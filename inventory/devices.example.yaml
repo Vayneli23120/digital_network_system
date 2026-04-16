@@ -1,0 +1,51 @@
+# 设备清单配置文件
+# 复制到 devices.yaml 后填写实际设备信息
+
+credentials:
+  default:
+    username: "admin"
+    password: "${DEVICE_PASSWORD}"
+    secret: "${DEVICE_SECRET}"
+  readonly:
+    username: "ro_user"
+    password: "${RO_PASSWORD}"
+    secret: ""
+
+devices:
+  # 示例设备 1 - 接入层交换机
+  SW-ACCESS-01:
+    name: "SW-ACCESS-01"
+    ip: "192.168.1.1"
+    model: "WS-C2960X-24TS-L"
+    serial_number: "FCW1234A5BC"
+    location: "Building-A / Floor1 / Rack-03"
+    role: "access"
+    status: "online"
+    purchase_date: "2024-06-15"
+    vendor: "Cisco 授权经销商"
+    purchase_cost: 8500.00
+    credential_group: "default"
+    tags:
+      - "floor1"
+      - "building-a"
+      - "vlan-users"
+    notes: "用户接入交换机"
+
+  # 示例设备 2 - 汇聚层交换机
+  SW-DIST-01:
+    name: "SW-DIST-01"
+    ip: "192.168.1.254"
+    model: "WS-C3850-24P"
+    serial_number: "FCW5678B9CD"
+    location: "Building-A / MDF / Rack-01"
+    role: "distribution"
+    status: "online"
+    purchase_date: "2023-03-20"
+    vendor: "Cisco 授权经销商"
+    purchase_cost: 25000.00
+    credential_group: "default"
+    tags:
+      - "mdf"
+      - "building-a"
+      - "core-uplink"
+    notes: "A 栋汇聚交换机"
