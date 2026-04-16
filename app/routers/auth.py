@@ -136,10 +136,21 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     return encoded_jwt
 
 
-def decode_token(token: str) -> Optional[dict]:
-    """解码 JWT 令牌"""
+def decode_token(token: str) -> dict:
+    """解码 JWT 令牌
+
+    Args:
+        token: JWT token string
+
+    Returns:
+        decoded payload dict
+
+    Raises:
+        AuthenticationException: if token is invalid or JWT not available
+    """
     if not JWT_AVAILABLE:
-        return None
+        from ..exceptions import AuthenticationException
+        raise AuthenticationException("JWT 功能未安装")
     try:
         payload = jwt.decode(
             token,
@@ -148,7 +159,8 @@ def decode_token(token: str) -> Optional[dict]:
         )
         return payload
     except JWTError:
-        return None
+        from ..exceptions import AuthenticationException
+        raise AuthenticationException("Invalid token")
 
 
 def get_current_user_from_token(
@@ -252,6 +264,100 @@ def _user_to_response(user: User) -> dict:
         "last_login": user.last_login,
         "created_at": user.created_at,
         "updated_at": user.updated_at
+    }
+
+
+# =============================================================================
+# Testable Helper Functions (用于测试的直接调用接口)
+# =============================================================================
+
+def create_user(user_data: dict, db: Session) -> dict:
+    """创建新用户（供测试直接调用的函数版本）
+
+    Args:
+        user_data: 用户数据字典，包含 username, password, email 等
+        db: 数据库会话
+
+    Returns:
+        创建的用户信息字典
+
+    Raises:
+        ConflictException: 用户名或邮箱已存在
+    """
+    from ..exceptions import ConflictException
+
+    # 检查用户名是否已存在
+    existing = db.query(User).filter(User.username == user_data.get("username")).first()
+    if existing:
+        raise ConflictException(f"用户名 '{user_data.get('username')}' already exists")
+
+    # 检查邮箱是否已存在
+    email = user_data.get("email")
+    if email:
+        existing_email = db.query(User).filter(User.email == email).first()
+        if existing_email:
+            raise ConflictException(f"邮箱 '{email}' already exists")
+
+    # 创建用户
+    user = User(
+        username=user_data["username"],
+        email=email,
+        password_hash=get_password_hash(user_data["password"]),
+        full_name=user_data.get("full_name"),
+        is_active=user_data.get("is_active", True),
+    )
+
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "full_name": user.full_name,
+    }
+
+
+def login_user(username: str, password: str, db: Session) -> dict:
+    """用户登录（供测试直接调用的函数版本）
+
+    Args:
+        username: 用户名
+        password: 明文密码
+        db: 数据库会话
+
+    Returns:
+        包含 access_token 的字典
+
+    Raises:
+        AuthenticationException: 用户名或密码错误
+    """
+    from ..exceptions import AuthenticationException
+
+    user = db.query(User).filter(User.username == username).first()
+
+    if not user or not verify_password(password, user.password_hash):
+        raise AuthenticationException("用户名或密码错误")
+
+    if not user.is_active:
+        raise AuthenticationException("用户已被禁用")
+
+    # 创建访问令牌
+    access_token_expires = timedelta(minutes=config.security.jwt_access_token_expire_minutes)
+    access_token = create_access_token(
+        data={"sub": user.username, "user_id": user.id},
+        expires_delta=access_token_expires
+    )
+
+    # 更新最后登录时间
+    user.last_login = datetime.utcnow()
+    db.commit()
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": config.security.jwt_access_token_expire_minutes * 60,
     }
 
 
@@ -413,7 +519,7 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def create_user(user_data: UserCreate, db: Session = Depends(get_db)):
+async def _create_user_endpoint(user_data: UserCreate, db: Session = Depends(get_db)):
     """创建新用户"""
     # 检查用户名是否已存在
     existing = db.query(User).filter(User.username == user_data.username).first()

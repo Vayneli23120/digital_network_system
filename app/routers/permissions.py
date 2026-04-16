@@ -367,11 +367,45 @@ async def remove_role_from_user(
 
 
 # =============================================================================
+# Testable Helper Functions (用于测试的直接调用接口)
+# =============================================================================
+
+def check_permission(user_id: int, permission_name: str, db: Session) -> bool:
+    """检查用户是否拥有指定权限（供测试直接调用）
+
+    Args:
+        user_id: 用户 ID
+        permission_name: 权限名称，如 "device:read"
+        db: 数据库会话
+
+    Returns:
+        True 如果用户拥有该权限，否则 False
+    """
+    from sqlalchemy.orm import joinedload
+
+    user = db.query(User).options(
+        joinedload(User.roles)
+    ).options(
+        joinedload(User.roles).joinedload(Role.permissions)
+    ).filter(User.id == user_id).first()
+
+    if not user:
+        return False
+
+    for role in user.roles:
+        for permission in role.permissions:
+            if permission.name == permission_name:
+                return True
+
+    return False
+
+
+# =============================================================================
 # 权限检查 API
 # =============================================================================
 
 @router.get("/check/{permission}")
-async def check_permission(
+async def _check_permission_endpoint(
     permission: str,
     current_user: User = Depends(get_db)
 ):

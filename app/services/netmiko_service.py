@@ -71,13 +71,14 @@ class NetmikoService:
         config = self.connection.send_command("show running-config")
         return config
 
-    def save_config(self):
+    def save_config(self) -> str:
         """保存配置到 startup-config"""
         if not self.connection:
             raise RuntimeError("未连接到设备")
 
         logger.debug("执行 write memory")
-        self.connection.save_config()
+        result = self.connection.save_config()
+        return result if result else "[OK]"
 
     def send_commands(self, commands: List[str], verify: bool = False) -> str:
         """发送配置命令"""

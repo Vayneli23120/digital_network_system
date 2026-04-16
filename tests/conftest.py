@@ -101,7 +101,7 @@ def sample_user():
     user = User(
         username="testuser",
         email="test@example.com",
-        password="hashed_password",
+        password_hash="hashed_password",
         full_name="Test User",
         is_active=True,
         is_superuser=False

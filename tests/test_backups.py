@@ -120,15 +120,15 @@ class TestBackupList:
             db_session.add(backup)
         db_session.commit()
 
-        from app.routers.backups import list_backups
-        result = list_backups(device_id=device.id, db=db_session)
+        from app.services.backup_service import list_backups
+        result = list_backups(db=db_session, device_id=device.id)
 
         assert result["total"] == 3
 
     def test_list_backups_empty(self, db_session):
         """Test listing backups when none exist"""
-        from app.routers.backups import list_backups
-        result = list_backups(device_id=999, db=db_session)
+        from app.services.backup_service import list_backups
+        result = list_backups(db=db_session, device_id=999)
 
         assert result["total"] == 0
         assert result["items"] == []
@@ -154,16 +154,16 @@ class TestBackupDelete:
         db_session.commit()
         backup_id = backup.id
 
-        from app.routers.backups import delete_backup
-        result = delete_backup(backup_id=backup_id, db=db_session)
+        from app.services.backup_service import delete_backup
+        result = delete_backup(db=db_session, backup_id=backup_id)
 
         assert result["success"] is True
         assert db_session.query(BackupRecord).filter(BackupRecord.id == backup_id).first() is None
 
     def test_delete_nonexistent_backup(self, db_session):
         """Test deleting a backup that doesn't exist"""
-        from app.routers.backups import delete_backup
+        from app.services.backup_service import delete_backup
         from app.exceptions import ResourceNotFoundException
 
         with pytest.raises(ResourceNotFoundException):
-            delete_backup(backup_id=99999, db=db_session)
+            delete_backup(db=db_session, backup_id=99999)

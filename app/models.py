@@ -54,7 +54,9 @@ class BackupRecord(Base):
     md5_hash = Column(String(64))
     has_change = Column(Boolean, default=False)
     diff_file = Column(String(500))
+    config_snapshot = Column(Text)  # 配置快照文本
     backup_time = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
     operator = Column(String(100))
     device_name = Column(String(100))
 
