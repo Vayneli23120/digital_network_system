@@ -206,6 +206,11 @@ def get_config() -> Config:
     return _config
 
 
+# 兼容性别名 - 部分代码引用 settings
+# 注意：这会在首次 import 时加载配置
+settings = get_config()
+
+
 def reload_config() -> Config:
     """重新加载配置"""
     global _config

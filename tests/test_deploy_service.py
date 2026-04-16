@@ -291,8 +291,9 @@ class TestDeployServiceCompareConfig:
         diff = service.compare_config(old_config, new_config)
 
         assert len(diff) > 0
-        assert any("Old" in line for line in diff)
-        assert any("New" in line for line in diff)
+        # Diff format: list of {'type': 'remove'|'add', 'content': str}
+        assert any(d.get('type') == 'remove' and 'Old' in d.get('content', '') for d in diff)
+        assert any(d.get('type') == 'add' and 'New' in d.get('content', '') for d in diff)
 
 
 class TestDeployServiceParseCommands:
