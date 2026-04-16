@@ -1,12 +1,15 @@
 """
 应用配置管理
+
+Fail-fast configuration: 启动时验证所有关键配置，缺失必填项立即报错退出。
 """
 
 import os
+import sys
 import yaml
 from pathlib import Path
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AlertEmailConfig(BaseModel):
@@ -33,6 +36,22 @@ class StorageConfig(BaseModel):
     max_backups_per_device: int = 30
     backup_retention_days: int = 365
 
+    @field_validator('backup_dir', 'photo_dir', 'log_dir')
+    @classmethod
+    def check_dir_writable(cls, v: str) -> str:
+        """验证目录路径可访问（如果不存在则尝试创建）"""
+        p = Path(v)
+        if not p.exists():
+            try:
+                p.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                print(f"[CONFIG ERROR] 无法创建目录: {v}", file=sys.stderr)
+                raise ValueError(f"目录不可写且无法创建: {v}")
+        elif not os.access(v, os.W_OK):
+            print(f"[CONFIG ERROR] 目录无写权限: {v}", file=sys.stderr)
+            raise ValueError(f"目录无写权限: {v}")
+        return v
+
 
 class ConsoleConfig(BaseModel):
     baudrate: int = 9600
@@ -47,6 +66,24 @@ class DatabaseConfig(BaseModel):
     type: str = "sqlite"
     sqlite_path: str = "./data/nas.db"
 
+    @field_validator('sqlite_path')
+    @classmethod
+    def check_sqlite_path(cls, v: str) -> str:
+        """验证 SQLite 数据库路径"""
+        p = Path(v)
+        parent = p.parent
+        if not parent.exists():
+            try:
+                parent.mkdir(parents=True, exist_ok=True)
+            except PermissionError:
+                print(f"[CONFIG ERROR] 无法创建数据库目录: {parent}", file=sys.stderr)
+                raise ValueError(f"无法创建数据库目录: {parent}")
+        # 如果文件已存在，检查是否可写
+        if p.exists() and not os.access(v, os.W_OK):
+            print(f"[CONFIG ERROR] 数据库文件无写权限: {v}", file=sys.stderr)
+            raise ValueError(f"数据库文件无写权限: {v}")
+        return v
+
 
 class SecurityConfig(BaseModel):
     auth_enabled: bool = False  # 认证功能开关，默认关闭
@@ -54,6 +91,33 @@ class SecurityConfig(BaseModel):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
+
+    @field_validator('jwt_secret')
+    @classmethod
+    def check_jwt_secret(cls, v: str) -> str:
+        """JWT Secret 安全检查"""
+        weak_secrets = [
+            'your-secret-key-change-in-production',
+            'secret',
+            'password',
+            'changeme',
+            '123456',
+        ]
+        if v.lower() in weak_secrets:
+            print("[CONFIG WARNING] JWT secret 使用了默认值！生产环境请设置强密码", file=sys.stderr)
+        elif len(v) < 32:
+            print(f"[CONFIG WARNING] JWT secret 长度 < 32 位，安全性不足", file=sys.stderr)
+        return v
+
+    @field_validator('jwt_access_token_expire_minutes')
+    @classmethod
+    def check_token_expiry(cls, v: int) -> int:
+        """Token 过期时间合理性检查"""
+        if v < 5:
+            print(f"[CONFIG WARNING] jwt_access_token_expire_minutes={v} 过短，建议 >= 5", file=sys.stderr)
+        elif v > 1440:  # 24小时
+            print(f"[CONFIG WARNING] jwt_access_token_expire_minutes={v} 过长，建议 <= 1440", file=sys.stderr)
+        return v
 
 
 class AppConfig(BaseModel):
@@ -89,7 +153,10 @@ class Config(BaseModel):
         # 环境变量替换
         data = cls._replace_env_vars(data)
 
-        return cls(**data)
+        config = cls(**data)
+        # Fail-fast 验证
+        config.validate()
+        return config
 
     @staticmethod
     def _replace_env_vars(obj):
@@ -102,6 +169,29 @@ class Config(BaseModel):
             env_var = obj[2:-1]
             return os.environ.get(env_var, "")
         return obj
+
+    def validate(self) -> "Config":
+        """应用级配置验证 — 跨字段检查
+        
+        在 Config.load() 后自动调用，失败时打印错误并退出。
+        """
+        # 检查认证已启用时 JWT secret 是否为默认值
+        if self.security.auth_enabled:
+            if self.security.jwt_secret == "your-secret-key-change-in-production":
+                print(
+                    "[CONFIG ERROR] auth_enabled=true 但 jwt_secret 仍为默认值！",
+                    file=sys.stderr
+                )
+                print("请在 config.yaml 中设置 security.jwt_secret 为强密码", file=sys.stderr)
+                sys.exit(1)
+        
+        # 检查备份目录和存储目录不是同一路径
+        dirs = [self.storage.backup_dir, self.storage.photo_dir, self.storage.log_dir]
+        if len(set(dirs)) != len(dirs):
+            print("[CONFIG ERROR] storage 目录下 backup_dir/photo_dir/log_dir 不能相同", file=sys.stderr)
+            sys.exit(1)
+        
+        return self
 
 
 # 全局配置实例
