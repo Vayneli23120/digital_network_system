@@ -37,6 +37,7 @@ from .routers import (
     spare_movements_router,
     compliance_router,
     websocket_router,
+    discovery_router,
 )
 from .middleware.auth_middleware import auth_middleware
 
@@ -62,8 +63,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 认证中间件（默认关闭，通过 config.yaml auth_enabled: true 启用）
-if getattr(config, 'auth_enabled', False):
+# 认证中间件（默认关闭，通过 config.yaml security.auth_enabled: true 启用）
+if config.security.auth_enabled:
     app.middleware("http")(auth_middleware)
 
 # ============ 异常处理 ============
@@ -100,6 +101,7 @@ app.include_router(spare_parts_router)
 app.include_router(spare_movements_router)
 app.include_router(compliance_router)
 app.include_router(websocket_router)
+app.include_router(discovery_router)
 
 # ============ 健康检查 ============
 
