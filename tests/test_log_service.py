@@ -173,7 +173,7 @@ class TestClearOldLogs:
 class TestGetLogService:
     def test_get_log_service_singleton(self):
         # Reset global state
-        import app.services.log_service as log_module
+        import app.features.logs.log_service as log_module
         log_module._log_service = None
 
         service1 = get_log_service()

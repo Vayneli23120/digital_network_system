@@ -168,7 +168,7 @@ class TestRBAC:
 
     def test_check_permission(self, db_session):
         """Test checking user permissions"""
-        from app.routers.permissions import check_permission
+        from app.features.permissions.router import check_permission
 
         # Create a role with permissions
         role = Role(name="engineer", description="Network Engineer")
@@ -188,7 +188,7 @@ class TestRBAC:
 
     def test_check_permission_denied(self, db_session, sample_user):
         """Test permission denied for user without required role"""
-        from app.routers.permissions import check_permission
+        from app.features.permissions.router import check_permission
 
         db_session.add(sample_user)
         db_session.commit()
