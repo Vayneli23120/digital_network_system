@@ -29,39 +29,10 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 @router.get("")
-async def list_devices(status: Optional[str] = None, role: Optional[str] = None):
+async def list_devices(status: Optional[str] = None, role: Optional[str] = None, db: Session = Depends(get_db)):
     """获取设备列表"""
-    db: Session = next(get_db())
-
-    try:
-        query = db.query(Device)
-
-        if status:
-            query = query.filter(Device.status == status)
-        if role:
-            query = query.filter(Device.role == role)
-
-        devices = query.all()
-
-        return {
-            "items": [
-                {
-                    "id": d.id,
-                    "name": d.name,
-                    "ip": d.ip,
-                    "model": d.model,
-                    "serial_number": d.serial_number,
-                    "location": d.location,
-                    "role": d.role,
-                    "status": d.status,
-                    "credential_group": d.credential_group,
-                    "last_backup_time": d.last_backup_time.isoformat() if d.last_backup_time else None,
-                }
-                for d in devices
-            ]
-        }
-    finally:
-        db.close()
+    from ..services.device_service import list_devices as svc_list_devices
+    return svc_list_devices(db, status=status, role=role)
 
 
 @router.get("/export")
@@ -195,169 +166,61 @@ async def import_devices(file: UploadFile = File(...)):
 
 
 @router.get("/{device_id}")
-async def get_device(device_id: int):
+async def get_device(device_id: int, db: Session = Depends(get_db)):
     """获取设备详情"""
-    db: Session = next(get_db())
-
-    from loguru import logger
-
+    from ..services.device_service import get_device as svc_get_device
+    from ..exceptions import ResourceNotFoundException
     try:
-        device = db.query(Device).filter(Device.id == device_id).first()
-
-        if not device:
-            raise HTTPException(status_code=404, detail="设备不存在")
-
-        # 获取设备照片
+        device = svc_get_device(db, device_id)
         photos = db.query(DevicePhoto).filter(DevicePhoto.device_id == device_id).all()
-
-        # 获取最近的备份记录
-        backups = db.query(BackupRecord).filter(
-            BackupRecord.device_id == device_id
-        ).order_by(BackupRecord.backup_time.desc()).limit(5).all()
-
-        # 获取故障记录
-        faults = db.query(FaultRecord).filter(
-            FaultRecord.device_id == device_id
-        ).order_by(FaultRecord.created_at.desc()).limit(5).all()
-        logger.info(f"Debug - faults for device {device_id}: {[(f.id, f.status) for f in faults]}")
-
-        # 获取维修记录
-        maintenances = db.query(MaintenanceRecord).filter(
-            MaintenanceRecord.device_id == device_id
-        ).order_by(MaintenanceRecord.created_at.desc()).limit(5).all()
+        backups = db.query(BackupRecord).filter(BackupRecord.device_id == device_id).order_by(BackupRecord.backup_time.desc()).limit(5).all()
+        faults = db.query(FaultRecord).filter(FaultRecord.device_id == device_id).order_by(FaultRecord.created_at.desc()).limit(5).all()
+        maintenances = db.query(MaintenanceRecord).filter(MaintenanceRecord.device_id == device_id).order_by(MaintenanceRecord.created_at.desc()).limit(5).all()
 
         return {
-            "id": device.id,
-            "name": device.name,
-            "ip": device.ip,
-            "model": device.model,
-            "serial_number": device.serial_number,
-            "location": device.location,
-            "role": device.role,
-            "status": device.status,
-            "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
-            "vendor": device.vendor,
-            "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
-            "photos": [
-                {
-                    "id": p.id,
-                    "photo_type": p.photo_type,
-                    "photo_path": p.photo_path,
-                    "upload_date": p.upload_date.isoformat()
-                }
-                for p in photos
-            ],
-            "recent_backups": [
-                {
-                    "id": b.id,
-                    "backup_time": b.backup_time.isoformat(),
-                    "has_change": b.has_change
-                }
-                for b in backups
-            ],
-            "recent_faults": [
-                {
-                    "id": f.id,
-                    "fault_no": f.fault_no,
-                    "device_id": f.device_id,
-                    "severity": f.severity,
-                    "status": f.status,
-                    "description": f.description,
-                    "downtime_minutes": f.downtime_minutes,
-                    "impact": f.impact,
-                    "created_at": f.created_at.isoformat()
-                }
-                for f in faults
-            ],
-            "recent_maintenances": [
-                {
-                    "id": m.id,
-                    "maint_no": m.maint_no,
-                    "device_id": m.device_id,
-                    "maint_type": m.maint_type,
-                    "parts_replaced": m.parts_replaced,
-                    "parts_cost": m.parts_cost,
-                    "labor_hours": m.labor_hours,
-                    "labor_cost": m.labor_cost,
-                    "vendor": m.vendor,
-                    "description": m.description,
-                    "maint_time": m.maint_time.isoformat() if m.maint_time else None,
-                    "created_at": m.created_at.isoformat()
-                }
-                for m in maintenances
-            ]
+            **device,
+            "photos": [{"id": p.id, "photo_type": p.photo_type, "photo_path": p.photo_path, "upload_date": p.upload_date.isoformat()} for p in photos],
+            "recent_backups": [{"id": b.id, "backup_time": b.backup_time.isoformat(), "has_change": b.has_change} for b in backups],
+            "recent_faults": [{"id": f.id, "fault_no": f.fault_no, "severity": f.severity, "status": f.status, "description": f.description, "downtime_minutes": f.downtime_minutes, "impact": f.impact, "created_at": f.created_at.isoformat()} for f in faults],
+            "recent_maintenances": [{"id": m.id, "maint_no": m.maint_no, "maint_type": m.maint_type, "parts_replaced": m.parts_replaced, "parts_cost": float(m.parts_cost or 0), "labor_hours": float(m.labor_hours or 0), "labor_cost": float(m.labor_cost or 0), "vendor": m.vendor, "description": m.description, "maint_time": m.maint_time.isoformat() if m.maint_time else None, "created_at": m.created_at.isoformat()} for m in maintenances],
         }
-    finally:
-        db.close()
+    except ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="设备不存在")
 
 
 @router.post("")
-async def create_device(device_data: dict):
+async def create_device(device_data: dict, db: Session = Depends(get_db)):
     """创建新设备"""
-    db: Session = next(get_db())
-
+    from ..services.device_service import create_device as svc_create_device
+    from ..exceptions import ConflictException
     try:
-        device = Device(**device_data)
-        db.add(device)
-        db.commit()
-        db.refresh(device)
-
-        return {"id": device.id, "message": "设备创建成功"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        db.close()
+        result = svc_create_device(db, device_data)
+        return {"id": result["id"], "message": "设备创建成功"}
+    except ConflictException as e:
+        raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.put("/{device_id}")
-async def update_device(device_id: int, device_data: dict):
+async def update_device(device_id: int, device_data: dict, db: Session = Depends(get_db)):
     """更新设备信息"""
-    db: Session = next(get_db())
-
+    from ..services.device_service import update_device as svc_update_device
+    from ..exceptions import ResourceNotFoundException
     try:
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if not device:
-            raise HTTPException(status_code=404, detail="设备不存在")
-
-        # 允许更新的字段列表
-        allowed_fields = [
-            "ip", "model", "serial_number", "location",
-            "role", "status", "purchase_date", "vendor", "purchase_cost",
-            "photo_dir", "credential_group"
-        ]
-
-        # 只更新允许的字段
-        for key, value in device_data.items():
-            if key in allowed_fields and hasattr(device, key):
-                setattr(device, key, value)
-
-        db.commit()
-        db.refresh(device)
-
-        return {"id": device.id, "message": "更新成功"}
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+        result = svc_update_device(db, device_id, device_data)
+        return {"id": result["id"], "message": "更新成功"}
+    except ResourceNotFoundException:
+        raise HTTPException(status_code=404, detail="设备不存在")
 
 
 @router.delete("/{device_id}")
-async def delete_device(device_id: int):
+async def delete_device(device_id: int, db: Session = Depends(get_db)):
     """删除设备"""
-    db: Session = next(get_db())
-
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
+    from ..services.device_service import delete_device as svc_delete_device
+    from ..exceptions import ResourceNotFoundException
+    try:
+        return svc_delete_device(db, device_id)
+    except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="设备不存在")
-
-    db.delete(device)
-    db.commit()
-
-    return {"message": "删除成功"}
 
 
 # ============ 照片管理 API ============

@@ -89,36 +89,10 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
 
 
 @router.get("")
-async def list_backups(device_id: Optional[int] = None, limit: int = 50):
+async def list_backups(device_id: Optional[int] = None, limit: int = 50, db: Session = Depends(get_db)):
     """获取备份记录列表"""
-    db: Session = next(get_db())
-
-    try:
-        query = db.query(BackupRecord)
-
-        if device_id:
-            query = query.filter(BackupRecord.device_id == device_id)
-
-        backups = query.order_by(BackupRecord.backup_time.desc()).limit(limit).all()
-
-        return {
-            "items": [
-                {
-                    "id": b.id,
-                    "device_id": b.device_id,
-                    "device_name": b.device_name,
-                    "backup_file": b.backup_file,
-                    "file_size": b.file_size,
-                    "md5_hash": b.md5_hash,
-                    "has_change": b.has_change,
-                    "backup_time": b.backup_time.isoformat(),
-                    "operator": b.operator
-                }
-                for b in backups
-            ]
-        }
-    finally:
-        db.close()
+    from ..services.backup_service import list_backups as svc_list_backups
+    return svc_list_backups(db, device_id=device_id, limit=limit)
 
 
 @router.get("/{backup_id}/content")

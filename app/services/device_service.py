@@ -86,6 +86,8 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
+        "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
+        "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
     }
 
 
@@ -117,6 +119,8 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
+        "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
+        "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
     }
 
 
@@ -161,6 +165,7 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         "role": device.role,
         "status": device.status,
         "credential_group": device.credential_group,
+        "message": "更新成功",
     }
 
 

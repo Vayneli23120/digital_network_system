@@ -105,7 +105,7 @@ class ComplianceService:
 
     def _check_ssh_version(self, lines: List[str], config: str) -> ComplianceCheckResult:
         """SEC-002: 检查 SSH 版本"""
-        has_ssh_v2 = any('ip ssh version 2' in line for line in lines)
+        has_ssh_v2 = any(line.strip() == 'ip ssh version 2' for line in lines)
         return ComplianceCheckResult(
             check_id="SEC-002",
             check_name="SSH 版本",
