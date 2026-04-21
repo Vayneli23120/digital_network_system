@@ -9,7 +9,7 @@
       </template>
 
       <!-- 检查项列表 -->
-      <el-table :data="checkItems" stripe border>
+      <el-table :data="checkItems" stripe border v-loading="loading">
         <el-table-column prop="id" label="检查项" width="100" />
         <el-table-column prop="name" label="名称" width="200" />
         <el-table-column prop="category" label="分类" width="120">
@@ -102,17 +102,21 @@ const checkItems = ref([])
 const report = ref(null)
 const checkDialogVisible = ref(false)
 const checking = ref(false)
+const loading = ref(false)
 const checkForm = reactive({ device_name: '', device_ip: '', config_text: '' })
 
 const categoryType = (cat) => ({ security: 'danger', availability: 'warning', compliance: 'info' }[cat] || '')
 const severityType = (sev) => ({ critical: 'danger', high: 'warning', medium: 'info', low: '' }[sev] || '')
 
 const loadChecks = async () => {
+  loading.value = true
   try {
     const { data } = await getCheckItems()
     checkItems.value = data
   } catch (e) {
-    console.error(e)
+    ElMessage.error('加载检查项失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    loading.value = false
   }
 }
 

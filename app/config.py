@@ -24,9 +24,26 @@ class AlertEmailConfig(BaseModel):
     notify_on: List[str] = ["backup_failure", "device_unreachable"]
 
 
+class AlertWeChatWorkConfig(BaseModel):
+    """企业微信 Webhook 告警配置"""
+    enabled: bool = False
+    webhook_url: str = ""
+
+
+class AlertDingTalkConfig(BaseModel):
+    """钉钉 Webhook 告警配置"""
+    enabled: bool = False
+    webhook_url: str = ""
+    secret: str = ""
+
+
 class AlertsConfig(BaseModel):
+    """告警通知配置 — 支持多渠道"""
     enabled: bool = False
     email: AlertEmailConfig = Field(default_factory=AlertEmailConfig)
+    wechat_work: AlertWeChatWorkConfig = Field(default_factory=AlertWeChatWorkConfig)
+    dingtalk: AlertDingTalkConfig = Field(default_factory=AlertDingTalkConfig)
+    channels: List[str] = []  # ["email", "wechat_work", "dingtalk"]
 
 
 class StorageConfig(BaseModel):

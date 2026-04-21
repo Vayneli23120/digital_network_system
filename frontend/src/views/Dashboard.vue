@@ -153,7 +153,8 @@
 <script setup>
 import { ref, onMounted, nextTick } from 'vue'
 import * as echarts from 'echarts'
-import { getDashboardSummary } from '@/api'
+import { ElMessage } from 'element-plus'
+import { getDashboardSummary, getFaultTrend } from '@/api'
 import dayjs from 'dayjs'
 
 const stats = ref({})
@@ -183,7 +184,7 @@ const loadDashboardData = async () => {
       updateFaultChart()
     })
   } catch (error) {
-    console.error('加载 Dashboard 数据失败:', error)
+    ElMessage.error('加载 Dashboard 数据失败：' + (error.response?.data?.detail || error.message))
   }
 }
 
@@ -386,7 +387,7 @@ const updateFaultChart = async () => {
     // 更新总故障数
     updateFaultTotal()
   } catch (error) {
-    console.error('加载故障趋势数据失败:', error)
+    ElMessage.error('加载故障趋势数据失败：' + (error.response?.data?.detail || error.message))
   }
 }
 

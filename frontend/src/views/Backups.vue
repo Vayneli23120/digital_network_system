@@ -71,6 +71,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadBackups" @current-change="loadBackups" />
+      </div>
     </el-card>
 
     <!-- 查看配置对话框 -->
@@ -126,6 +129,9 @@ const backups = ref([])
 const filteredBackups = ref([])
 const devices = ref([])
 const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const showConfigDialog = ref(false)
 const showDiffDialog = ref(false)
 const showBatchBackupDialog = ref(false)
@@ -207,7 +213,7 @@ const loadBackups = async () => {
     backups.value = data.items || []
     filterBackups()
   } catch (error) {
-    console.error('加载备份记录失败:', error)
+    ElMessage.error('加载备份记录失败')
   } finally {
     loading.value = false
   }
@@ -218,7 +224,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    console.error('加载设备列表失败:', error)
+    ElMessage.error('加载设备列表失败')
   }
 }
 
@@ -230,7 +236,7 @@ const viewConfig = async (backupId) => {
     configBackupTime.value = formatDateTime(data.backup_time)
     showConfigDialog.value = true
   } catch (error) {
-    console.error('获取配置失败:', error)
+    ElMessage.error('获取配置失败')
     ElMessage.error('获取配置失败')
   }
 }
@@ -241,7 +247,7 @@ const viewDiff = async (backupId) => {
     diffContent.value = data.diff || '没有差异内容'
     showDiffDialog.value = true
   } catch (error) {
-    console.error('获取差异失败:', error)
+    ElMessage.error('获取差异失败')
     ElMessage.error('获取差异失败')
   }
 }
@@ -267,7 +273,7 @@ const doBatchBackup = async () => {
     showBatchBackupDialog.value = false
     loadBackups()
   } catch (error) {
-    console.error('批量备份失败:', error)
+    ElMessage.error('批量备份失败')
     ElMessage.error('批量备份失败')
   }
 }
@@ -336,4 +342,5 @@ onMounted(() => {
 .diff-content :deep(.-) {
   color: #cb2431;
 }
+.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

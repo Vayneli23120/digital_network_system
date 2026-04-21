@@ -190,6 +190,7 @@ const router = useRouter()
 
 const fault = ref({})
 const device = ref(null)
+const loading = ref(false)
 const showEditDialog = ref(false)
 
 const editForm = ref({
@@ -244,8 +245,9 @@ const loadFault = async () => {
       device.value = (devices.items || []).find(d => d.id === data.device_id)
     }
   } catch (error) {
-    console.error('加载故障详情失败:', error)
     ElMessage.error('加载故障详情失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -260,7 +262,7 @@ const updateFault = async () => {
     showEditDialog.value = false
     loadFault()
   } catch (error) {
-    console.error('更新故障记录失败:', error)
+    ElMessage.error('更新故障记录失败')
     ElMessage.error('更新故障记录失败')
   }
 }
@@ -278,7 +280,7 @@ const closeFault = async () => {
     loadFault()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('关闭故障失败:', error)
+      ElMessage.error('关闭故障失败')
       ElMessage.error('关闭故障失败')
     }
   }
@@ -297,7 +299,7 @@ const deleteFault = async () => {
     router.push('/faults')
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除故障失败:', error)
+      ElMessage.error('删除故障失败')
       ElMessage.error('删除故障失败')
     }
   }

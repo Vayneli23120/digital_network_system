@@ -69,6 +69,10 @@
           <el-icon><List /></el-icon>
           <span>工具日志</span>
         </el-menu-item>
+        <el-menu-item index="/alert-settings">
+          <el-icon><Bell /></el-icon>
+          <span>告警通知</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 

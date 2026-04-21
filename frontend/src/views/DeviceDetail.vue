@@ -3,7 +3,7 @@
     <el-row :gutter="20">
       <!-- 左侧：设备信息 -->
       <el-col :span="8">
-        <el-card class="info-card">
+        <el-card class="info-card" v-loading="loading">
           <template #header>
             <span>设备信息</span>
           </template>
@@ -336,6 +336,7 @@ import axios from 'axios'
 
 const route = useRoute()
 const device = ref(null)
+const loading = ref(false)
 const activeTab = ref('backups')
 const showFaultDialog = ref(false)
 const showMaintDialog = ref(false)
@@ -427,13 +428,15 @@ const calculateMaintCost = () => {
 }
 
 const loadDevice = async () => {
+  loading.value = true
   try {
     const data = await getDeviceDetail(route.params.id)
     device.value = data
     editForm.value = { ...data }
   } catch (error) {
-    console.error('加载设备详情失败:', error)
     ElMessage.error('加载设备详情失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -444,7 +447,7 @@ const backupNow = async () => {
     ElMessage.success('备份成功')
     loadDevice()
   } catch (error) {
-    console.error('备份失败:', error)
+    ElMessage.error('备份失败')
   }
 }
 
@@ -458,7 +461,7 @@ const handlePhotoUploadSuccess = (response) => {
 }
 
 const handlePhotoUploadError = (error) => {
-  console.error('照片上传失败:', error)
+  ElMessage.error('照片上传失败')
   ElMessage.error('照片上传失败')
 }
 
@@ -476,7 +479,7 @@ const deletePhoto = async (photoId) => {
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除照片失败:', error)
+      ElMessage.error('删除照片失败')
     }
   }
 }
@@ -488,7 +491,7 @@ const viewConfig = async (backupId) => {
     configContent.value = data.content
     showConfigDialog.value = true
   } catch (error) {
-    console.error('获取配置失败:', error)
+    ElMessage.error('获取配置失败')
     ElMessage.error('获取配置失败')
   }
 }
@@ -500,7 +503,7 @@ const updateDevice = async () => {
     showEditDialog.value = false
     loadDevice()
   } catch (error) {
-    console.error('更新设备失败:', error)
+    ElMessage.error('更新设备失败')
     ElMessage.error('更新设备失败')
   }
 }
@@ -519,7 +522,7 @@ const addFault = async () => {
     resetFaultForm()
     loadDevice()
   } catch (error) {
-    console.error('添加故障记录失败:', error)
+    ElMessage.error('添加故障记录失败')
     ElMessage.error(error.response?.data?.detail || '添加故障记录失败')
   }
 }
@@ -553,7 +556,7 @@ const updateFaultInDetail = async () => {
     resetFaultForm()
     loadDevice()
   } catch (error) {
-    console.error('更新故障记录失败:', error)
+    ElMessage.error('更新故障记录失败')
     ElMessage.error('更新故障记录失败')
   }
 }
@@ -572,7 +575,7 @@ const closeFaultInDetail = async (row) => {
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('关闭故障失败:', error)
+      ElMessage.error('关闭故障失败')
       ElMessage.error('关闭故障失败')
     }
   }
@@ -606,7 +609,7 @@ const addMaintenance = async () => {
     resetMaintForm()
     loadDevice()
   } catch (error) {
-    console.error('添加维修记录失败:', error)
+    ElMessage.error('添加维修记录失败')
     ElMessage.error(error.response?.data?.detail || '添加维修记录失败')
   }
 }
@@ -636,7 +639,7 @@ const updateMaintInDetail = async () => {
     resetMaintForm()
     loadDevice()
   } catch (error) {
-    console.error('更新维修记录失败:', error)
+    ElMessage.error('更新维修记录失败')
     ElMessage.error('更新维修记录失败')
   }
 }
@@ -654,7 +657,7 @@ const deleteMaintInDetail = async (maintId) => {
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除维修记录失败:', error)
+      ElMessage.error('删除维修记录失败')
       ElMessage.error('删除维修记录失败')
     }
   }

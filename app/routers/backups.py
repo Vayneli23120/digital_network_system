@@ -74,10 +74,9 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
 
             return {"success": True, "message": result["message"], "backup_id": backup_record.id}
         else:
-            # 发送告警邮件
-            from ..services.email_service import get_email_service
-            email_service = get_email_service()
-            email_service.send_backup_failure_alert(device.name, result["message"], operator)
+            # 发送多渠道告警
+            from ..services.notification_service import get_notification_service
+            get_notification_service().notify_backup_failure(device.name, result["message"], operator)
 
             raise HTTPException(status_code=500, detail=result["message"])
 

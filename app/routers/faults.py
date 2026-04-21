@@ -91,10 +91,9 @@ async def create_fault(fault_data: dict):
         db.commit()
         db.refresh(fault)
 
-        # 发送告警邮件
-        from ..services.email_service import get_email_service
-        email_service = get_email_service()
-        email_service.send_fault_alert(
+        # 发送多渠道告警
+        from ..services.notification_service import get_notification_service
+        get_notification_service().notify_fault(
             fault_data.get("device_name", "Unknown"),
             fault_no,
             fault_data.get("severity", "warning"),

@@ -59,6 +59,8 @@ __all__ = [
     "get_deploy_service",
     # Compliance
     "ComplianceService",
+    # Notification
+    "get_notification_service",
     # Template
     "list_templates",
     "get_template",

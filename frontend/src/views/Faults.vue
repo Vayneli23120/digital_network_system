@@ -105,6 +105,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadFaults" @current-change="loadFaults" />
+      </div>
     </el-card>
 
     <!-- 添加故障对话框 -->
@@ -157,6 +160,9 @@ const faults = ref([])
 const filteredFaults = ref([])
 const devices = ref([])
 const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const showAddDialog = ref(false)
 const showEditDialog = ref(false)
 const editMode = ref(false)
@@ -256,11 +262,12 @@ const filterFaults = () => {
 const loadFaults = async () => {
   loading.value = true
   try {
-    const data = await getFaults()
+    const data = await getFaults({ limit: 200 })
     faults.value = data.items || []
+    total.value = data.total || faults.value.length
     filterFaults()
   } catch (error) {
-    console.error('加载故障记录失败:', error)
+    ElMessage.error('加载故障记录失败')
   } finally {
     loading.value = false
   }
@@ -271,7 +278,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    console.error('加载设备列表失败:', error)
+    ElMessage.error('加载设备列表失败')
   }
 }
 
@@ -289,7 +296,7 @@ const addFault = async () => {
     resetForm()
     loadFaults()
   } catch (error) {
-    console.error('添加故障记录失败:', error)
+    ElMessage.error('添加故障记录失败')
     ElMessage.error('添加故障记录失败')
   }
 }
@@ -322,7 +329,7 @@ const updateFault = async () => {
     resetForm()
     loadFaults()
   } catch (error) {
-    console.error('更新故障记录失败:', error)
+    ElMessage.error('更新故障记录失败')
     ElMessage.error('更新故障记录失败')
   }
 }
@@ -340,7 +347,7 @@ const closeFault = async (row) => {
     loadFaults()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('关闭故障失败:', error)
+      ElMessage.error('关闭故障失败')
       ElMessage.error('关闭故障失败')
     }
   }
@@ -393,4 +400,5 @@ onMounted(() => {
   text-decoration: underline;
   color: #66b1ff;
 }
+.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

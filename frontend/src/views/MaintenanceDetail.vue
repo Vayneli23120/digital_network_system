@@ -183,6 +183,7 @@ const router = useRouter()
 
 const maintenance = ref({})
 const device = ref(null)
+const loading = ref(false)
 const showEditDialog = ref(false)
 
 const editForm = ref({
@@ -208,6 +209,7 @@ const getMaintTypeText = (type) => {
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
 const loadMaintenance = async () => {
+  loading.value = true
   try {
     const maintId = route.params.id
     // 获取所有维修列表，然后找到对应的维修
@@ -232,8 +234,9 @@ const loadMaintenance = async () => {
       }
     }
   } catch (error) {
-    console.error('加载维修详情失败:', error)
     ElMessage.error('加载维修详情失败')
+  } finally {
+    loading.value = false
   }
 }
 
@@ -248,7 +251,7 @@ const updateMaintenance = async () => {
     showEditDialog.value = false
     loadMaintenance()
   } catch (error) {
-    console.error('更新维修记录失败:', error)
+    ElMessage.error('更新维修记录失败')
     ElMessage.error('更新维修记录失败')
   }
 }
@@ -266,7 +269,7 @@ const deleteMaintenance = async () => {
     router.push('/maintenance')
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除维修记录失败:', error)
+      ElMessage.error('删除维修记录失败')
       ElMessage.error('删除维修记录失败')
     }
   }

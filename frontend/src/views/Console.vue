@@ -2,7 +2,7 @@
   <div class="console-page">
     <el-row :gutter="20">
       <el-col :span="12">
-        <el-card>
+        <el-card v-loading="loading">
           <template #header>
             <span>Console 连接配置</span>
           </template>
@@ -73,7 +73,7 @@
       </el-col>
 
       <el-col :span="12">
-        <el-card>
+        <el-card v-loading="loading">
           <template #header>
             <span>部署进度</span>
           </template>
@@ -110,6 +110,7 @@ import dayjs from 'dayjs'
 
 const availablePorts = ref([])
 const devices = ref([])
+const loading = ref(false)
 const recentBackups = ref([])
 
 const consoleForm = ref({
@@ -139,7 +140,7 @@ const detectPort = async () => {
       ElMessage.warning('未找到 Console 设备，请检查 USB 连接')
     }
   } catch (error) {
-    console.error('检测失败:', error)
+    ElMessage.error('检测失败：' + (error.response?.data?.detail || error.message))
   }
 }
 
@@ -148,7 +149,7 @@ const refreshPorts = async () => {
     const data = await getConsolePorts()
     availablePorts.value = data.ports || []
   } catch (error) {
-    console.error('刷新端口失败:', error)
+    ElMessage.error('刷新端口失败：' + (error.response?.data?.detail || error.message))
   }
 }
 

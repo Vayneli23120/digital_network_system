@@ -19,6 +19,7 @@ from .spare_movements import router as spare_movements_router
 from .compliance import router as compliance_router
 from .websocket import router as websocket_router
 from .discovery import router as discovery_router
+from .alerts import router as alerts_router
 
 __all__ = [
     "devices_router",
@@ -40,4 +41,5 @@ __all__ = [
     "compliance_router",
     "websocket_router",
     "discovery_router",
+    "alerts_router",
 ]

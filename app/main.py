@@ -38,6 +38,7 @@ from .routers import (
     compliance_router,
     websocket_router,
     discovery_router,
+    alerts_router,
 )
 from .middleware.auth_middleware import auth_middleware
 
@@ -102,6 +103,7 @@ app.include_router(spare_movements_router)
 app.include_router(compliance_router)
 app.include_router(websocket_router)
 app.include_router(discovery_router)
+app.include_router(alerts_router)
 
 # ============ 健康检查 ============
 

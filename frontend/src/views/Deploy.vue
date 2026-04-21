@@ -2,7 +2,7 @@
   <div class="deploy-page">
     <el-row :gutter="20">
       <el-col :span="14">
-        <el-card>
+        <el-card v-loading="loading">
           <template #header>
             <div class="card-header">
               <span>配置部署</span>
@@ -171,7 +171,7 @@
       </el-col>
 
       <el-col :span="10">
-        <el-card>
+        <el-card v-loading="loading">
           <template #header>
             <span>部署预览/结果</span>
           </template>
@@ -280,6 +280,7 @@ import dayjs from 'dayjs'
 
 const devices = ref([])
 const backups = ref([])
+const loading = ref(false)
 const templates = ref([])
 const allVariables = ref([])
 
@@ -315,7 +316,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    console.error('加载设备列表失败:', error)
+    ElMessage.error('加载设备列表失败')
   }
 }
 
@@ -324,7 +325,7 @@ const loadBackups = async () => {
     const data = await getBackups({ limit: 50 })
     backups.value = data.items || []
   } catch (error) {
-    console.error('加载备份列表失败:', error)
+    ElMessage.error('加载备份列表失败')
   }
 }
 
@@ -333,7 +334,7 @@ const loadTemplates = async () => {
     const data = await getTemplates()
     templates.value = data.items || []
   } catch (error) {
-    console.error('加载模板列表失败:', error)
+    ElMessage.error('加载模板列表失败')
   }
 }
 
@@ -342,7 +343,7 @@ const loadCompatibleVariables = async () => {
     const data = await getCompatibleVariables()
     allVariables.value = data.variables || []
   } catch (error) {
-    console.error('加载变量列表失败:', error)
+    ElMessage.error('加载变量列表失败')
   }
 }
 
@@ -368,7 +369,7 @@ const loadTemplateVariables = async (templateId) => {
       }
     }
   } catch (error) {
-    console.error('加载模板变量失败:', error)
+    ElMessage.error('加载模板变量失败')
   }
 }
 
@@ -435,7 +436,7 @@ const previewDeploy = async () => {
     previewResult.value = result
     ElMessage.success('预览生成成功')
   } catch (error) {
-    console.error('预览失败:', error)
+    ElMessage.error('预览失败')
     ElMessage.error(`预览失败：${error.response?.data?.detail || error.message}`)
   } finally {
     previewLoading.value = false
@@ -487,7 +488,7 @@ const confirmDeploy = async () => {
     deployResult.value = result
     ElMessage.success(result.message || '部署完成')
   } catch (error) {
-    console.error('部署失败:', error)
+    ElMessage.error('部署失败')
     ElMessage.error(`部署失败：${error.response?.data?.detail || error.message}`)
   } finally {
     deployLoading.value = false

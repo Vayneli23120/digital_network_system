@@ -88,6 +88,17 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          :total="total"
+          @size-change="loadDevices"
+          @current-change="loadDevices"
+        />
+      </div>
     </el-card>
 
     <!-- 添加/编辑设备对话框 -->
@@ -196,6 +207,9 @@ const devices = ref([])
 const searchText = ref('')
 const filterStatus = ref('')
 const filterRole = ref('')
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const showAddDialog = ref(false)
 const showImportDialog = ref(false)
 const editMode = ref(false)
@@ -255,10 +269,12 @@ const handleSelectionChange = (selection) => {
 const loadDevices = async () => {
   loading.value = true
   try {
-    const data = await getDevices()
+    const params = { status: filterStatus.value || undefined, role: filterRole.value || undefined }
+    const data = await getDevices(params)
     devices.value = data.items || []
+    total.value = data.total || devices.value.length
   } catch (error) {
-    console.error('加载设备列表失败:', error)
+    ElMessage.error('加载设备列表失败')
   } finally {
     loading.value = false
   }
@@ -269,7 +285,7 @@ const loadCredentialGroups = async () => {
     const data = await getCredentials()
     credentialGroups.value = data.items || data || []
   } catch (error) {
-    console.error('加载账号组列表失败:', error)
+    ElMessage.error('加载账号组列表失败')
   }
 }
 
@@ -283,7 +299,7 @@ const backupDevice = async (row) => {
     ElMessage.success(`设备 ${row.name} 备份成功`)
     loadDevices()
   } catch (error) {
-    console.error('备份失败:', error)
+    ElMessage.error('备份失败')
     ElMessage.error('备份失败')
   }
 }
@@ -303,7 +319,7 @@ const batchBackup = async () => {
     loadDevices()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('批量备份失败:', error)
+      ElMessage.error('批量备份失败')
       ElMessage.error('批量备份失败')
     }
   }
@@ -335,7 +351,7 @@ const updateDevice = async () => {
     editMode.value = false
     loadDevices()
   } catch (error) {
-    console.error('更新设备失败:', error)
+    ElMessage.error('更新设备失败')
     ElMessage.error(error.response?.data?.detail || '更新设备失败')
   }
 }
@@ -353,7 +369,7 @@ const deleteDevice = async (row) => {
     loadDevices()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除设备失败:', error)
+      ElMessage.error('删除设备失败')
       ElMessage.error('删除设备失败')
     }
   }
@@ -366,7 +382,7 @@ const addDevice = async () => {
     showAddDialog.value = false
     loadDevices()
   } catch (error) {
-    console.error('添加设备失败:', error)
+    ElMessage.error('添加设备失败')
     ElMessage.error('添加设备失败')
   }
 }
@@ -384,7 +400,7 @@ const exportDevices = async () => {
     window.URL.revokeObjectURL(url)
     ElMessage.success('导出成功')
   } catch (error) {
-    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
     ElMessage.error('导出失败')
   }
 }
@@ -410,7 +426,7 @@ const importDevices = async () => {
     loadDevices()
     loadCredentialGroups()
   } catch (error) {
-    console.error('导入失败:', error)
+    ElMessage.error('导入失败')
     ElMessage.error(error.response?.data?.detail || '导入失败')
   }
 }
@@ -457,4 +473,5 @@ onMounted(() => {
   font-size: 12px;
   min-width: auto;
 }
+.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

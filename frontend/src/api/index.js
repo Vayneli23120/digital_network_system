@@ -295,3 +295,17 @@ export function registerUser(data) {
 export function changePassword(data) {
   return api.post('/auth/change-password', data)
 }
+
+// 告警通知
+export function getAlertSettings() {
+  return api.get('/alerts/settings')
+}
+export function saveAlertSettings(data) {
+  return api.post('/alerts/settings', data)
+}
+export function getAlertStatus() {
+  return api.get('/alerts/status')
+}
+export function testAlertChannel(channel = 'all') {
+  return api.post('/alerts/test', null, { params: { channel } })
+}

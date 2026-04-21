@@ -203,6 +203,19 @@ const routes = [
         meta: { title: '工具日志' }
       }
     ]
+  },
+  {
+    path: '/alert-settings',
+    name: 'AlertSettingsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'AlertSettings',
+        component: () => import('@/views/AlertSettings.vue'),
+        meta: { title: '告警通知' }
+      }
+    ]
   }
 ]
 

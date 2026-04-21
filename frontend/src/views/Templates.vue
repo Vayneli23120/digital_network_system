@@ -25,6 +25,9 @@
           </template>
         </el-table-column>
       </el-table>
+      <div class="pagination-bar">
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadTemplates" @current-change="loadTemplates" />
+      </div>
     </el-card>
 
     <!-- 添加/编辑模板对话框 -->
@@ -91,6 +94,9 @@ import dayjs from 'dayjs'
 
 const templates = ref([])
 const loading = ref(false)
+const currentPage = ref(1)
+const pageSize = ref(20)
+const total = ref(0)
 const showAddDialog = ref(false)
 const showViewDialog = ref(false)
 const editMode = ref(false)
@@ -111,7 +117,7 @@ const loadTemplates = async () => {
     const data = await getTemplates()
     templates.value = data.items || []
   } catch (error) {
-    console.error('加载模板失败:', error)
+    ElMessage.error('加载模板失败')
   } finally {
     loading.value = false
   }
@@ -123,7 +129,7 @@ const viewTemplate = async (id) => {
     currentTemplate.value = data
     showViewDialog.value = true
   } catch (error) {
-    console.error('获取模板失败:', error)
+    ElMessage.error('获取模板失败')
   }
 }
 
@@ -140,7 +146,7 @@ const editTemplate = async (id) => {
     editMode.value = true
     showAddDialog.value = true
   } catch (error) {
-    console.error('获取模板失败:', error)
+    ElMessage.error('获取模板失败')
   }
 }
 
@@ -167,7 +173,7 @@ const createTemplate = async () => {
     resetForm()
     loadTemplates()
   } catch (error) {
-    console.error('创建模板失败:', error)
+    ElMessage.error('创建模板失败')
     ElMessage.error('创建模板失败')
   }
 }
@@ -197,7 +203,7 @@ const updateTemplate = async () => {
     resetForm()
     loadTemplates()
   } catch (error) {
-    console.error('更新模板失败:', error)
+    ElMessage.error('更新模板失败')
     ElMessage.error('更新模板失败')
   }
 }
@@ -215,7 +221,7 @@ const deleteTemplate = async (id) => {
     loadTemplates()
   } catch (error) {
     if (error !== 'cancel') {
-      console.error('删除模板失败:', error)
+      ElMessage.error('删除模板失败')
       ElMessage.error('删除模板失败')
     }
   }
@@ -277,4 +283,5 @@ code {
   border-radius: 3px;
   font-family: 'Consolas', 'Monaco', monospace;
 }
+.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

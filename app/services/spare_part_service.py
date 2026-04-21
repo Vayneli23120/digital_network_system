@@ -277,6 +277,19 @@ def create_movement(
     else:
         part.status = "active"
 
+    # 库存不足预警
+    if part.quantity_in_stock <= part.min_quantity:
+        try:
+            from .notification_service import get_notification_service
+            get_notification_service().notify_low_stock(
+                part_name=part.name,
+                part_number=part.part_number,
+                quantity=part.quantity_in_stock,
+                min_quantity=part.min_quantity,
+            )
+        except Exception:
+            pass  # 告警失败不影响主流程
+
     movement = SparePartMovement(
         part_id=part_id,
         movement_type=movement_type,
