@@ -176,6 +176,33 @@ const routes = [
         meta: { title: '配置合规' }
       }
     ]
+  },
+  // v1.2 新增路由
+  {
+    path: '/discovery',
+    name: 'DiscoveryLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Discovery',
+        component: () => import('@/views/Discovery.vue'),
+        meta: { title: '设备发现' }
+      }
+    ]
+  },
+  {
+    path: '/tool-logs',
+    name: 'ToolLogsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'ToolLogs',
+        component: () => import('@/views/ToolLogs.vue'),
+        meta: { title: '工具日志' }
+      }
+    ]
   }
 ]
 

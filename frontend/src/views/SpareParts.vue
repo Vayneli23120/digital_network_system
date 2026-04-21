@@ -1,15 +1,18 @@
 <template>
   <div class="spare-parts">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>备件资产管理</span>
-          <el-button type="primary" @click="showAddDialog">新增备件</el-button>
-        </div>
-      </template>
+    <el-tabs v-model="activeTab">
+      <!-- 备件列表 Tab -->
+      <el-tab-pane label="备件列表" name="parts">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>备件资产管理</span>
+              <el-button type="primary" @click="showAddDialog">新增备件</el-button>
+            </div>
+          </template>
 
-      <!-- 统计卡片 -->
-      <el-row :gutter="16" class="stats-row">
+          <!-- 统计卡片 -->
+          <el-row :gutter="16" class="stats-row">
         <el-col :span="6">
           <el-card shadow="hover" class="stat-card">
             <el-statistic title="备件种类" :value="stats.total_parts" />
@@ -80,6 +83,45 @@
         </el-table-column>
       </el-table>
     </el-card>
+      </el-tab-pane>
+
+      <!-- 出入库历史 Tab -->
+      <el-tab-pane label="出入库历史" name="movements">
+        <el-card>
+          <template #header>
+            <div class="card-header">
+              <span>出入库记录</span>
+              <el-button @click="loadMovements"><el-icon><Refresh /></el-icon> 刷新</el-button>
+            </div>
+          </template>
+          <el-table :data="movements" v-loading="movementsLoading" stripe border>
+            <el-table-column prop="created_at" label="时间" width="180">
+              <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+            </el-table-column>
+            <el-table-column prop="movement_type" label="类型" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.movement_type === 'in' ? 'success' : 'warning'" size="small">
+                  {{ row.movement_type === 'in' ? '入库' : '出库' }}
+                </el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column prop="quantity" label="数量" width="80" />
+            <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="operator" label="操作人" width="100" />
+            <el-table-column prop="reference" label="参考编号" width="150" show-overflow-tooltip />
+          </el-table>
+          <div class="pagination-bar">
+            <el-pagination
+              v-model:current-page="movementPage"
+              :page-size="50"
+              layout="total, prev, pager, next"
+              :total="movementTotal"
+              @current-change="loadMovements"
+            />
+          </div>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
 
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑备件' : '新增备件'" width="600px">
@@ -153,7 +195,8 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getPartList, createPart, updatePart, getPartStats, createMovement } from '@/api'
+import { Refresh } from '@element-plus/icons-vue'
+import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements } from '@/api'
 
 const parts = ref([])
 const loading = ref(false)
@@ -161,6 +204,11 @@ const search = ref('')
 const category = ref('')
 const lowStock = ref(false)
 const stats = reactive({ total_parts: 0, total_quantity: 0, low_stock_count: 0, total_value: 0 })
+const activeTab = ref('parts')
+const movements = ref([])
+const movementsLoading = ref(false)
+const movementPage = ref(1)
+const movementTotal = ref(0)
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -178,13 +226,13 @@ const movementForm = reactive({ quantity: 1, reason: '', operator: '', reference
 const loadParts = async () => {
   loading.value = true
   try {
-    const params = { search: search.value, category: category.value, low_stock: lowStock.value }
-    const { data } = await getPartList(params)
-    parts.value = data
-    const { data: statsData } = await getPartStats()
+    const params = { search: search.value, category: category.value, low_stock: lowStock.value, limit: 200 }
+    const result = await getPartList(params)
+    parts.value = result.items || []
+    const statsData = await getPartStats()
     Object.assign(stats, statsData)
   } catch (e) {
-    console.error(e)
+    ElMessage.error('加载备件失败：' + (e.response?.data?.detail || e.message))
   } finally {
     loading.value = false
   }
@@ -215,7 +263,7 @@ const savePart = async () => {
     dialogVisible.value = false
     loadParts()
   } catch (e) {
-    ElMessage.error('操作失败')
+    ElMessage.error('操作失败：' + (e.response?.data?.detail || e.message))
   }
 }
 
@@ -250,8 +298,28 @@ const submitMovement = async () => {
     movementDialogVisible.value = false
     loadParts()
   } catch (e) {
-    ElMessage.error('操作失败')
+    ElMessage.error('操作失败：' + (e.response?.data?.detail || e.message))
   }
+}
+
+const loadMovements = async () => {
+  movementsLoading.value = true
+  try {
+    const params = { skip: (movementPage.value - 1) * 50, limit: 50 }
+    const result = await getMovements(params)
+    movements.value = result.items || []
+    movementTotal.value = result.total || 0
+  } catch (e) {
+    ElMessage.error('加载出入库记录失败')
+  } finally {
+    movementsLoading.value = false
+  }
+}
+
+const formatDateTime = (datetimeStr) => {
+  if (!datetimeStr) return ''
+  try { return new Date(datetimeStr).toLocaleString('zh-CN', { hour12: false }) }
+  catch { return datetimeStr }
 }
 
 onMounted(loadParts)
@@ -262,4 +330,5 @@ onMounted(loadParts)
 .stats-row { margin-bottom: 20px; }
 .stat-card { text-align: center; }
 .filter-form { margin-bottom: 20px; }
+.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 </style>

@@ -214,3 +214,84 @@ export function searchLogs(keyword, params) {
 export function clearOldLogs(days) {
   return api.post('/logs/clear', null, { params: { days } })
 }
+
+// 仪表盘趋势
+export function getFaultTrend(params) {
+  return api.get('/dashboard/fault-trend', { params })
+}
+
+// 设备发现
+export function pingSweep(data) {
+  return api.post('/discovery/ping-sweep', data)
+}
+export function discoverDevices(data) {
+  return api.post('/discovery/discover', data)
+}
+export function getDiscoveryCapabilities() {
+  return api.get('/discovery/capabilities')
+}
+
+// 工具日志
+export function getToolLogs(params) {
+  return api.get('/tool-logs/', { params })
+}
+export function searchToolLogs(keyword, params) {
+  return api.get('/tool-logs/search', { params: { keyword, ...params } })
+}
+export function getToolLogDetail(id) {
+  return api.get(`/tool-logs/${id}`)
+}
+export function getToolLogStats() {
+  return api.get('/tool-logs/stats/summary')
+}
+export function cleanupToolLogs(days) {
+  return api.delete('/tool-logs/cleanup', { params: { days } })
+}
+
+// 备件管理
+export function getPartList(params) {
+  return api.get('/spare-parts/', { params })
+}
+export function getPart(id) {
+  return api.get(`/spare-parts/${id}`)
+}
+export function createPart(data) {
+  return api.post('/spare-parts/', data)
+}
+export function updatePart(id, data) {
+  return api.put(`/spare-parts/${id}`, data)
+}
+export function deletePart(id) {
+  return api.delete(`/spare-parts/${id}`)
+}
+export function getPartStats() {
+  return api.get('/spare-parts/stats/summary')
+}
+
+// 备件出入库
+export function createMovement(data) {
+  return api.post('/spare-movements/', data)
+}
+export function getMovements(params) {
+  return api.get('/spare-movements/', { params })
+}
+export function getMovementDetail(id) {
+  return api.get(`/spare-movements/${id}`)
+}
+
+// 认证
+export function login(data) {
+  return api.post('/auth/login', data)
+}
+export function logout() {
+  return api.post('/auth/logout')
+}
+export function getCurrentUser() {
+  return api.get('/auth/me')
+}
+export function registerUser(data) {
+  return api.post('/auth/register', data)
+}
+export function changePassword(data) {
+  return api.post('/auth/change-password', data)
+}

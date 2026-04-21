@@ -53,6 +53,22 @@
           <el-icon><Document /></el-icon>
           <span>系统日志</span>
         </el-menu-item>
+        <el-menu-item index="/discovery">
+          <el-icon><Aim /></el-icon>
+          <span>设备发现</span>
+        </el-menu-item>
+        <el-menu-item index="/spare-parts">
+          <el-icon><Box /></el-icon>
+          <span>备件管理</span>
+        </el-menu-item>
+        <el-menu-item index="/compliance">
+          <el-icon><Checked /></el-icon>
+          <span>配置合规</span>
+        </el-menu-item>
+        <el-menu-item index="/tool-logs">
+          <el-icon><List /></el-icon>
+          <span>工具日志</span>
+        </el-menu-item>
       </el-menu>
     </el-aside>
 
