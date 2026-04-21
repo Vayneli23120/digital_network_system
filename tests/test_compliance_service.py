@@ -5,7 +5,7 @@ These tests verify the compliance check logic against sample configurations.
 """
 
 import pytest
-from app.services.compliance_service import (
+from app.features.compliance.compliance_service import (
     ComplianceService,
     ComplianceCheckResult,
     ComplianceReport,

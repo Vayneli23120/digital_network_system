@@ -5,12 +5,12 @@ Tests for template_service.py
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import ConfigTemplate
-from app.services.template_service import (
+from app.shared.models import ConfigTemplate
+from app.features.templates.template_service import (
     list_templates, get_template, create_template,
     update_template, delete_template, render_template,
 )
-from app.exceptions import ResourceNotFoundException, ConflictException
+from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
 class TestListTemplates:

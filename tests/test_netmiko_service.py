@@ -7,7 +7,7 @@ real network devices during testing.
 
 import pytest
 from unittest.mock import patch, MagicMock
-from app.models import Device
+from app.shared.models import Device
 
 
 class MockConnectHandler:
@@ -51,8 +51,8 @@ Processor board ID: FCW1234A5BC
 @pytest.fixture
 def netmiko_service():
     """Create a NetmikoService instance with mocked connection"""
-    with patch("app.services.netmiko_service.ConnectHandler", MockConnectHandler):
-        from app.services.netmiko_service import NetmikoService
+    with patch("app.features.backups.netmiko_service.ConnectHandler", MockConnectHandler):
+        from app.features.backups.netmiko_service import NetmikoService
         service = NetmikoService()
         yield service
 
@@ -161,7 +161,7 @@ class TestBackupDeviceConfig:
 
     def test_backup_device_config_success(self, sample_device):
         """Test successful device configuration backup"""
-        from app.services.netmiko_service import backup_device_config
+        from app.features.backups.netmiko_service import backup_device_config
 
         sample_device.ip = "192.168.1.1"
         sample_device.name = "Test-SW-01"
@@ -169,7 +169,7 @@ class TestBackupDeviceConfig:
 
         credentials = {"username": "admin", "password": "secret"}
 
-        with patch("app.services.netmiko_service.ConnectHandler", MockConnectHandler):
+        with patch("app.features.backups.netmiko_service.ConnectHandler", MockConnectHandler):
             result = backup_device_config(sample_device, credentials, "./backups")
 
             assert result["success"] is True
@@ -179,7 +179,7 @@ class TestBackupDeviceConfig:
 
     def test_backup_device_config_connection_failure(self, sample_device):
         """Test backup failure due to connection error"""
-        from app.services.netmiko_service import backup_device_config
+        from app.features.backups.netmiko_service import backup_device_config
         from netmiko import NetmikoTimeoutException
 
         sample_device.ip = "192.168.1.1"
@@ -190,7 +190,7 @@ class TestBackupDeviceConfig:
         def mock_connect_failure(**kwargs):
             raise NetmikoTimeoutException("Connection timed out")
 
-        with patch("app.services.netmiko_service.ConnectHandler", mock_connect_failure):
+        with patch("app.features.backups.netmiko_service.ConnectHandler", mock_connect_failure):
             result = backup_device_config(sample_device, credentials, "./backups")
 
             assert result["success"] is False

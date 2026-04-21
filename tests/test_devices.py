@@ -4,7 +4,7 @@ Tests for device management router
 
 import pytest
 from datetime import datetime
-from app.models import Device
+from app.shared.models import Device
 
 
 class TestDeviceList:
@@ -12,7 +12,7 @@ class TestDeviceList:
 
     def test_list_devices_empty(self, db_session):
         """Test listing devices when database is empty"""
-        from app.services.device_service import list_devices
+        from app.features.devices.device_service import list_devices
 
         result = list_devices(db=db_session, status=None, role=None)
         assert result["total"] == 0
@@ -24,7 +24,7 @@ class TestDeviceList:
         db_session.add(device)
         db_session.commit()
 
-        from app.services.device_service import list_devices
+        from app.features.devices.device_service import list_devices
         result = list_devices(db=db_session, status=None, role=None)
 
         assert result["total"] == 1
@@ -37,7 +37,7 @@ class TestDeviceList:
         db_session.add(device)
         db_session.commit()
 
-        from app.services.device_service import list_devices
+        from app.features.devices.device_service import list_devices
         result = list_devices(db=db_session, status="online", role=None)
 
         assert result["total"] == 1
@@ -52,7 +52,7 @@ class TestDeviceList:
         db_session.add(device)
         db_session.commit()
 
-        from app.services.device_service import list_devices
+        from app.features.devices.device_service import list_devices
         result = list_devices(db=db_session, status=None, role="core")
 
         assert result["total"] == 1
@@ -67,7 +67,7 @@ class TestDeviceCreate:
 
     def test_create_device(self, db_session, sample_device_data):
         """Test creating a new device"""
-        from app.services.device_service import create_device
+        from app.features.devices.device_service import create_device
 
         # Remove id if present
         data = {k: v for k, v in sample_device_data.items() if k != "id"}
@@ -79,8 +79,8 @@ class TestDeviceCreate:
 
     def test_create_device_duplicate_name(self, db_session, sample_device_data):
         """Test creating device with duplicate name raises error"""
-        from app.services.device_service import create_device
-        from app.exceptions import ConflictException
+        from app.features.devices.device_service import create_device
+        from app.shared.exceptions import ConflictException
 
         device = Device(**sample_device_data)
         db_session.add(device)
@@ -99,7 +99,7 @@ class TestDeviceGet:
 
     def test_get_device(self, db_session, sample_device_data):
         """Test getting a device by ID"""
-        from app.services.device_service import get_device
+        from app.features.devices.device_service import get_device
 
         device = Device(**sample_device_data)
         db_session.add(device)
@@ -111,8 +111,8 @@ class TestDeviceGet:
 
     def test_get_device_not_found(self, db_session):
         """Test getting non-existent device raises error"""
-        from app.services.device_service import get_device
-        from app.exceptions import ResourceNotFoundException
+        from app.features.devices.device_service import get_device
+        from app.shared.exceptions import ResourceNotFoundException
 
         with pytest.raises(ResourceNotFoundException):
             get_device(db=db_session, device_id=99999)
@@ -123,7 +123,7 @@ class TestDeviceUpdate:
 
     def test_update_device(self, db_session, sample_device_data):
         """Test updating device fields"""
-        from app.services.device_service import update_device
+        from app.features.devices.device_service import update_device
 
         device = Device(**sample_device_data)
         db_session.add(device)
@@ -137,8 +137,8 @@ class TestDeviceUpdate:
 
     def test_update_device_not_found(self, db_session):
         """Test updating non-existent device raises error"""
-        from app.services.device_service import update_device
-        from app.exceptions import ResourceNotFoundException
+        from app.features.devices.device_service import update_device
+        from app.shared.exceptions import ResourceNotFoundException
 
         with pytest.raises(ResourceNotFoundException):
             update_device(db=db_session, device_id=99999, update_data={"status": "offline"})
@@ -149,7 +149,7 @@ class TestDeviceDelete:
 
     def test_delete_device(self, db_session, sample_device_data):
         """Test deleting a device"""
-        from app.services.device_service import delete_device
+        from app.features.devices.device_service import delete_device
 
         device = Device(**sample_device_data)
         db_session.add(device)
@@ -163,8 +163,8 @@ class TestDeviceDelete:
 
     def test_delete_device_not_found(self, db_session):
         """Test deleting non-existent device raises error"""
-        from app.services.device_service import delete_device
-        from app.exceptions import ResourceNotFoundException
+        from app.features.devices.device_service import delete_device
+        from app.shared.exceptions import ResourceNotFoundException
 
         with pytest.raises(ResourceNotFoundException):
             delete_device(db=db_session, device_id=99999)
@@ -175,7 +175,7 @@ class TestDeviceBatchOperations:
 
     def test_batch_update_status(self, db_session, sample_device_data):
         """Test batch updating device status"""
-        from app.services.device_service import batch_update_devices
+        from app.features.devices.device_service import batch_update_devices
 
         # Create multiple devices
         devices = []

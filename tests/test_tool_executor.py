@@ -7,7 +7,7 @@ These tests verify the tool executor's ability to orchestrate netmiko, napalm, a
 import pytest
 import asyncio
 from unittest.mock import patch, MagicMock, AsyncMock
-from app.services.tool_executor import ToolExecutor
+from app.features.tool_logs.tool_executor import ToolExecutor
 
 
 @pytest.fixture
@@ -312,5 +312,5 @@ class TestToolExecutorGlobalInstance:
 
     def test_global_instance_exists(self):
         """Test that the global tool_executor instance exists"""
-        from app.services.tool_executor import tool_executor
+        from app.features.tool_logs.tool_executor import tool_executor
         assert isinstance(tool_executor, ToolExecutor)

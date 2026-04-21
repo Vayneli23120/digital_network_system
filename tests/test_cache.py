@@ -4,7 +4,7 @@ Tests for cache service
 
 import pytest
 import time
-from app.services.cache import SimpleCache
+from app.shared.cache import SimpleCache
 
 
 class TestSimpleCache:

@@ -3,7 +3,7 @@ Tests for rate_limiter middleware
 """
 
 import pytest
-from app.middleware.rate_limiter import RateLimiter
+from app.shared.middleware.rate_limiter import RateLimiter
 
 
 class TestRateLimiter:
@@ -60,6 +60,6 @@ class TestRateLimiter:
         assert status["remaining"] == 10
 
     def test_default_limiter_exists(self):
-        from app.middleware.rate_limiter import default_limiter, get_rate_limiter
+        from app.shared.middleware.rate_limiter import default_limiter, get_rate_limiter
         assert default_limiter is not None
         assert get_rate_limiter() is default_limiter

@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 @pytest.fixture(autouse=True)
 def reset_config():
     """Reset the global config singleton before each test"""
-    from app import config as config_module
+    from app.shared import config as config_module
     config_module._config = None
     yield
     config_module._config = None
@@ -25,8 +25,8 @@ def reset_config():
 @pytest.fixture
 def db_manager():
     """Create an in-memory SQLite database manager"""
-    from app.database import DatabaseManager
-    from app.models import Base
+    from app.shared.database import DatabaseManager
+    from app.shared.models import Base
 
     manager = DatabaseManager(":memory:")
     manager.init_db()
@@ -138,4 +138,4 @@ def mock_netmiko(monkeypatch):
     def mock_connect(**kwargs):
         return MockConnectHandler(**kwargs)
 
-    monkeypatch.setattr("app.services.netmiko_service.ConnectHandler", mock_connect)
+    monkeypatch.setattr("app.features.backups.netmiko_service.ConnectHandler", mock_connect)

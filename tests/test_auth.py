@@ -5,7 +5,7 @@ Tests for authentication and authorization router
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime, timedelta
-from app.models import User, Role, Permission
+from app.shared.models import User, Role, Permission
 
 
 class TestPasswordHashing:
@@ -13,7 +13,7 @@ class TestPasswordHashing:
 
     def test_verify_password_correct(self):
         """Test verifying correct password"""
-        from app.routers.auth import verify_password
+        from app.features.auth.router import verify_password
 
         # Hash a known password
         hashed = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYWEG6fSYY/i"
@@ -25,7 +25,7 @@ class TestPasswordHashing:
 
     def test_verify_password_incorrect(self):
         """Test verifying incorrect password"""
-        from app.routers.auth import verify_password
+        from app.features.auth.router import verify_password
 
         result = verify_password("wrongpassword", "correctpassword")
         assert result is False
@@ -36,10 +36,10 @@ class TestUserCreation:
 
     def test_create_user(self, db_session):
         """Test creating a new user"""
-        from app.routers.auth import create_user
-        from app.models import User
+        from app.features.auth.router import create_user
+        from app.shared.models import User
 
-        from app.routers.auth import get_password_hash
+        from app.features.auth.router import get_password_hash
         
         user_data = {
             "username": "testuser",
@@ -60,8 +60,8 @@ class TestUserCreation:
 
     def test_create_user_duplicate_username(self, db_session, sample_user):
         """Test creating user with duplicate username fails"""
-        from app.routers.auth import create_user
-        from app.exceptions import ConflictException
+        from app.features.auth.router import create_user
+        from app.shared.exceptions import ConflictException
 
         db_session.add(sample_user)
         db_session.commit()
@@ -83,7 +83,7 @@ class TestUserAuthentication:
 
     def test_login_success(self, db_session, sample_user):
         """Test successful login"""
-        from app.routers.auth import login_user, get_password_hash
+        from app.features.auth.router import login_user, get_password_hash
 
         # Hash the password first - note: User model uses password_hash, not password
         sample_user.password_hash = get_password_hash("testpassword")
@@ -102,8 +102,8 @@ class TestUserAuthentication:
 
     def test_login_invalid_username(self, db_session):
         """Test login with invalid username"""
-        from app.routers.auth import login_user
-        from app.exceptions import AuthenticationException
+        from app.features.auth.router import login_user
+        from app.shared.exceptions import AuthenticationException
 
         with pytest.raises(AuthenticationException):
             login_user(
@@ -114,8 +114,8 @@ class TestUserAuthentication:
 
     def test_login_invalid_password(self, db_session, sample_user):
         """Test login with invalid password"""
-        from app.routers.auth import login_user, get_password_hash
-        from app.exceptions import AuthenticationException
+        from app.features.auth.router import login_user, get_password_hash
+        from app.shared.exceptions import AuthenticationException
 
         sample_user.password_hash = get_password_hash("correctpassword")
         db_session.add(sample_user)
@@ -134,7 +134,7 @@ class TestTokenGeneration:
 
     def test_create_access_token(self):
         """Test creating an access token"""
-        from app.routers.auth import create_access_token
+        from app.features.auth.router import create_access_token
 
         token = create_access_token(data={"sub": "testuser", "role": "admin"})
 
@@ -144,7 +144,7 @@ class TestTokenGeneration:
 
     def test_decode_access_token(self):
         """Test decoding a valid access token"""
-        from app.routers.auth import create_access_token, decode_token
+        from app.features.auth.router import create_access_token, decode_token
 
         data = {"sub": "testuser", "role": "admin"}
         token = create_access_token(data=data)
@@ -156,8 +156,8 @@ class TestTokenGeneration:
 
     def test_decode_invalid_token(self):
         """Test decoding an invalid token raises error"""
-        from app.routers.auth import decode_token
-        from app.exceptions import AuthenticationException
+        from app.features.auth.router import decode_token
+        from app.shared.exceptions import AuthenticationException
 
         with pytest.raises(AuthenticationException):
             decode_token("invalid.token.here")
@@ -202,7 +202,7 @@ class TestUserSessionManagement:
 
     def test_create_session(self, db_session, sample_user):
         """Test creating a user session"""
-        from app.models import UserSession
+        from app.shared.models import UserSession
 
         db_session.add(sample_user)
         db_session.commit()
@@ -221,7 +221,7 @@ class TestUserSessionManagement:
 
     def test_session_expiration(self, db_session, sample_user):
         """Test expired sessions are detected"""
-        from app.models import UserSession
+        from app.shared.models import UserSession
 
         db_session.add(sample_user)
         db_session.commit()

@@ -7,7 +7,7 @@ without requiring actual network device connections.
 
 import pytest
 from unittest.mock import patch, MagicMock
-from app.models import Device, ConfigTemplate
+from app.shared.models import Device, ConfigTemplate
 
 
 class TestDeployServiceTemplateRendering:
@@ -136,7 +136,7 @@ class TestDeployServiceCredentialSelection:
 
     def test_get_device_credentials_exact_match(self):
         """Test getting credentials for exact group match"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -153,7 +153,7 @@ class TestDeployServiceCredentialSelection:
 
     def test_get_device_credentials_default_fallback(self):
         """Test falling back to default group when specific group not found"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -169,7 +169,7 @@ class TestDeployServiceCredentialSelection:
 
     def test_get_device_credentials_empty_groups(self):
         """Test handling empty credential groups"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -187,7 +187,7 @@ class TestDeployServiceDeviceTypeMapping:
 
     def test_device_type_mapping(self):
         """Test device type is correctly mapped for Netmiko"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -228,7 +228,7 @@ class TestDeployServiceConnection:
 
     def test_connect_device_success(self):
         """Test successful device connection"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         with patch("app.services.deploy_service.ConnectHandler", MockNetmikoConnection):
             service = DeployService()
@@ -251,7 +251,7 @@ class TestDeployServiceConnection:
 
     def test_connect_device_without_netmiko(self):
         """Test error when netmiko is not available"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -270,7 +270,7 @@ class TestDeployServiceCompareConfig:
 
     def test_compare_config_identical(self):
         """Test identical configs produce no diff"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -281,7 +281,7 @@ class TestDeployServiceCompareConfig:
 
     def test_compare_config_with_changes(self):
         """Test configs with changes produce diff lines"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 
@@ -301,7 +301,7 @@ class TestDeployServiceParseCommands:
 
     def test_parse_config_commands(self):
         """Test parsing multi-line config into commands"""
-        from app.services.deploy_service import DeployService
+        from app.features.deploy.deploy_service import DeployService
 
         service = DeployService()
 

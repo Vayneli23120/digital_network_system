@@ -8,7 +8,7 @@ import os
 from pathlib import Path
 from datetime import datetime, timedelta
 
-from app.services.log_service import LogService, get_log_service
+from app.features.logs.log_service import LogService, get_log_service
 
 
 @pytest.fixture

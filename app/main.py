@@ -18,10 +18,10 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from loguru import logger
 
-from .config import get_config
-from .database import get_db_manager
-from .exceptions import register_exception_handlers
-from .db_init import init_default_templates
+from .shared.config import get_config
+from .shared.database import get_db_manager
+from .shared.exceptions import register_exception_handlers
+from .shared.db_init import init_default_templates
 from .routers import (
     devices_router,
     backups_router,
@@ -43,8 +43,8 @@ from .routers import (
     discovery_router,
     alerts_router,
 )
-from .middleware.auth_middleware import auth_middleware
-from .middleware.rate_limiter import RateLimitMiddleware
+from .shared.middleware.auth_middleware import auth_middleware
+from .shared.middleware.rate_limiter import RateLimitMiddleware
 
 config = get_config()
 
@@ -158,7 +158,7 @@ async def readiness_check():
 @app.get("/api/rate-limit/status", tags=["health"])
 async def rate_limit_status(request: Request):
     """查看当前请求的限流状态"""
-    from .middleware.rate_limiter import get_rate_limiter
+    from .shared.middleware.rate_limiter import get_rate_limiter
 
     limiter = get_rate_limiter()
     return limiter.get_status(request.client.host)
@@ -167,7 +167,7 @@ async def rate_limit_status(request: Request):
 @app.get("/api/cache/stats", tags=["health"])
 async def cache_stats():
     """查看缓存统计"""
-    from .services.cache import cache
+    from .shared.cache import cache
 
     return cache.get_stats()
 
@@ -175,7 +175,7 @@ async def cache_stats():
 @app.post("/api/cache/clear", tags=["health"])
 async def cache_clear(prefix: str = None):
     """清除缓存"""
-    from .services.cache import cache
+    from .shared.cache import cache
 
     count = cache.invalidate_prefix(prefix) if prefix else cache.clear()
     return {"cleared": count}
@@ -208,7 +208,7 @@ def handle_shutdown(signum, frame):
     except Exception as e:
         logger.error(f"关闭数据库连接池失败: {e}")
     try:
-        from .services.cache import cache
+        from .shared.cache import cache
 
         count = cache.clear()
         logger.info(f"缓存已清空 ({count} 个条目)")

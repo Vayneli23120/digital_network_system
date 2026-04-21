@@ -1,0 +1,1 @@
+"""alerts"""  # noqa: F401

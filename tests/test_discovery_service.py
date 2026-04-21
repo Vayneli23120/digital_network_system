@@ -8,7 +8,7 @@ without requiring actual network connections.
 import socket
 import pytest
 from unittest.mock import patch, MagicMock
-from app.services.discovery_service import (
+from app.features.discovery.discovery_service import (
     DiscoveryService,
     DiscoveredDevice,
     get_discovery_service,

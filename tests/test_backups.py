@@ -5,7 +5,7 @@ Tests for backup management router
 import pytest
 from unittest.mock import patch, MagicMock
 from datetime import datetime
-from app.models import Device, BackupRecord, CredentialGroup
+from app.shared.models import Device, BackupRecord, CredentialGroup
 
 
 class TestBackupRecord:
@@ -120,14 +120,14 @@ class TestBackupList:
             db_session.add(backup)
         db_session.commit()
 
-        from app.services.backup_service import list_backups
+        from app.features.backups.backup_service import list_backups
         result = list_backups(db=db_session, device_id=device.id)
 
         assert result["total"] == 3
 
     def test_list_backups_empty(self, db_session):
         """Test listing backups when none exist"""
-        from app.services.backup_service import list_backups
+        from app.features.backups.backup_service import list_backups
         result = list_backups(db=db_session, device_id=999)
 
         assert result["total"] == 0
@@ -154,7 +154,7 @@ class TestBackupDelete:
         db_session.commit()
         backup_id = backup.id
 
-        from app.services.backup_service import delete_backup
+        from app.features.backups.backup_service import delete_backup
         result = delete_backup(db=db_session, backup_id=backup_id)
 
         assert result["success"] is True
@@ -162,8 +162,8 @@ class TestBackupDelete:
 
     def test_delete_nonexistent_backup(self, db_session):
         """Test deleting a backup that doesn't exist"""
-        from app.services.backup_service import delete_backup
-        from app.exceptions import ResourceNotFoundException
+        from app.features.backups.backup_service import delete_backup
+        from app.shared.exceptions import ResourceNotFoundException
 
         with pytest.raises(ResourceNotFoundException):
             delete_backup(db=db_session, backup_id=99999)

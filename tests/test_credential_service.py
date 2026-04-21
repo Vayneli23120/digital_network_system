@@ -7,7 +7,7 @@ These tests verify the Fernet-based password encryption/decryption logic.
 import pytest
 from unittest.mock import patch, MagicMock
 from cryptography.fernet import Fernet
-from app.services.credential_service import (
+from app.features.credentials.credential_service import (
     CredentialService,
     get_credential_service,
     encrypt_password,
@@ -25,9 +25,9 @@ class TestCredentialServiceEncryption:
 
         # Patch config to return our test key
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
             original = "MyS3cretP@ssw0rd!"
             encrypted = service.encrypt_password(original)
@@ -40,9 +40,9 @@ class TestCredentialServiceEncryption:
         """Test that each encryption produces different ciphertext (Fernet property)"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
             original = "same_password"
 
@@ -59,9 +59,9 @@ class TestCredentialServiceEncryption:
         """Test encryption of empty string"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
             encrypted = service.encrypt_password("")
             decrypted = service.decrypt_password(encrypted)
@@ -71,9 +71,9 @@ class TestCredentialServiceEncryption:
         """Test encryption of unicode passwords"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
             original = "密码测试🔒"
             encrypted = service.encrypt_password(original)
@@ -84,9 +84,9 @@ class TestCredentialServiceEncryption:
         """Test encryption of long passwords"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
             original = "A" * 1000
             encrypted = service.encrypt_password(original)
@@ -101,9 +101,9 @@ class TestCredentialServiceDecryption:
         """Test decryption of invalid/ tampered token"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
 
             with pytest.raises(Exception):  # Fernet raises InvalidToken
@@ -115,16 +115,16 @@ class TestCredentialServiceDecryption:
         key2 = Fernet.generate_key().decode()
 
         mock_config1 = MagicMock()
-        mock_config1.security = {"encryption_key": key1}
+        mock_config1.security = MagicMock(); mock_config1.security.jwt_secret = key1
 
         mock_config2 = MagicMock()
-        mock_config2.security = {"encryption_key": key2}
+        mock_config2.security = MagicMock(); mock_config2.security.jwt_secret = key2
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config1):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config1):
             service1 = CredentialService()
             encrypted = service1.encrypt_password("secret")
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config2):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config2):
             service2 = CredentialService()
             with pytest.raises(Exception):
                 service2.decrypt_password(encrypted)
@@ -136,9 +136,9 @@ class TestCredentialServiceConfig:
     def test_missing_encryption_key(self):
         """Test error when encryption key is not configured"""
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": ""}
+        mock_config.security = MagicMock(); mock_config.security.jwt_secret = ""
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = CredentialService()
 
             with pytest.raises(ValueError, match="Encryption key not configured"):
@@ -150,27 +150,27 @@ class TestCredentialServiceSingleton:
 
     def test_get_credential_service_returns_instance(self):
         """Test that get_credential_service returns a CredentialService instance"""
-        import app.services.credential_service as mod
+        import app.features.credentials.credential_service as mod
         mod._credential_service = None  # reset
 
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             service = get_credential_service()
             assert isinstance(service, CredentialService)
 
     def test_get_credential_service_returns_same_instance(self):
         """Test that repeated calls return the same instance"""
-        import app.services.credential_service as mod
+        import app.features.credentials.credential_service as mod
         mod._credential_service = None
 
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             s1 = get_credential_service()
             s2 = get_credential_service()
             assert s1 is s2
@@ -183,12 +183,12 @@ class TestConvenienceFunctions:
         """Test the encrypt_password convenience function"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        import app.services.credential_service as mod
+        import app.features.credentials.credential_service as mod
         mod._credential_service = None
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             result = encrypt_password("test123")
             assert isinstance(result, str)
             assert result != "test123"
@@ -197,12 +197,12 @@ class TestConvenienceFunctions:
         """Test the decrypt_password convenience function"""
         key = Fernet.generate_key().decode()
         mock_config = MagicMock()
-        mock_config.security = {"encryption_key": key}
+        mock_config.security.jwt_secret = key
 
-        import app.services.credential_service as mod
+        import app.features.credentials.credential_service as mod
         mod._credential_service = None
 
-        with patch("app.services.credential_service.get_config", return_value=mock_config):
+        with patch("app.features.credentials.credential_service.get_config", return_value=mock_config):
             encrypted = encrypt_password("test456")
             decrypted = decrypt_password(encrypted)
             assert decrypted == "test456"

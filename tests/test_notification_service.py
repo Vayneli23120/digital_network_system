@@ -6,7 +6,7 @@ import pytest
 from unittest.mock import MagicMock, patch
 
 from app.services.notification_service import NotificationService, get_notification_service
-from app.config import get_config
+from app.shared.config import get_config
 
 
 class TestNotificationService:

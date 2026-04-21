@@ -6,9 +6,9 @@ import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.models import Device, BackupRecord
-from app.services.backup_service import list_backups, delete_backup
-from app.exceptions import ResourceNotFoundException
+from app.shared.models import Device, BackupRecord
+from app.features.backups.backup_service import list_backups, delete_backup
+from app.shared.exceptions import ResourceNotFoundException
 
 
 class TestListBackups:

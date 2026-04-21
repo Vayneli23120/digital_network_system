@@ -6,8 +6,8 @@ import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
-from app.models import Device, BackupRecord, FaultRecord, MaintenanceRecord
-from app.services.dashboard_service import get_dashboard_summary, get_fault_trend
+from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord
+from app.features.dashboard.dashboard_service import get_dashboard_summary, get_fault_trend
 
 
 class TestGetDashboardSummary:

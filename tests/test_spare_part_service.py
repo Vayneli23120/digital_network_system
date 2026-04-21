@@ -5,12 +5,12 @@ Tests for spare_part_service.py
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import SparePart, SparePartMovement
-from app.services.spare_part_service import (
+from app.shared.models import SparePart, SparePartMovement
+from app.features.spare_parts.spare_part_service import (
     list_parts, get_part, create_part, update_part, delete_part,
     get_stats, create_movement, list_movements, get_movement,
 )
-from app.exceptions import ResourceNotFoundException, ConflictException
+from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
 class TestListParts:

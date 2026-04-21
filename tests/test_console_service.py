@@ -7,7 +7,7 @@ without requiring actual serial hardware.
 
 import pytest
 from unittest.mock import patch, MagicMock, PropertyMock
-from app.services.console_service import ConsoleService, find_console_port
+from app.features.console.console_service import ConsoleService, find_console_port
 
 
 class TestConsoleServiceListPorts:

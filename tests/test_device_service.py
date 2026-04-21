@@ -5,12 +5,12 @@ Tests for device_service.py
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Device
-from app.services.device_service import (
+from app.shared.models import Device
+from app.features.devices.device_service import (
     list_devices, create_device, get_device,
     update_device, delete_device, batch_update_devices,
 )
-from app.exceptions import ResourceNotFoundException, ConflictException
+from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
 class TestListDevices:
