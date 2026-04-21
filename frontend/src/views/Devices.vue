@@ -474,4 +474,9 @@ onMounted(() => {
   min-width: auto;
 }
 .pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
+@media (max-width: 768px) {
+  .filter-bar { flex-wrap: wrap; }
+  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
+  .action-buttons .el-button { margin-bottom: 4px; }
+}
 </style>

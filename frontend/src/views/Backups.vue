@@ -343,4 +343,9 @@ onMounted(() => {
   color: #cb2431;
 }
 .pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
+@media (max-width: 768px) {
+  .filter-bar { flex-wrap: wrap; }
+  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
+  .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+}
 </style>
