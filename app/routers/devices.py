@@ -19,6 +19,8 @@ try:
 except ImportError:
     StreamingResponse = None
 
+from pydantic import BaseModel
+
 from ..database import get_db
 from ..models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup
 from ..config import get_config
@@ -26,6 +28,34 @@ from ..config import get_config
 config = get_config()
 
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+
+
+# ============ Pydantic 模型 ============
+
+class DeviceCreate(BaseModel):
+    name: str
+    ip: str
+    model: Optional[str] = None
+    serial_number: Optional[str] = None
+    location: Optional[str] = None
+    role: str = "access"
+    status: str = "online"
+    vendor: Optional[str] = None
+    purchase_cost: float = 0
+    credential_group: str = "default"
+
+
+class DeviceUpdate(BaseModel):
+    ip: Optional[str] = None
+    model: Optional[str] = None
+    serial_number: Optional[str] = None
+    location: Optional[str] = None
+    role: Optional[str] = None
+    status: Optional[str] = None
+    vendor: Optional[str] = None
+    purchase_cost: Optional[float] = None
+    credential_group: Optional[str] = None
+    name: Optional[str] = None
 
 
 @router.get("")
@@ -189,24 +219,24 @@ async def get_device(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("")
-async def create_device(device_data: dict, db: Session = Depends(get_db)):
+async def create_device(device_data: DeviceCreate, db: Session = Depends(get_db)):
     """创建新设备"""
     from ..services.device_service import create_device as svc_create_device
     from ..exceptions import ConflictException
     try:
-        result = svc_create_device(db, device_data)
+        result = svc_create_device(db, device_data.model_dump())
         return {"id": result["id"], "message": "设备创建成功"}
     except ConflictException as e:
         raise HTTPException(status_code=409, detail=str(e))
 
 
 @router.put("/{device_id}")
-async def update_device(device_id: int, device_data: dict, db: Session = Depends(get_db)):
+async def update_device(device_id: int, device_data: DeviceUpdate, db: Session = Depends(get_db)):
     """更新设备信息"""
     from ..services.device_service import update_device as svc_update_device
     from ..exceptions import ResourceNotFoundException
     try:
-        result = svc_update_device(db, device_id, device_data)
+        result = svc_update_device(db, device_id, device_data.model_dump(exclude_unset=True))
         return {"id": result["id"], "message": "更新成功"}
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="设备不存在")
