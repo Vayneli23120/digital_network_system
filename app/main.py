@@ -8,7 +8,7 @@ Network Automation System - FastAPI 主程序
 - 路由注册
 """
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
@@ -41,6 +41,7 @@ from .routers import (
     alerts_router,
 )
 from .middleware.auth_middleware import auth_middleware
+from .middleware.rate_limiter import RateLimitMiddleware
 
 # 获取配置
 config = get_config()
@@ -67,6 +68,9 @@ app.add_middleware(
 # 认证中间件（默认关闭，通过 config.yaml security.auth_enabled: true 启用）
 if config.security.auth_enabled:
     app.middleware("http")(auth_middleware)
+
+# API 限流中间件（默认 60 请求/分钟）
+app.add_middleware(RateLimitMiddleware)
 
 # ============ 异常处理 ============
 
@@ -115,6 +119,15 @@ async def health_check():
         "status": "healthy",
         "version": config.app.version
     }
+
+
+@app.get("/api/rate-limit/status", tags=["health"])
+async def rate_limit_status(request: Request):
+    """查看当前请求的限流状态"""
+    from .middleware.rate_limiter import get_rate_limiter
+    limiter = get_rate_limiter()
+    client_ip = request.client.host
+    return limiter.get_status(client_ip)
 
 # ============ 初始化事件 ============
 
