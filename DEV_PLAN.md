@@ -1,54 +1,49 @@
-# Network Automation System — 开发路线（4月20日晚）
+# Network Automation System — 开发路线
 
 ## 当前状态（4月21日 v1.2.0 完成）
-- ✅ **205 个测试通过**（核心服务层 100% 覆盖）
-- ✅ 基础后端架构完成（18 路由 + 17 服务）
+- ✅ **212 个测试通过**（核心服务层 100% 覆盖）
+- ✅ 基础后端架构完成（18 路由 + 17 服务 + 2 中间件）
 - ✅ Docker 配置 + Fail-fast 校验
 - ✅ 设备发现服务
 - ✅ Service 层重构完成
 - ✅ 告警通知模块（企业微信/钉钉/邮件）
-- ✅ 前端优化（分页/错误处理/加载状态）
-- ✅ 性能优化（DB 索引 + API 分页）
+- ✅ 前端优化（分页/错误处理/加载状态/暗色主题/响应式）
+- ✅ 性能优化（DB 索引 + API 分页 + 限流中间件）
 
 ## 已完成清单
 
 ### Phase 1: Service 层重构
-- ✅ 新建 template_service / dashboard_service / spare_part_service
-- ✅ 重构 6 个路由为纯路由层
+- ✅ 3 新 Service + 6 路由重构
 
 ### Phase 2: 测试覆盖
-- ✅ 新增 120 个测试用例（6 服务 + 通知 = 205 总计）
+- ✅ 212 测试（127 新增）
 
 ### Phase 3: 前端完善
-- ✅ 新增 Discovery / ToolLogs / AlertSettings 页面
-- ✅ 17 个页面 + 71+ API 函数
+- ✅ 19 页面 + 80+ API 函数
 
 ### Phase 4: 告警通知
-- ✅ 企业微信 Webhook + 钉钉 Webhook + 统一通知服务
-- ✅ 告警设置页面 + 测试接口
-- ✅ 集成到备份失败/故障/库存不足场景
+- ✅ 企业微信/钉钉/邮件 + 统一通知 + 设置页面
 
 ### Phase 5: 前端优化
-- ✅ 6 个列表页面分页
-- ✅ 所有 console.error → ElMessage.error
-- ✅ 加载状态覆盖所有页面
+- ✅ 分页 + 错误处理 + 加载状态
 
 ### Phase 6: 性能优化
-- ✅ DB 索引（device/fault/backup/maintenance 高频查询列）
-- ✅ API 分页参数（skip/limit）
-- ✅ 通知服务单元测试
+- ✅ DB 索引 + API 分页
+
+### Phase 7: 前端响应式 + 暗色主题
+- ✅ 暗色模式切换 + localStorage 持久化
+- ✅ 移动端响应式布局（768px / 576px 断点）
+- ✅ 侧边栏折叠 + 移动端遮罩
+
+### Phase 8: API 安全
+- ✅ 限流中间件（60 请求/分钟，滑动窗口）
+- ✅ 429 响应 + Retry-After 头 + X-RateLimit-* 头
+- ✅ 限流状态查询端点
 
 ## 下一步建议
 
 | 优先级 | 任务 | 说明 |
 |--------|------|------|
-| P1 | 前端响应式 | 移动端适配/暗色主题 |
-| P1 | 缓存优化 | Redis 缓存 Dashboard/统计查询 |
-| P2 | API 限流 | Rate limiting 防止滥用 |
+| P1 | 缓存优化 | 内存缓存 Dashboard/统计查询 |
 | P2 | 多厂商支持 | Huawei/H3C/Juniper 适配 |
-
-## 开发规范
-- 代码必须能跑（能跑是底线）
-- Clean Code：有意义命名，单一职责
-- 每个功能提交一次
-- 测试覆盖率优先
+| P2 | 配置版本控制 | Git 后端存储配置历史 |
