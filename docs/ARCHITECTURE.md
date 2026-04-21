@@ -1,7 +1,9 @@
 # Network Automation System - 架构文档
 
-**版本**: v1.0  
-**最后更新**: 2026-04-14
+**版本**: v1.2.0  
+**最后更新**: 2026-04-21
+
+> v1.2.0 重大变更：新增 3 个 Service 层模块（template_service/dashboard_service/spare_part_service），重构 6 个路由为纯路由层。新增前端页面：设备发现、工具日志。测试覆盖：196 个用例，100% 通过。
 
 ---
 

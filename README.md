@@ -2,6 +2,27 @@
 
 Cisco IOS 交换机自动化备份与配置管理平台
 
+**版本：1.2.0 | 最后更新：2026-04-21**
+
+---
+
+## 项目简介
+
+Network Automation System 是一个基于 **FastAPI + Vue 3** 的网络设备自动化管理平台，面向 Cisco IOS 交换机运维场景，提供设备管理、配置备份、配置部署、故障管理、维修管理、备件管理、合规检查、设备发现等全链路运维能力。
+
+### 核心指标
+
+| 指标 | 数值 |
+|------|------|
+| 后端 API | 107 端点，17 个路由模块 |
+| 服务层 | 14 个 Service，100% 业务逻辑下沉 |
+| 前端页面 | 17 个 Vue 组件 |
+| API 函数 | 71 个前端 API 调用 |
+| 测试用例 | **196 个**，100% 通过 |
+| 数据库表 | 15 个模型 |
+
+---
+
 ## 快速启动
 
 ```bash
@@ -29,6 +50,19 @@ cd frontend && npm run dev
 访问：
 - 前端界面：http://localhost:3000
 - API 文档：http://localhost:8000/docs
+
+---
+
+## 测试
+
+```bash
+# 运行所有测试
+cd network-automation-system
+.venv/bin/python -m pytest tests/ -v
+
+# 当前状态：196 个测试用例，100% 通过
+# 覆盖率：核心服务层 100% 覆盖
+```
 
 ---
 
@@ -65,6 +99,13 @@ python scripts/seed_data.py
 | 维修管理 | 维修记录、成本统计 |
 | Dashboard | ECharts 图表、运维指标展示 |
 | 系统日志 | 实时日志查看、搜索过滤 |
+| 配置模板 | Jinja2 模板管理 + 渲染 |
+| 配置合规 | 10 项安全合规自动检查 |
+| 设备发现 | Ping Sweep 网段扫描 + 自动识别 |
+| 备件管理 | 备件 CRUD + 出入库 + 库存预警 + 统计 |
+| 工具日志 | Netmiko/NAPALM/JIRA 执行日志追踪 |
+| 用户认证 | JWT + RBAC 权限管理（可选启用） |
+| 审计日志 | 操作审计追踪 |
 | CLI 工具 | 命令行管理设备 |
 
 ---
@@ -107,7 +148,9 @@ network-automation-system/
 │   ├── exceptions.py           # 异常处理
 │   ├── db_init.py              # 数据库初始化
 │   ├── cli.py                  # CLI 工具
-│   ├── routers/                # API 路由模块
+│   ├── middleware/             # 中间件
+│   │   └── auth_middleware.py  # JWT 认证中间件
+│   ├── routers/                # API 路由模块 (17 个)
 │   │   ├── devices.py
 │   │   ├── backups.py
 │   │   ├── faults.py
@@ -117,21 +160,56 @@ network-automation-system/
 │   │   ├── deploy.py
 │   │   ├── console.py
 │   │   ├── dashboard.py
-│   │   └── logs.py
-│   └── services/               # 业务服务
+│   │   ├── logs.py
+│   │   ├── auth.py
+│   │   ├── permissions.py
+│   │   ├── tool_logs.py
+│   │   ├── spare_parts.py
+│   │   ├── spare_movements.py
+│   │   ├── compliance.py
+│   │   ├── discovery.py
+│   │   └── websocket.py
+│   └── services/               # 业务服务层 (14 个)
 │       ├── netmiko_service.py
+│       ├── backup_service.py
+│       ├── device_service.py
+│       ├── deploy_service.py
 │       ├── credential_service.py
 │       ├── email_service.py
 │       ├── console_service.py
-│       ├── deploy_service.py
-│       └── log_service.py
+│       ├── log_service.py
+│       ├── template_service.py
+│       ├── dashboard_service.py
+│       ├── spare_part_service.py
+│       ├── discovery_service.py
+│       ├── compliance_service.py
+│       └── tool_executor.py
 │
 ├── frontend/                   # Vue 3 前端
 │   ├── src/
-│   │   ├── views/              # 页面组件
+│   │   ├── views/              # 页面组件 (17 个)
 │   │   ├── router/             # 路由配置
-│   │   └── api/                # API 调用
+│   │   └── api/                # API 调用 (71 个函数)
 │   └── vite.config.js
+│
+├── tests/                      # 测试用例 (196 个)
+│   ├── test_auth.py
+│   ├── test_devices.py
+│   ├── test_backups.py
+│   ├── test_backup_service.py
+│   ├── test_device_service.py
+│   ├── test_template_service.py
+│   ├── test_dashboard_service.py
+│   ├── test_spare_part_service.py
+│   ├── test_log_service.py
+│   ├── test_compliance_service.py
+│   ├── test_console_service.py
+│   ├── test_credential_service.py
+│   ├── test_deploy_service.py
+│   ├── test_discovery_service.py
+│   ├── test_email_service.py
+│   ├── test_netmiko_service.py
+│   └── test_tool_executor.py
 │
 ├── backups/                    # 配置备份目录
 ├── logs/                       # 日志目录
@@ -140,7 +218,14 @@ network-automation-system/
 │
 ├── config.yaml                 # 应用配置
 ├── requirements.txt            # Python 依赖
+├── pytest.ini                  # pytest 配置
+├── docker-compose.yml          # Docker 编排
+├── Dockerfile                  # Docker 镜像
 ├── nas-cli.bat                 # CLI 启动脚本
+├── CHANGELOG.md                # 变更日志
+├── DEV_PLAN.md                 # 开发计划
+├── CLI_USAGE.md                # CLI 使用指南
+├── CODE_REVIEW.md              # 代码审查报告
 └── README.md                   # 本文档
 ```
 
@@ -159,6 +244,8 @@ network-automation-system/
 | 配置模板 | Jinja2 |
 | 图表 | ECharts |
 | 日志 | Loguru |
+| 测试 | pytest + pytest-asyncio |
+| 容器化 | Docker + Docker Compose |
 
 ---
 
@@ -175,6 +262,9 @@ network-automation-system/
 **保留的文档**：
 - `README.md` - 项目说明（本文档）
 - `CLI_USAGE.md` - CLI 工具详细使用指南
+- `CHANGELOG.md` - 变更日志
+- `DEV_PLAN.md` - 开发计划
+- `CODE_REVIEW.md` - 代码审查报告
 
 **其他历史文档**（BRD.md、CODEX_*.md 等）为项目开发过程中的过程文档，已归档至 `.docs-archive/` 目录。
 
@@ -182,15 +272,27 @@ network-automation-system/
 
 ## 开发路线 (Roadmap)
 
-### 短期目标 (v1.1 - v1.2)
+### v1.2.0 已完成 ✅
+
+| 功能 | 说明 |
+|------|------|
+| Service 层重构 | 14 个服务，Router 只做路由 |
+| 测试覆盖 | 196 个测试，100% 通过 |
+| 前端完善 | 17 个页面，71 个 API 函数 |
+| 设备发现 | Ping Sweep 扫描 |
+| 配置合规 | 10 项安全检查 |
+| 备件管理 | CRUD + 出入库 + 统计 |
+| Docker 化 | 一键部署 |
+| 用户认证 | JWT + RBAC（可选） |
+
+### 短期目标 (v1.3+)
 
 | 功能 | 说明 | 优先级 |
 |------|------|--------|
-| 自动化测试 | 单元测试 + 集成测试覆盖率 >80% | P0 |
-| Docker 容器化 | Dockerfile + docker-compose 一键部署 | P0 |
-| 设备发现 | 自动扫描网段发现 Cisco 设备 | P1 |
-| 配置合规检查 | 基于策略的配置自动审计 | P1 |
 | 告警通知 | 企业微信/钉钉/邮件告警 | P1 |
+| API 文档 | OpenAPI/Swagger 完善 | P2 |
+| 前端优化 | 响应式布局/暗色主题 | P2 |
+| 性能优化 | 查询优化/缓存/分页 | P2 |
 
 ### 中期目标 (v1.3 - v2.0)
 
@@ -213,4 +315,4 @@ network-automation-system/
 
 ---
 
-*版本：1.0 | 最后更新：2026-04-13*
+*版本：1.2.0 | 最后更新：2026-04-21*

@@ -1,5 +1,45 @@
 # Changelog
 
+## v1.2.0 (2026-04-21)
+
+### 架构重构 - Service 层 (Phase 1)
+- ✅ 新增 `app/services/template_service.py` — 配置模板 CRUD + Jinja2 渲染
+- ✅ 新增 `app/services/dashboard_service.py` — Dashboard 统计 + 故障趋势分析
+- ✅ 新增 `app/services/spare_part_service.py` — 备件 CRUD + 出入库 + 统计
+- ✅ 重构 `app/routers/templates.py` — 业务逻辑全迁移至 Service 层
+- ✅ 重构 `app/routers/dashboard.py` — 统计逻辑全迁移至 Service 层
+- ✅ 重构 `app/routers/spare_parts.py` — 业务逻辑全迁移至 Service 层
+- ✅ 重构 `app/routers/spare_movements.py` — 出入库逻辑迁移至 Service 层
+- ✅ 重构 `app/routers/devices.py` — CRUD 逻辑迁移至 device_service
+- ✅ 重构 `app/routers/backups.py` — 列表逻辑迁移至 backup_service
+- ✅ 更新 `app/services/device_service.py` — 补充 purchase_date/purchase_cost 字段
+- ✅ 更新 `app/services/__init__.py` — 全量导出所有服务函数
+- ✅ 原则：Router 只做路由，业务逻辑全在 Service
+
+### 测试覆盖 (Phase 2)
+- ✅ 新增 `tests/test_template_service.py` — 19 个测试用例
+- ✅ 新增 `tests/test_dashboard_service.py` — 12 个测试用例
+- ✅ 新增 `tests/test_backup_service.py` — 8 个测试用例
+- ✅ 新增 `tests/test_device_service.py` — 19 个测试用例
+- ✅ 新增 `tests/test_spare_part_service.py` — 33 个测试用例
+- ✅ 新增 `tests/test_log_service.py` — 20 个测试用例
+- ✅ 测试总数：85 → **196**（+111），100% 通过
+
+### 前端完善 (Phase 3)
+- ✅ 新增 `frontend/src/views/Discovery.vue` — 设备发现（Ping Sweep 扫描）
+- ✅ 新增 `frontend/src/views/ToolLogs.vue` — 工具执行日志（含统计卡片 + 筛选）
+- ✅ 重构 `frontend/src/views/SpareParts.vue` — 修复 API 格式 + 新增"出入库历史"Tab
+- ✅ 更新 `frontend/src/views/Layout.vue` — 侧边栏新增 4 个菜单项
+- ✅ 更新 `frontend/src/router/index.js` — 新增 Discovery/ToolLogs 路由
+- ✅ 更新 `frontend/src/api/index.js` — 新增 25+ API 函数
+  - 备件 CRUD/出入库/统计
+  - 设备发现（Ping Sweep）
+  - 工具日志查询/清理
+  - 认证（登录/登出/用户管理）
+  - 故障趋势
+
+---
+
 ## v1.1.0 (2026-04-14)
 
 ### 代码审查
