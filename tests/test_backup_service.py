@@ -70,7 +70,8 @@ class TestListBackups:
         db_session.commit()
 
         result = list_backups(db_session, limit=3)
-        assert result["total"] == 3  # limited to 3
+        assert result["total"] == 10  # total is full count
+        assert len(result["items"]) == 3  # items are limited to 3
 
     def test_list_backups_sorted_by_time(self, db_session):
         device = Device(name="sw-01", ip="10.0.0.1", status="online")

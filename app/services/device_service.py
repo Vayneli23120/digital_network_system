@@ -12,13 +12,15 @@ from ..models import Device
 from ..exceptions import ResourceNotFoundException, ConflictException
 
 
-def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None) -> Dict[str, Any]:
+def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 200) -> Dict[str, Any]:
     """获取设备列表
 
     Args:
         db: 数据库会话
         status: 按状态过滤
         role: 按角色过滤
+        skip: 偏移量
+        limit: 最大返回数量
 
     Returns:
         包含 total 和 items 的字典
@@ -30,10 +32,11 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
     if role:
         query = query.filter(Device.role == role)
 
-    devices = query.all()
+    total = query.count()
+    devices = query.offset(skip).limit(limit).all()
 
     return {
-        "total": len(devices),
+        "total": total,
         "items": [
             {
                 "id": d.id,

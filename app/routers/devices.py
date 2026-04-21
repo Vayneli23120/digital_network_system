@@ -29,10 +29,10 @@ router = APIRouter(prefix="/api/devices", tags=["devices"])
 
 
 @router.get("")
-async def list_devices(status: Optional[str] = None, role: Optional[str] = None, db: Session = Depends(get_db)):
+async def list_devices(status: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
     """获取设备列表"""
     from ..services.device_service import list_devices as svc_list_devices
-    return svc_list_devices(db, status=status, role=role)
+    return svc_list_devices(db, status=status, role=role, skip=skip, limit=limit)
 
 
 @router.get("/export")

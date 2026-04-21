@@ -20,7 +20,7 @@ class WeChatWorkAlertService:
 
     def __init__(self):
         self.config = get_config()
-        self.webhook_url = self.config.alerts.wechat_work_webhook
+        self.webhook_url = self.config.alerts.wechat_work.webhook_url
 
     def send_text(self, content: str, mentioned_list: Optional[List[str]] = None,
                   mentioned_mobile_list: Optional[List[str]] = None) -> bool:

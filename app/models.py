@@ -17,13 +17,13 @@ class Device(Base):
     __tablename__ = "devices"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(100), unique=True, nullable=False)
-    ip = Column(String(50))
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    ip = Column(String(50), index=True)
     model = Column(String(100))
     serial_number = Column(String(100))
     location = Column(String(200))
-    role = Column(String(50))  # access, distribution, core
-    status = Column(String(50), default="online")  # online, offline, maintenance, retired
+    role = Column(String(50), index=True)  # access, distribution, core
+    status = Column(String(50), default="online", index=True)  # online, offline, maintenance, retired
     purchase_date = Column(DateTime)
     vendor = Column(String(200))
     purchase_cost = Column(DECIMAL(10, 2), default=0)
@@ -48,14 +48,14 @@ class BackupRecord(Base):
     __tablename__ = "backup_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"))
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True)
     backup_file = Column(String(500), nullable=False)
     file_size = Column(Integer)
     md5_hash = Column(String(64))
     has_change = Column(Boolean, default=False)
     diff_file = Column(String(500))
     config_snapshot = Column(Text)  # 配置快照文本
-    backup_time = Column(DateTime, default=datetime.utcnow)
+    backup_time = Column(DateTime, default=datetime.utcnow, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     operator = Column(String(100))
     device_name = Column(String(100))
@@ -72,18 +72,18 @@ class FaultRecord(Base):
     __tablename__ = "fault_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"))
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True)
     fault_no = Column(String(50), unique=True, nullable=False)
-    fault_time = Column(DateTime)
+    fault_time = Column(DateTime, index=True)
     description = Column(Text)
-    severity = Column(String(20))  # critical, major, minor, warning
+    severity = Column(String(20), index=True)  # critical, major, minor, warning
     downtime_minutes = Column(Integer, default=0)
     impact = Column(Text)
     resolution = Column(Text)
     cost = Column(DECIMAL(10, 2), default=0)
     reporter = Column(String(100))
-    status = Column(String(20), default="open")  # open, investigating, resolved, closed
-    created_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String(20), default="open", index=True)  # open, investigating, resolved, closed
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     device_name = Column(String(100))
 
     # 关系
@@ -98,10 +98,10 @@ class MaintenanceRecord(Base):
     __tablename__ = "maintenance_records"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"))
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True)
     maint_no = Column(String(50), unique=True, nullable=False)
-    maint_type = Column(String(20))  # preventive, corrective, upgrade, emergency
-    maint_time = Column(DateTime)
+    maint_type = Column(String(20), index=True)  # preventive, corrective, upgrade, emergency
+    maint_time = Column(DateTime, index=True)
     parts_replaced = Column(Text)
     parts_cost = Column(DECIMAL(10, 2), default=0)
     labor_hours = Column(DECIMAL(5, 2), default=0)
@@ -110,7 +110,7 @@ class MaintenanceRecord(Base):
     description = Column(Text)
     post_status = Column(String(50))
     operator = Column(String(100))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
     device_name = Column(String(100))
 
     # 关系

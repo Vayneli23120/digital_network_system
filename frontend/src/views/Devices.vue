@@ -269,10 +269,10 @@ const handleSelectionChange = (selection) => {
 const loadDevices = async () => {
   loading.value = true
   try {
-    const params = { status: filterStatus.value || undefined, role: filterRole.value || undefined }
+    const params = { status: filterStatus.value || undefined, role: filterRole.value || undefined, skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
     const data = await getDevices(params)
     devices.value = data.items || []
-    total.value = data.total || devices.value.length
+    total.value = data.total || 0
   } catch (error) {
     ElMessage.error('加载设备列表失败')
   } finally {

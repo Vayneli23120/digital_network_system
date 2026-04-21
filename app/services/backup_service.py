@@ -11,7 +11,7 @@ from ..models import BackupRecord
 from ..exceptions import ResourceNotFoundException
 
 
-def list_backups(db: Session, device_id: Optional[int] = None, limit: int = 50) -> Dict[str, Any]:
+def list_backups(db: Session, device_id: Optional[int] = None, skip: int = 0, limit: int = 50) -> Dict[str, Any]:
     """获取备份记录列表
 
     Args:
@@ -27,10 +27,11 @@ def list_backups(db: Session, device_id: Optional[int] = None, limit: int = 50) 
     if device_id:
         query = query.filter(BackupRecord.device_id == device_id)
 
-    backups = query.order_by(BackupRecord.backup_time.desc()).limit(limit).all()
+    total = query.count()
+    backups = query.order_by(BackupRecord.backup_time.desc()).offset(skip).limit(limit).all()
 
     return {
-        "total": len(backups),
+        "total": total,
         "items": [
             {
                 "id": b.id,

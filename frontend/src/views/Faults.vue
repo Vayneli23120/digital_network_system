@@ -262,7 +262,7 @@ const filterFaults = () => {
 const loadFaults = async () => {
   loading.value = true
   try {
-    const data = await getFaults({ limit: 200 })
+    const data = await getFaults({ limit: 500 })
     faults.value = data.items || []
     total.value = data.total || faults.value.length
     filterFaults()

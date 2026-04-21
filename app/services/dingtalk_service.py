@@ -24,8 +24,8 @@ class DingTalkAlertService:
 
     def __init__(self):
         self.config = get_config()
-        self.webhook_url = self.config.alerts.dingtalk_webhook
-        self.secret = self.config.alerts.dingtalk_secret
+        self.webhook_url = self.config.alerts.dingtalk.webhook_url
+        self.secret = self.config.alerts.dingtalk.secret
 
     def _get_signed_url(self) -> str:
         """获取带签名的 Webhook URL"""

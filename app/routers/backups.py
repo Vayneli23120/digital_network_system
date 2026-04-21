@@ -88,10 +88,10 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
 
 
 @router.get("")
-async def list_backups(device_id: Optional[int] = None, limit: int = 50, db: Session = Depends(get_db)):
+async def list_backups(device_id: Optional[int] = None, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """获取备份记录列表"""
     from ..services.backup_service import list_backups as svc_list_backups
-    return svc_list_backups(db, device_id=device_id, limit=limit)
+    return svc_list_backups(db, device_id=device_id, skip=skip, limit=limit)
 
 
 @router.get("/{backup_id}/content")
