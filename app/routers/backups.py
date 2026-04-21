@@ -78,6 +78,10 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             from ..services.notification_service import get_notification_service
             get_notification_service().notify_backup_failure(device.name, result["message"], operator)
 
+            # 清除 Dashboard 缓存
+            from ..services.cache import cache
+            cache.invalidate_prefix("dashboard:")
+
             raise HTTPException(status_code=500, detail=result["message"])
 
     except Exception as e:

@@ -93,6 +93,10 @@ async def create_maintenance(maint_data: dict):
     db.commit()
     db.refresh(maint)
 
+    # 清除 Dashboard 缓存
+    from ..services.cache import cache
+    cache.invalidate_prefix("dashboard:")
+
     return {"id": maint.id, "maint_no": maint_no, "message": "维修记录创建成功"}
 
 

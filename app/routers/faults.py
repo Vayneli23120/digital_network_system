@@ -100,6 +100,10 @@ async def create_fault(fault_data: dict):
             fault_data.get("description", "")
         )
 
+        # 清除 Dashboard 缓存
+        from ..services.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
         return {"id": fault.id, "fault_no": fault_no, "message": "故障记录创建成功"}
     except Exception as e:
         db.rollback()

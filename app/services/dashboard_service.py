@@ -2,6 +2,7 @@
 Dashboard 服务层
 
 封装 Dashboard 统计和业务逻辑，供路由和测试使用。
+集成内存缓存提升读多写少场景性能。
 """
 
 from typing import Optional, Dict, Any, List
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func
 
 from ..models import Device, BackupRecord, FaultRecord, MaintenanceRecord
+from .cache import cache
 
 
 def get_dashboard_summary(db: Session) -> Dict[str, Any]:

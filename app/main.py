@@ -129,6 +129,24 @@ async def rate_limit_status(request: Request):
     client_ip = request.client.host
     return limiter.get_status(client_ip)
 
+
+@app.get("/api/cache/stats", tags=["health"])
+async def cache_stats():
+    """查看缓存统计"""
+    from .services.cache import cache
+    return cache.get_stats()
+
+
+@app.post("/api/cache/clear", tags=["health"])
+async def cache_clear(prefix: str = None):
+    """清除缓存"""
+    from .services.cache import cache
+    if prefix:
+        count = cache.invalidate_prefix(prefix)
+    else:
+        count = cache.clear()
+    return {"cleared": count}
+
 # ============ 初始化事件 ============
 
 
