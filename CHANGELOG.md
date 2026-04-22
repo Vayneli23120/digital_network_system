@@ -1,5 +1,46 @@
 # Changelog
 
+## v1.3.0 (2026-04-22)
+
+### Feature-first 架构重构
+- ✅ 从 layer-first（routers/ + services/）迁移到 feature-first 结构
+- ✅ 19 个业务模块：`app/features/<feature>/`（router.py + service.py）
+- ✅ 共享基础设施：`app/shared/`（config/database/models/exceptions/cache/middleware）
+- ✅ 跨领域服务保留：`app/services/`（email/notification/wechat/dingtalk）
+- ✅ Alembic 数据库迁移初始化
+- ✅ 优雅关闭：SIGTERM/SIGINT → 关 DB 连接池 + 清缓存
+- ✅ Readiness 探针：`/ready` 端点检查数据库可达性
+- ✅ 安全头中间件：X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, HSTS
+- ✅ Request ID 追踪：每个响应带 X-Request-ID
+- ✅ `.env.example` 完整环境变量文档
+- ✅ 前端 BASE_URL 环境变量（VITE_API_URL）
+- ✅ Auth Token 自动附加（axios interceptor）
+- ✅ Pydantic 输入验证（DeviceCreate, DeviceUpdate）
+- ✅ 225 测试 100% 通过
+
+### 前端优化
+- ✅ 暗色模式切换 + localStorage 持久化
+- ✅ 移动端响应式布局（768px / 576px 断点）
+- ✅ 侧边栏折叠 + 移动端遮罩
+- ✅ 6 个列表页面分页
+- ✅ 所有 console.error → ElMessage.error
+- ✅ 加载状态覆盖所有页面
+
+### 告警通知
+- ✅ 企业微信 Webhook 告警
+- ✅ 钉钉 Webhook 告警（含加签验证）
+- ✅ 统一通知服务（多渠道分发）
+- ✅ 告警设置页面 + 测试接口
+- ✅ 集成到备份失败/故障/库存不足场景
+
+### 性能优化
+- ✅ 14 个 DB 索引（device/fault/backup/maintenance 高频查询列）
+- ✅ API 分页参数（skip/limit）
+- ✅ 内存缓存（LRU + TTL，Dashboard 30s / 趋势 60s）
+- ✅ 限流中间件（60 请求/分钟，滑动窗口）
+
+---
+
 ## v1.2.0 (2026-04-21)
 
 ### 架构重构 - Service 层 (Phase 1)

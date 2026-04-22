@@ -2,7 +2,7 @@
 
 Cisco IOS 交换机自动化备份与配置管理平台
 
-**版本：1.2.0 | 最后更新：2026-04-21**
+**版本：1.3.0 | 最后更新：2026-04-22**
 
 ---
 
@@ -14,12 +14,13 @@ Network Automation System 是一个基于 **FastAPI + Vue 3** 的网络设备自
 
 | 指标 | 数值 |
 |------|------|
-| 后端 API | 107 端点，17 个路由模块 |
-| 服务层 | 14 个 Service，100% 业务逻辑下沉 |
-| 前端页面 | 17 个 Vue 组件 |
-| API 函数 | 71 个前端 API 调用 |
-| 测试用例 | **196 个**，100% 通过 |
-| 数据库表 | 15 个模型 |
+| 后端 API | 116 端点，19 个 feature 模块 |
+| 服务层 | Feature-first 架构，19 个业务模块 |
+| 前端页面 | 19 个 Vue 组件 |
+| API 函数 | 80+ 前端 API 调用 |
+| 测试用例 | **225 个**，100% 通过 |
+| 数据库表 | 15 个模型 + Alembic 迁移 |
+| DB 索引 | 14 个高频查询列索引 |
 
 ---
 
@@ -60,7 +61,7 @@ cd frontend && npm run dev
 cd network-automation-system
 .venv/bin/python -m pytest tests/ -v
 
-# 当前状态：196 个测试用例，100% 通过
+# 当前状态：225 个测试用例，100% 通过
 # 覆盖率：核心服务层 100% 覆盖
 ```
 
@@ -136,96 +137,65 @@ nas-cli stats
 
 ---
 
-## 项目结构
+## 项目结构（Feature-first）
 
 ```
 network-automation-system/
-├── app/                        # Python 后端
+├── app/
 │   ├── main.py                 # FastAPI 主程序
-│   ├── config.py               # 配置管理
-│   ├── models.py               # 数据库模型
-│   ├── database.py             # 数据库连接
-│   ├── exceptions.py           # 异常处理
-│   ├── db_init.py              # 数据库初始化
 │   ├── cli.py                  # CLI 工具
-│   ├── middleware/             # 中间件
-│   │   └── auth_middleware.py  # JWT 认证中间件
-│   ├── routers/                # API 路由模块 (17 个)
-│   │   ├── devices.py
-│   │   ├── backups.py
-│   │   ├── faults.py
-│   │   ├── maintenance.py
-│   │   ├── templates.py
-│   │   ├── credentials.py
-│   │   ├── deploy.py
-│   │   ├── console.py
-│   │   ├── dashboard.py
-│   │   ├── logs.py
-│   │   ├── auth.py
-│   │   ├── permissions.py
-│   │   ├── tool_logs.py
-│   │   ├── spare_parts.py
-│   │   ├── spare_movements.py
-│   │   ├── compliance.py
-│   │   ├── discovery.py
-│   │   └── websocket.py
-│   └── services/               # 业务服务层 (14 个)
-│       ├── netmiko_service.py
-│       ├── backup_service.py
-│       ├── device_service.py
-│       ├── deploy_service.py
-│       ├── credential_service.py
+│   ├── shared/                 # 公共基础设施
+│   │   ├── config.py
+│   │   ├── database.py
+│   │   ├── models.py
+│   │   ├── exceptions.py
+│   │   ├── db_init.py
+│   │   ├── cache.py
+│   │   └── middleware/
+│   ├── features/               # 19 个业务模块
+│   │   ├── devices/            # router.py + device_service.py
+│   │   ├── backups/            # router.py + backup/netmiko_service.py
+│   │   ├── faults/             # router.py
+│   │   ├── maintenance/        # router.py
+│   │   ├── templates/          # router.py + template_service.py
+│   │   ├── credentials/        # router.py + credential_service.py
+│   │   ├── deploy/             # router.py + deploy_service.py
+│   │   ├── console/            # router.py + console_service.py
+│   │   ├── dashboard/          # router.py + dashboard_service.py
+│   │   ├── logs/               # router.py + log_service.py
+│   │   ├── auth/               # router.py
+│   │   ├── permissions/        # router.py
+│   │   ├── tool_logs/          # router.py + tool_executor.py
+│   │   ├── spare_parts/        # router.py + spare_part_service.py
+│   │   ├── spare_movements/    # router.py
+│   │   ├── discovery/          # router.py + discovery_service.py
+│   │   ├── alerts/             # router.py
+│   │   ├── compliance/         # router.py + compliance_service.py
+│   │   └── websocket/          # router.py
+│   └── services/               # 跨领域服务
 │       ├── email_service.py
-│       ├── console_service.py
-│       ├── log_service.py
-│       ├── template_service.py
-│       ├── dashboard_service.py
-│       ├── spare_part_service.py
-│       ├── discovery_service.py
-│       ├── compliance_service.py
-│       └── tool_executor.py
+│       ├── notification_service.py
+│       ├── wechat_work_service.py
+│       └── dingtalk_service.py
 │
-├── frontend/                   # Vue 3 前端
-│   ├── src/
-│   │   ├── views/              # 页面组件 (17 个)
-│   │   ├── router/             # 路由配置
-│   │   └── api/                # API 调用 (71 个函数)
-│   └── vite.config.js
+├── frontend/                   # Vue 3 前端 (19 页面 + 80+ API)
+│   └── src/
+│       ├── views/
+│       ├── router/
+│       └── api/
 │
-├── tests/                      # 测试用例 (196 个)
-│   ├── test_auth.py
-│   ├── test_devices.py
-│   ├── test_backups.py
-│   ├── test_backup_service.py
-│   ├── test_device_service.py
-│   ├── test_template_service.py
-│   ├── test_dashboard_service.py
-│   ├── test_spare_part_service.py
-│   ├── test_log_service.py
-│   ├── test_compliance_service.py
-│   ├── test_console_service.py
-│   ├── test_credential_service.py
-│   ├── test_deploy_service.py
-│   ├── test_discovery_service.py
-│   ├── test_email_service.py
-│   ├── test_netmiko_service.py
-│   └── test_tool_executor.py
-│
-├── backups/                    # 配置备份目录
-├── logs/                       # 日志目录
-├── data/                       # 数据库文件
-├── assets/                     # 静态资源
+├── tests/                      # 225 个测试
+├── migrations/                 # Alembic 数据库迁移
+├── backups/ / logs/ / data/
 │
 ├── config.yaml                 # 应用配置
+├── .env.example                # 环境变量文档
 ├── requirements.txt            # Python 依赖
-├── pytest.ini                  # pytest 配置
 ├── docker-compose.yml          # Docker 编排
 ├── Dockerfile                  # Docker 镜像
-├── nas-cli.bat                 # CLI 启动脚本
+├── alembic.ini                 # Alembic 配置
 ├── CHANGELOG.md                # 变更日志
 ├── DEV_PLAN.md                 # 开发计划
-├── CLI_USAGE.md                # CLI 使用指南
-├── CODE_REVIEW.md              # 代码审查报告
 └── README.md                   # 本文档
 ```
 
@@ -239,6 +209,7 @@ network-automation-system/
 | 前端框架 | Vue 3 + Element Plus |
 | 数据库 | SQLite |
 | ORM | SQLAlchemy |
+| 数据库迁移 | Alembic |
 | 网络设备连接 | Netmiko |
 | 串口通信 | pyserial |
 | 配置模板 | Jinja2 |
@@ -272,18 +243,18 @@ network-automation-system/
 
 ## 开发路线 (Roadmap)
 
-### v1.2.0 已完成 ✅
+### v1.3.0 已完成 ✅
 
 | 功能 | 说明 |
 |------|------|
-| Service 层重构 | 14 个服务，Router 只做路由 |
-| 测试覆盖 | 196 个测试，100% 通过 |
-| 前端完善 | 17 个页面，71 个 API 函数 |
-| 设备发现 | Ping Sweep 扫描 |
-| 配置合规 | 10 项安全检查 |
-| 备件管理 | CRUD + 出入库 + 统计 |
-| Docker 化 | 一键部署 |
-| 用户认证 | JWT + RBAC（可选） |
+| Feature-first 架构 | 19 个业务模块 + shared 基础设施 |
+| 测试覆盖 | 225 个测试，100% 通过 |
+| 前端 | 19 页面 + 暗色主题 + 响应式 + Auth 拦截器 |
+| 告警通知 | 企业微信/钉钉/邮件 |
+| 性能优化 | 14 DB 索引 + API 分页 + 内存缓存 |
+| 安全 | 限流中间件 + 安全头 + Request ID |
+| 数据库 | Alembic 迁移 + 优雅关闭 |
+| 开发规范 | .env.example + Pydantic 验证 |
 
 ### 短期目标 (v1.3+)
 
