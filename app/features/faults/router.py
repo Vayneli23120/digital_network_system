@@ -42,8 +42,8 @@ async def get_fault(fault_id: int):
 
 
 @router.get("")
-async def list_faults(device_id: Optional[int] = None, status: Optional[str] = None):
-    """获取故障记录列表"""
+async def list_faults(device_id: Optional[int] = None, status: Optional[str] = None, skip: int = 0, limit: int = 100):
+    """获取故障记录列表（带分页）"""
     db: Session = next(get_db())
 
     try:
@@ -54,9 +54,11 @@ async def list_faults(device_id: Optional[int] = None, status: Optional[str] = N
         if status:
             query = query.filter(FaultRecord.status == status)
 
-        faults = query.order_by(FaultRecord.created_at.desc()).all()
+        total = query.count()
+        faults = query.order_by(FaultRecord.created_at.desc()).offset(skip).limit(limit).all()
 
         return {
+            "total": total,
             "items": [
                 {
                     "id": f.id,
@@ -101,7 +103,7 @@ async def create_fault(fault_data: dict):
         )
 
         # 清除 Dashboard 缓存
-        from ..services.cache import cache
+        from app.shared.cache import cache
         cache.invalidate_prefix("dashboard:")
 
         return {"id": fault.id, "fault_no": fault_no, "message": "故障记录创建成功"}
@@ -117,18 +119,21 @@ async def update_fault(fault_id: int, fault_data: dict):
     """更新故障记录"""
     db: Session = next(get_db())
 
-    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
-    if not fault:
-        raise HTTPException(status_code=404, detail="故障记录不存在")
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if not fault:
+            raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    for key, value in fault_data.items():
-        if hasattr(fault, key):
-            setattr(fault, key, value)
+        for key, value in fault_data.items():
+            if hasattr(fault, key):
+                setattr(fault, key, value)
 
-    db.commit()
-    db.refresh(fault)
+        db.commit()
+        db.refresh(fault)
 
-    return {"id": fault.id, "message": "更新成功"}
+        return {"id": fault.id, "message": "更新成功"}
+    finally:
+        db.close()
 
 
 @router.delete("/{fault_id}")
@@ -136,11 +141,14 @@ async def delete_fault(fault_id: int):
     """删除故障记录"""
     db: Session = next(get_db())
 
-    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
-    if not fault:
-        raise HTTPException(status_code=404, detail="故障记录不存在")
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if not fault:
+            raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    db.delete(fault)
-    db.commit()
+        db.delete(fault)
+        db.commit()
 
-    return {"message": "删除成功"}
+        return {"message": "删除成功"}
+    finally:
+        db.close()

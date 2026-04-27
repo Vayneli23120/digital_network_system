@@ -105,12 +105,14 @@ class LogService:
             "message": line
         }
 
-    def search_logs(self, keyword: str, days: int = 7, level: Optional[str] = None) -> List[Dict]:
-        """搜索日志"""
+    def search_logs(self, keyword: str, days: int = 7, level: Optional[str] = None, max_results: int = 500) -> List[Dict]:
+        """搜索日志（限制结果数量，避免内存爆炸）"""
         results = []
         log_files = self.get_log_files(days)
 
         for log_file in log_files:
+            if len(results) >= max_results:
+                break
             try:
                 with open(log_file["path"], 'r', encoding='utf-8', errors='ignore') as f:
                     for line_num, line in enumerate(f, 1):
@@ -122,6 +124,8 @@ class LogService:
                                 parsed["source_file"] = log_file["filename"]
                                 parsed["line_number"] = line_num
                                 results.append(parsed)
+                                if len(results) >= max_results:
+                                    break
             except Exception as e:
                 logger.error(f"搜索日志失败：{log_file['filename']}, error: {e}")
 

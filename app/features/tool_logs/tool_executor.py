@@ -30,11 +30,22 @@ class ToolExecutor:
         """注册日志回调（用于 WebSocket 实时推送）"""
         self._callbacks.append(callback)
 
+    def unregister_callback(self, callback: Callable):
+        """移除回调（防止 WebSocket 断开后回调无限累积）"""
+        try:
+            self._callbacks.remove(callback)
+        except ValueError:
+            pass
+
     async def _log(self, log_entry: LogEntry, message: str, db=None):
         """记录日志并推送"""
-        log_entry.log_content = (log_entry.log_content or "") + message + "\n"
+        # 直接写入 DB，避免在内存中无限拼接字符串
         if db:
-            db.add(log_entry)
+            db.execute(
+                LogEntry.__table__.update()
+                .where(LogEntry.id == log_entry.id)
+                .values(log_content=LogEntry.log_content + message + "\n")
+            )
             db.commit()
 
         # 推送给所有 WebSocket 订阅者

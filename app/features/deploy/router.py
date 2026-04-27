@@ -10,7 +10,7 @@ from jinja2 import Template
 
 from app.shared.database import get_db
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog
-from .credential_service import decrypt_password
+from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])

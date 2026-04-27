@@ -7,7 +7,7 @@ from typing import Optional
 from app.shared.database import get_db
 from .dashboard_service import get_dashboard_summary as svc_get_dashboard_summary
 from .dashboard_service import get_fault_trend as svc_get_fault_trend
-from ..services.cache import cache, _DASHBOARD_TTL, _TREND_TTL, _cache_key
+from app.shared.cache import cache, _DASHBOARD_TTL, _TREND_TTL, _cache_key
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 

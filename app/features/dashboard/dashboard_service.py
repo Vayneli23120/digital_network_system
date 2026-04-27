@@ -33,17 +33,17 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     # 备份统计（最近 10 条）
     recent_backups = db.query(BackupRecord).order_by(BackupRecord.backup_time.desc()).limit(10).all()
 
-    # 故障统计（近 30 天）
+    # 故障统计（近 30 天，限制数量避免全表加载）
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     recent_faults = db.query(FaultRecord).filter(
         FaultRecord.created_at >= thirty_days_ago
-    ).all()
+    ).limit(1000).all()
 
-    # 成本统计（本月）
+    # 成本统计（本月，限制数量避免全表加载）
     current_month = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     month_maintenance = db.query(MaintenanceRecord).filter(
         MaintenanceRecord.created_at >= current_month
-    ).all()
+    ).limit(1000).all()
 
     total_parts_cost = sum(m.parts_cost or 0 for m in month_maintenance)
     total_labor_cost = sum(m.labor_cost or 0 for m in month_maintenance)
@@ -142,11 +142,11 @@ def get_fault_trend(
         query_start_date = now - timedelta(days=30)
         query_end_date = now
 
-    # 查询故障记录
+    # 查询故障记录（限制数量，避免全表加载到内存）
     faults = db.query(FaultRecord).filter(
         FaultRecord.created_at >= query_start_date,
         FaultRecord.created_at <= query_end_date,
-    ).all()
+    ).limit(5000).all()
 
     # 按时间 + 级别分组
     fault_counts = defaultdict(int)

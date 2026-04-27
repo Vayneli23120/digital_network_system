@@ -7,7 +7,7 @@ WebSocket 端点 - 实时日志推送
 import json
 from typing import Dict, Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.services.tool_executor import tool_executor
+from app.features.tool_logs.tool_executor import tool_executor
 
 router = APIRouter(tags=["WebSocket"])
 
@@ -74,6 +74,8 @@ async def websocket_logs(websocket: WebSocket, tool_type: str = None):
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
         manager.disconnect(websocket, channel)
+    finally:
+        tool_executor.unregister_callback(push_log)
 
 
 @router.websocket("/ws/logs/{operation}")
@@ -97,3 +99,5 @@ async def websocket_logs_by_op(websocket: WebSocket, operation: str):
             await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket, f"op:{operation}")
+    finally:
+        tool_executor.unregister_callback(push_log)

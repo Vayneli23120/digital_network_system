@@ -13,21 +13,19 @@ class TestPasswordHashing:
 
     def test_verify_password_correct(self):
         """Test verifying correct password"""
-        from app.features.auth.router import verify_password
+        from app.features.auth.router import verify_password, get_password_hash
 
-        # Hash a known password
-        hashed = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/X4.VTtYWEG6fSYY/i"
-
-        # Note: In test environment without passlib, it falls back to plain comparison
-        # This test verifies the fallback works
-        result = verify_password("testpassword", "testpassword")
+        # Hash a known password and verify
+        hashed = get_password_hash("testpassword")
+        result = verify_password("testpassword", hashed)
         assert result is True
 
     def test_verify_password_incorrect(self):
         """Test verifying incorrect password"""
-        from app.features.auth.router import verify_password
+        from app.features.auth.router import verify_password, get_password_hash
 
-        result = verify_password("wrongpassword", "correctpassword")
+        hashed = get_password_hash("correctpassword")
+        result = verify_password("wrongpassword", hashed)
         assert result is False
 
 

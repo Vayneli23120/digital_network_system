@@ -309,3 +309,19 @@ export function getAlertStatus() {
 export function testAlertChannel(channel = 'all') {
   return api.post('/alerts/test', null, { params: { channel } })
 }
+
+// 配置合规
+export function getCheckItems() {
+  return api.get('/compliance/checks')
+}
+export function runComplianceCheck(data) {
+  return api.post('/compliance/check', data)
+}
+
+// 厂商管理
+export function getVendors() {
+  return api.get('/devices/vendors')
+}
+export function getVendorInfo(vendor) {
+  return api.get(`/devices/vendors/${vendor}`)
+}

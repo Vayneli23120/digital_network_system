@@ -97,7 +97,7 @@ ip domain-name {{ DOMAIN_NAME }}
 @pytest.fixture
 def sample_user():
     """Sample user for testing"""
-    from app.models import User
+    from app.shared.models import User
     user = User(
         username="testuser",
         email="test@example.com",

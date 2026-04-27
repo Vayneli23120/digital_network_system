@@ -74,7 +74,7 @@ async def export_devices():
     db: Session = next(get_db())
 
     try:
-        devices = db.query(Device).all()
+        devices = db.query(Device).order_by(Device.id).limit(5000).all()
 
         # 创建 Excel 工作簿
         wb = openpyxl.Workbook()
@@ -225,6 +225,8 @@ async def create_device(device_data: DeviceCreate, db: Session = Depends(get_db)
     from app.shared.exceptions import ConflictException
     try:
         result = svc_create_device(db, device_data.model_dump())
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
         return {"id": result["id"], "message": "设备创建成功"}
     except ConflictException as e:
         raise HTTPException(status_code=409, detail=str(e))
@@ -248,7 +250,10 @@ async def delete_device(device_id: int, db: Session = Depends(get_db)):
     from .device_service import delete_device as svc_delete_device
     from app.shared.exceptions import ResourceNotFoundException
     try:
-        return svc_delete_device(db, device_id)
+        result = svc_delete_device(db, device_id)
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+        return result
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="设备不存在")
 
@@ -339,3 +344,19 @@ async def delete_device_photo(device_id: int, photo_id: int):
     db.commit()
 
     return {"message": "删除成功"}
+
+
+# ============ 厂商管理 API ============
+
+@router.get("/vendors")
+async def list_vendors():
+    """获取支持的厂商列表"""
+    from .vendor_service import get_supported_vendors
+    return get_supported_vendors()
+
+
+@router.get("/vendors/{vendor}")
+async def get_vendor(vendor: str):
+    """获取厂商详细信息"""
+    from .vendor_service import get_vendor_info
+    return get_vendor_info(vendor)

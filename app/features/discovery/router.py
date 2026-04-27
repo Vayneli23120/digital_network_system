@@ -19,7 +19,7 @@ from .discovery_service import (
     quick_discovery,
     NETMIKO_AVAILABLE,
 )
-from .auth import get_current_active_user
+from app.features.auth.router import get_current_active_user
 from app.shared.models import User
 
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])

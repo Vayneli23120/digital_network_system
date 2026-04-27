@@ -10,7 +10,7 @@ from datetime import datetime
 from app.shared.database import get_db
 from app.shared.models import BackupRecord, Device, CredentialGroup
 from .netmiko_service import backup_device_config
-from .credential_service import decrypt_password
+from app.features.credentials.credential_service import decrypt_password
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
 
@@ -79,7 +79,7 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             get_notification_service().notify_backup_failure(device.name, result["message"], operator)
 
             # 清除 Dashboard 缓存
-            from ..services.cache import cache
+            from app.shared.cache import cache
             cache.invalidate_prefix("dashboard:")
 
             raise HTTPException(status_code=500, detail=result["message"])
@@ -163,53 +163,54 @@ async def get_backup_diff(backup_id: int):
 async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
     """批量备份设备配置"""
     db: Session = next(get_db())
-    devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
+    try:
+        devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
 
-    results = []
+        # 一次性加载所有凭证组，避免 N+1 查询
+        all_cred_groups = db.query(CredentialGroup).all()
+        cred_group_map = {g.name: g for g in all_cred_groups}
 
-    for device in devices:
-        # 从凭证组获取 SSH 凭证
-        cred_group_name = device.credential_group or "default"
-        cred_group = db.query(CredentialGroup).filter(
-            CredentialGroup.name == cred_group_name
-        ).first()
+        results = []
 
-        if not cred_group:
-            cred_group = db.query(CredentialGroup).filter(
-                CredentialGroup.name == "default"
-            ).first()
+        for device in devices:
+            cred_group_name = device.credential_group or "default"
+            cred_group = cred_group_map.get(cred_group_name) or cred_group_map.get("default")
 
-        if cred_group:
-            credentials = {
-                "username": cred_group.username,
-                "password": decrypt_password(cred_group.password_encrypted),
-                "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
-            }
-        else:
-            credentials = {"username": "admin", "password": "", "secret": ""}
+            if cred_group:
+                credentials = {
+                    "username": cred_group.username,
+                    "password": decrypt_password(cred_group.password_encrypted),
+                    "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
+                }
+            else:
+                credentials = {"username": "admin", "password": "", "secret": ""}
 
-        from app.shared.config import get_config
-        config = get_config()
-        result = backup_device_config(device, credentials, config.storage.backup_dir)
+            from app.shared.config import get_config
+            config = get_config()
+            result = backup_device_config(device, credentials, config.storage.backup_dir)
 
-        if result["success"]:
-            backup_record = BackupRecord(
-                device_id=device.id,
-                device_name=device.name,
-                backup_file=result["file_path"],
-                file_size=result["file_size"],
-                md5_hash=result["md5_hash"],
-                has_change=result["has_change"],
-                operator=operator
-            )
-            db.add(backup_record)
-            device.last_backup_time = datetime.utcnow()
-            db.commit()
+            if result["success"]:
+                backup_record = BackupRecord(
+                    device_id=device.id,
+                    device_name=device.name,
+                    backup_file=result["file_path"],
+                    file_size=result["file_size"],
+                    md5_hash=result["md5_hash"],
+                    has_change=result["has_change"],
+                    operator=operator
+                )
+                db.add(backup_record)
+                device.last_backup_time = datetime.utcnow()
 
-        results.append({
-            "device_name": device.name,
-            "success": result["success"],
-            "message": result["message"]
-        })
+            results.append({
+                "device_name": device.name,
+                "success": result["success"],
+                "message": result["message"]
+            })
 
-    return {"results": results}
+        # 批量提交，减少数据库写入次数
+        db.commit()
+
+        return {"results": results}
+    finally:
+        db.close()

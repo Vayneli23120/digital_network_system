@@ -47,11 +47,12 @@ async def get_log_file_content(
 async def search_logs(
     keyword: str = Query(..., description="搜索关键词"),
     days: int = Query(default=7, description="搜索范围（天）"),
-    level: Optional[str] = Query(default=None, description="日志级别过滤")
+    level: Optional[str] = Query(default=None, description="日志级别过滤"),
+    max_results: int = Query(default=500, description="最大返回条数")
 ):
     """搜索日志"""
     log_service = get_log_service()
-    results = log_service.search_logs(keyword, days=days, level=level)
+    results = log_service.search_logs(keyword, days=days, level=level, max_results=max_results)
     return {"items": results, "total": len(results), "keyword": keyword}
 
 

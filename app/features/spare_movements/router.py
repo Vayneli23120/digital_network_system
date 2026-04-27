@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 
 from app.shared.database import get_db
-from .spare_part_service import (
+from app.features.spare_parts.spare_part_service import (
     create_movement as svc_create_movement,
     list_movements as svc_list_movements,
     get_movement as svc_get_movement,

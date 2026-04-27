@@ -14,7 +14,7 @@
         :collapse="collapsed && !isMobile"
         :background-color="darkMode ? '#1a1a2e' : '#304156'"
         :text-color="darkMode ? '#a0a0b0' : '#bfcbd9'"
-        :active-text-color="#409EFF"
+        active-text-color="#409EFF"
         router
         class="sidebar-menu"
       >

@@ -139,7 +139,7 @@ class SecurityConfig(BaseModel):
 
 class AppConfig(BaseModel):
     name: str = "Network Automation System"
-    version: str = "1.0.0"
+    version: str = "1.3.0"
     debug: bool = False
 
 

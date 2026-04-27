@@ -34,6 +34,9 @@ class RateLimiter:
             (ts, path) for ts, path in self._requests[client_ip]
             if ts > cutoff
         ]
+        # 如果该 IP 没有活跃请求，从 dict 中移除，防止无限增长
+        if not self._requests[client_ip]:
+            del self._requests[client_ip]
 
     def is_allowed(self, client_ip: str, path: str) -> Tuple[bool, int]:
         """检查请求是否允许

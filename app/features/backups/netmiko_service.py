@@ -13,6 +13,7 @@ from loguru import logger
 
 from app.shared.config import get_config
 from app.shared.models import Device
+from app.features.devices.vendor_adapter import get_vendor_profile
 
 
 class NetmikoService:
@@ -23,9 +24,10 @@ class NetmikoService:
         self.connection: Optional[ConnectHandler] = None
 
     def get_device_params(self, device: Device, credentials: Dict[str, str]) -> Dict[str, Any]:
-        """构建设备连接参数"""
+        """构建设备连接参数（支持多厂商）"""
+        vendor_profile = get_vendor_profile(getattr(device, 'vendor', 'cisco'))
         return {
-            "device_type": "cisco_ios",
+            "device_type": vendor_profile.netmiko_device_type,
             "host": device.ip,
             "port": 22,
             "username": credentials.get("username", "admin"),
@@ -36,14 +38,17 @@ class NetmikoService:
         }
 
     def connect(self, device: Device, credentials: Dict[str, str]) -> ConnectHandler:
-        """连接到设备"""
+        """连接到设备（支持多厂商）"""
         params = self.get_device_params(device, credentials)
+        vendor_profile = get_vendor_profile(getattr(device, 'vendor', 'cisco'))
 
-        logger.info(f"正在连接设备 {device.name} ({device.ip})")
+        logger.info(f"正在连接设备 {device.name} ({device.ip}) [厂商: {vendor_profile.display_name}]")
 
         try:
             self.connection = ConnectHandler(**params)
-            self.connection.enable()  # 进入 enable 模式
+            # 只有 Cisco/Arista 等需要 enable 模式
+            if vendor_profile.enter_enable_mode:
+                self.connection.enable()
             logger.info(f"成功连接到设备 {device.name}")
             return self.connection
         except NetmikoTimeoutException as e:

@@ -42,8 +42,8 @@ async def get_maintenance(maint_id: int):
 
 
 @router.get("")
-async def list_maintenances(device_id: Optional[int] = None):
-    """获取维修记录列表"""
+async def list_maintenances(device_id: Optional[int] = None, skip: int = 0, limit: int = 100):
+    """获取维修记录列表（带分页）"""
     db: Session = next(get_db())
 
     try:
@@ -52,9 +52,11 @@ async def list_maintenances(device_id: Optional[int] = None):
         if device_id:
             query = query.filter(MaintenanceRecord.device_id == device_id)
 
-        maintenances = query.order_by(MaintenanceRecord.created_at.desc()).all()
+        total = query.count()
+        maintenances = query.order_by(MaintenanceRecord.created_at.desc()).offset(skip).limit(limit).all()
 
         return {
+            "total": total,
             "items": [
                 {
                     "id": m.id,
@@ -94,7 +96,7 @@ async def create_maintenance(maint_data: dict):
     db.refresh(maint)
 
     # 清除 Dashboard 缓存
-    from ..services.cache import cache
+    from app.shared.cache import cache
     cache.invalidate_prefix("dashboard:")
 
     return {"id": maint.id, "maint_no": maint_no, "message": "维修记录创建成功"}
@@ -105,18 +107,21 @@ async def update_maintenance(maint_id: int, maint_data: dict):
     """更新维修记录"""
     db: Session = next(get_db())
 
-    maint = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
-    if not maint:
-        raise HTTPException(status_code=404, detail="维修记录不存在")
+    try:
+        maint = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maint:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
 
-    for key, value in maint_data.items():
-        if hasattr(maint, key):
-            setattr(maint, key, value)
+        for key, value in maint_data.items():
+            if hasattr(maint, key):
+                setattr(maint, key, value)
 
-    db.commit()
-    db.refresh(maint)
+        db.commit()
+        db.refresh(maint)
 
-    return {"id": maint.id, "message": "更新成功"}
+        return {"id": maint.id, "message": "更新成功"}
+    finally:
+        db.close()
 
 
 @router.delete("/{maint_id}")
@@ -124,11 +129,14 @@ async def delete_maintenance(maint_id: int):
     """删除维修记录"""
     db: Session = next(get_db())
 
-    maint = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
-    if not maint:
-        raise HTTPException(status_code=404, detail="维修记录不存在")
+    try:
+        maint = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maint:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
 
-    db.delete(maint)
-    db.commit()
+        db.delete(maint)
+        db.commit()
 
-    return {"message": "删除成功"}
+        return {"message": "删除成功"}
+    finally:
+        db.close()

@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
-from app.services.compliance_service import ComplianceService, ComplianceReport
+from app.features.compliance.compliance_service import ComplianceService, ComplianceReport
 
 router = APIRouter(prefix="/compliance", tags=["配置合规"])
 
@@ -92,7 +92,6 @@ async def check_device_config(device_id: int):
 
     从设备获取当前配置并执行检查。
     """
-    # TODO: 从设备获取配置
-    from app.routers.devices import get_device
+    # TODO: 从设备获取配置，使用 app.features.devices.router
     # 需要整合设备路由获取配置
     raise HTTPException(status_code=501, detail="设备合规检查需要连接真实设备，待实现")
