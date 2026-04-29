@@ -6,9 +6,10 @@ from typing import Optional, List
 from pathlib import Path
 import difflib
 from datetime import datetime
+import time
 
 from app.shared.database import get_db
-from app.shared.models import BackupRecord, Device, CredentialGroup
+from app.shared.models import BackupRecord, Device, CredentialGroup, LogEntry
 from .netmiko_service import backup_device_config
 from app.features.credentials.credential_service import decrypt_password
 
@@ -19,6 +20,7 @@ router = APIRouter(prefix="/api/backups", tags=["backups"])
 async def backup_device(device_id: int, operator: Optional[str] = None):
     """备份单个设备配置"""
     db: Session = next(get_db())
+    start_time = time.time()
 
     try:
         device = db.query(Device).filter(Device.id == device_id).first()
@@ -32,7 +34,6 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
         ).first()
 
         if not cred_group:
-            # 如果指定的凭证组不存在，尝试使用 default
             cred_group = db.query(CredentialGroup).filter(
                 CredentialGroup.name == "default"
             ).first()
@@ -54,6 +55,27 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
         config = get_config()
         result = backup_device_config(device, credentials, config.storage.backup_dir)
 
+        duration_ms = int((time.time() - start_time) * 1000)
+
+        # 创建工具日志记录
+        log_entry = LogEntry(
+            tool_type="netmiko",
+            operation="备份配置",
+            target=device.name,
+            status=result["success"] if result["success"] else "failed",
+            log_content=f"[INFO] 开始备份设备配置: {device.name} ({device.ip})\n"
+                       f"[INFO] 使用凭证组: {cred_group_name}\n"
+                       f"[INFO] 执行命令: show running-config\n"
+                       f"[{result['success'] if result['success'] else 'ERROR'}] {result['message']}\n"
+                       f"[INFO] 耗时: {duration_ms}ms\n"
+                       f"[INFO] 文件大小: {result.get('file_size', 0)} bytes\n"
+                       f"[INFO] MD5: {result.get('md5_hash', 'N/A')}\n"
+                       f"[INFO] 配置变更: {'有' if result.get('has_change') else '无'}",
+            duration_ms=duration_ms,
+            created_by=operator or "system"
+        )
+        db.add(log_entry)
+
         if result["success"]:
             # 记录备份记录
             backup_record = BackupRecord(
@@ -72,11 +94,17 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
 
             db.commit()
 
-            return {"success": True, "message": result["message"], "backup_id": backup_record.id}
+            # 清除 Dashboard 缓存
+            from app.shared.cache import cache
+            cache.invalidate_prefix("dashboard:")
+
+            return {"success": True, "message": result["message"], "backup_id": backup_record.id, "log_id": log_entry.id}
         else:
             # 发送多渠道告警
             from app.services.notification_service import get_notification_service
             get_notification_service().notify_backup_failure(device.name, result["message"], operator)
+
+            db.commit()
 
             # 清除 Dashboard 缓存
             from app.shared.cache import cache
@@ -85,6 +113,20 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             raise HTTPException(status_code=500, detail=result["message"])
 
     except Exception as e:
+        # 记录失败日志
+        duration_ms = int((time.time() - start_time) * 1000)
+        log_entry = LogEntry(
+            tool_type="netmiko",
+            operation="备份配置",
+            target=device.name if device else f"device_id:{device_id}",
+            status="failed",
+            log_content=f"[ERROR] 备份失败\n[ERROR] 错误信息: {str(e)}\n[INFO] 耗时: {duration_ms}ms",
+            duration_ms=duration_ms,
+            created_by=operator or "system"
+        )
+        db.add(log_entry)
+        db.commit()
+
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
     finally:
@@ -166,13 +208,15 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
     try:
         devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
 
-        # 一次性加载所有凭证组，避免 N+1 查询
+        # 一次性加载所有凭证组
         all_cred_groups = db.query(CredentialGroup).all()
         cred_group_map = {g.name: g for g in all_cred_groups}
 
         results = []
 
         for device in devices:
+            start_time = time.time()
+
             cred_group_name = device.credential_group or "default"
             cred_group = cred_group_map.get(cred_group_name) or cred_group_map.get("default")
 
@@ -188,6 +232,22 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
             from app.shared.config import get_config
             config = get_config()
             result = backup_device_config(device, credentials, config.storage.backup_dir)
+
+            duration_ms = int((time.time() - start_time) * 1000)
+
+            # 记录工具日志
+            log_entry = LogEntry(
+                tool_type="netmiko",
+                operation="批量备份配置",
+                target=device.name,
+                status=result["success"] if result["success"] else "failed",
+                log_content=f"[INFO] 批量备份: {device.name} ({device.ip})\n"
+                           f"[{result['success'] if result['success'] else 'ERROR'}] {result['message']}\n"
+                           f"[INFO] 耗时: {duration_ms}ms",
+                duration_ms=duration_ms,
+                created_by=operator or "system"
+            )
+            db.add(log_entry)
 
             if result["success"]:
                 backup_record = BackupRecord(
@@ -208,8 +268,11 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
                 "message": result["message"]
             })
 
-        # 批量提交，减少数据库写入次数
         db.commit()
+
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
 
         return {"results": results}
     finally:

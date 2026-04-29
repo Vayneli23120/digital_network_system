@@ -1,0 +1,280 @@
+// 语言配置
+export const languages = {
+  zh: {
+    // 品牌名称
+    brandName: '网络自动化系统',
+    brandSubtitle: '运维仪表板',
+
+    // 顶部导航
+    navDashboard: '仪表板',
+    navDevices: '设备管理',
+    navConfig: '配置管理',
+    navSpare: '资产管理',
+    navSystem: '系统设置',
+
+    // 侧边栏分组
+    groupOverview: '总览',
+    groupDeviceManage: '设备管理',
+    groupConfigManage: '配置管理',
+    groupSpare: '资产管理',
+    groupSystem: '系统管理',
+
+    // 侧边栏菜单
+    menuDashboard: '仪表板',
+    menuDevices: '设备列表',
+    menuDiscovery: '设备发现',
+    menuBackups: '备份管理',
+    menuFaults: '故障管理',
+    menuMaintenance: '维修管理',
+    menuConsole: 'Console配置',
+    menuDeploy: '配置部署',
+    menuTemplates: '配置模板',
+    menuCredentials: 'SSH凭证',
+    menuCompliance: '配置合规',
+    menuToolLogs: '工具执行日志',
+    menuSpareParts: '备件库存',
+    menuScrapInventory: '报废库存',
+    menuLogs: '系统日志',
+    menuAlertSettings: '告警通知',
+
+    // Dashboard
+    dashNetworkDevices: '网络设备',
+    dashNodes: '节点',
+    dashOnline: '在线',
+    dashOffline: '离线',
+    dashFaultEvents: '故障事件',
+    dashEvents: '事件',
+    dashCritical: '严重',
+    dashMajor: '主要',
+    dashMinor: '次要',
+    dashConfigBackups: '配置备份',
+    dashRecent: '最近',
+    dashBackupActive: '备份服务：运行中',
+    dashLastRun: '上次运行',
+    dashMonthlyOpEx: '本月运维成本',
+    dashHardware: '硬件',
+    dashLabor: '人工',
+    dashTopologyStatus: '设备拓扑状态',
+    dashFaultTimeline: '故障事件时间线',
+    dashTotal: '总计',
+    dashDays7: '近 7 天',
+    dashDays30: '近 30 天',
+    dashMonths3: '近 3 月',
+    dashYears1: '近 1 年',
+    dashCustom: '自定义',
+    dashCustomRange: '自定义时间',
+    dashRecentBackups: '最近备份操作',
+    dashSystemAlerts: '系统告警',
+    dashTimestamp: '时间戳',
+    dashChange: '变更',
+    dashModified: '有变更',
+    dashClean: '无变更',
+    dashAction: '操作',
+    dashView: '查看',
+    dashNoRecords: '暂无记录',
+    dashViewAll: '查看全部',
+    dashUptime: '系统可用性',
+    dashApiResponse: 'API响应',
+    dashActiveSessions: '活跃会话',
+    dashLastSync: '最后同步',
+
+    // 状态
+    statusLive: '实时',
+    statusOnline: '在线',
+    statusOffline: '离线',
+    statusMaintenance: '维护中',
+    statusRetired: '已退役',
+    statusActive: '活跃',
+    statusIdle: '闲置',
+    statusWarning: '警告',
+    statusError: '错误',
+    statusSuccess: '成功',
+    statusFailed: '失败',
+    statusRunning: '运行中',
+
+    // 搜索
+    searchPlaceholder: '搜索设备、配置...',
+    searchDevices: '设备',
+    searchTemplates: '配置模板',
+    searchBackups: '备份记录',
+    searchNoResults: '未找到匹配结果',
+
+    // 用户菜单
+    userProfile: '个人信息',
+    userSettings: '系统设置',
+    userLogout: '退出登录',
+    userAdmin: '管理员',
+
+    // 操作
+    actionRefresh: '刷新数据',
+    actionAdd: '添加',
+    actionEdit: '编辑',
+    actionDelete: '删除',
+    actionSave: '保存',
+    actionCancel: '取消',
+    actionConfirm: '确认',
+    actionExport: '导出',
+    actionImport: '导入',
+
+    // 提示消息
+    msgDataRefreshed: '数据已刷新',
+    msgLoadFailed: '加载失败',
+    msgSaveSuccess: '保存成功',
+    msgDeleteConfirm: '确认删除？',
+
+    // 主题
+    themeLight: '明亮模式',
+    themeDark: '暗黑模式',
+    themeSwitch: '切换主题',
+    langSwitch: '切换语言',
+    langZh: '中文',
+    langEn: '英文',
+  },
+
+  en: {
+    // 品牌名称
+    brandName: 'Network Automation',
+    brandSubtitle: 'Operations Dashboard',
+
+    // 顶部导航
+    navDashboard: 'Dashboard',
+    navDevices: 'Devices',
+    navConfig: 'Configuration',
+    navSpare: 'Asset Mgmt',
+    navSystem: 'System',
+
+    // 侧边栏分组
+    groupOverview: 'Overview',
+    groupDeviceManage: 'Device Management',
+    groupConfigManage: 'Configuration',
+    groupSpare: 'Asset Management',
+    groupSystem: 'System Management',
+
+    // 侧边栏菜单
+    menuDashboard: 'Dashboard',
+    menuDevices: 'Device List',
+    menuDiscovery: 'Device Discovery',
+    menuBackups: 'Backup Management',
+    menuFaults: 'Fault Management',
+    menuMaintenance: 'Maintenance',
+    menuConsole: 'Console Config',
+    menuDeploy: 'Config Deploy',
+    menuTemplates: 'Config Templates',
+    menuCredentials: 'SSH Credentials',
+    menuCompliance: 'Config Compliance',
+    menuToolLogs: 'Tool Execution Logs',
+    menuSpareParts: 'Spare Parts',
+    menuScrapInventory: 'Scrap Inventory',
+    menuLogs: 'System Logs',
+    menuAlertSettings: 'Alert Settings',
+
+    // Dashboard
+    dashNetworkDevices: 'Network Devices',
+    dashNodes: 'nodes',
+    dashOnline: 'Online',
+    dashOffline: 'Offline',
+    dashFaultEvents: 'Fault Events',
+    dashEvents: 'events',
+    dashCritical: 'Critical',
+    dashMajor: 'Major',
+    dashMinor: 'Minor',
+    dashConfigBackups: 'Config Backups',
+    dashRecent: 'recent',
+    dashBackupActive: 'Backup Service: Active',
+    dashLastRun: 'Last Run',
+    dashMonthlyOpEx: 'Monthly OpEx',
+    dashHardware: 'Hardware',
+    dashLabor: 'Labor',
+    dashTopologyStatus: 'Device Topology Status',
+    dashFaultTimeline: 'Fault Event Timeline',
+    dashTotal: 'total',
+    dashDays7: '7 Days',
+    dashDays30: '30 Days',
+    dashMonths3: '3 Months',
+    dashYears1: '1 Year',
+    dashCustom: 'Custom',
+    dashCustomRange: 'Custom Range',
+    dashRecentBackups: 'Recent Backup Operations',
+    dashSystemAlerts: 'System Alerts',
+    dashTimestamp: 'Timestamp',
+    dashChange: 'Change',
+    dashModified: 'Modified',
+    dashClean: 'Clean',
+    dashAction: 'Action',
+    dashView: 'View',
+    dashNoRecords: 'No records',
+    dashViewAll: 'View All',
+    dashUptime: 'System Uptime',
+    dashApiResponse: 'API Response',
+    dashActiveSessions: 'Active Sessions',
+    dashLastSync: 'Last Sync',
+
+    // 状态
+    statusLive: 'LIVE',
+    statusOnline: 'Online',
+    statusOffline: 'Offline',
+    statusMaintenance: 'Maintenance',
+    statusRetired: 'Retired',
+    statusActive: 'Active',
+    statusIdle: 'Idle',
+    statusWarning: 'Warning',
+    statusError: 'Error',
+    statusSuccess: 'Success',
+    statusFailed: 'Failed',
+    statusRunning: 'Running',
+
+    // 搜索
+    searchPlaceholder: 'Search devices, configs...',
+    searchDevices: 'Devices',
+    searchTemplates: 'Templates',
+    searchBackups: 'Backups',
+    searchNoResults: 'No results found',
+
+    // 用户菜单
+    userProfile: 'Profile',
+    userSettings: 'Settings',
+    userLogout: 'Logout',
+    userAdmin: 'Admin',
+
+    // 操作
+    actionRefresh: 'Refresh Data',
+    actionAdd: 'Add',
+    actionEdit: 'Edit',
+    actionDelete: 'Delete',
+    actionSave: 'Save',
+    actionCancel: 'Cancel',
+    actionConfirm: 'Confirm',
+    actionExport: 'Export',
+    actionImport: 'Import',
+
+    // 提示消息
+    msgDataRefreshed: 'Data refreshed',
+    msgLoadFailed: 'Load failed',
+    msgSaveSuccess: 'Saved successfully',
+    msgDeleteConfirm: 'Confirm delete?',
+
+    // 主题
+    themeLight: 'Light Mode',
+    themeDark: 'Dark Mode',
+    themeSwitch: 'Switch Theme',
+    langSwitch: 'Switch Language',
+    langZh: 'Chinese',
+    langEn: 'English',
+  }
+}
+
+// 获取当前语言
+export const getCurrentLang = () => {
+  return localStorage.getItem('lang') || 'zh'
+}
+
+// 设置语言
+export const setCurrentLang = (lang) => {
+  localStorage.setItem('lang', lang)
+}
+
+// 获取翻译文本
+export const t = (key) => {
+  const lang = getCurrentLang()
+  return languages[lang]?.[key] || languages['zh']?.[key] || key
+}

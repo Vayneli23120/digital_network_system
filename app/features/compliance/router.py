@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 from app.features.compliance.compliance_service import ComplianceService, ComplianceReport
 
-router = APIRouter(prefix="/compliance", tags=["配置合规"])
+router = APIRouter(prefix="/api/compliance", tags=["配置合规"])
 
 compliance_service = ComplianceService()
 

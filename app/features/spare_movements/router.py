@@ -17,12 +17,12 @@ from app.features.spare_parts.spare_part_service import (
 )
 from app.shared.exceptions import ResourceNotFoundException
 
-router = APIRouter(prefix="/spare-movements", tags=["备件出入库"])
+router = APIRouter(prefix="/api/spare-movements", tags=["备件出入库"])
 
 
 class MovementCreate(BaseModel):
     part_id: int
-    movement_type: str  # "in" or "out"
+    movement_type: str  # "in", "out", or "scrap_in"
     quantity: int
     reason: Optional[str] = None
     operator: Optional[str] = None
@@ -36,6 +36,7 @@ async def api_create_movement(movement: MovementCreate, db: Session = Depends(ge
 
     - movement_type="in": 入库，增加库存
     - movement_type="out": 出库，减少库存（库存不足时拒绝）
+    - movement_type="scrap_in": 报废入库，增加库存（用于返回件）
     """
     try:
         return svc_create_movement(

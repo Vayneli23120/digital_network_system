@@ -82,25 +82,41 @@
         <el-table-column prop="created_at" label="发生时间" width="180">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="editFault(row)">编辑</el-button>
             <el-button
-              v-if="row.status !== 'closed'"
+              v-if="row.status === 'open'"
+              size="small"
+              type="warning"
+              @click="changeStatus(row, 'investigating')"
+            >
+              处理
+            </el-button>
+            <el-button
+              v-if="row.status === 'investigating'"
               size="small"
               type="success"
-              @click="closeFault(row)"
+              @click="changeStatus(row, 'resolved')"
+            >
+              解决
+            </el-button>
+            <el-button
+              v-if="row.status === 'resolved'"
+              size="small"
+              type="info"
+              @click="changeStatus(row, 'closed')"
             >
               关闭
             </el-button>
             <el-button
-              v-else
+              v-if="row.status === 'closed'"
               size="small"
-              type="info"
+              type="primary"
               plain
-              disabled
+              @click="changeStatus(row, 'open')"
             >
-              已关闭
+              重开
             </el-button>
           </template>
         </el-table-column>
@@ -129,6 +145,14 @@
             <el-option label="主要 (Major)" value="major" />
             <el-option label="次要 (Minor)" value="minor" />
             <el-option label="警告 (Warning)" value="warning" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态" v-if="editMode">
+          <el-select v-model="faultForm.status">
+            <el-option label="待处理" value="open" />
+            <el-option label="处理中" value="investigating" />
+            <el-option label="已解决" value="resolved" />
+            <el-option label="已关闭" value="closed" />
           </el-select>
         </el-form-item>
         <el-form-item label="停机时长 (分钟)">
@@ -328,6 +352,8 @@ const updateFault = async () => {
     editMode.value = false
     resetForm()
     loadFaults()
+    // 触发事件更新导航栏badge
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     ElMessage.error('更新故障记录失败')
     ElMessage.error('更新故障记录失败')
@@ -345,10 +371,43 @@ const closeFault = async (row) => {
     await updateFaultApi(row.id, { status: 'closed' })
     ElMessage.success('故障已关闭')
     loadFaults()
+    // 触发事件更新导航栏badge
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('关闭故障失败')
       ElMessage.error('关闭故障失败')
+    }
+  }
+}
+
+const changeStatus = async (row, newStatus) => {
+  try {
+    const statusLabels = {
+      open: '待处理',
+      investigating: '处理中',
+      resolved: '已解决',
+      closed: '已关闭'
+    }
+
+    await ElMessageBox.confirm(
+      `确定要将故障 "${row.fault_no}" 的状态改为 "${statusLabels[newStatus]}" 吗？`,
+      '确认状态变更',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    )
+
+    await updateFaultApi(row.id, { status: newStatus })
+    ElMessage.success(`故障状态已更新为 ${statusLabels[newStatus]}`)
+    loadFaults()
+    // 触发事件更新导航栏badge
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('状态更新失败')
     }
   }
 }

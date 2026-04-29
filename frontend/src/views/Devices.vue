@@ -70,6 +70,11 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column prop="vendor" label="厂商" width="100">
+          <template #default="{ row }">
+            <el-tag size="small">{{ row.vendor || 'Cisco' }}</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="role" label="角色" width="100">
           <template #default="{ row }">
             <el-tag :type="getRoleType(row.role)" size="small">
@@ -118,6 +123,11 @@
         </el-form-item>
         <el-form-item label="位置">
           <el-input v-model="newDevice.location" placeholder="如 Building-A / Floor1 / Rack-03" />
+        </el-form-item>
+        <el-form-item label="厂商">
+          <el-select v-model="newDevice.vendor">
+            <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
+          </el-select>
         </el-form-item>
         <el-form-item label="角色">
           <el-select v-model="newDevice.role">
@@ -198,7 +208,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Plus, Upload, UploadFilled } from '@element-plus/icons-vue'
-import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi } from '@/api'
+import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 
 const router = useRouter()
 
@@ -217,6 +227,7 @@ const selectMode = ref(false)
 const selectedDevices = ref([])
 const credentialGroups = ref([])
 const selectedFile = ref(null)
+const vendors = ref([])
 
 const newDevice = ref({
   name: '',
@@ -226,6 +237,7 @@ const newDevice = ref({
   location: '',
   role: 'access',
   status: 'online',
+  vendor: 'cisco',
   credential_group: 'default'
 })
 
@@ -431,9 +443,19 @@ const importDevices = async () => {
   }
 }
 
+const loadVendors = async () => {
+  try {
+    const res = await getVendors()
+    vendors.value = res.vendors || []
+  } catch (e) {
+    console.error('加载厂商列表失败', e)
+  }
+}
+
 onMounted(() => {
   loadDevices()
   loadCredentialGroups()
+  loadVendors()
 })
 </script>
 

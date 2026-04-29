@@ -94,7 +94,7 @@ class DiscoveryService:
                 try:
                     if future.result():
                         device = DiscoveredDevice(
-                            ip=ip,
+                            ip=str(ip),
                             discovery_method="ping",
                             is_cisco=False  # 需要进一步识别
                         )

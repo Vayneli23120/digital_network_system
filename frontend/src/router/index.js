@@ -165,6 +165,19 @@ const routes = [
     ]
   },
   {
+    path: '/scrap-inventory',
+    name: 'ScrapInventoryLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'ScrapInventory',
+        component: () => import('@/views/ScrapInventory.vue'),
+        meta: { title: '报废库存' }
+      }
+    ]
+  },
+  {
     path: '/compliance',
     name: 'ComplianceLayout',
     component: Layout,

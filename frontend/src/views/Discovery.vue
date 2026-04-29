@@ -36,7 +36,7 @@
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="!loading && discoveredDevices.length === 0" description="暂无发现结果，点击上方"开始扫描"" />
+      <el-empty v-if="!loading && discoveredDevices.length === 0" description="暂无发现结果，点击上方「开始扫描」" />
     </el-card>
 
     <!-- 扫描配置对话框 -->

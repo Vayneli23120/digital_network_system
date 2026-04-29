@@ -64,6 +64,7 @@ async def list_maintenances(device_id: Optional[int] = None, skip: int = 0, limi
                     "device_id": m.device_id,
                     "device_name": m.device_name,
                     "maint_type": m.maint_type,
+                    "parts_replaced": m.parts_replaced,
                     "parts_cost": float(m.parts_cost) if m.parts_cost else 0,
                     "labor_cost": float(m.labor_cost) if m.labor_cost else 0,
                     "total_cost": float((m.parts_cost or 0) + (m.labor_cost or 0)),
@@ -83,23 +84,37 @@ async def create_maintenance(maint_data: dict):
     """创建维修记录"""
     db: Session = next(get_db())
 
-    maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
-    maint_data["maint_no"] = maint_no
+    try:
+        maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
-    # 设置维修时间为当前时间（如果未提供）
-    if "maint_time" not in maint_data or not maint_data["maint_time"]:
-        maint_data["maint_time"] = datetime.utcnow()
+        # 过滤掉不属于模型的字段
+        valid_fields = {
+            'device_id', 'device_name', 'maint_type', 'maint_time',
+            'parts_replaced', 'parts_cost', 'labor_hours', 'labor_cost',
+            'vendor', 'description', 'post_status', 'operator'
+        }
+        filtered_data = {k: v for k, v in maint_data.items() if k in valid_fields}
+        filtered_data["maint_no"] = maint_no
 
-    maint = MaintenanceRecord(**maint_data)
-    db.add(maint)
-    db.commit()
-    db.refresh(maint)
+        # 设置维修时间为当前时间（如果未提供）
+        if "maint_time" not in filtered_data or not filtered_data["maint_time"]:
+            filtered_data["maint_time"] = datetime.utcnow()
 
-    # 清除 Dashboard 缓存
-    from app.shared.cache import cache
-    cache.invalidate_prefix("dashboard:")
+        maint = MaintenanceRecord(**filtered_data)
+        db.add(maint)
+        db.commit()
+        db.refresh(maint)
 
-    return {"id": maint.id, "maint_no": maint_no, "message": "维修记录创建成功"}
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
+        return {"id": maint.id, "maint_no": maint_no, "message": "维修记录创建成功"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
 
 
 @router.put("/{maint_id}")
@@ -112,14 +127,24 @@ async def update_maintenance(maint_id: int, maint_data: dict):
         if not maint:
             raise HTTPException(status_code=404, detail="维修记录不存在")
 
+        # 过滤掉不属于模型的字段
+        valid_fields = {
+            'device_id', 'device_name', 'maint_type', 'maint_time',
+            'parts_replaced', 'parts_cost', 'labor_hours', 'labor_cost',
+            'vendor', 'description', 'post_status', 'operator'
+        }
+
         for key, value in maint_data.items():
-            if hasattr(maint, key):
+            if key in valid_fields and hasattr(maint, key):
                 setattr(maint, key, value)
 
         db.commit()
         db.refresh(maint)
 
         return {"id": maint.id, "message": "更新成功"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
     finally:
         db.close()
 

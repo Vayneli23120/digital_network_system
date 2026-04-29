@@ -20,7 +20,7 @@ from .spare_part_service import (
 )
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
-router = APIRouter(prefix="/spare-parts", tags=["备件管理"])
+router = APIRouter(prefix="/api/spare-parts", tags=["备件管理"])
 
 
 class SparePartCreate(BaseModel):

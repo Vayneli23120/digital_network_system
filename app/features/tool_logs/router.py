@@ -5,15 +5,15 @@
 """
 from typing import List, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
 from pydantic import BaseModel
 
-from app.database import get_db
-from app.models import LogEntry
+from app.shared.database import get_db
+from app.shared.models import LogEntry
 
-router = APIRouter(prefix="/tool-logs", tags=["工具日志"])
+router = APIRouter(prefix="/api/tool-logs", tags=["工具日志"])
 
 
 class LogEntryResponse(BaseModel):
@@ -90,8 +90,7 @@ async def get_log(log_id: int, db: Session = Depends(get_db)):
     """获取单条日志详情"""
     log = db.query(LogEntry).filter(LogEntry.id == log_id).first()
     if not log:
-        from fastapi import HTTPException
-        raise HTTPException(status_code=404, detail="Log not found")
+        raise HTTPException(status_code=404, detail="日志不存在")
     return log
 
 

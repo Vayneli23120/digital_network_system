@@ -266,10 +266,10 @@ def create_movement(
                 f"库存不足：当前 {part.quantity_in_stock}，需要 {quantity}"
             )
         part.quantity_in_stock -= quantity
-    elif movement_type == "in":
+    elif movement_type == "in" or movement_type == "scrap_in":
         part.quantity_in_stock += quantity
     else:
-        raise ValueError("movement_type 必须为 'in' 或 'out'")
+        raise ValueError("movement_type 必须为 'in', 'out' 或 'scrap_in'")
 
     # 更新备件状态
     if part.quantity_in_stock == 0:
@@ -355,6 +355,8 @@ def list_movements(
             {
                 "id": m.id,
                 "part_id": m.part_id,
+                "part_number": m.part.part_number if m.part else None,
+                "name": m.part.name if m.part else None,
                 "movement_type": m.movement_type,
                 "quantity": m.quantity,
                 "reason": m.reason,

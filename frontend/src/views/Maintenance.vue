@@ -90,10 +90,10 @@
     </el-card>
 
     <!-- 添加/编辑维修记录对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? '编辑维修记录' : '添加维修记录'" width="600px">
+    <el-dialog v-model="showAddDialog" :title="editMode ? '编辑维修记录' : '添加维修记录'" width="700px">
       <el-form :model="maintForm" label-width="120px">
         <el-form-item label="设备" required>
-          <el-select v-model="maintForm.device_id" placeholder="选择设备" style="width: 100%" :disabled="editMode">
+          <el-select v-model="maintForm.device_id" placeholder="选择设备" style="width: 100%" :disabled="editMode" filterable>
             <el-option
               v-for="device in devices"
               :key="device.id"
@@ -110,12 +110,141 @@
             <el-option label="紧急维修" value="emergency" />
           </el-select>
         </el-form-item>
+
+        <!-- 备件选择区域 -->
+        <el-divider content-position="left">备件更换</el-divider>
         <el-form-item label="更换备件">
-          <el-input v-model="maintForm.parts_replaced" type="textarea" :rows="2" />
+          <div class="spare-parts-section">
+            <!-- 搜索添加备件 -->
+            <div class="spare-search">
+              <el-select
+                v-model="selectedSparePart"
+                placeholder="输入型号或名称搜索，点击选择添加"
+                filterable
+                remote
+                :remote-method="searchSpareParts"
+                :loading="spareLoading"
+                style="width: 100%"
+                @change="addSparePartToForm"
+                clearable
+              >
+                <el-option
+                  v-for="part in sparePartOptions"
+                  :key="part.id"
+                  :label="`${part.part_number} - ${part.name}`"
+                  :value="part.id"
+                  :disabled="part.quantity_in_stock <= 0"
+                >
+                  <div class="spare-option">
+                    <span class="spare-number">{{ part.part_number }}</span>
+                    <span class="spare-name">{{ part.name }}</span>
+                    <span class="spare-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
+                      库存: {{ part.quantity_in_stock }}
+                    </span>
+                  </div>
+                </el-option>
+              </el-select>
+              <div class="spare-tip">↓ 从上方下拉列表点击选择备件，自动添加到下方列表</div>
+            </div>
+
+            <!-- 已选备件列表 -->
+            <div class="selected-parts" v-if="maintForm.spare_parts.length > 0">
+              <el-table :data="maintForm.spare_parts" size="small" border>
+                <el-table-column prop="part_number" label="型号" width="150" />
+                <el-table-column prop="name" label="名称" width="150" />
+                <el-table-column prop="quantity" label="数量" width="80">
+                  <template #default="{ row, $index }">
+                    <el-input-number v-model="row.quantity" :min="1" size="small" @change="updatePartsCost" />
+                  </template>
+                </el-table-column>
+                <el-table-column prop="unit_price" label="单价" width="80">
+                  <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column prop="total" label="小计" width="80">
+                  <template #default="{ row }">¥{{ (row.quantity * row.unit_price).toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column label="操作" width="60">
+                  <template #default="{ row, $index }">
+                    <el-button type="danger" size="small" link @click="removeSparePart($index)">
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="parts-summary">
+                备件总成本: <span class="total-cost">¥{{ maintForm.parts_cost.toFixed(2) }}</span>
+              </div>
+            </div>
+            <div class="no-parts-tip" v-else>
+              <el-icon><InfoFilled /></el-icon>
+              <span>暂无更换备件，如需添加请从上方搜索框选择</span>
+            </div>
+          </div>
         </el-form-item>
-        <el-form-item label="备件成本">
-          <el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" />
+
+        <el-divider content-position="left">返回件信息</el-divider>
+        <el-form-item label="返回件处理">
+          <div class="return-parts-section">
+            <!-- 手动添加返回件 -->
+            <div class="return-add">
+              <el-select
+                v-model="selectedReturnPart"
+                placeholder="从备件库选择（可选）"
+                filterable
+                remote
+                :remote-method="searchReturnParts"
+                :loading="spareLoading"
+                style="width: 200px"
+                clearable
+              >
+                <el-option
+                  v-for="part in sparePartOptions"
+                  :key="part.id"
+                  :label="`${part.part_number} - ${part.name}`"
+                  :value="part.id"
+                />
+              </el-select>
+              <el-input v-model="returnPartNumber" placeholder="型号（手动输入）" style="width: 130px" />
+              <el-input v-model="returnPartName" placeholder="名称" style="width: 130px" />
+              <el-input-number v-model="returnPartQty" :min="1" style="width: 90px" />
+              <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
+              <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">添加</el-button>
+            </div>
+
+            <div class="return-parts-table" v-if="maintForm.return_parts.length > 0">
+              <el-table :data="maintForm.return_parts" size="small" border>
+                <el-table-column prop="part_number" label="型号" width="150" />
+                <el-table-column prop="name" label="名称" width="150" />
+                <el-table-column prop="quantity" label="数量" width="80">
+                  <template #default="{ row, $index }">
+                    <el-input-number v-model="row.quantity" :min="1" size="small" />
+                  </template>
+                </el-table-column>
+                <el-table-column label="入报废库" width="120">
+                  <template #default="{ row }">
+                    <el-checkbox v-model="row.scrap_in" :disabled="!row.part_id" />
+                    <span class="scrap-label" v-if="row.part_id && !row.scrap_in">不入库</span>
+                    <span class="scrap-label no-id" v-if="!row.part_id">无备件ID</span>
+                  </template>
+                </el-table-column>
+                <el-table-column label="操作" width="60">
+                  <template #default="{ row, $index }">
+                    <el-button type="danger" size="small" link @click="removeReturnPart($index)">
+                      删除
+                    </el-button>
+                  </template>
+                </el-table-column>
+              </el-table>
+              <div class="return-tip">注：需从备件库选择才能入报废库，无固定资产的返回件可不入库</div>
+            </div>
+            <div class="no-return-tip" v-else>
+              <el-tag type="info">暂无返回件，请从上方手动录入换下来的坏件</el-tag>
+            </div>
+          </div>
         </el-form-item>
+
+        <el-divider />
+
         <el-form-item label="人工工时 (小时)">
           <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
@@ -138,10 +267,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getMaintenances, getDevices, createMaintenance as createMaintenanceApi, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi } from '@/api'
-import { Search } from '@element-plus/icons-vue'
+import { Plus, Search, InfoFilled } from '@element-plus/icons-vue'
+import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement } from '@/api'
 import dayjs from 'dayjs'
 
 const maintenances = ref([])
@@ -159,15 +288,44 @@ const filterMaintType = ref('')
 const dateRange = ref([])
 const sortBy = ref('maint_time_desc')
 
-const openAddDialog = () => {
-  console.log('打开添加维修记录对话框')
+// 备件相关
+const sparePartOptions = ref([])
+const spareLoading = ref(false)
+const selectedSparePart = ref(null)
+
+// 返回件录入
+const selectedReturnPart = ref(null)
+const returnPartNumber = ref('')
+const returnPartName = ref('')
+const returnPartQty = ref(1)
+const returnPartScrap = ref(true)
+
+const openAddDialog = async () => {
+  editMode.value = false
+  resetForm()
+  // 预加载备件列表
+  await loadInitialSpareParts()
   showAddDialog.value = true
+}
+
+// 加载初始备件列表
+const loadInitialSpareParts = async () => {
+  spareLoading.value = true
+  try {
+    const result = await getPartList({ limit: 50 })
+    sparePartOptions.value = result.items || []
+  } catch (e) {
+    console.error('加载备件失败:', e)
+  } finally {
+    spareLoading.value = false
+  }
 }
 
 const maintForm = ref({
   device_id: null,
   maint_type: 'corrective',
-  parts_replaced: '',
+  spare_parts: [],  // 更换的备件列表
+  return_parts: [], // 返回件列表（换下来的坏件）
   parts_cost: 0,
   labor_hours: 0,
   labor_cost: 0,
@@ -187,10 +345,111 @@ const getMaintTypeText = (type) => {
 
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
+// 搜索备件
+const searchSpareParts = async (query) => {
+  if (!query || query.length < 1) {
+    sparePartOptions.value = []
+    return
+  }
+  spareLoading.value = true
+  try {
+    const result = await getPartList({ search: query, limit: 20 })
+    sparePartOptions.value = result.items || []
+  } catch (e) {
+    ElMessage.error('搜索备件失败')
+  } finally {
+    spareLoading.value = false
+  }
+}
+
+// 搜索返回件备件（共用同一个搜索）
+const searchReturnParts = async (query) => {
+  await searchSpareParts(query)
+}
+
+// 添加备件到表单
+const addSparePartToForm = () => {
+  if (!selectedSparePart.value) return
+
+  const part = sparePartOptions.value.find(p => p.id === selectedSparePart.value)
+  if (!part) return
+
+  // 检查是否已添加
+  const existing = maintForm.value.spare_parts.find(p => p.part_id === part.id)
+  if (existing) {
+    existing.quantity += 1
+  } else {
+    maintForm.value.spare_parts.push({
+      part_id: part.id,
+      part_number: part.part_number,
+      name: part.name,
+      unit_price: part.unit_price || 0,
+      quantity: 1
+    })
+  }
+
+  updatePartsCost()
+  selectedSparePart.value = null
+}
+
+// 移除备件
+const removeSparePart = (index) => {
+  maintForm.value.spare_parts.splice(index, 1)
+  updatePartsCost()
+}
+
+// 手动添加返回件
+const addReturnPart = () => {
+  if (!returnPartNumber.value && !selectedReturnPart.value) {
+    ElMessage.warning('请输入返回件型号或从备件库选择')
+    return
+  }
+
+  // 如果从备件库选择，使用备件信息
+  let partNumber = returnPartNumber.value
+  let partName = returnPartName.value
+  let partId = null
+
+  if (selectedReturnPart.value) {
+    const part = sparePartOptions.value.find(p => p.id === selectedReturnPart.value)
+    if (part) {
+      partId = part.id
+      partNumber = part.part_number
+      partName = part.name
+    }
+  }
+
+  maintForm.value.return_parts.push({
+    part_id: partId,
+    part_number: partNumber,
+    name: partName || partNumber,
+    quantity: returnPartQty.value,
+    scrap_in: selectedReturnPart.value ? returnPartScrap.value : false
+  })
+
+  // 清空输入
+  selectedReturnPart.value = null
+  returnPartNumber.value = ''
+  returnPartName.value = ''
+  returnPartQty.value = 1
+  returnPartScrap.value = true
+}
+
+// 移除返回件
+const removeReturnPart = (index) => {
+  maintForm.value.return_parts.splice(index, 1)
+}
+
+// 更新备件成本
+const updatePartsCost = () => {
+  maintForm.value.parts_cost = maintForm.value.spare_parts.reduce(
+    (sum, p) => sum + p.quantity * p.unit_price, 0
+  )
+}
+
 const filterMaintenances = () => {
   let result = [...maintenances.value]
 
-  // 按搜索文本过滤
   if (searchText.value) {
     const search = searchText.value.toLowerCase()
     result = result.filter(m =>
@@ -199,12 +458,10 @@ const filterMaintenances = () => {
     )
   }
 
-  // 按维修类型过滤
   if (filterMaintType.value) {
     result = result.filter(m => m.maint_type === filterMaintType.value)
   }
 
-  // 按日期范围过滤
   if (dateRange.value && dateRange.value.length === 2) {
     const startDate = dayjs(dateRange.value[0])
     const endDate = dayjs(dateRange.value[1]).endOf('day')
@@ -214,7 +471,6 @@ const filterMaintenances = () => {
     })
   }
 
-  // 排序
   if (sortBy.value) {
     switch (sortBy.value) {
       case 'maint_time_desc':
@@ -238,8 +494,9 @@ const filterMaintenances = () => {
 const loadMaintenances = async () => {
   loading.value = true
   try {
-    const data = await getMaintenances()
+    const data = await getMaintenances({ limit: 500 })
     maintenances.value = data.items || []
+    total.value = data.total || maintenances.value.length
     filterMaintenances()
   } catch (error) {
     ElMessage.error('加载维修记录失败')
@@ -268,14 +525,51 @@ const addMaintenance = async () => {
   }
 
   try {
-    await createMaintenanceApi(maintForm.value)
+    // 创建维修记录 - 合并备件和返回件数据
+    const device = devices.value.find(d => d.id === maintForm.value.device_id)
+    const combinedParts = [
+      ...maintForm.value.spare_parts.map(p => ({ ...p, is_return: false })),
+      ...maintForm.value.return_parts.map(p => ({ ...p, is_return: true }))
+    ]
+
+    await createMaintenance({
+      ...maintForm.value,
+      device_name: device?.name,
+      parts_replaced: JSON.stringify(combinedParts)
+    })
+
+    // 处理备件出库
+    for (const part of maintForm.value.spare_parts) {
+      await createMovement({
+        part_id: part.part_id,
+        movement_type: 'out',
+        quantity: part.quantity,
+        reason: `维修更换 - ${maintForm.value.maint_type}`,
+        operator: 'Web',
+        reference: device?.name
+      })
+    }
+
+    // 处理返回件入报废库
+    for (const part of maintForm.value.return_parts) {
+      if (part.scrap_in && part.part_id) {
+        await createMovement({
+          part_id: part.part_id,
+          movement_type: 'scrap_in',
+          quantity: part.quantity,
+          reason: `维修返回件入库 - 报废`,
+          operator: 'Web',
+          reference: device?.name
+        })
+      }
+    }
+
     ElMessage.success('维修记录添加成功')
     showAddDialog.value = false
     resetForm()
     loadMaintenances()
   } catch (error) {
-    ElMessage.error('添加维修记录失败')
-    ElMessage.error('添加维修记录失败')
+    ElMessage.error('添加维修记录失败: ' + (error.response?.data?.detail || error.message))
   }
 }
 
@@ -285,7 +579,8 @@ const editMaintenance = (row) => {
     id: row.id,
     device_id: row.device_id,
     maint_type: row.maint_type,
-    parts_replaced: row.parts_replaced || '',
+    spare_parts: [],
+    return_parts: [],
     parts_cost: row.parts_cost || 0,
     labor_hours: row.labor_hours || 0,
     labor_cost: row.labor_cost || 0,
@@ -302,14 +597,18 @@ const updateMaintenance = async () => {
   }
 
   try {
-    await updateMaintenanceApi(maintForm.value.id, maintForm.value)
+    const device = devices.value.find(d => d.id === maintForm.value.device_id)
+    await updateMaintenanceApi(maintForm.value.id, {
+      ...maintForm.value,
+      device_name: device?.name,
+      parts_replaced: JSON.stringify(maintForm.value.spare_parts)
+    })
     ElMessage.success('维修记录更新成功')
     showAddDialog.value = false
     editMode.value = false
     resetForm()
     loadMaintenances()
   } catch (error) {
-    ElMessage.error('更新维修记录失败')
     ElMessage.error('更新维修记录失败')
   }
 }
@@ -328,7 +627,6 @@ const deleteMaintenance = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('删除维修记录失败')
-      ElMessage.error('删除维修记录失败')
     }
   }
 }
@@ -337,13 +635,21 @@ const resetForm = () => {
   maintForm.value = {
     device_id: null,
     maint_type: 'corrective',
-    parts_replaced: '',
+    spare_parts: [],
+    return_parts: [],
     parts_cost: 0,
     labor_hours: 0,
     labor_cost: 0,
     vendor: '',
     description: ''
   }
+  selectedSparePart.value = null
+  sparePartOptions.value = []
+  selectedReturnPart.value = null
+  returnPartNumber.value = ''
+  returnPartName.value = ''
+  returnPartQty.value = 1
+  returnPartScrap.value = true
 }
 
 onMounted(() => {
@@ -380,10 +686,150 @@ onMounted(() => {
   text-decoration: underline;
   color: #66b1ff;
 }
-.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
+
+.pagination-bar {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 备件选择区域 */
+.spare-parts-section {
+  width: 100%;
+}
+
+.spare-search {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.spare-tip {
+  font-size: 12px;
+  color: #909399;
+  padding: 4px 8px;
+  background: #f4f4f5;
+  border-radius: 4px;
+}
+
+.selected-parts {
+  margin-top: 12px;
+}
+
+.no-parts-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  color: #909399;
+  font-size: 13px;
+  margin-top: 12px;
+}
+
+.no-parts-tip .el-icon {
+  font-size: 16px;
+}
+
+.parts-summary {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #f5f7fa;
+  border-radius: 4px;
+  text-align: right;
+}
+
+.total-cost {
+  font-weight: 600;
+  color: #409EFF;
+  font-size: 16px;
+}
+
+/* 备件下拉选项样式 */
+.spare-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.spare-number {
+  font-weight: 500;
+  color: #409EFF;
+}
+
+.spare-name {
+  color: #606266;
+}
+
+.spare-stock {
+  font-size: 12px;
+  color: #909399;
+}
+
+.spare-stock.low {
+  color: #F56C6C;
+  font-weight: 500;
+}
+
+/* 返回件区域样式 */
+.return-parts-section {
+  width: 100%;
+}
+
+.return-add {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.return-parts-table {
+  margin-top: 8px;
+}
+
+.scrap-label {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.scrap-label.no-id {
+  color: #E6A23C;
+}
+
+.return-tip {
+  margin-top: 10px;
+  padding: 8px 12px;
+  background: #fdf6ec;
+  border-radius: 4px;
+  color: #909399;
+  font-size: 12px;
+}
+
+.no-return-tip {
+  margin-top: 8px;
+}
+
 @media (max-width: 768px) {
-  .filter-bar { flex-wrap: wrap; }
-  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
-  .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
+  .filter-bar {
+    flex-wrap: wrap;
+  }
+  .filter-bar .el-input, .filter-bar .el-select {
+    width: 100% !important;
+  }
+  .card-header {
+    flex-direction: column;
+    gap: 8px;
+    align-items: flex-start;
+  }
+  .spare-search {
+    flex-direction: column;
+  }
+  .spare-search .el-select {
+    width: 100% !important;
+  }
 }
 </style>

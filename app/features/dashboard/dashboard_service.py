@@ -155,8 +155,12 @@ def get_fault_trend(
 
     for fault in faults:
         if group_by == "week":
-            week_key = fault.created_at.strftime("%Y-%W")
-            label = f"第{int(week_key.split('-')[1])}周"
+            # 使用 ISO 周格式: 显示为 "04-W1" (月-周)
+            iso_year, iso_week = fault.created_at.isocalendar()[:2]
+            # 计算该 ISO 周对应的月份
+            week_start = fault.created_at - timedelta(days=fault.created_at.weekday())
+            month = week_start.month
+            label = f"{month:02d}-W{iso_week}"
         elif group_by == "month":
             label = fault.created_at.strftime("%Y-%m")
         else:
@@ -189,21 +193,25 @@ def get_fault_trend(
         week_data = {}
         for label, count in fault_counts.items():
             try:
-                week_idx = int(label.replace("第", "").replace("周", ""))
-                week_data[week_idx] = {
-                    "count": count,
-                    "severity": fault_by_severity[label],
-                }
+                # 解析新格式 "04-W1" -> 提取周数用于排序
+                parts = label.split("-W")
+                if len(parts) == 2:
+                    week_idx = int(parts[1])
+                    week_data[week_idx] = {
+                        "label": label,
+                        "count": count,
+                        "severity": fault_by_severity[label],
+                    }
             except (ValueError, KeyError):
                 continue
 
         if week_data:
             min_week = min(week_data.keys())
-            for i in range(13):
-                week_num = min_week + i
-                label = f"第{week_num}周"
-                labels.append(label)
+            max_week = max(week_data.keys())
+            for week_num in range(min_week, max_week + 1):
                 if week_num in week_data:
+                    label = week_data[week_num]["label"]
+                    labels.append(label)
                     values.append(week_data[week_num]["count"])
                     severity_timeline[label] = {
                         "critical": week_data[week_num]["severity"].get("critical", 0),
@@ -212,6 +220,13 @@ def get_fault_trend(
                         "warning": week_data[week_num]["severity"].get("warning", 0),
                     }
                 else:
+                    # 为缺失的周生成占位标签
+                    # 推算该周应该显示的月份
+                    placeholder_month = (min_week + week_num - min_week) % 12 + 1
+                    if placeholder_month < 1:
+                        placeholder_month = 1
+                    label = f"{placeholder_month:02d}-W{week_num}"
+                    labels.append(label)
                     values.append(0)
                     severity_timeline[label] = {
                         "critical": 0,
@@ -221,8 +236,10 @@ def get_fault_trend(
                     }
 
     elif group_by == "month":
-        current = query_start_date
-        while current < query_end_date:
+        # 从起始日期的下一个月开始，避免 day=31 导致的月份遍历错误
+        current = query_start_date.replace(day=1)
+        end_month = query_end_date.replace(day=1)
+        while current <= end_month:
             label = current.strftime("%Y-%m")
             labels.append(label)
             values.append(fault_counts.get(label, 0))
@@ -232,6 +249,7 @@ def get_fault_trend(
                 "minor": fault_by_severity.get(label, {}).get("minor", 0),
                 "warning": fault_by_severity.get(label, {}).get("warning", 0),
             }
+            # 安全地增加一个月
             if current.month == 12:
                 current = current.replace(year=current.year + 1, month=1)
             else:
