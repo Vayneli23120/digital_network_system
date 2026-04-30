@@ -49,6 +49,15 @@
               <el-icon><Edit /></el-icon>
               编辑
             </el-button>
+            <!-- 转维修按钮：未关闭且未关联维修单 -->
+            <el-button
+              v-if="fault.status !== 'closed' && !fault.maintenance_id"
+              type="warning"
+              @click="convertToMaintenance"
+            >
+              <el-icon><Tools /></el-icon>
+              转维修单
+            </el-button>
             <el-button
               v-if="fault.status !== 'closed'"
               type="success"
@@ -62,6 +71,31 @@
               删除
             </el-button>
           </el-space>
+        </el-card>
+
+        <!-- 关联的维修单信息 -->
+        <el-card style="margin-top: 20px" v-if="maintenanceInfo">
+          <template #header>
+            <span>关联维修单</span>
+          </template>
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="维修单号">
+              <router-link :to="`/maintenance/${maintenanceInfo.id}`">
+                {{ maintenanceInfo.maint_no }}
+              </router-link>
+            </el-descriptions-item>
+            <el-descriptions-item label="维修类型">
+              <el-tag>{{ getMaintTypeText(maintenanceInfo.maint_type) }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="备件成本">¥{{ maintenanceInfo.parts_cost }}</el-descriptions-item>
+            <el-descriptions-item label="人工成本">¥{{ maintenanceInfo.labor_cost }}</el-descriptions-item>
+            <el-descriptions-item label="维修时间">{{ formatDateTime(maintenanceInfo.maint_time) }}</el-descriptions-item>
+            <el-descriptions-item label="总成本">
+              <span class="total-cost">¥{{ (maintenanceInfo.parts_cost + maintenanceInfo.labor_cost).toFixed(2) }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+          <el-divider>维修描述</el-divider>
+          <p class="description">{{ maintenanceInfo.description || '无描述' }}</p>
         </el-card>
       </el-col>
 
@@ -182,8 +216,9 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getFaultDetail, updateFault as updateFaultApi, deleteFault as deleteFaultApi, getDevices } from '@/api'
-import dayjs from 'dayjs'
+import { Tools } from '@element-plus/icons-vue'
+import { getFaultDetail, updateFault as updateFaultApi, deleteFault as deleteFaultApi, getDevices, convertFaultToMaintenance, getFaultMaintenance } from '@/api'
+import { formatDateTime } from '@/utils/time'
 
 const route = useRoute()
 const router = useRouter()
@@ -192,6 +227,7 @@ const fault = ref({})
 const device = ref(null)
 const loading = ref(false)
 const showEditDialog = ref(false)
+const maintenanceInfo = ref(null)
 
 const editForm = ref({
   severity: 'major',
@@ -222,7 +258,10 @@ const getStatusText = (status) => {
   return texts[status] || status
 }
 
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
+const getMaintTypeText = (type) => {
+  const texts = { preventive: '预防性', corrective: '修复性', upgrade: '升级', emergency: '紧急' }
+  return texts[type] || type
+}
 
 const loadFault = async () => {
   try {
@@ -244,6 +283,12 @@ const loadFault = async () => {
       const devices = await getDevices()
       device.value = (devices.items || []).find(d => d.id === data.device_id)
     }
+
+    // 加载关联的维修单信息
+    if (data.maintenance_id) {
+      const maintData = await getFaultMaintenance(faultId)
+      maintenanceInfo.value = maintData.maintenance
+    }
   } catch (error) {
     ElMessage.error('加载故障详情失败')
   } finally {
@@ -255,6 +300,28 @@ const goBack = () => {
   router.push('/faults')
 }
 
+const convertToMaintenance = async () => {
+  try {
+    await ElMessageBox.confirm(
+      '确定要将此故障转换为维修单吗？转换后故障状态将更新，维修单将继承故障信息。',
+      '转维修单',
+      {
+        confirmButtonText: '确定转换',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+
+    const result = await convertFaultToMaintenance(fault.value.id)
+    ElMessage.success(`维修单 ${result.maint_no} 创建成功`)
+    loadFault()
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(error.response?.data?.detail || '转换失败')
+    }
+  }
+}
+
 const updateFault = async () => {
   try {
     await updateFaultApi(fault.value.id, editForm.value)
@@ -262,7 +329,6 @@ const updateFault = async () => {
     showEditDialog.value = false
     loadFault()
   } catch (error) {
-    ElMessage.error('更新故障记录失败')
     ElMessage.error('更新故障记录失败')
   }
 }
@@ -281,7 +347,6 @@ const closeFault = async () => {
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error('关闭故障失败')
-      ElMessage.error('关闭故障失败')
     }
   }
 }
@@ -299,7 +364,6 @@ const deleteFault = async () => {
     router.push('/faults')
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除故障失败')
       ElMessage.error('删除故障失败')
     }
   }
@@ -352,5 +416,11 @@ onMounted(() => {
   margin: 0 0 5px 0;
   color: #909399;
   font-size: 14px;
+}
+
+.total-cost {
+  font-weight: 600;
+  color: #E6A23C;
+  font-size: 16px;
 }
 </style>

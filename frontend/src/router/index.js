@@ -229,6 +229,39 @@ const routes = [
         meta: { title: '告警通知' }
       }
     ]
+  },
+  // v1.3 新增路由
+  {
+    path: '/users',
+    name: 'UsersLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Users',
+        component: () => import('@/views/Users.vue'),
+        meta: { title: '用户管理' }
+      }
+    ]
+  },
+  {
+    path: '/planned-maintenance',
+    name: 'PlannedMaintenanceLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'PlannedMaintenance',
+        component: () => import('@/views/PlannedMaintenance.vue'),
+        meta: { title: '计划性运维' }
+      },
+      {
+        path: 'tasks/:id',
+        name: 'TaskDetail',
+        component: () => import('@/views/TaskDetail.vue'),
+        meta: { title: '任务详情' }
+      }
+    ]
   }
 ]
 

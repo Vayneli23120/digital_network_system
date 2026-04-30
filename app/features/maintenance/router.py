@@ -7,7 +7,7 @@ from datetime import datetime
 import uuid
 
 from app.shared.database import get_db
-from app.shared.models import MaintenanceRecord
+from app.shared.models import MaintenanceRecord, FaultRecord
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
@@ -22,6 +22,19 @@ async def get_maintenance(maint_id: int):
         if not maintenance:
             raise HTTPException(status_code=404, detail="维修记录不存在")
 
+        # 获取关联的故障信息
+        fault_info = None
+        if maintenance.fault_id:
+            fault = db.query(FaultRecord).filter(FaultRecord.id == maintenance.fault_id).first()
+            if fault:
+                fault_info = {
+                    "id": fault.id,
+                    "fault_no": fault.fault_no,
+                    "severity": fault.severity,
+                    "status": fault.status,
+                    "description": fault.description
+                }
+
         return {
             "id": maintenance.id,
             "maint_no": maintenance.maint_no,
@@ -34,6 +47,8 @@ async def get_maintenance(maint_id: int):
             "labor_cost": float(maintenance.labor_cost) if maintenance.labor_cost else 0,
             "vendor": maintenance.vendor,
             "description": maintenance.description,
+            "fault_id": maintenance.fault_id,
+            "fault": fault_info,
             "maint_time": maintenance.maint_time.isoformat() if maintenance.maint_time else None,
             "created_at": maintenance.created_at.isoformat()
         }
@@ -42,7 +57,14 @@ async def get_maintenance(maint_id: int):
 
 
 @router.get("")
-async def list_maintenances(device_id: Optional[int] = None, skip: int = 0, limit: int = 100):
+async def list_maintenances(
+    device_id: Optional[int] = None,
+    fault_id: Optional[int] = None,
+    maint_type: Optional[str] = None,
+    has_fault: Optional[bool] = None,
+    skip: int = 0,
+    limit: int = 100
+):
     """获取维修记录列表（带分页）"""
     db: Session = next(get_db())
 
@@ -51,6 +73,17 @@ async def list_maintenances(device_id: Optional[int] = None, skip: int = 0, limi
 
         if device_id:
             query = query.filter(MaintenanceRecord.device_id == device_id)
+
+        if fault_id:
+            query = query.filter(MaintenanceRecord.fault_id == fault_id)
+
+        if maint_type:
+            query = query.filter(MaintenanceRecord.maint_type == maint_type)
+
+        if has_fault is True:
+            query = query.filter(MaintenanceRecord.fault_id.isnot(None))
+        elif has_fault is False:
+            query = query.filter(MaintenanceRecord.fault_id.is_(None))
 
         total = query.count()
         maintenances = query.order_by(MaintenanceRecord.created_at.desc()).offset(skip).limit(limit).all()
@@ -64,6 +97,7 @@ async def list_maintenances(device_id: Optional[int] = None, skip: int = 0, limi
                     "device_id": m.device_id,
                     "device_name": m.device_name,
                     "maint_type": m.maint_type,
+                    "fault_id": m.fault_id,
                     "parts_replaced": m.parts_replaced,
                     "parts_cost": float(m.parts_cost) if m.parts_cost else 0,
                     "labor_cost": float(m.labor_cost) if m.labor_cost else 0,

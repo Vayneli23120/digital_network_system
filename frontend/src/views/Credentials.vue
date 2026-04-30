@@ -79,7 +79,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getCredentials, createCredential as createCredentialApi, getCredential, updateCredential as updateCredentialApi, deleteCredential as deleteCredentialApi } from '@/api'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/time'
 
 const credentials = ref([])
 const loading = ref(false)
@@ -97,8 +97,6 @@ const credentialForm = ref({
   password: '',
   enable_password: ''
 })
-
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
 const loadCredentials = async () => {
   loading.value = true

@@ -60,6 +60,7 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = Field(None, max_length=100)
     role_ids: Optional[List[int]] = None
     is_active: Optional[bool] = None
+    password: Optional[str] = Field(None, min_length=6)  # 管理员重置密码
 
 
 class UserResponse(BaseModel):
@@ -586,6 +587,10 @@ async def update_user(
         roles = db.query(Role).filter(Role.id.in_(user_data.role_ids)).all()
         user.roles = roles
 
+    # 重置密码（管理员功能）
+    if user_data.password is not None:
+        user.password_hash = get_password_hash(user_data.password)
+
     user.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(user)
@@ -648,3 +653,10 @@ async def get_auth_status():
         "password_hash_available": PWD_CONTEXT_AVAILABLE,
         "version": "1.0.0"
     }
+
+
+@router.get("/roles")
+async def list_roles(db: Session = Depends(get_db)):
+    """获取角色列表"""
+    roles = db.query(Role).all()
+    return [{"id": r.id, "name": r.name, "description": r.description} for r in roles]

@@ -267,6 +267,10 @@ export function deletePart(id) {
 export function getPartStats() {
   return api.get('/spare-parts/stats/summary')
 }
+// 扫码枪查询 - 通过序列号查找备件
+export function getPartBySerialNumber(serialNumber) {
+  return api.get(`/spare-parts/by-serial/${serialNumber}`)
+}
 
 // 备件出入库
 export function createMovement(data) {
@@ -324,4 +328,79 @@ export function getVendors() {
 }
 export function getVendorInfo(vendor) {
   return api.get(`/devices/vendors/${vendor}`)
+}
+
+// 故障转维修
+export function convertFaultToMaintenance(faultId) {
+  return api.post(`/faults/${faultId}/convert-to-maintenance`)
+}
+export function getFaultMaintenance(faultId) {
+  return api.get(`/faults/${faultId}/maintenance`)
+}
+
+// 计划性运维
+export function getMaintenancePlans(params) {
+  return api.get('/planned-maintenance/plans', { params })
+}
+export function createMaintenancePlan(data) {
+  return api.post('/planned-maintenance/plans', data)
+}
+export function getMaintenancePlan(id) {
+  return api.get(`/planned-maintenance/plans/${id}`)
+}
+export function updateMaintenancePlan(id, data) {
+  return api.put(`/planned-maintenance/plans/${id}`, data)
+}
+export function deleteMaintenancePlan(id) {
+  return api.delete(`/planned-maintenance/plans/${id}`)
+}
+
+export function getMaintenanceTasks(params) {
+  return api.get('/planned-maintenance/tasks', { params })
+}
+export function createMaintenanceTask(data) {
+  return api.post('/planned-maintenance/tasks', data)
+}
+export function getMaintenanceTask(id) {
+  return api.get(`/planned-maintenance/tasks/${id}`)
+}
+export function startMaintenanceTask(id) {
+  return api.post(`/planned-maintenance/tasks/${id}/start`)
+}
+export function completeMaintenanceTask(id, data) {
+  return api.post(`/planned-maintenance/tasks/${id}/complete`, data)
+}
+export function skipMaintenanceTask(id, reason) {
+  return api.post(`/planned-maintenance/tasks/${id}/skip`, null, { params: { reason } })
+}
+export function deleteMaintenanceTask(id) {
+  return api.delete(`/planned-maintenance/tasks/${id}`)
+}
+
+export function getPlannedMaintenanceStats(params) {
+  return api.get('/planned-maintenance/stats', { params })
+}
+export function generateTasksForPlans() {
+  return api.post('/planned-maintenance/generate-tasks')
+}
+
+// ============ 用户管理 API ============
+export function getUsers() {
+  return api.get('/auth/users')
+}
+
+export function createUser(data) {
+  return api.post('/auth/users', data)
+}
+
+export function updateUser(id, data) {
+  return api.put(`/auth/users/${id}`, data)
+}
+
+export function deleteUser(id) {
+  return api.delete(`/auth/users/${id}`)
+}
+
+export function getRoles() {
+  return api.get('/auth/roles')
 }

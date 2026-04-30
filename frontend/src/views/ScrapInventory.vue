@@ -118,7 +118,7 @@
 import { ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Search, Delete, Box, Tools } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 
 const scrapItems = ref([])
 const filteredScrapItems = ref([])
@@ -136,8 +136,6 @@ const stats = ref({
   fromMaintenance: 0
 })
 
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
-
 const filterScrapItems = () => {
   let result = [...scrapItems.value]
 
@@ -151,10 +149,11 @@ const filterScrapItems = () => {
   }
 
   if (dateRange.value && dateRange.value.length === 2) {
-    const startDate = dayjs(dateRange.value[0])
+    const startDate = dayjs(dateRange.value[0]).startOf('day')
     const endDate = dayjs(dateRange.value[1]).endOf('day')
     result = result.filter(item => {
-      const itemTime = dayjs(item.created_at)
+      // 将 UTC 时间转换为本地时间进行比较
+      const itemTime = toLocalDayjs(item.created_at)
       return itemTime.isAfter(startDate) && itemTime.isBefore(endDate)
     })
   }

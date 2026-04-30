@@ -6,7 +6,40 @@
 
 from loguru import logger
 from app.shared.database import get_db
-from app.shared.models import ConfigTemplate
+from app.shared.models import ConfigTemplate, Role
+
+
+def init_default_roles():
+    """初始化默认角色"""
+    db = next(get_db())
+
+    try:
+        # 检查是否已有角色
+        existing = db.query(Role).first()
+        if existing:
+            logger.info("默认角色已存在，跳过初始化")
+            return
+
+        # 默认角色列表
+        default_roles = [
+            {"name": "admin", "description": "系统管理员 - 拥有所有权限", "is_system": True},
+            {"name": "operator", "description": "运维人员 - 可管理设备和配置", "is_system": True},
+            {"name": "viewer", "description": "观察者 - 仅可查看数据", "is_system": True},
+        ]
+
+        for role_data in default_roles:
+            role = Role(**role_data)
+            db.add(role)
+            logger.info(f"创建默认角色：{role_data['name']}")
+
+        db.commit()
+        logger.info("默认角色初始化完成")
+
+    except Exception as e:
+        db.rollback()
+        logger.error(f"初始化默认角色失败：{e}")
+    finally:
+        db.close()
 
 
 def init_default_templates():

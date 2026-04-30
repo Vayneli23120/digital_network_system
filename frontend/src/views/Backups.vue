@@ -123,7 +123,7 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBackups, getBackupContent, getBackupDiff, batchBackup, getDevices } from '@/api'
 import { Search } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 
 const backups = ref([])
 const filteredBackups = ref([])
@@ -155,8 +155,6 @@ const formatSize = (bytes) => {
   return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i]
 }
 
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
-
 const filterBackups = () => {
   let result = [...backups.value]
 
@@ -171,10 +169,11 @@ const filterBackups = () => {
 
   // 按日期范围过滤
   if (dateRange.value && dateRange.value.length === 2) {
-    const startDate = dayjs(dateRange.value[0])
+    const startDate = dayjs(dateRange.value[0]).startOf('day')
     const endDate = dayjs(dateRange.value[1]).endOf('day')
     result = result.filter(b => {
-      const backupTime = dayjs(b.backup_time)
+      // UTC 时间转换为本地时间进行比较
+      const backupTime = toLocalDayjs(b.backup_time)
       return backupTime.isAfter(startDate) && backupTime.isBefore(endDate)
     })
   }
@@ -189,10 +188,10 @@ const filterBackups = () => {
   if (sortBy.value) {
     switch (sortBy.value) {
       case 'backup_time_desc':
-        result.sort((a, b) => dayjs(b.backup_time) - dayjs(a.backup_time))
+        result.sort((a, b) => toLocalDayjs(b.backup_time).valueOf() - toLocalDayjs(a.backup_time).valueOf())
         break
       case 'backup_time_asc':
-        result.sort((a, b) => dayjs(a.backup_time) - dayjs(b.backup_time))
+        result.sort((a, b) => toLocalDayjs(a.backup_time).valueOf() - toLocalDayjs(b.backup_time).valueOf())
         break
       case 'file_size_desc':
         result.sort((a, b) => (b.file_size || 0) - (a.file_size || 0))

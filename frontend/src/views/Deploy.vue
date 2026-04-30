@@ -276,7 +276,7 @@ import {
   executeDeploy as executeDeployApi,
   getCompatibleVariables
 } from '@/api'
-import dayjs from 'dayjs'
+import { formatDateTime } from '@/utils/time'
 
 const devices = ref([])
 const backups = ref([])
@@ -299,8 +299,6 @@ const deployResult = ref(null)
 const previewLoading = ref(false)
 const deployLoading = ref(false)
 const showVariableHelp = ref(false)
-
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
 const canDeploy = computed(() => {
   if (deployForm.value.target_devices.length === 0) return false

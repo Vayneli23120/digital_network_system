@@ -115,7 +115,7 @@
               <select class="fselect" v-model="selectedBackup">
                 <option value="">-- 选择备份文件 --</option>
                 <option v-for="backup in backups" :key="backup.id" :value="backup.id">
-                  {{ backup.device_name }} - {{ formatDate(backup.backup_time) }}
+                  {{ backup.device_name }} - {{ formatShortTime(backup.backup_time) }}
                 </option>
               </select>
             </div>
@@ -214,7 +214,7 @@ import {
   SwitchButton, WarningFilled
 } from '@element-plus/icons-vue'
 import { getDevices, getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
-import dayjs from 'dayjs'
+import { formatShortTime } from '@/utils/time'
 
 // Web Serial API Support
 const isSupported = ref('serial' in navigator)
@@ -256,8 +256,6 @@ const configPreview = ref('')
 // ReadableStream controller for async reading
 let readLoopPromise = null
 let abortController = null
-
-const formatDate = (dateStr) => dayjs(dateStr).format('MM-DD HH:mm')
 
 // Add line to terminal
 const addLine = (text, type = 'output') => {

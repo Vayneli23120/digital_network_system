@@ -1,5 +1,48 @@
 # Changelog
 
+## v1.4.0 (2026-04-30)
+
+### 故障-维修关联
+- ✅ 故障单可直接"转维修"，避免重复录入
+- ✅ `FaultRecord` 增加 `maintenance_id` 字段
+- ✅ `MaintenanceRecord` 增加 `fault_id` 字段
+- ✅ 故障详情页显示关联维修单信息
+- ✅ 维修列表支持按故障筛选
+
+### 计划性运维模块
+- ✅ 新增 `MaintenancePlan` 模型（维护计划）
+- ✅ 新增 `MaintenanceTask` 模型（运维任务）
+- ✅ 支持三种计划类型：routine_check / parts_replace / vendor_service
+- ✅ 任务自动生成（按计划周期）
+- ✅ 任务详情页：任务信息、执行记录、时间线
+- ✅ 完成任务支持备件选择和返回件处理
+- ✅ 统计报表：时间/设备/类型/备件消耗筛选
+- ✅ 超期任务动态判断
+
+### 导航优化
+- ✅ Console 配置移至配置管理导航栏
+- ✅ 计划性运维菜单加入设备管理导航
+
+### 时间显示修复
+- ✅ 创建统一时间工具 `src/utils/time.js`
+- ✅ UTC 时间正确转换为本地时间显示
+- ✅ 修复 10+ 个页面的时间显示问题
+
+### 用户管理
+- ✅ 用户 CRUD API（`/api/auth/users`）
+- ✅ 用户管理页面（列表/添加/编辑/重置密码/删除）
+- ✅ 默认角色初始化（admin/operator/viewer）
+- ✅ 用户角色分配
+- ✅ 管理员重置密码功能
+
+### 备件管理增强
+- ✅ 新增 `serial_number` 序列号字段（扫码枪接口）
+- ✅ 新增 `po_number` 采购订单号字段
+- ✅ 扫码枪查询接口：`GET /api/spare-parts/by-serial/{serial_number}`
+- ✅ 搜索支持序列号和 PO 号
+
+---
+
 ## v1.3.0 (2026-04-22)
 
 ### Feature-first 架构重构

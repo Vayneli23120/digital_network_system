@@ -26,6 +26,8 @@ router = APIRouter(prefix="/api/spare-parts", tags=["备件管理"])
 class SparePartCreate(BaseModel):
     name: str
     part_number: str
+    serial_number: Optional[str] = None  # 序列号
+    po_number: Optional[str] = None  # 采购订单号
     category: Optional[str] = None
     manufacturer: Optional[str] = None
     description: Optional[str] = None
@@ -37,6 +39,8 @@ class SparePartCreate(BaseModel):
 
 class SparePartUpdate(BaseModel):
     name: Optional[str] = None
+    serial_number: Optional[str] = None  # 序列号
+    po_number: Optional[str] = None  # 采购订单号
     category: Optional[str] = None
     manufacturer: Optional[str] = None
     description: Optional[str] = None
@@ -85,6 +89,25 @@ async def api_get_part(part_id: int, db: Session = Depends(get_db)):
         return svc_get_part(db, part_id)
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="备件不存在")
+
+
+@router.get("/by-serial/{serial_number}")
+async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_db)):
+    """通过序列号查找备件（扫码枪接口）"""
+    from app.shared.models import SparePart
+    part = db.query(SparePart).filter(SparePart.serial_number == serial_number).first()
+    if not part:
+        raise HTTPException(status_code=404, detail="未找到该序列号的备件")
+    return {
+        "id": part.id,
+        "name": part.name,
+        "part_number": part.part_number,
+        "serial_number": part.serial_number,
+        "po_number": part.po_number,
+        "quantity_in_stock": part.quantity_in_stock,
+        "location": part.location,
+        "status": part.status,
+    }
 
 
 @router.put("/{part_id}")

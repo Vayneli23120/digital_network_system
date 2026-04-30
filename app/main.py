@@ -21,7 +21,7 @@ from loguru import logger
 from .shared.config import get_config
 from .shared.database import get_db_manager
 from .shared.exceptions import register_exception_handlers
-from .shared.db_init import init_default_templates
+from .shared.db_init import init_default_templates, init_default_roles
 from .routers import (
     devices_router,
     backups_router,
@@ -42,6 +42,7 @@ from .routers import (
     websocket_router,
     discovery_router,
     alerts_router,
+    planned_maintenance_router,
 )
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter import RateLimitMiddleware
@@ -120,6 +121,7 @@ app.include_router(compliance_router)
 app.include_router(websocket_router)
 app.include_router(discovery_router)
 app.include_router(alerts_router)
+app.include_router(planned_maintenance_router)
 
 
 # ============ 健康检查 ============
@@ -206,6 +208,7 @@ async def startup_event():
     logger.info(f"数据库路径：{config.database.sqlite_path}")
     logger.info(f"备份目录：{config.storage.backup_dir}")
     init_default_templates()
+    init_default_roles()
 
 
 # ============ 优雅关闭 ============

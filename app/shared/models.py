@@ -83,11 +83,13 @@ class FaultRecord(Base):
     cost = Column(DECIMAL(10, 2), default=0)
     reporter = Column(String(100))
     status = Column(String(20), default="open", index=True)  # open, investigating, resolved, closed
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联的维修单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     device_name = Column(String(100))
 
     # 关系
     device = relationship("Device", back_populates="faults")
+    maintenance = relationship("MaintenanceRecord", foreign_keys=[maintenance_id])
 
     def __repr__(self):
         return f"<FaultRecord(fault_no='{self.fault_no}', device='{self.device_name}')>"
@@ -110,11 +112,13 @@ class MaintenanceRecord(Base):
     description = Column(Text)
     post_status = Column(String(50))
     operator = Column(String(100))
+    fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True)  # 关联的故障单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     device_name = Column(String(100))
 
     # 关系
     device = relationship("Device", back_populates="maintenances")
+    fault = relationship("FaultRecord", foreign_keys=[fault_id])
 
     def __repr__(self):
         return f"<MaintenanceRecord(maint_no='{self.maint_no}', device='{self.device_name}')>"
@@ -346,6 +350,8 @@ class SparePart(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(200), nullable=False, index=True)
     part_number = Column(String(100), unique=True, nullable=False, index=True)
+    serial_number = Column(String(100), nullable=True, index=True)  # 序列号，用于扫码枪识别
+    po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
     category = Column(String(100), nullable=True, index=True)  # 模块/电源/线缆/其他
     manufacturer = Column(String(200), nullable=True)
     description = Column(Text, nullable=True)
@@ -382,3 +388,51 @@ class SparePartMovement(Base):
 
     def __repr__(self):
         return f"<SparePartMovement(part_id={self.part_id}, type={self.movement_type}, qty={self.quantity})>"
+
+
+class MaintenancePlan(Base):
+    """维护计划表 - 计划性运维"""
+    __tablename__ = "maintenance_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    device_name = Column(String(100))
+    plan_type = Column(String(20), nullable=False, index=True)  # routine_check, parts_replace, vendor_service
+    cycle_days = Column(Integer, default=30)
+    next_date = Column(DateTime, nullable=False, index=True)
+    data_basis = Column(Text)  # 数据依据（为什么做）
+    auto_generate = Column(Boolean, default=True)
+    status = Column(String(20), default="active", index=True)  # active, paused, completed
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    tasks = relationship("MaintenanceTask", back_populates="plan", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<MaintenancePlan(name='{self.name}', type='{self.plan_type}')>"
+
+
+class MaintenanceTask(Base):
+    """运维任务表 - 计划性运维的具体执行任务"""
+    __tablename__ = "maintenance_tasks"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    plan_id = Column(Integer, ForeignKey("maintenance_plans.id", ondelete="SET NULL"), nullable=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    device_name = Column(String(100))
+    task_no = Column(String(50), unique=True, nullable=False)
+    scheduled_date = Column(DateTime, nullable=False, index=True)
+    actual_date = Column(DateTime)
+    status = Column(String(20), default="pending", index=True)  # pending, in_progress, completed, skipped, overdue
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    plan = relationship("MaintenancePlan", back_populates="tasks")
+    maintenance = relationship("MaintenanceRecord")
+
+    def __repr__(self):
+        return f"<MaintenanceTask(task_no='{self.task_no}', status='{self.status}')>"

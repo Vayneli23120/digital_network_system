@@ -188,7 +188,7 @@ import { useRoute, useRouter } from 'vue-router'
 import {
   Monitor, Search, Bell, Sunny, Moon, User, Setting, SwitchButton,
   Fold, Expand, DataBoard, Connection, Download, Warning, Tools,
-  Upload, Document, Key, Aim, Box, Checked, List, Delete
+  Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar
 } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
@@ -384,7 +384,7 @@ const sidebarGroups = computed(() => {
           { path: '/backups', text: t('menuBackups'), icon: Download },
           { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null },
           { path: '/maintenance', text: t('menuMaintenance'), icon: Tools },
-          { path: '/console', text: t('menuConsole'), icon: Connection },
+          { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar },
         ]
       },
     ],
@@ -392,6 +392,7 @@ const sidebarGroups = computed(() => {
       {
         label: t('groupConfigManage'),
         items: [
+          { path: '/console', text: t('menuConsole'), icon: Connection },
           { path: '/deploy', text: t('menuDeploy'), icon: Upload },
           { path: '/templates', text: t('menuTemplates'), icon: Document },
           { path: '/credentials', text: t('menuCredentials'), icon: Key },
@@ -415,6 +416,7 @@ const sidebarGroups = computed(() => {
         items: [
           { path: '/logs', text: t('menuLogs'), icon: Document },
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell },
+          { path: '/users', text: t('menuUsers'), icon: User },
         ]
       },
     ],
@@ -427,13 +429,13 @@ watch(route, (newRoute) => {
   const path = newRoute.path
   if (path === '/' || path.startsWith('/dashboard')) {
     activeTopTab.value = 'dashboard'
-  } else if (path.startsWith('/devices') || path.startsWith('/discovery') || path.startsWith('/backups') || path.startsWith('/faults') || path.startsWith('/maintenance') || path.startsWith('/console')) {
+  } else if (path.startsWith('/devices') || path.startsWith('/discovery') || path.startsWith('/backups') || path.startsWith('/faults') || path.startsWith('/maintenance') || path.startsWith('/planned-maintenance')) {
     activeTopTab.value = 'devices'
-  } else if (path.startsWith('/deploy') || path.startsWith('/templates') || path.startsWith('/credentials') || path.startsWith('/compliance') || path.startsWith('/tool-logs')) {
+  } else if (path.startsWith('/console') || path.startsWith('/deploy') || path.startsWith('/templates') || path.startsWith('/credentials') || path.startsWith('/compliance') || path.startsWith('/tool-logs')) {
     activeTopTab.value = 'config'
   } else if (path.startsWith('/spare') || path.startsWith('/scrap')) {
     activeTopTab.value = 'spare'
-  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings')) {
+  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users')) {
     activeTopTab.value = 'system'
   }
 }, { immediate: true })

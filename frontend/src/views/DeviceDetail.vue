@@ -331,7 +331,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi } from '@/api'
-import dayjs from 'dayjs'
+import { formatDateTime, formatDate } from '@/utils/time'
 import axios from 'axios'
 
 const route = useRoute()
@@ -416,9 +416,6 @@ const getMaintTypeType = (type) => {
   const types = { preventive: 'success', corrective: 'warning', upgrade: 'info', emergency: 'danger' }
   return types[type] || ''
 }
-
-const formatDate = (date) => dayjs(date).format('YYYY-MM-DD')
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
 const calculateMaintCost = () => {
   if (!device.value?.recent_maintenances) return 0

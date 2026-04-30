@@ -178,7 +178,7 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
 import { Search } from '@element-plus/icons-vue'
-import dayjs from 'dayjs'
+import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 
 const faults = ref([])
 const filteredFaults = ref([])
@@ -227,8 +227,6 @@ const getStatusText = (status) => {
   const texts = { open: '待处理', investigating: '处理中', resolved: '已解决', closed: '已关闭' }
   return texts[status] || status
 }
-
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
 const filterFaults = () => {
   let result = [...faults.value]

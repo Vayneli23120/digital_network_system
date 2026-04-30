@@ -195,6 +195,22 @@ async def import_devices(file: UploadFile = File(...)):
         db.close()
 
 
+# ============ 厂商管理 API（放在 /{device_id} 之前，避免路由匹配冲突）============
+
+@router.get("/vendors")
+async def list_vendors():
+    """获取支持的厂商列表"""
+    from .vendor_service import get_supported_vendors
+    return get_supported_vendors()
+
+
+@router.get("/vendors/{vendor}")
+async def get_vendor(vendor: str):
+    """获取厂商详细信息"""
+    from .vendor_service import get_vendor_info
+    return get_vendor_info(vendor)
+
+
 @router.get("/{device_id}")
 async def get_device(device_id: int, db: Session = Depends(get_db)):
     """获取设备详情"""
@@ -344,19 +360,3 @@ async def delete_device_photo(device_id: int, photo_id: int):
     db.commit()
 
     return {"message": "删除成功"}
-
-
-# ============ 厂商管理 API ============
-
-@router.get("/vendors")
-async def list_vendors():
-    """获取支持的厂商列表"""
-    from .vendor_service import get_supported_vendors
-    return get_supported_vendors()
-
-
-@router.get("/vendors/{vendor}")
-async def get_vendor(vendor: str):
-    """获取厂商详细信息"""
-    from .vendor_service import get_vendor_info
-    return get_vendor_info(vendor)

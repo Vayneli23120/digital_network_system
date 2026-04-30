@@ -38,7 +38,7 @@
       <!-- 搜索和过滤 -->
       <el-form :inline="true" class="filter-form">
         <el-form-item label="搜索">
-          <el-input v-model="search" placeholder="名称/型号" clearable @clear="loadParts" />
+          <el-input v-model="search" placeholder="名称/型号/序列号/PO号" clearable @clear="loadParts" />
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="category" placeholder="全部" clearable @change="loadParts">
@@ -60,6 +60,12 @@
       <el-table :data="parts" stripe border v-loading="loading">
         <el-table-column prop="name" label="名称" width="150" />
         <el-table-column prop="part_number" label="型号" width="150" />
+        <el-table-column prop="serial_number" label="序列号" width="150">
+          <template #default="{ row }">{{ row.serial_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="po_number" label="PO号" width="120">
+          <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
         <el-table-column prop="category" label="分类" width="100" />
         <el-table-column prop="manufacturer" label="厂商" width="120" />
         <el-table-column prop="quantity_in_stock" label="库存" width="100">
@@ -132,6 +138,12 @@
         <el-form-item label="型号" required>
           <el-input v-model="form.part_number" />
         </el-form-item>
+        <el-form-item label="序列号">
+          <el-input v-model="form.serial_number" placeholder="扫码枪扫描或手动输入" />
+        </el-form-item>
+        <el-form-item label="PO号">
+          <el-input v-model="form.po_number" placeholder="采购订单号" />
+        </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category">
             <el-option label="模块" value="模块" />
@@ -197,6 +209,7 @@ import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements } from '@/api'
+import { formatDateTime } from '@/utils/time'
 
 const parts = ref([])
 const loading = ref(false)
@@ -214,7 +227,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = reactive({
-  name: '', part_number: '', category: '', manufacturer: '',
+  name: '', part_number: '', serial_number: '', po_number: '', category: '', manufacturer: '',
   description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: ''
 })
 
@@ -240,7 +253,7 @@ const loadParts = async () => {
 
 const showAddDialog = () => {
   isEdit.value = false
-  Object.assign(form, { name: '', part_number: '', category: '', manufacturer: '', description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: '' })
+  Object.assign(form, { name: '', part_number: '', serial_number: '', po_number: '', category: '', manufacturer: '', description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: '' })
   dialogVisible.value = true
 }
 
@@ -314,12 +327,6 @@ const loadMovements = async () => {
   } finally {
     movementsLoading.value = false
   }
-}
-
-const formatDateTime = (datetimeStr) => {
-  if (!datetimeStr) return ''
-  try { return new Date(datetimeStr).toLocaleString('zh-CN', { hour12: false }) }
-  catch { return datetimeStr }
 }
 
 onMounted(loadParts)

@@ -7,7 +7,7 @@ from datetime import datetime
 import uuid
 
 from app.shared.database import get_db
-from app.shared.models import FaultRecord
+from app.shared.models import FaultRecord, MaintenanceRecord, Device
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
@@ -34,6 +34,7 @@ async def get_fault(fault_id: int):
             "description": fault.description,
             "resolution": fault.resolution,
             "reporter": fault.reporter,
+            "maintenance_id": fault.maintenance_id,
             "fault_time": fault.fault_time.isoformat() if fault.fault_time else None,
             "created_at": fault.created_at.isoformat()
         }
@@ -150,5 +151,101 @@ async def delete_fault(fault_id: int):
         db.commit()
 
         return {"message": "删除成功"}
+    finally:
+        db.close()
+
+
+@router.post("/{fault_id}/convert-to-maintenance")
+async def convert_to_maintenance(fault_id: int):
+    """将故障单转换为维修单"""
+    db: Session = next(get_db())
+
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if not fault:
+            raise HTTPException(status_code=404, detail="故障记录不存在")
+
+        # 检查是否已关联维修单
+        if fault.maintenance_id:
+            raise HTTPException(status_code=400, detail="该故障已关联维修单")
+
+        # 检查故障状态（已关闭的不能转维修）
+        if fault.status == "closed":
+            raise HTTPException(status_code=400, detail="已关闭的故障不能转维修")
+
+        # 自动生成维修单号
+        maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+        # 创建维修单
+        maintenance = MaintenanceRecord(
+            maint_no=maint_no,
+            device_id=fault.device_id,
+            device_name=fault.device_name,
+            maint_type="corrective",  # 故障驱动维修
+            description=f"由故障单 {fault.fault_no} 转换\n\n故障描述：{fault.description}",
+            fault_id=fault.id,
+            maint_time=datetime.utcnow()
+        )
+        db.add(maintenance)
+        db.commit()
+        db.refresh(maintenance)
+
+        # 更新故障单的维修关联
+        fault.maintenance_id = maintenance.id
+        db.commit()
+
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
+        return {
+            "maintenance_id": maintenance.id,
+            "maint_no": maint_no,
+            "message": "维修单创建成功"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"转换失败：{str(e)}")
+    finally:
+        db.close()
+
+
+@router.get("/{fault_id}/maintenance")
+async def get_fault_maintenance(fault_id: int):
+    """获取故障关联的维修单详情"""
+    db: Session = next(get_db())
+
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if not fault:
+            raise HTTPException(status_code=404, detail="故障记录不存在")
+
+        if not fault.maintenance_id:
+            return {"maintenance": None}
+
+        maintenance = db.query(MaintenanceRecord).filter(
+            MaintenanceRecord.id == fault.maintenance_id
+        ).first()
+
+        if not maintenance:
+            return {"maintenance": None}
+
+        return {
+            "maintenance": {
+                "id": maintenance.id,
+                "maint_no": maintenance.maint_no,
+                "maint_type": maintenance.maint_type,
+                "parts_replaced": maintenance.parts_replaced,
+                "parts_cost": float(maintenance.parts_cost) if maintenance.parts_cost else 0,
+                "labor_hours": float(maintenance.labor_hours) if maintenance.labor_hours else 0,
+                "labor_cost": float(maintenance.labor_cost) if maintenance.labor_cost else 0,
+                "vendor": maintenance.vendor,
+                "description": maintenance.description,
+                "maint_time": maintenance.maint_time.isoformat() if maintenance.maint_time else None,
+                "created_at": maintenance.created_at.isoformat()
+            }
+        }
     finally:
         db.close()

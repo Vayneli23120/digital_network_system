@@ -26,6 +26,7 @@ export const languages = {
     menuBackups: '备份管理',
     menuFaults: '故障管理',
     menuMaintenance: '维修管理',
+    menuPlannedMaintenance: '计划性运维',
     menuConsole: 'Console配置',
     menuDeploy: '配置部署',
     menuTemplates: '配置模板',
@@ -36,6 +37,7 @@ export const languages = {
     menuScrapInventory: '报废库存',
     menuLogs: '系统日志',
     menuAlertSettings: '告警通知',
+    menuUsers: '用户管理',
 
     // Dashboard
     dashNetworkDevices: '网络设备',
@@ -157,6 +159,7 @@ export const languages = {
     menuBackups: 'Backup Management',
     menuFaults: 'Fault Management',
     menuMaintenance: 'Maintenance',
+    menuPlannedMaintenance: 'Planned Ops',
     menuConsole: 'Console Config',
     menuDeploy: 'Config Deploy',
     menuTemplates: 'Config Templates',
@@ -167,6 +170,7 @@ export const languages = {
     menuScrapInventory: 'Scrap Inventory',
     menuLogs: 'System Logs',
     menuAlertSettings: 'Alert Settings',
+    menuUsers: 'User Management',
 
     // Dashboard
     dashNetworkDevices: 'Network Devices',
