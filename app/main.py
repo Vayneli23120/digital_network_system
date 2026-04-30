@@ -133,7 +133,7 @@ async def health_check():
 
 @app.get("/ready", tags=["health"])
 async def readiness_check():
-    """Readiness 探针 — 服务是否就绪（数据库可达）"""
+    """Readiness 探针 — 服务是否就绪（数据库可达 + Redis 可选）"""
     from sqlalchemy import text
 
     checks = {}
@@ -146,6 +146,14 @@ async def readiness_check():
     except Exception as e:
         checks["database"] = {"status": "error", "detail": str(e)}
         overall_ok = False
+
+    # Redis 检查（可选，不阻塞就绪状态）
+    try:
+        from app.shared.redis_cache import get_redis_cache
+        rc = get_redis_cache()
+        checks["redis"] = {"status": "ok" if rc.available else "not_connected"}
+    except Exception as e:
+        checks["redis"] = {"status": "error", "detail": str(e)}
 
     status_code = 200 if overall_ok else 503
     return {
@@ -166,10 +174,15 @@ async def rate_limit_status(request: Request):
 
 @app.get("/api/cache/stats", tags=["health"])
 async def cache_stats():
-    """查看缓存统计"""
+    """查看缓存统计（内存 + Redis）"""
     from .shared.cache import cache
+    from .shared.redis_cache import get_redis_cache
 
-    return cache.get_stats()
+    rc = get_redis_cache()
+    return {
+        "memory": cache.get_stats(),
+        "redis": rc.get_stats(),
+    }
 
 
 @app.post("/api/cache/clear", tags=["health"])

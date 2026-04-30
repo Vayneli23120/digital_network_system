@@ -46,6 +46,16 @@ class AlertsConfig(BaseModel):
     channels: List[str] = []  # ["email", "wechat_work", "dingtalk"]
 
 
+class RedisCacheConfig(BaseModel):
+    """Redis 缓存配置"""
+    enabled: bool = False
+    host: str = "localhost"
+    port: int = 6379
+    db: int = 0
+    password: str = ""
+    default_ttl: int = 60  # seconds
+
+
 class StorageConfig(BaseModel):
     backup_dir: str = "./backups"
     photo_dir: str = "./assets/devices"
@@ -150,6 +160,7 @@ class Config(BaseModel):
     storage: StorageConfig = Field(default_factory=StorageConfig)
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
+    cache: RedisCacheConfig = Field(default_factory=RedisCacheConfig)
     logging: dict = Field(default_factory=lambda: {"level": "INFO"})
 
     @classmethod
