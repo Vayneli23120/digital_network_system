@@ -5,7 +5,12 @@
       <el-col :span="8">
         <el-card class="info-card" v-loading="loading">
           <template #header>
-            <span>设备信息</span>
+            <div style="display: flex; justify-content: space-between; align-items: center">
+              <span>设备信息</span>
+              <el-button type="primary" size="small" @click="testConnection" :disabled="!device">
+                <el-icon><Connection /></el-icon> 连接测试
+              </el-button>
+            </div>
           </template>
 
           <div v-if="device" class="device-info">
@@ -15,9 +20,15 @@
               <el-tag :type="getStatusType(device.status)">
                 {{ getStatusText(device.status) }}
               </el-tag>
+              <el-tag v-if="device.vendor" type="info" size="small" style="margin-top: 8px">
+                {{ getVendorText(device.vendor) }}
+              </el-tag>
             </div>
 
             <el-descriptions :column="1" border>
+              <el-descriptions-item label="厂商">
+                <el-tag size="small" :type="getVendorTagType(device.vendor)">{{ getVendorText(device.vendor) }}</el-tag>
+              </el-descriptions-item>
               <el-descriptions-item label="IP 地址">{{ device.ip || 'N/A' }}</el-descriptions-item>
               <el-descriptions-item label="设备型号">{{ device.model || 'N/A' }}</el-descriptions-item>
               <el-descriptions-item label="序列号">{{ device.serial_number || 'N/A' }}</el-descriptions-item>
@@ -390,6 +401,26 @@ const getFaultStatusText = (status) => {
 const getRoleText = (role) => {
   const texts = { access: '接入层', distribution: '汇聚层', core: '核心层' }
   return texts[role] || role
+}
+
+const getVendorText = (vendor) => {
+  const map = { cisco: 'Cisco', huawei: '华为', '华为': '华为', h3c: 'H3C', '新华三': 'H3C', hp: 'H3C', juniper: 'Juniper', arista: 'Arista' }
+  return map[vendor?.toLowerCase()] || vendor || 'Cisco'
+}
+
+const getVendorTagType = (vendor) => {
+  const map = { cisco: '', huawei: 'success', '华为': 'success', h3c: 'warning', '新华三': 'warning', hp: 'warning', juniper: 'danger', arista: 'info' }
+  return map[vendor?.toLowerCase()] || ''
+}
+
+const testConnection = async () => {
+  try {
+    ElMessage.info('正在测试连接...')
+    // TODO: 实现连接测试 API
+    ElMessage.success('连接测试功能待后端 API 实现')
+  } catch (e) {
+    ElMessage.error('连接测试失败')
+  }
 }
 
 const getSeverityType = (severity) => {
