@@ -94,6 +94,22 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
 
             db.commit()
 
+            # 提交到 Git 版本控制
+            try:
+                from app.shared.git_config_service import get_git_config_service
+                git_service = get_git_config_service()
+                if git_service.available:
+                    git_commit = git_service.commit_backup(
+                        device_name=device.name,
+                        backup_file=result["file_path"],
+                        has_change=result["has_change"],
+                        operator=operator,
+                    )
+                    log_entry.log_content += f"\n[INFO] Git commit: {git_commit[:8] if git_commit else 'N/A'}"
+                    db.commit()
+            except Exception as git_err:
+                logger.warning(f"Git 版本控制失败（不影响备份）: {git_err}")
+
             # 清除 Dashboard 缓存
             from app.shared.cache import cache
             cache.invalidate_prefix("dashboard:")
