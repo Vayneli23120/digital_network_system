@@ -7,7 +7,11 @@
           <template #header>
             <div class="card-header">
               <span>备件资产管理</span>
-              <el-button type="primary" @click="showAddDialog">新增备件</el-button>
+              <div class="header-buttons">
+                <el-button type="success" @click="showScanDialog('in')">扫码入库</el-button>
+                <el-button type="warning" @click="showScanDialog('out')">扫码出库</el-button>
+                <el-button type="primary" @click="showAddDialog">新增备件</el-button>
+              </div>
             </div>
           </template>
 
@@ -201,6 +205,72 @@
         <el-button type="primary" @click="submitMovement">确认</el-button>
       </template>
     </el-dialog>
+
+    <!-- 扫码出入库对话框 -->
+    <el-dialog v-model="scanDialogVisible" title="扫码出入库" width="600px">
+      <div class="scan-section">
+        <p class="scan-tip">使用扫码枪扫描备件序列号，或手动输入序列号查询</p>
+        <ScanInput
+          ref="scanInputRef"
+          :mode="scanMode"
+          :auto-add="false"
+          @found="onScanFound"
+          @added="onScanAdded"
+          @not-found="onScanNotFound"
+          @manual="onScanManual"
+        />
+      </div>
+
+      <!-- 扫码待处理列表 -->
+      <div v-if="scanList.length > 0" class="scan-list-section">
+        <h4>待处理列表</h4>
+        <el-table :data="scanList" size="small" border>
+          <el-table-column prop="name" label="名称" width="120" />
+          <el-table-column prop="part_number" label="型号" width="100" />
+          <el-table-column prop="serial_number" label="序列号" width="120" />
+          <el-table-column prop="quantity" label="数量" width="80">
+            <template #default="{ row }">
+              <el-input-number v-model="row.quantity" :min="1" size="small" controls-position="right" />
+            </template>
+          </el-table-column>
+          <el-table-column prop="action" label="操作" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.action === 'in' ? 'success' : 'warning'" size="small">
+                {{ row.action === 'in' ? '入库' : '出库' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="" width="60">
+            <template #default="{ $index }">
+              <el-button type="danger" size="small" link @click="removeFromScanList($index)">移除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <!-- 操作信息 -->
+      <el-form v-if="scanList.length > 0" :model="scanForm" label-width="80px" style="margin-top: 16px">
+        <el-form-item label="操作人">
+          <el-input v-model="scanForm.operator" />
+        </el-form-item>
+        <el-form-item label="原因/备注">
+          <el-input v-model="scanForm.reason" type="textarea" />
+        </el-form-item>
+        <el-form-item label="参考单号">
+          <el-input v-model="scanForm.reference" placeholder="工单号/设备编号" />
+        </el-form-item>
+      </el-form>
+
+      <template #footer>
+        <el-button @click="scanDialogVisible = false">取消</el-button>
+        <el-button
+          type="primary"
+          @click="submitScanList"
+          :disabled="scanList.length === 0"
+          :loading="scanSubmitting"
+        >确认提交 ({{ scanList.length }} 项)</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -210,6 +280,7 @@ import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements } from '@/api'
 import { formatDateTime } from '@/utils/time'
+import ScanInput from '@/components/ScanInput.vue'
 
 const parts = ref([])
 const loading = ref(false)
@@ -235,6 +306,91 @@ const movementDialogVisible = ref(false)
 const movementType = ref('in')
 const currentPart = ref(null)
 const movementForm = reactive({ quantity: 1, reason: '', operator: '', reference: '' })
+
+// 扫码相关状态
+const scanDialogVisible = ref(false)
+const scanMode = ref('in')
+const scanInputRef = ref(null)
+const scanList = ref([])
+const scanForm = reactive({ operator: '', reason: '', reference: '' })
+const scanSubmitting = ref(false)
+
+// 显示扫码对话框
+const showScanDialog = (mode) => {
+  scanMode.value = mode
+  scanList.value = []
+  scanForm.operator = ''
+  scanForm.reason = ''
+  scanForm.reference = ''
+  scanDialogVisible.value = true
+  // 聚焦扫码输入框
+  setTimeout(() => {
+    scanInputRef.value?.focus()
+  }, 100)
+}
+
+// 扫码找到备件
+const onScanFound = (part) => {
+  console.log('找到备件:', part)
+}
+
+// 扫码加入列表
+const onScanAdded = (item) => {
+  // 检查是否已在列表中
+  const existing = scanList.value.find(p => p.id === item.id)
+  if (existing) {
+    existing.quantity += 1
+    ElMessage.info(`${item.name} 数量+1`)
+  } else {
+    scanList.value.push({
+      ...item,
+      quantity: 1,
+      action: scanMode.value
+    })
+    ElMessage.success(`已添加: ${item.name}`)
+  }
+}
+
+// 扫码未找到
+const onScanNotFound = (serial) => {
+  ElMessage.warning(`序列号 "${serial}" 未找到`)
+}
+
+// 手动录入
+const onScanManual = (serial) => {
+  ElMessage.info('请手动录入备件信息')
+}
+
+// 从扫码列表移除
+const removeFromScanList = (index) => {
+  scanList.value.splice(index, 1)
+}
+
+// 提交扫码列表
+const submitScanList = async () => {
+  if (scanList.value.length === 0) return
+
+  scanSubmitting.value = true
+  try {
+    for (const item of scanList.value) {
+      await createMovement({
+        part_id: item.id,
+        movement_type: item.action,
+        quantity: item.quantity,
+        reason: scanForm.reason || `扫码${item.action === 'in' ? '入库' : '出库'}`,
+        operator: scanForm.operator || '扫码枪',
+        reference: scanForm.reference
+      })
+    }
+    ElMessage.success(`成功处理 ${scanList.value.length} 项`)
+    scanDialogVisible.value = false
+    loadParts()
+  } catch (e) {
+    ElMessage.error('提交失败: ' + (e.response?.data?.detail || e.message))
+  } finally {
+    scanSubmitting.value = false
+  }
+}
 
 const loadParts = async () => {
   loading.value = true
@@ -334,8 +490,13 @@ onMounted(loadParts)
 
 <style scoped>
 .card-header { display: flex; justify-content: space-between; align-items: center; }
+.header-buttons { display: flex; gap: 8px; }
 .stats-row { margin-bottom: 20px; }
 .stat-card { text-align: center; }
 .filter-form { margin-bottom: 20px; }
 .pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
+.scan-section { margin-bottom: 20px; }
+.scan-tip { color: var(--el-text-color-secondary); font-size: 14px; margin-bottom: 16px; }
+.scan-list-section { margin-top: 20px; }
+.scan-list-section h4 { margin-bottom: 12px; font-weight: 600; }
 </style>

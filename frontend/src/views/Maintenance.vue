@@ -115,6 +115,18 @@
         <el-divider content-position="left">备件更换</el-divider>
         <el-form-item label="更换备件">
           <div class="spare-parts-section">
+            <!-- 扫码添加备件 -->
+            <div class="spare-scan">
+              <ScanInput
+                mode="select"
+                placeholder="扫码枪扫描序列号，或手动输入查询"
+                @found="onScanPartFound"
+                @added="onScanPartAdded"
+                style="width: 100%"
+              />
+              <div class="spare-scan-tip">↑ 使用扫码枪扫描备件序列号，快速添加</div>
+            </div>
+
             <!-- 搜索添加备件 -->
             <div class="spare-search">
               <el-select
@@ -271,7 +283,8 @@ import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, InfoFilled } from '@element-plus/icons-vue'
 import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement } from '@/api'
-import dayjs from 'dayjs'
+import ScanInput from '@/components/ScanInput.vue'
+import { formatDateTime } from '@/utils/time'
 
 const maintenances = ref([])
 const filteredMaintenances = ref([])
@@ -343,8 +356,6 @@ const getMaintTypeText = (type) => {
   return texts[type] || type
 }
 
-const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
-
 // 搜索备件
 const searchSpareParts = async (query) => {
   if (!query || query.length < 1) {
@@ -365,6 +376,32 @@ const searchSpareParts = async (query) => {
 // 搜索返回件备件（共用同一个搜索）
 const searchReturnParts = async (query) => {
   await searchSpareParts(query)
+}
+
+// 扫码找到备件
+const onScanPartFound = (part) => {
+  // 自动添加到表单
+  const existing = maintForm.value.spare_parts.find(p => p.part_id === part.id)
+  if (existing) {
+    existing.quantity += 1
+    ElMessage.info(`${part.name} 数量+1`)
+  } else {
+    maintForm.value.spare_parts.push({
+      part_id: part.id,
+      part_number: part.part_number,
+      name: part.name,
+      serial_number: part.serial_number,
+      unit_price: part.unit_price || 0,
+      quantity: 1
+    })
+    ElMessage.success(`已添加: ${part.name}`)
+  }
+  updatePartsCost()
+}
+
+// 扫码添加备件（从ScanInput组件）
+const onScanPartAdded = (item) => {
+  onScanPartFound(item)
 }
 
 // 添加备件到表单
@@ -696,6 +733,21 @@ onMounted(() => {
 /* 备件选择区域 */
 .spare-parts-section {
   width: 100%;
+}
+
+.spare-scan {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.spare-scan-tip {
+  font-size: 12px;
+  color: var(--el-color-primary);
+  padding: 4px 8px;
+  background: var(--el-color-primary-light-9);
+  border-radius: 4px;
 }
 
 .spare-search {
