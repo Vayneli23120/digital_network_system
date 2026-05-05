@@ -404,3 +404,32 @@ export function deleteUser(id) {
 export function getRoles() {
   return api.get('/auth/roles')
 }
+
+// ============ 扫码会话 API ============
+export function createScanSession(data) {
+  return api.post('/scan/sessions', data)
+}
+
+export function getScanSession(sessionCode) {
+  return api.get(`/scan/sessions/${sessionCode}`)
+}
+
+export function joinScanSession(sessionCode) {
+  return api.post('/scan/sessions/join', { session_code: sessionCode })
+}
+
+export function addScanItem(sessionCode, serialNumber, quantity = 1) {
+  return api.post('/scan/sessions/items', {
+    session_code: sessionCode,
+    serial_number: serialNumber,
+    quantity
+  })
+}
+
+export function completeScanSession(sessionCode) {
+  return api.post(`/scan/sessions/${sessionCode}/complete`)
+}
+
+export function deleteScanSession(sessionCode) {
+  return api.delete(`/scan/sessions/${sessionCode}`)
+}

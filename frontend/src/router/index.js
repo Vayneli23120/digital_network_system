@@ -262,6 +262,13 @@ const routes = [
         meta: { title: '任务详情' }
       }
     ]
+  },
+  // 扫码枪终端页面（无需Layout）
+  {
+    path: '/scanner',
+    name: 'ScannerTerminal',
+    component: () => import('@/views/ScannerTerminal.vue'),
+    meta: { title: '扫码枪终端' }
   }
 ]
 

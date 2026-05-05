@@ -2,7 +2,7 @@
 
 ## 当前状态（5月5日 v1.7.0 开发中）
 - ✅ **265 个测试通过**（核心服务层 100% 覆盖）
-- ✅ Feature-first 架构（20 个业务模块 + shared 基础设施）
+- ✅ Feature-first 架构（21 个业务模块 + shared 基础设施）
 - ✅ Docker + Alembic 迁移 + Fail-fast 校验
 - ✅ 多厂商支持（Cisco/Huawei/H3C/Juniper/Arista）
 - ✅ 告警通知（企业微信/钉钉/邮件）
@@ -15,6 +15,7 @@
 - ✅ **用户管理**（用户 CRUD + 角色分配 + 密码重置）
 - ✅ **备件序列号/PO号**（扫码枪接口）
 - ✅ **扫码枪集成**（Zebra扫码枪 + 序列号查询 + 快速出入库）
+- ✅ **扫码会话模式**（PC显示二维码 + 扫码枪扫码加入 + 序列号推送）
 
 ## 已完成清单
 
@@ -57,11 +58,30 @@
 ### Phase 12: 配置版本控制
 - ✅ git_config_service.py + 自动 commit + 11 测试
 
+### Phase 13: 扫码枪集成模块
+- ✅ **会话模式设计**：PC端创建会话显示二维码，扫码枪扫描二维码加入会话，然后扫描序列号推送到PC端
+- ✅ **后端API**：
+  - `POST /api/scan/sessions` - 创建扫码会话
+  - `POST /api/scan/sessions/join` - 扫码枪加入会话
+  - `POST /api/scan/sessions/items` - 扫码枪添加序列号
+  - `GET /api/scan/sessions/{code}` - PC端轮询获取扫描结果
+  - `POST /api/scan/sessions/{code}/complete` - 完成会话
+  - `DELETE /api/scan/sessions/{code}` - 取消会话
+- ✅ **前端组件**：
+  - `ScanSession.vue` - PC端扫码会话组件（显示二维码、轮询状态、显示扫描列表）
+  - `ScannerTerminal.vue` - 扫码枪专用页面（简洁UI、大按钮、自动聚焦）
+- ✅ **集成点**：
+  - SpareParts.vue - 备件出入库 ✅
+  - Maintenance.vue - 维修备件选择（待集成）
+  - TaskDetail.vue - 运维任务备件选择（待集成）
+- ✅ **二维码格式**：`NAS-SCAN:XXXXXX`（6位字母数字会话码）
+
 ## 下一步建议
 
 | 优先级 | 任务 | 说明 |
 |--------|------|------|
-| P1 | 连接测试 API | 设备 Ping/SSH 连通性测试 |
+| P1 | 扫码枪实际测试 | Zebra扫码枪连接WiFi、访问/scanner页面、测试完整流程 |
+| P2 | 维修/运维任务集成 | Maintenance.vue、TaskDetail.vue集成ScanSession组件 |
 | P2 | 前端配置历史 | 备份页面 Git 历史查看 |
 | P2 | 多厂商合规检查 | Huawei/H3C 合规规则扩展 |
 | P3 | OAuth2 SSO | 对接企业 SSO |

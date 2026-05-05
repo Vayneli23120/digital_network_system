@@ -24,3 +24,4 @@ from app.features.websocket.router import router as websocket_router
 from app.features.discovery.router import router as discovery_router
 from app.features.alerts.router import router as alerts_router
 from app.features.planned_maintenance.router import router as planned_maintenance_router
+from app.features.scan.router import router as scan_router

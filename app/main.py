@@ -43,6 +43,7 @@ from .routers import (
     discovery_router,
     alerts_router,
     planned_maintenance_router,
+    scan_router,
 )
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter import RateLimitMiddleware
@@ -122,6 +123,7 @@ app.include_router(websocket_router)
 app.include_router(discovery_router)
 app.include_router(alerts_router)
 app.include_router(planned_maintenance_router)
+app.include_router(scan_router)
 
 
 # ============ 健康检查 ============
