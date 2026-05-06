@@ -347,8 +347,9 @@ const submitSession = async () => {
       props.onComplete(scanItems.value)
     }
 
-    completeMessage.value = `成功处理 ${scanItems.value.length} 个备件`
-    showCompleteDialog.value = true
+    // 不显示完成对话框，直接关闭让父组件处理
+    // completeMessage.value = `成功处理 ${scanItems.value.length} 个备件`
+    // showCompleteDialog.value = true
   } catch (e) {
     ElMessage.error('提交失败: ' + (e.response?.data?.detail || e.message))
   } finally {
