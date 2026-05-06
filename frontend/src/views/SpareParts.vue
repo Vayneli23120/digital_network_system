@@ -62,7 +62,13 @@
 
       <!-- 表格 -->
       <el-table :data="parts" stripe border v-loading="loading">
-        <el-table-column prop="name" label="名称" width="150" />
+        <el-table-column prop="name" label="名称" width="150">
+          <template #default="{ row }">
+            <el-button type="primary" link @click="showPartDetail(row)">
+              {{ row.name }}
+            </el-button>
+          </template>
+        </el-table-column>
         <el-table-column prop="part_number" label="型号" width="150" />
         <el-table-column prop="category" label="分类" width="100" />
         <el-table-column prop="manufacturer" label="厂商" width="120" />
@@ -78,12 +84,11 @@
           <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="location" label="存放位置" />
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="success" @click="showInDialog(row)">入库</el-button>
             <el-button size="small" type="warning" @click="showOutDialog(row)">出库</el-button>
             <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
-            <el-button size="small" type="info" @click="showInstancesDialog(row)">实例</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -238,6 +243,60 @@
         @cancel="scanDialogVisible = false"
       />
     </el-dialog>
+
+    <!-- 备件详情对话框（实例列表） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="800px">
+      <div v-if="currentDetailPart" class="part-info-header">
+        <el-descriptions :column="4" border>
+          <el-descriptions-item label="型号">{{ currentDetailPart.part_number }}</el-descriptions-item>
+          <el-descriptions-item label="厂商">{{ currentDetailPart.manufacturer || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="分类">{{ currentDetailPart.category || '-' }}</el-descriptions-item>
+          <el-descriptions-item label="单价">¥{{ currentDetailPart.unit_price?.toFixed(2) || '0.00' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-row :gutter="16" style="margin-top: 16px">
+          <el-col :span="6">
+            <el-statistic title="在库数量" :value="currentDetailPart.in_stock_count || 0" />
+          </el-col>
+          <el-col :span="6">
+            <el-statistic title="已出库" :value="currentDetailPart.out_count || 0" />
+          </el-col>
+          <el-col :span="6">
+            <el-statistic title="总实例数" :value="currentDetailPart.total_instances || 0" />
+          </el-col>
+          <el-col :span="6">
+            <el-statistic title="库存显示" :value="currentDetailPart.quantity_in_stock || 0" />
+          </el-col>
+        </el-row>
+      </div>
+
+      <el-table :data="partInstances" v-loading="instancesLoading" stripe border style="margin-top: 16px">
+        <el-table-column prop="serial_number" label="序列号" width="150" />
+        <el-table-column prop="po_number" label="PO号" width="120">
+          <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="status" label="状态" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'in_stock' ? 'success' : row.status === 'out' ? 'warning' : 'info'" size="small">
+              {{ row.status === 'in_stock' ? '在库' : row.status === 'out' ? '已出库' : row.status }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="location" label="位置" width="100">
+          <template #default="{ row }">{{ row.location || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="in_stock_at" label="入库时间" width="160">
+          <template #default="{ row }">{{ row.in_stock_at ? formatDateTime(row.in_stock_at) : '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="out_at" label="出库时间" width="160">
+          <template #default="{ row }">{{ row.out_at ? formatDateTime(row.out_at) : '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="notes" label="备注" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.notes || '-' }}</template>
+        </el-table-column>
+      </el-table>
+
+      <el-empty v-if="!instancesLoading && partInstances.length === 0" description="该备件暂无库存实例，请扫码入库" />
+    </el-dialog>
   </div>
 </template>
 
@@ -245,7 +304,7 @@
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements } from '@/api'
+import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getPartInstances } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 
@@ -260,6 +319,12 @@ const movements = ref([])
 const movementsLoading = ref(false)
 const movementPage = ref(1)
 const movementTotal = ref(0)
+
+// 备件详情对话框
+const detailDialogVisible = ref(false)
+const currentDetailPart = ref(null)
+const partInstances = ref([])
+const instancesLoading = ref(false)
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -320,6 +385,28 @@ const onScanSessionComplete = async (result) => {
   }
 
   loadParts()
+}
+
+// 显示备件详情（实例列表）
+const showPartDetail = async (row) => {
+  currentDetailPart.value = row
+  detailDialogVisible.value = true
+  instancesLoading.value = true
+
+  try {
+    const result = await getPartInstances(row.id)
+    partInstances.value = result.instances || []
+    currentDetailPart.value = {
+      ...row,
+      in_stock_count: result.in_stock_count,
+      out_count: result.out_count,
+      total_instances: result.total_instances
+    }
+  } catch (e) {
+    ElMessage.error('加载备件实例失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    instancesLoading.value = false
+  }
 }
 
 const loadParts = async () => {

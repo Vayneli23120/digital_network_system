@@ -272,6 +272,12 @@ export function getPartBySerialNumber(serialNumber) {
   return api.get(`/spare-parts/by-serial/${serialNumber}`)
 }
 
+// 获取备件实例列表
+export function getPartInstances(partId, status = null) {
+  const params = status ? { status } : {}
+  return api.get(`/spare-parts/${partId}/instances`, { params })
+}
+
 // 备件出入库
 export function createMovement(data) {
   return api.post('/spare-movements/', data)
