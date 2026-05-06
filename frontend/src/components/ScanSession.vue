@@ -200,6 +200,13 @@ const submitForm = ref({
   reference: props.reference || ''
 })
 
+// 当partId有值时（入库模式），自动创建会话
+watch(() => props.partId, (newPartId) => {
+  if (newPartId && props.poNumber && !sessionCode.value) {
+    createSession()
+  }
+}, { immediate: true })
+
 // 计算属性
 const sessionTypeText = computed(() => {
   const texts = { in: '入库', out: '出库', maintenance: '维修备件', task: '运维任务' }
