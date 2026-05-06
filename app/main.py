@@ -99,7 +99,18 @@ for dir_path in [config.storage.backup_dir, config.storage.photo_dir, config.sto
 
 # ============ 静态文件挂载 ============
 
-app.mount("/assets", StaticFiles(directory=config.storage.photo_dir), name="assets")
+# 前端静态文件（Vue SPA）- assets 目录挂载到 /assets
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    frontend_assets = frontend_dist / "assets"
+    if frontend_assets.exists():
+        app.mount("/assets", StaticFiles(directory=str(frontend_assets)), name="frontend-assets")
+
+# 照片资源 - 挂载到 /photos 避免与前端 assets 冲突
+photos_dir = Path(config.storage.photo_dir)
+if photos_dir.exists():
+    app.mount("/photos", StaticFiles(directory=str(photos_dir)), name="photos")
+
 
 # ============ 路由注册 ============
 
@@ -196,6 +207,25 @@ async def cache_clear(prefix: str = None):
 
     count = cache.invalidate_prefix(prefix) if prefix else cache.clear()
     return {"cleared": count}
+
+
+# ============ SPA Fallback ============
+
+@app.get("/{full_path:path}", include_in_schema=False)
+async def spa_fallback(full_path: str):
+    """Vue SPA fallback - 返回前端 index.html（仅对非 API 路径）"""
+    # 排除 API 和文档路径
+    if full_path.startswith(("api/", "docs", "redoc", "openapi", "health", "ready")):
+        # 让 FastAPI 返回 404
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Not found")
+
+    frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+    index_file = frontend_dist / "index.html"
+    if index_file.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(index_file), media_type="text/html")
+    return {"error": "Frontend not built"}
 
 
 # ============ 初始化事件 ============
