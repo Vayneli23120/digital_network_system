@@ -372,6 +372,7 @@ const sidebarGroups = computed(() => {
         label: t('groupOverview'),
         items: [
           { path: '/', text: t('menuDashboard'), icon: DataBoard },
+          { path: '/monitor-screen', text: t('menuMonitorScreen'), icon: Monitor },
         ]
       }
     ],
@@ -427,7 +428,7 @@ const sidebarGroups = computed(() => {
 // Sync top tab based on current route
 watch(route, (newRoute) => {
   const path = newRoute.path
-  if (path === '/' || path.startsWith('/dashboard')) {
+  if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/monitor-screen')) {
     activeTopTab.value = 'dashboard'
   } else if (path.startsWith('/devices') || path.startsWith('/discovery') || path.startsWith('/backups') || path.startsWith('/faults') || path.startsWith('/maintenance') || path.startsWith('/planned-maintenance')) {
     activeTopTab.value = 'devices'

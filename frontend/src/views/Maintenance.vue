@@ -285,6 +285,7 @@ import { Plus, Search, InfoFilled } from '@element-plus/icons-vue'
 import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement } from '@/api'
 import ScanInput from '@/components/ScanInput.vue'
 import { formatDateTime } from '@/utils/time'
+import dayjs from 'dayjs'
 
 const maintenances = ref([])
 const filteredMaintenances = ref([])

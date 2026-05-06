@@ -610,23 +610,34 @@
 
                 const result = await response.json();
 
-                // 添加到列表
-                const existing = scannedItems.find(i => i.serial_number === sn);
-                if (existing) {
-                    existing.quantity += 1;
+                // 根据后端返回判断是否添加
+                if (result.is_session_duplicate) {
+                    // 会话中已存在，提示但不重复添加
+                    showError(scanError, '序列号 ' + sn + ' 已在扫描列表中，请勿重复扫描');
                 } else {
-                    scannedItems.push({
-                        serial_number: sn,
-                        part_id: result.item.part_id,
-                        name: result.item.name,
-                        part_number: result.item.part_number,
-                        unit_price: result.item.unit_price,
-                        quantity: 1
-                    });
+                    // 直接用后端返回的最新items列表同步（避免和轮询冲突）
+                    // 重新获取会话状态确保同步
+                    const syncResponse = await fetch(API_BASE + '/scan/sessions/' + sessionCode);
+                    if (syncResponse.ok) {
+                        const syncResult = await syncResponse.json();
+                        scannedItems = syncResult.items || [];
+                        updateItemsList();
+                        showSuccess('已添加: ' + result.item.name);
+                    } else {
+                        // 如果同步失败，手动添加
+                        scannedItems.push({
+                            serial_number: sn,
+                            part_id: result.item.part_id,
+                            name: result.item.name,
+                            part_number: result.item.part_number,
+                            unit_price: result.item.unit_price,
+                            quantity: 1
+                        });
+                        updateItemsList();
+                        showSuccess('已添加: ' + result.item.name);
+                    }
                 }
 
-                updateItemsList();
-                showSuccess(result.found_in_stock ? '已添加: ' + result.item.name : '序列号已记录（未匹配库存）');
                 serialInput.value = '';
                 serialInput.focus();
             } catch (e) {
@@ -649,39 +660,46 @@
             }
 
             emptyTip.classList.add('hidden');
-            listEl.innerHTML = scannedItems.map((item, index) => `
+            listEl.innerHTML = scannedItems.map((item) => `
                 <div class="item-card">
                     <div class="item-info">
                         <span class="serial">${item.serial_number}</span>
                         <span class="name">${item.name || '未匹配'}</span>
                         <span class="qty">数量: ${item.quantity}</span>
                     </div>
-                    <button class="remove-btn" onclick="removeItem(${index})">×</button>
+                    <button class="remove-btn" onclick="removeItemBySerial('${item.serial_number}')">×</button>
                 </div>
             `).join('');
         }
 
-        // 移除项目
-        async function removeItem(index) {
-            const item = scannedItems[index];
-            if (!item) return;
-
+        // 通过序列号删除项目（更可靠）
+        async function removeItemBySerial(serialNumber) {
             try {
                 // 先调用后端删除
-                const response = await fetch(API_BASE + '/scan/sessions/' + sessionCode + '/items/' + item.serial_number, {
+                const response = await fetch(API_BASE + '/scan/sessions/' + sessionCode + '/items/' + serialNumber, {
                     method: 'DELETE'
                 });
 
                 if (response.ok) {
-                    // 后端删除成功，本地也移除
-                    scannedItems.splice(index, 1);
-                    updateItemsList();
+                    // 删除成功，从后端同步最新列表
+                    const syncResponse = await fetch(API_BASE + '/scan/sessions/' + sessionCode);
+                    if (syncResponse.ok) {
+                        const syncResult = await syncResponse.json();
+                        scannedItems = syncResult.items || [];
+                        updateItemsList();
+                        showSuccess('已移除: ' + serialNumber);
+                        // 删除后重新聚焦到输入框，准备下一次扫描
+                        serialInput.value = '';
+                        serialInput.focus();
+                    }
                 } else {
                     const error = await response.json();
-                    console.error('移除失败:', error.detail);
+                    showError(scanError, '移除失败: ' + (error.detail || '未知错误'));
+                    serialInput.focus();
                 }
             } catch (e) {
-                console.error('移除失败:', e.message);
+                showError(scanError, '移除失败: ' + e.message);
+                serialInput.focus();
             }
         }
 
@@ -707,7 +725,12 @@
         });
 
         serialInput.addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') scanSerial();
+            // 扫码枪扫描后发送Enter，但不自动提交，等待用户确认
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                // 只聚焦到确认按钮，不自动提交
+                document.getElementById('scanBtn').focus();
+            }
         });
 
         // 初始化主题

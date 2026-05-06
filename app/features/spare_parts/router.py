@@ -112,6 +112,7 @@ async def api_get_part_instances(
         "part_id": part_id,
         "part_name": part.name,
         "part_number": part.part_number,
+        "unit_price": float(part.unit_price) if part.unit_price else 0,
         "total_instances": len(instances),
         "in_stock_count": sum(1 for i in instances if i.status == "in_stock"),
         "out_count": sum(1 for i in instances if i.status == "out"),
@@ -120,6 +121,7 @@ async def api_get_part_instances(
                 "id": inst.id,
                 "serial_number": inst.serial_number,
                 "po_number": inst.po_number,
+                "unit_price": float(inst.unit_price) if inst.unit_price else float(part.unit_price) if part.unit_price else 0,
                 "status": inst.status,
                 "location": inst.location,
                 "in_stock_at": inst.in_stock_at.isoformat() if inst.in_stock_at else None,
@@ -129,6 +131,168 @@ async def api_get_part_instances(
             }
             for inst in instances
         ]
+    }
+
+
+class ManualStockIn(BaseModel):
+    """手动入库"""
+    serial_number: str
+    po_number: Optional[str] = None
+    unit_price: Optional[float] = None
+    location: Optional[str] = None
+    notes: Optional[str] = None
+    reason: Optional[str] = None
+
+
+class ManualStockOut(BaseModel):
+    """手动出库"""
+    serial_number: str
+    reason: str
+    destination: Optional[str] = None
+    notes: Optional[str] = None
+
+
+@router.post("/{part_id}/manual-in")
+async def api_manual_stock_in(
+    part_id: int,
+    data: ManualStockIn,
+    db: Session = Depends(get_db)
+):
+    """手动入库（创建备件实例）"""
+    from app.shared.models import SparePart, SparePartInstance, SparePartMovement
+    from datetime import datetime
+
+    part = db.query(SparePart).filter(SparePart.id == part_id).first()
+    if not part:
+        raise HTTPException(status_code=404, detail="备件不存在")
+
+    # 检查序列号是否已存在
+    existing = db.query(SparePartInstance).filter(
+        SparePartInstance.serial_number == data.serial_number
+    ).first()
+
+    if existing:
+        # 如果已存在但状态不是in_stock，更新状态
+        if existing.status != "in_stock":
+            existing.status = "in_stock"
+            existing.in_stock_at = datetime.utcnow()
+            existing.out_at = None
+            existing.po_number = data.po_number or existing.po_number
+            existing.unit_price = data.unit_price or existing.unit_price
+            existing.location = data.location or existing.location
+            existing.notes = data.notes or existing.notes
+        else:
+            raise HTTPException(status_code=400, detail="该序列号已在库中")
+    else:
+        # 创建新实例
+        instance = SparePartInstance(
+            part_id=part_id,
+            serial_number=data.serial_number,
+            po_number=data.po_number,
+            unit_price=data.unit_price or part.unit_price,
+            status="in_stock",
+            location=data.location or part.location,
+            notes=data.notes,
+            in_stock_at=datetime.utcnow()
+        )
+        db.add(instance)
+
+    # 先flush让状态更新生效，再计算库存数量
+    db.flush()
+
+    # 更新库存数量（基于实例计数）
+    actual_count = db.query(SparePartInstance).filter(
+        SparePartInstance.part_id == part_id,
+        SparePartInstance.status == "in_stock"
+    ).count()
+    part.quantity_in_stock = actual_count
+
+    # 创建出入库记录
+    movement = SparePartMovement(
+        part_id=part_id,
+        movement_type="in",
+        quantity=1,
+        reason=data.reason or "手动入库",
+        operator="",
+        reference=data.po_number or "",
+        created_at=datetime.utcnow()
+    )
+    db.add(movement)
+
+    db.commit()
+
+    return {
+        "message": f"入库成功，序列号: {data.serial_number}",
+        "serial_number": data.serial_number,
+        "new_stock": part.quantity_in_stock
+    }
+
+
+@router.post("/{part_id}/manual-out")
+async def api_manual_stock_out(
+    part_id: int,
+    data: ManualStockOut,
+    db: Session = Depends(get_db)
+):
+    """手动出库（通过序列号定位实例）"""
+    from app.shared.models import SparePart, SparePartInstance, SparePartMovement
+    from datetime import datetime
+
+    part = db.query(SparePart).filter(SparePart.id == part_id).first()
+    if not part:
+        raise HTTPException(status_code=404, detail="备件不存在")
+
+    # 通过序列号查找实例
+    instance = db.query(SparePartInstance).filter(
+        SparePartInstance.serial_number == data.serial_number,
+        SparePartInstance.status == "in_stock"
+    ).first()
+
+    if not instance:
+        raise HTTPException(status_code=404, detail="未找到该序列号的在库实例")
+
+    # 更新实例状态
+    instance.status = "out"
+    instance.out_at = datetime.utcnow()
+    # 更新备注：追加出库信息
+    out_note = f"出库原因: {data.reason}"
+    if data.destination:
+        out_note += f", 去向: {data.destination}"
+    if data.notes:
+        out_note += f", 备注: {data.notes}"
+    if instance.notes:
+        instance.notes = instance.notes + "\n" + out_note
+    else:
+        instance.notes = out_note
+
+    # 先flush让状态更新生效，再计算库存数量
+    db.flush()
+
+    # 更新库存数量
+    actual_count = db.query(SparePartInstance).filter(
+        SparePartInstance.part_id == part_id,
+        SparePartInstance.status == "in_stock"
+    ).count()
+    part.quantity_in_stock = actual_count
+
+    # 创建出入库记录
+    movement = SparePartMovement(
+        part_id=part_id,
+        movement_type="out",
+        quantity=1,
+        reason=data.reason,
+        operator="",
+        reference=data.destination or "",
+        created_at=datetime.utcnow()
+    )
+    db.add(movement)
+
+    db.commit()
+
+    return {
+        "message": f"出库成功，序列号: {data.serial_number}",
+        "serial_number": data.serial_number,
+        "new_stock": part.quantity_in_stock
     }
 
 

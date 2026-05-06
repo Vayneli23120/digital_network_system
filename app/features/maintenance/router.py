@@ -57,6 +57,7 @@ async def get_maintenance(maint_id: int):
 
 
 @router.get("")
+@router.get("/")
 async def list_maintenances(
     device_id: Optional[int] = None,
     fault_id: Optional[int] = None,
@@ -114,6 +115,7 @@ async def list_maintenances(
 
 
 @router.post("")
+@router.post("/")
 async def create_maintenance(maint_data: dict):
     """创建维修记录"""
     db: Session = next(get_db())

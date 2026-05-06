@@ -263,6 +263,20 @@ const routes = [
       }
     ]
   },
+  // v1.4 系统监控大屏
+  {
+    path: '/monitor-screen',
+    name: 'MonitorScreenLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'MonitorScreen',
+        component: () => import('@/views/MonitorScreen.vue'),
+        meta: { title: '系统监控大屏' }
+      }
+    ]
+  },
   // 扫码枪终端页面（无需Layout）
   {
     path: '/scanner',

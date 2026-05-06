@@ -24,6 +24,7 @@ class Device(Base):
     location = Column(String(200))
     role = Column(String(50), index=True)  # access, distribution, core
     status = Column(String(50), default="online", index=True)  # online, offline, maintenance, retired
+    device_type = Column(String(50), default="switch", index=True)  # switch, ap, router, other
     purchase_date = Column(DateTime)
     vendor = Column(String(200))
     purchase_cost = Column(DECIMAL(10, 2), default=0)
@@ -38,6 +39,7 @@ class Device(Base):
     faults = relationship("FaultRecord", back_populates="device", cascade="all, delete-orphan")
     maintenances = relationship("MaintenanceRecord", back_populates="device", cascade="all, delete-orphan")
     photos = relationship("DevicePhoto", back_populates="device", cascade="all, delete-orphan")
+    nodes = relationship("DeviceNode", back_populates="device", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}')>"
@@ -371,6 +373,7 @@ class SparePartInstance(Base):
     part_id = Column(Integer, ForeignKey("spare_parts.id", ondelete="CASCADE"), nullable=False, index=True)
     serial_number = Column(String(100), unique=True, nullable=False, index=True)  # 序列号（唯一）
     po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
+    unit_price = Column(DECIMAL(10, 2), default=0)  # 该实例的采购价格（入库时可填写）
     status = Column(String(20), default="in_stock", index=True)  # in_stock / out / scrapped
     location = Column(String(200), nullable=True)  # 存放位置
     in_stock_at = Column(DateTime, nullable=True)  # 入库时间
@@ -461,3 +464,44 @@ class MaintenanceTask(Base):
 
     def __repr__(self):
         return f"<MaintenanceTask(task_no='{self.task_no}', status='{self.status}')>"
+
+
+# =============================================================================
+# 系统监控大屏模型
+# =============================================================================
+
+class FloorPlan(Base):
+    """平面图表 - 存储工厂平面图图片"""
+    __tablename__ = "floor_plans"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)  # 平面图名称，如"一楼车间"
+    image_path = Column(String(500), nullable=False)  # 图片存储路径
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    nodes = relationship("DeviceNode", back_populates="floor_plan", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<FloorPlan(name='{self.name}', id={self.id})>"
+
+
+class DeviceNode(Base):
+    """设备节点表 - 存储设备在平面图上的位置"""
+    __tablename__ = "device_nodes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    x_percent = Column(DECIMAL(5, 2), nullable=False)  # X坐标百分比 (0-100)
+    y_percent = Column(DECIMAL(5, 2), nullable=False)  # Y坐标百分比 (0-100)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    device = relationship("Device", back_populates="nodes")
+    floor_plan = relationship("FloorPlan", back_populates="nodes")
+
+    def __repr__(self):
+        return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent})>"

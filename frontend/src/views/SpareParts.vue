@@ -39,26 +39,30 @@
         </el-col>
       </el-row>
 
-      <!-- 搜索和过滤 -->
-      <el-form :inline="true" class="filter-form">
-        <el-form-item label="搜索">
-          <el-input v-model="search" placeholder="名称/型号" clearable @clear="loadParts" />
-        </el-form-item>
-        <el-form-item label="分类">
-          <el-select v-model="category" placeholder="全部" clearable @change="loadParts">
+      <!-- 筛选工具栏 -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <el-input
+            v-model="search"
+            placeholder="搜索名称/型号"
+            clearable
+            class="search-input"
+            @keyup.enter="loadParts"
+            @clear="loadParts"
+          />
+          <el-select v-model="category" placeholder="分类" clearable class="category-select" @change="loadParts">
             <el-option label="模块" value="模块" />
             <el-option label="电源" value="电源" />
             <el-option label="线缆" value="线缆" />
             <el-option label="其他" value="其他" />
           </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-checkbox v-model="lowStock" @change="loadParts">仅显示库存不足</el-checkbox>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="loadParts">搜索</el-button>
-        </el-form-item>
-      </el-form>
+          <el-checkbox v-model="lowStock" @change="loadParts">库存不足</el-checkbox>
+        </div>
+        <div class="toolbar-right">
+          <el-button size="small" @click="resetFilters">重置</el-button>
+          <el-button size="small" type="primary" @click="loadParts">搜索</el-button>
+        </div>
+      </div>
 
       <!-- 表格 -->
       <el-table :data="parts" stripe border v-loading="loading">
@@ -80,15 +84,13 @@
           </template>
         </el-table-column>
         <el-table-column prop="min_quantity" label="最低库存" width="100" />
-        <el-table-column prop="unit_price" label="单价" width="100">
-          <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
+        <el-table-column label="总价" width="100">
+          <template #default="{ row }">¥{{ (row.unit_price * row.quantity_in_stock).toFixed(2) }}</template>
         </el-table-column>
-        <el-table-column prop="location" label="存放位置" />
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="140" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="success" @click="showInDialog(row)">入库</el-button>
-            <el-button size="small" type="warning" @click="showOutDialog(row)">出库</el-button>
-            <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
+            <el-button size="small" type="success" @click="showManualInDialog(row)">入库</el-button>
+            <el-button size="small" type="warning" @click="showManualOutDialog(row)">出库</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -104,21 +106,25 @@
               <el-button @click="loadMovements"><el-icon><Refresh /></el-icon> 刷新</el-button>
             </div>
           </template>
-          <el-table :data="movements" v-loading="movementsLoading" stripe border>
+          <el-table :data="movements" v-loading="movementsLoading" stripe border @row-click="showMovementDetail">
             <el-table-column prop="created_at" label="时间" width="180">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
             </el-table-column>
-            <el-table-column prop="movement_type" label="类型" width="80">
+            <el-table-column prop="name" label="备件名称" width="150">
+              <template #default="{ row }">
+                <el-button type="primary" link>{{ row.name || '-' }}</el-button>
+              </template>
+            </el-table-column>
+            <el-table-column prop="movement_type" label="类型" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.movement_type === 'in' ? 'success' : 'warning'" size="small">
                   {{ row.movement_type === 'in' ? '入库' : '出库' }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="quantity" label="数量" width="80" />
+            <el-table-column prop="quantity" label="数量" width="80" align="right" />
             <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="operator" label="操作人" width="100" />
-            <el-table-column prop="reference" label="参考编号" width="150" show-overflow-tooltip />
+            <el-table-column prop="reference" label="参考编号" width="120" show-overflow-tooltip />
           </el-table>
           <div class="pagination-bar">
             <el-pagination
@@ -132,6 +138,25 @@
         </el-card>
       </el-tab-pane>
     </el-tabs>
+
+    <!-- 出入库详情对话框 -->
+    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="500px">
+      <el-descriptions :column="2" border v-if="currentMovement">
+        <el-descriptions-item label="时间">{{ formatDateTime(currentMovement.created_at) }}</el-descriptions-item>
+        <el-descriptions-item label="类型">
+          <el-tag :type="currentMovement.movement_type === 'in' ? 'success' : 'warning'" size="small">
+            {{ currentMovement.movement_type === 'in' ? '入库' : '出库' }}
+          </el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="备件名称">{{ currentMovement.name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="备件型号">{{ currentMovement.part_number || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="数量">{{ currentMovement.quantity }}</el-descriptions-item>
+        <el-descriptions-item label="单价">¥{{ currentMovement.unit_price?.toFixed(2) || '0.00' }}</el-descriptions-item>
+        <el-descriptions-item label="原因" :span="2">{{ currentMovement.reason || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="参考编号">{{ currentMovement.reference || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="操作人">{{ currentMovement.operator || '-' }}</el-descriptions-item>
+      </el-descriptions>
+    </el-dialog>
 
     <!-- 新增/编辑对话框 -->
     <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑备件' : '新增备件'" width="600px">
@@ -233,79 +258,128 @@
     </el-dialog>
 
     <!-- 扫码出入库对话框 -->
-    <el-dialog v-model="scanDialogVisible" title="扫码出入库" width="700px">
+    <el-dialog v-model="scanDialogVisible" :title="scanMode === 'in' ? '扫码入库' : '扫码出库'" width="700px">
       <ScanSession
         ref="scanSessionRef"
         :default-type="scanMode"
         :part-id="scanInForm.part_id"
         :po-number="scanInForm.po_number"
-        :auto-start="scanDialogVisible && scanInForm.part_id && scanInForm.po_number"
+        :location="scanInForm.location"
+        :auto-start="scanDialogVisible"
         @complete="onScanSessionComplete"
         @cancel="scanDialogVisible = false"
       />
     </el-dialog>
 
-    <!-- 备件详情对话框（实例列表） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="800px">
+    <!-- 备件详情对话框（库存清单） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="650px">
       <div v-if="currentDetailPart" class="part-info-header">
-        <el-descriptions :column="4" border>
-          <el-descriptions-item label="型号">{{ currentDetailPart.part_number }}</el-descriptions-item>
-          <el-descriptions-item label="厂商">{{ currentDetailPart.manufacturer || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="分类">{{ currentDetailPart.category || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="单价">¥{{ currentDetailPart.unit_price?.toFixed(2) || '0.00' }}</el-descriptions-item>
-        </el-descriptions>
-        <el-row :gutter="16" style="margin-top: 16px">
+        <el-row :gutter="16">
           <el-col :span="6">
             <el-statistic title="在库数量" :value="currentDetailPart.in_stock_count || 0" />
           </el-col>
           <el-col :span="6">
-            <el-statistic title="已出库" :value="currentDetailPart.out_count || 0" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="总实例数" :value="currentDetailPart.total_instances || 0" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="库存显示" :value="currentDetailPart.quantity_in_stock || 0" />
+            <el-statistic title="库存总价" :value="totalStockValue" :precision="2" suffix="元" />
           </el-col>
         </el-row>
       </div>
 
-      <el-table :data="partInstances" v-loading="instancesLoading" stripe border style="margin-top: 16px">
+      <el-table :data="inStockInstances" v-loading="instancesLoading" stripe border size="small" style="margin-top: 16px">
         <el-table-column prop="serial_number" label="序列号" width="150" />
-        <el-table-column prop="po_number" label="PO号" width="120">
+        <el-table-column prop="po_number" label="PO号" width="100">
           <template #default="{ row }">{{ row.po_number || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.status === 'in_stock' ? 'success' : row.status === 'out' ? 'warning' : 'info'" size="small">
-              {{ row.status === 'in_stock' ? '在库' : row.status === 'out' ? '已出库' : row.status }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="location" label="位置" width="100">
+        <el-table-column prop="location" label="位置" width="80">
           <template #default="{ row }">{{ row.location || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="in_stock_at" label="入库时间" width="160">
+        <el-table-column prop="in_stock_at" label="入库时间" width="140">
           <template #default="{ row }">{{ row.in_stock_at ? formatDateTime(row.in_stock_at) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="out_at" label="出库时间" width="160">
-          <template #default="{ row }">{{ row.out_at ? formatDateTime(row.out_at) : '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="notes" label="备注" show-overflow-tooltip>
+        <el-table-column prop="notes" label="备注" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">{{ row.notes || '-' }}</template>
         </el-table-column>
       </el-table>
 
-      <el-empty v-if="!instancesLoading && partInstances.length === 0" description="该备件暂无库存实例，请扫码入库" />
+      <el-empty v-if="!instancesLoading && inStockInstances.length === 0" description="该备件暂无在库实例" />
+    </el-dialog>
+
+    <!-- 手动入库对话框 -->
+    <el-dialog v-model="manualInDialogVisible" title="手动入库" width="500px">
+      <el-form :model="manualInForm" label-width="80px">
+        <el-form-item label="备件">
+          <el-input :value="currentManualPart?.name" disabled />
+        </el-form-item>
+        <el-form-item label="序列号" required>
+          <el-input v-model="manualInForm.serial_number" placeholder="输入序列号" />
+        </el-form-item>
+        <el-form-item label="PO号">
+          <el-input v-model="manualInForm.po_number" placeholder="采购订单号" />
+        </el-form-item>
+        <el-form-item label="单价">
+          <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" placeholder="单价" />
+        </el-form-item>
+        <el-form-item label="存放位置">
+          <el-input v-model="manualInForm.location" placeholder="存放位置" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="manualInForm.notes" type="textarea" placeholder="备注信息" />
+        </el-form-item>
+        <el-form-item label="入库原因">
+          <el-input v-model="manualInForm.reason" type="textarea" placeholder="入库原因" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualInDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitManualIn" :loading="manualInSubmitting">确认入库</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 手动出库对话框 -->
+    <el-dialog v-model="manualOutDialogVisible" title="手动出库" width="500px">
+      <el-form :model="manualOutForm" label-width="80px">
+        <el-form-item label="序列号" required>
+          <el-input v-model="manualOutForm.serial_number" placeholder="输入序列号查询备件" @keyup.enter="searchSerialForOut" />
+          <el-button size="small" type="primary" @click="searchSerialForOut" :loading="searchingSerial" style="margin-top: 8px">查询</el-button>
+        </el-form-item>
+        <div v-if="outPartInfo" style="background: #f5f7fa; padding: 12px; border-radius: 8px; margin-bottom: 16px">
+          <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
+            <el-tag :type="outPartInfo.status === 'in_stock' ? 'success' : 'warning'" size="small">
+              {{ outPartInfo.status === 'in_stock' ? '在库' : '已出库' }}
+            </el-tag>
+            <span style="font-weight: 600; color: #1677ff">{{ outPartInfo.serial_number }}</span>
+          </div>
+          <div style="color: #8c8c8c; font-size: 14px">
+            <span style="min-width: 50px">名称：</span>{{ outPartInfo.name }}<br>
+            <span style="min-width: 50px">型号：</span>{{ outPartInfo.part_number }}<br>
+            <span style="min-width: 50px">位置：</span>{{ outPartInfo.location || '-' }}
+          </div>
+          <el-alert v-if="outPartInfo.status !== 'in_stock'" type="warning" :closable="false" style="margin-top: 8px">
+            该序列号不在库中，无法出库
+          </el-alert>
+        </div>
+        <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" label="出库原因" required>
+          <el-input v-model="manualOutForm.reason" type="textarea" placeholder="出库原因" />
+        </el-form-item>
+        <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" label="出库去向">
+          <el-input v-model="manualOutForm.destination" placeholder="出库去向（设备/项目等）" />
+        </el-form-item>
+        <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" label="备注">
+          <el-input v-model="manualOutForm.notes" type="textarea" placeholder="备注信息" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualOutDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitManualOut" :loading="manualOutSubmitting" :disabled="!outPartInfo || outPartInfo.status !== 'in_stock'">确认出库</el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, reactive } from 'vue'
+import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getPartInstances } from '@/api'
+import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getPartInstances, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 
@@ -326,6 +400,43 @@ const detailDialogVisible = ref(false)
 const currentDetailPart = ref(null)
 const partInstances = ref([])
 const instancesLoading = ref(false)
+
+// 计算库存总价（在库实例的单价之和）
+const totalStockValue = computed(() => {
+  return partInstances.value
+    .filter(item => item.status === 'in_stock')
+    .reduce((sum, item) => sum + (item.unit_price || currentDetailPart.value?.unit_price || 0), 0)
+})
+
+// 只显示在库的实例
+const inStockInstances = computed(() => {
+  return partInstances.value.filter(item => item.status === 'in_stock')
+})
+
+// 手动入库
+const manualInDialogVisible = ref(false)
+const currentManualPart = ref(null)
+const manualInSubmitting = ref(false)
+const manualInForm = reactive({
+  serial_number: '',
+  po_number: '',
+  unit_price: 0,
+  location: '',
+  notes: '',
+  reason: ''
+})
+
+// 手动出库
+const manualOutDialogVisible = ref(false)
+const manualOutSubmitting = ref(false)
+const searchingSerial = ref(false)
+const outPartInfo = ref(null)
+const manualOutForm = reactive({
+  serial_number: '',
+  reason: '',
+  destination: '',
+  notes: ''
+})
 
 const dialogVisible = ref(false)
 const isEdit = ref(false)
@@ -364,6 +475,15 @@ const showScanDialog = (mode) => {
     // 出库：直接开始扫码会话
     scanDialogVisible.value = true
   }
+}
+
+// 出入库详情
+const movementDetailVisible = ref(false)
+const currentMovement = ref(null)
+
+const showMovementDetail = (row) => {
+  currentMovement.value = row
+  movementDetailVisible.value = true
 }
 
 // 开始扫码入库
@@ -422,6 +542,113 @@ const loadParts = async () => {
     ElMessage.error('加载备件失败：' + (e.response?.data?.detail || e.message))
   } finally {
     loading.value = false
+  }
+}
+
+// 重置筛选条件
+const resetFilters = () => {
+  search.value = ''
+  category.value = ''
+  lowStock.value = false
+  loadParts()
+}
+
+// 显示手动入库对话框
+const showManualInDialog = (row) => {
+  currentManualPart.value = row
+  Object.assign(manualInForm, {
+    serial_number: '',
+    po_number: '',
+    unit_price: row.unit_price || 0,
+    location: row.location || '',
+    notes: '',
+    reason: ''
+  })
+  manualInDialogVisible.value = true
+}
+
+// 显示手动出库对话框
+const showManualOutDialog = (row) => {
+  // row 可能是 null（从顶部按钮调用），或者是备件行（从表格按钮调用）
+  Object.assign(manualOutForm, {
+    serial_number: '',
+    reason: '',
+    destination: '',
+    notes: ''
+  })
+  outPartInfo.value = null
+  manualOutDialogVisible.value = true
+}
+
+// 查询序列号对应的备件信息
+const searchSerialForOut = async () => {
+  if (!manualOutForm.serial_number) {
+    ElMessage.warning('请输入序列号')
+    return
+  }
+
+  searchingSerial.value = true
+  try {
+    const result = await getPartBySerialNumber(manualOutForm.serial_number)
+    outPartInfo.value = result
+    if (result.status !== 'in_stock') {
+      ElMessage.warning('该序列号不在库中')
+    }
+  } catch (e) {
+    ElMessage.error('未找到该序列号的备件')
+    outPartInfo.value = null
+  } finally {
+    searchingSerial.value = false
+  }
+}
+
+// 提交手动入库
+const submitManualIn = async () => {
+  if (!manualInForm.serial_number) {
+    ElMessage.warning('请输入序列号')
+    return
+  }
+
+  manualInSubmitting.value = true
+  try {
+    const result = await manualStockIn(currentManualPart.value.id, manualInForm)
+    ElMessage.success(result.message || '入库成功')
+    manualInDialogVisible.value = false
+    loadParts()
+  } catch (e) {
+    ElMessage.error('入库失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    manualInSubmitting.value = false
+  }
+}
+
+// 提交手动出库
+const submitManualOut = async () => {
+  if (!outPartInfo.value || outPartInfo.value.status !== 'in_stock') {
+    ElMessage.warning('该序列号不在库中，无法出库')
+    return
+  }
+  if (!manualOutForm.reason) {
+    ElMessage.warning('请填写出库原因')
+    return
+  }
+
+  manualOutSubmitting.value = true
+  try {
+    // 使用查询到的 part_id 进行出库
+    const result = await manualStockOut(outPartInfo.value.id, {
+      serial_number: manualOutForm.serial_number,
+      reason: manualOutForm.reason,
+      destination: manualOutForm.destination,
+      notes: manualOutForm.notes
+    })
+    ElMessage.success(result.message || '出库成功')
+    manualOutDialogVisible.value = false
+    loadParts()
+  } catch (e) {
+    ElMessage.error('出库失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    manualOutSubmitting.value = false
   }
 }
 
@@ -511,10 +738,34 @@ onMounted(loadParts)
 .header-buttons { display: flex; gap: 8px; }
 .stats-row { margin-bottom: 20px; }
 .stat-card { text-align: center; }
-.filter-form { margin-bottom: 20px; }
 .pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
 .scan-section { margin-bottom: 20px; }
 .scan-tip { color: var(--el-text-color-secondary); font-size: 14px; margin-bottom: 16px; }
 .scan-list-section { margin-top: 20px; }
 .scan-list-section h4 { margin-bottom: 12px; font-weight: 600; }
+/* 筛选工具栏样式 */
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #fafafa;
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.search-input {
+  width: 200px;
+}
+.category-select {
+  width: 100px;
+}
+.toolbar-right {
+  display: flex;
+  gap: 8px;
+}
 </style>

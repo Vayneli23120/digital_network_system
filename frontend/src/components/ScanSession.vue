@@ -1,7 +1,7 @@
 <template>
   <div class="scan-session-wrapper">
     <!-- 会话创建阶段 -->
-    <div v-if="!sessionCode" class="create-session">
+    <div v-if="!sessionCode && !autoStart" class="create-session">
       <el-form :model="sessionForm" label-width="80px">
         <el-form-item label="操作类型">
           <el-radio-group v-model="sessionForm.session_type">
@@ -21,6 +21,12 @@
       <el-button type="primary" @click="createSession" :loading="creating">
         创建扫码会话
       </el-button>
+    </div>
+
+    <!-- 等待自动创建会话 -->
+    <div v-if="!sessionCode && autoStart" class="waiting-session">
+      <el-icon class="loading-icon"><Loading /></el-icon>
+      <span>正在创建扫码会话...</span>
     </div>
 
     <!-- 扫码阶段 -->
@@ -70,26 +76,31 @@
             <el-table-column prop="part_number" label="型号" width="120">
               <template #default="{ row }">{{ row.part_number || '未知' }}</template>
             </el-table-column>
-            <el-table-column prop="name" label="名称" width="150">
+            <el-table-column prop="name" label="名称" width="120">
               <template #default="{ row }">{{ row.name || '未找到' }}</template>
             </el-table-column>
-            <el-table-column prop="quantity" label="数量" width="80">
+            <el-table-column prop="unit_price" label="单价" width="100">
               <template #default="{ row }">
                 <el-input-number
-                  v-model="row.quantity"
-                  :min="1"
+                  v-model="row.unit_price"
+                  :min="0"
+                  :precision="2"
                   size="small"
                   controls-position="right"
-                  @change="updateItemQuantity(row)"
+                  placeholder="单价"
                 />
               </template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价" width="80">
+            <el-table-column prop="notes" label="备注" width="120">
               <template #default="{ row }">
-                {{ row.unit_price ? `¥${row.unit_price}` : '-' }}
+                <el-input
+                  v-model="row.notes"
+                  size="small"
+                  placeholder="备注"
+                />
               </template>
             </el-table-column>
-            <el-table-column prop="found_in_stock" label="库存状态" width="100">
+            <el-table-column prop="found_in_stock" label="状态" width="80">
               <template #default="{ row }">
                 <el-tag :type="row.part_id ? 'success' : 'warning'" size="small">
                   {{ row.part_id ? '已匹配' : '未找到' }}
@@ -151,7 +162,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Aim } from '@element-plus/icons-vue'
+import { Aim, Loading } from '@element-plus/icons-vue'
 import JsBarcode from 'jsbarcode'
 import {
   createScanSession,
@@ -171,6 +182,7 @@ const props = defineProps({
   reference: String,
   partId: Number,  // 入库备件ID
   poNumber: String,  // PO号
+  location: String,  // 存放位置
   autoStart: Boolean,  // 是否自动创建会话（对话框打开时）
   onComplete: Function // 完成回调
 })
@@ -216,19 +228,36 @@ const resetState = () => {
   joined.value = false
   scanItems.value = []
   stopPolling()
+  // 重置 session_type 为当前 props 的值
+  sessionForm.value.session_type = props.defaultType
 }
 
-// 当autoStart变为true时（入库模式，对话框打开），自动创建会话
-watch(
-  () => props.autoStart,
-  (autoStart) => {
-    if (autoStart && props.partId && props.poNumber) {
-      // 先重置状态，确保创建新会话
-      resetState()
+// 组件挂载后检查是否需要自动创建会话
+onMounted(() => {
+  // 入库需要 partId 和 poNumber，出库不需要
+  if (props.autoStart) {
+    if (props.defaultType === 'in' && props.partId && props.poNumber) {
+      createSession()
+    } else if (props.defaultType === 'out') {
       createSession()
     }
-  },
-  { immediate: false }  // 不立即执行，等待autoStart变为true
+  }
+})
+
+// 当autoStart变化时重新创建会话
+watch(
+  () => props.autoStart,
+  (autoStart, oldStart) => {
+    // 只有从false变true时才触发（避免重复创建）
+    if (autoStart && !oldStart) {
+      resetState()
+      if (props.defaultType === 'in' && props.partId && props.poNumber) {
+        createSession()
+      } else if (props.defaultType === 'out') {
+        createSession()
+      }
+    }
+  }
 )
 
 // 计算属性
@@ -277,7 +306,8 @@ const createSession = async () => {
       session_type: sessionForm.value.session_type,
       reference: sessionForm.value.reference,
       part_id: props.partId,  // 入库备件ID
-      po_number: props.poNumber  // PO号
+      po_number: props.poNumber,  // PO号
+      location: props.location  // 存放位置
     })
     sessionCode.value = result.session_code
     expiresAt.value = result.expires_at
@@ -309,18 +339,37 @@ const startPolling = () => {
     try {
       const result = await getScanSession(sessionCode.value)
       joined.value = result.joined
-      scanItems.value = result.items || []
 
-      // 如果过期，停止轮询
+      // 更新items时保留本地修改的单价和备注
+      const existingItems = scanItems.value
+      const newItems = result.items || []
+
+      // 对于已存在的item，保留本地单价和备注
+      newItems.forEach(newItem => {
+        const existing = existingItems.find(e => e.serial_number === newItem.serial_number)
+        if (existing) {
+          if (existing.unit_price !== undefined) {
+            newItem.unit_price = existing.unit_price
+          }
+          if (existing.notes !== undefined) {
+            newItem.notes = existing.notes  // 保留备注
+          }
+        }
+      })
+      scanItems.value = newItems
+
+      // 如果过期或完成，提示用户手动关闭
       if (result.status === 'expired') {
+        ElMessage.warning('会话已过期，请手动取消')
+      }
+      if (result.status === 'completed') {
+        ElMessage.success('会话已完成')
         stopPolling()
-        ElMessage.warning('会话已过期')
-        sessionCode.value = ''
       }
     } catch (e) {
-      if (e.response?.status === 404 || e.response?.status === 400) {
-        stopPolling()
-        sessionCode.value = ''
+      // 不自动退出，让用户手动处理
+      if (e.response?.status === 404) {
+        ElMessage.warning('会话不存在，请手动取消')
       }
     }
   }, 2000)
@@ -364,7 +413,13 @@ const submitSession = async () => {
 
   submitting.value = true
   try {
-    const result = await completeScanSession(sessionCode.value)
+    // 提交时传递包含单价和备注的 items，以及入库原因
+    const itemsWithNotes = scanItems.value.map(item => ({
+      serial_number: item.serial_number,
+      unit_price: item.unit_price || 0,
+      notes: item.notes || ''  // 每个备件的备注
+    }))
+    const result = await completeScanSession(sessionCode.value, itemsWithNotes, submitForm.value.reason)
     stopPolling()
 
     // 触发完成回调
@@ -433,6 +488,26 @@ onUnmounted(() => {
 
 .create-session {
   max-width: 400px;
+}
+
+.waiting-session {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--el-text-color-secondary);
+}
+
+.loading-icon {
+  font-size: 32px;
+  margin-bottom: 16px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .barcode-section {

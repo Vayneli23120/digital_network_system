@@ -278,6 +278,16 @@ export function getPartInstances(partId, status = null) {
   return api.get(`/spare-parts/${partId}/instances`, { params })
 }
 
+// 手动入库（创建实例）
+export function manualStockIn(partId, data) {
+  return api.post(`/spare-parts/${partId}/manual-in`, data)
+}
+
+// 手动出库（更新实例状态）
+export function manualStockOut(partId, data) {
+  return api.post(`/spare-parts/${partId}/manual-out`, data)
+}
+
 // 备件出入库
 export function createMovement(data) {
   return api.post('/spare-movements/', data)
@@ -436,10 +446,68 @@ export function removeScanItem(sessionCode, serialNumber) {
   return api.delete(`/scan/sessions/${sessionCode}/items/${serialNumber}`)
 }
 
-export function completeScanSession(sessionCode) {
-  return api.post(`/scan/sessions/${sessionCode}/complete`)
+export function completeScanSession(sessionCode, items = null, reason = '') {
+  const data = { items, reason }
+  return api.post(`/scan/sessions/${sessionCode}/complete`, data)
 }
 
 export function deleteScanSession(sessionCode) {
   return api.delete(`/scan/sessions/${sessionCode}`)
+}
+
+// ============ 系统监控大屏 API ============
+export function getFloorPlans() {
+  return api.get('/floor-plans')
+}
+
+export function getFloorPlan(id) {
+  return api.get(`/floor-plans/${id}`)
+}
+
+export function createFloorPlan(formData) {
+  return api.post('/floor-plans', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function updateFloorPlan(id, formData) {
+  return api.put(`/floor-plans/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+export function deleteFloorPlan(id) {
+  return api.delete(`/floor-plans/${id}`)
+}
+
+export function getFloorPlanNodes(planId) {
+  return api.get(`/floor-plans/${planId}/nodes`)
+}
+
+export function getAvailableDevices(planId) {
+  return api.get(`/floor-plans/${planId}/available-devices`)
+}
+
+export function createDeviceNode(planId, data) {
+  return api.post(`/floor-plans/${planId}/nodes`, data)
+}
+
+export function updateDeviceNode(planId, nodeId, data) {
+  return api.put(`/floor-plans/${planId}/nodes/${nodeId}`, data)
+}
+
+export function deleteDeviceNode(planId, nodeId) {
+  return api.delete(`/floor-plans/${planId}/nodes/${nodeId}`)
+}
+
+export function getMonitorDeviceDetail(deviceId) {
+  return api.get(`/monitor-screen/device/${deviceId}/detail`)
+}
+
+export function getOfflineAlerts() {
+  return api.get('/monitor-screen/offline-alerts')
+}
+
+export function getMonitorStats() {
+  return api.get('/monitor-screen/stats')
 }
