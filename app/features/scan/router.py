@@ -158,7 +158,11 @@ async def add_scan_item(
     data: ScanItemAdd,
     db: Session = Depends(get_db)
 ):
-    """扫码枪添加备件（扫码枪扫描序列号后调用）"""
+    """扫码枪添加备件（扫码枪扫描序列号后调用）
+
+    入库模式：session中已有part_id，直接记录序列号
+    出库模式：查询已有备件实例匹配序列号
+    """
     session = scan_sessions.get(data.session_code)
 
     if not session:
@@ -170,15 +174,63 @@ async def add_scan_item(
     if not session["joined"]:
         raise HTTPException(status_code=400, detail="请先扫描会话码加入")
 
-    # 查询备件信息
-    part = db.query(SparePart).filter(
-        SparePart.serial_number == data.serial_number
+    # 入库模式：从session获取备件信息
+    if session["session_type"] == "in" and session.get("part_id"):
+        part = db.query(SparePart).filter(SparePart.id == session["part_id"]).first()
+        if not part:
+            raise HTTPException(status_code=404, detail="备件不存在")
+
+        # 检查序列号是否已存在（防止重复入库）
+        existing_instance = db.query(SparePartInstance).filter(
+            SparePartInstance.serial_number == data.serial_number
+        ).first()
+
+        scan_item = {
+            "serial_number": data.serial_number,
+            "part_id": part.id,
+            "part_number": part.part_number,
+            "name": part.name,
+            "quantity": data.quantity,
+            "unit_price": float(part.unit_price) if part.unit_price else None,
+            "po_number": session.get("po_number"),
+            "scanned_at": datetime.utcnow()
+        }
+
+        # 如果已存在相同序列号，增加数量提示
+        existing = None
+        for item in session["items"]:
+            if item["serial_number"] == data.serial_number:
+                existing = item
+                break
+
+        if existing:
+            existing["quantity"] += data.quantity
+        else:
+            session["items"].append(scan_item)
+
+        return {
+            "session_code": data.session_code,
+            "item": scan_item,
+            "total_items": len(session["items"]),
+            "found_in_stock": existing_instance is not None and existing_instance.status == "in_stock",
+            "is_duplicate": existing_instance is not None,
+            "message": f"已添加: {part.name}" if not existing_instance else f"序列号已存在（状态: {existing_instance.status})"
+        }
+
+    # 出库模式：查询已有备件实例
+    instance = db.query(SparePartInstance).filter(
+        SparePartInstance.serial_number == data.serial_number,
+        SparePartInstance.status == "in_stock"
     ).first()
 
-    # 创建扫描项
+    part = None
+    if instance:
+        part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
+
     scan_item = {
         "serial_number": data.serial_number,
-        "part_id": part.id if part else None,
+        "part_id": instance.part_id if instance else None,
+        "instance_id": instance.id if instance else None,
         "part_number": part.part_number if part else None,
         "name": part.name if part else None,
         "quantity": data.quantity,
@@ -186,7 +238,6 @@ async def add_scan_item(
         "scanned_at": datetime.utcnow()
     }
 
-    # 如果已存在相同序列号，增加数量
     existing = None
     for item in session["items"]:
         if item["serial_number"] == data.serial_number:
@@ -202,8 +253,8 @@ async def add_scan_item(
         "session_code": data.session_code,
         "item": scan_item,
         "total_items": len(session["items"]),
-        "found_in_stock": part is not None,
-        "message": f"已添加: {part.name if part else data.serial_number}"
+        "found_in_stock": instance is not None,
+        "message": f"已添加: {part.name if part else data.serial_number}" if instance else f"序列号 {data.serial_number} 未找到或在库中不存在"
     }
 
 
