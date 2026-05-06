@@ -15,7 +15,7 @@ import uuid
 import json
 
 from app.shared.database import get_db
-from app.shared.models import SparePart
+from app.shared.models import SparePart, SparePartInstance
 
 router = APIRouter(prefix="/api/scan", tags=["scan-session"])
 
@@ -32,6 +32,8 @@ class ScanSessionCreate(BaseModel):
     session_type: str  # in, out, maintenance, task
     reference: Optional[str] = None  # 关联工单/任务ID
     device_id: Optional[int] = None
+    part_id: Optional[int] = None  # 入库时选择的备件ID
+    po_number: Optional[str] = None  # 入库时的PO号
 
 
 class ScanSessionJoin(BaseModel):
@@ -90,6 +92,8 @@ async def create_scan_session(
         "session_type": data.session_type,
         "reference": data.reference,
         "device_id": data.device_id,
+        "part_id": data.part_id,  # 入库备件ID
+        "po_number": data.po_number,  # PO号
         "created_at": now,
         "expires_at": now + timedelta(minutes=30),
         "status": "pending",
@@ -99,12 +103,28 @@ async def create_scan_session(
 
     scan_sessions[session_code] = session
 
+    # 查询备件信息（如果有）
+    part_info = None
+    if data.part_id:
+        part = db.query(SparePart).filter(SparePart.id == data.part_id).first()
+        if part:
+            part_info = {
+                "id": part.id,
+                "name": part.name,
+                "part_number": part.part_number,
+                "category": part.category,
+                "manufacturer": part.manufacturer,
+                "unit_price": float(part.unit_price) if part.unit_price else 0
+            }
+
     return {
         "session_code": session_code,
         "session_type": data.session_type,
         "expires_at": session["expires_at"].isoformat(),
-        "qr_content": f"NAS-SCAN:{session_code}",  # 二维码内容格式
-        "message": "请用扫码枪扫描二维码加入会话"
+        "qr_content": f"NAS-SCAN:{session_code}",
+        "part_info": part_info,
+        "po_number": data.po_number,
+        "message": "请用扫码枪扫描条形码加入会话"
     }
 
 
@@ -232,6 +252,8 @@ async def get_scan_session(
         "session_type": session["session_type"],
         "reference": session["reference"],
         "device_id": session["device_id"],
+        "part_id": session.get("part_id"),  # 入库备件ID
+        "po_number": session.get("po_number"),  # PO号
         "status": session["status"],
         "joined": session["joined"],
         "items": session["items"],
@@ -245,15 +267,85 @@ async def complete_scan_session(
     session_code: str,
     db: Session = Depends(get_db)
 ):
-    """完成扫码会话（电脑端确认提交后调用）"""
+    """完成扫码会话（电脑端确认提交后调用）
+
+    入库时：创建备件实例记录，更新库存
+    出库时：更新备件实例状态为out
+    """
     session = scan_sessions.get(session_code)
 
     if not session:
         raise HTTPException(status_code=404, detail="会话不存在")
 
+    if session["expires_at"] < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="会话已过期")
+
     session["status"] = "completed"
 
-    # 返回所有扫描的备件
+    # 处理入库：创建备件实例记录
+    if session["session_type"] == "in" and session.get("part_id"):
+        part_id = session["part_id"]
+        po_number = session.get("po_number", "")
+        part = db.query(SparePart).filter(SparePart.id == part_id).first()
+
+        if not part:
+            raise HTTPException(status_code=404, detail="备件不存在")
+
+        # 为每个扫描的序列号创建备件实例
+        for item in session["items"]:
+            serial_number = item["serial_number"]
+
+            # 检查序列号是否已存在
+            existing = db.query(SparePartInstance).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
+
+            if existing:
+                # 如果已存在但状态不是in_stock，更新状态
+                if existing.status != "in_stock":
+                    existing.status = "in_stock"
+                    existing.in_stock_at = datetime.utcnow()
+                    existing.out_at = None
+                    existing.po_number = po_number
+            else:
+                # 创建新的备件实例
+                instance = SparePartInstance(
+                    part_id=part_id,
+                    serial_number=serial_number,
+                    po_number=po_number,
+                    status="in_stock",
+                    location=part.location,
+                    in_stock_at=datetime.utcnow()
+                )
+                db.add(instance)
+
+        # 更新备件库存数量
+        part.quantity_in_stock += len(session["items"])
+        db.commit()
+
+        # 删除会话
+        if session_code in scan_sessions:
+            del scan_sessions[session_code]
+
+        return {
+            "session_code": session_code,
+            "status": "completed",
+            "items": session["items"],
+            "part_id": part_id,
+            "added_count": len(session["items"]),
+            "new_stock": part.quantity_in_stock,
+            "message": f"入库成功，新增 {len(session['items'])} 件，库存: {part.quantity_in_stock}"
+        }
+
+    # 出库处理（暂不实现复杂逻辑）
+    if session["session_type"] == "out":
+        # TODO: 更新备件实例状态为out
+        pass
+
+    # 删除会话
+    if session_code in scan_sessions:
+        del scan_sessions[session_code]
+
     return {
         "session_code": session_code,
         "status": "completed",

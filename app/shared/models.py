@@ -343,33 +343,6 @@ class LogEntry(Base):
         return f"<LogEntry(tool={self.tool_type}, op={self.operation}, status={self.status})>"
 
 
-class SparePart(Base):
-    """备件资产表"""
-    __tablename__ = "spare_parts"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(200), nullable=False, index=True)
-    part_number = Column(String(100), unique=True, nullable=False, index=True)
-    serial_number = Column(String(100), nullable=True, index=True)  # 序列号，用于扫码枪识别
-    po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
-    category = Column(String(100), nullable=True, index=True)  # 模块/电源/线缆/其他
-    manufacturer = Column(String(200), nullable=True)
-    description = Column(Text, nullable=True)
-    quantity_in_stock = Column(Integer, default=0, nullable=False)
-    min_quantity = Column(Integer, default=0)  # 最低库存预警值
-    unit_price = Column(DECIMAL(10, 2), default=0)
-    location = Column(String(200), nullable=True)  # 存放位置
-    status = Column(String(20), default="active")  # active, inactive, depleted
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # 一对多关系
-    movements = relationship("SparePartMovement", back_populates="part", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<SparePart(name='{self.name}', qty={self.quantity_in_stock})>"
-
-
 class SparePartMovement(Base):
     """备件出入库记录表"""
     __tablename__ = "spare_part_movements"
@@ -388,6 +361,58 @@ class SparePartMovement(Base):
 
     def __repr__(self):
         return f"<SparePartMovement(part_id={self.part_id}, type={self.movement_type}, qty={self.quantity})>"
+
+
+class SparePartInstance(Base):
+    """备件实例表 - 存储每个备件个体的序列号、PO号等信息"""
+    __tablename__ = "spare_part_instances"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    part_id = Column(Integer, ForeignKey("spare_parts.id", ondelete="CASCADE"), nullable=False, index=True)
+    serial_number = Column(String(100), unique=True, nullable=False, index=True)  # 序列号（唯一）
+    po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
+    status = Column(String(20), default="in_stock", index=True)  # in_stock / out / scrapped
+    location = Column(String(200), nullable=True)  # 存放位置
+    in_stock_at = Column(DateTime, nullable=True)  # 入库时间
+    out_at = Column(DateTime, nullable=True)  # 出库时间
+    out_to_device = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 出库到设备
+    out_to_maintenance = Column(Integer, ForeignKey("maintenance_records.id", ondelete="SET NULL"), nullable=True)  # 出库到维修单
+    out_to_task = Column(Integer, ForeignKey("maintenance_tasks.id", ondelete="SET NULL"), nullable=True)  # 出库到运维任务
+    notes = Column(String(500), nullable=True)  # 备注
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    part = relationship("SparePart", back_populates="instances")
+
+    def __repr__(self):
+        return f"<SparePartInstance(serial={self.serial_number}, status={self.status})>"
+
+
+class SparePart(Base):
+    """备件资产表 - 存储备件型号基础信息"""
+    __tablename__ = "spare_parts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(200), nullable=False, index=True)
+    part_number = Column(String(100), unique=True, nullable=False, index=True)  # 型号（唯一）
+    category = Column(String(100), nullable=True, index=True)  # 模块/电源/线缆/其他
+    manufacturer = Column(String(200), nullable=True)
+    description = Column(Text, nullable=True)
+    quantity_in_stock = Column(Integer, default=0, nullable=False)
+    min_quantity = Column(Integer, default=0)  # 最低库存预警值
+    unit_price = Column(DECIMAL(10, 2), default=0)
+    location = Column(String(200), nullable=True)  # 默认存放位置
+    status = Column(String(20), default="active")  # active, inactive, depleted
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 一对多关系
+    movements = relationship("SparePartMovement", back_populates="part", cascade="all, delete-orphan")
+    instances = relationship("SparePartInstance", back_populates="part", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<SparePart(name='{self.name}', qty={self.quantity_in_stock})>"
 
 
 class MaintenancePlan(Base):

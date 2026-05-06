@@ -206,11 +206,45 @@
       </template>
     </el-dialog>
 
-    <!-- 扫码出入库对话框（新版：会话模式） -->
-    <el-dialog v-model="scanDialogVisible" title="扫码出入库（会话模式）" width="700px">
+    <!-- 选择备件和填PO号对话框 -->
+    <el-dialog v-model="selectPartDialogVisible" title="选择入库备件" width="500px">
+      <el-form :model="scanInForm" label-width="80px">
+        <el-form-item label="选择备件" required>
+          <el-select v-model="scanInForm.part_id" placeholder="选择要入库的备件型号" filterable>
+            <el-option
+              v-for="part in parts"
+              :key="part.id"
+              :label="`${part.name} (${part.part_number})`"
+              :value="part.id"
+            >
+              <span>{{ part.name }}</span>
+              <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ part.part_number }}</span>
+              <span style="color: var(--el-text-color-secondary); margin-left: 8px;">库存: {{ part.quantity_in_stock }}</span>
+            </el-option>
+          </el-select>
+        </el-form-item>
+        <el-form-item label="PO号" required>
+          <el-input v-model="scanInForm.po_number" placeholder="采购订单号（同一批次）" />
+        </el-form-item>
+        <el-form-item label="存放位置">
+          <el-input v-model="scanInForm.location" placeholder="存放位置" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="selectPartDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="startScanIn" :disabled="!scanInForm.part_id || !scanInForm.po_number">
+          开始扫码入库
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 扫码出入库对话框 -->
+    <el-dialog v-model="scanDialogVisible" title="扫码出入库" width="700px">
       <ScanSession
         ref="scanSessionRef"
         :default-type="scanMode"
+        :part-id="scanInForm.part_id"
+        :po-number="scanInForm.po_number"
         @complete="onScanSessionComplete"
         @cancel="scanDialogVisible = false"
       />
@@ -255,37 +289,48 @@ const movementForm = reactive({ quantity: 1, reason: '', operator: '', reference
 const scanDialogVisible = ref(false)
 const scanMode = ref('in')
 const scanSessionRef = ref(null)
+const selectPartDialogVisible = ref(false)  // 选择备件对话框
+const scanInForm = reactive({
+  part_id: null,
+  po_number: '',
+  location: ''
+})
 
-// 显示扫码对话框
+// 显示扫码对话框（入库需要先选择备件）
 const showScanDialog = (mode) => {
   scanMode.value = mode
+  if (mode === 'in') {
+    // 入库：先显示选择备件对话框
+    selectPartDialogVisible.value = true
+    scanInForm.part_id = null
+    scanInForm.po_number = ''
+    scanInForm.location = ''
+  } else {
+    // 出库：直接开始扫码会话
+    scanDialogVisible.value = true
+  }
+}
+
+// 开始扫码入库
+const startScanIn = () => {
+  selectPartDialogVisible.value = false
   scanDialogVisible.value = true
 }
 
 // 扫码会话完成处理
 const onScanSessionComplete = async (result) => {
-  const { session_type, items, operator, reason, reference } = result
-  if (items.length === 0) return
+  const { session_type, items, added_count, new_stock, message } = result
+  if (items && items.length === 0) return
 
-  try {
-    for (const item of items) {
-      if (item.part_id) {
-        await createMovement({
-          part_id: item.part_id,
-          movement_type: session_type,
-          quantity: item.quantity,
-          reason: reason || `扫码${session_type === 'in' ? '入库' : '出库'}`,
-          operator: operator || '扫码枪',
-          reference: reference
-        })
-      }
-    }
-    ElMessage.success(`成功处理 ${items.length} 项`)
-    scanDialogVisible.value = false
-    loadParts()
-  } catch (e) {
-    ElMessage.error('提交失败: ' + (e.response?.data?.detail || e.message))
+  scanDialogVisible.value = false
+
+  if (message) {
+    ElMessage.success(message)
+  } else {
+    ElMessage.success(`成功处理 ${items?.length || 0} 项`)
   }
+
+  loadParts()
 }
 
 const loadParts = async () => {

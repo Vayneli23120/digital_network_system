@@ -169,6 +169,8 @@ const props = defineProps({
     default: 'in' // in, out, maintenance, task
   },
   reference: String,
+  partId: Number,  // 入库备件ID
+  poNumber: String,  // PO号
   onComplete: Function // 完成回调
 })
 
@@ -242,11 +244,19 @@ const createSession = async () => {
   try {
     const result = await createScanSession({
       session_type: sessionForm.value.session_type,
-      reference: sessionForm.value.reference
+      reference: sessionForm.value.reference,
+      part_id: props.partId,  // 入库备件ID
+      po_number: props.poNumber  // PO号
     })
     sessionCode.value = result.session_code
     expiresAt.value = result.expires_at
-    ElMessage.success('扫码会话已创建')
+
+    // 显示备件信息（如果有）
+    if (result.part_info) {
+      ElMessage.success(`扫码会话已创建 - ${result.part_info.name}`)
+    } else {
+      ElMessage.success('扫码会话已创建')
+    }
 
     // 生成条形码
     generateBarcode()
