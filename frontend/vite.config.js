@@ -14,6 +14,12 @@ export default defineConfig(({ mode }) => {
         '@': resolve(__dirname, 'src')
       }
     },
+    build: {
+      // 支持旧版 Chromium（扫码枪浏览器）
+      target: ['es2015', 'chrome60'],
+      // 不使用动态导入，避免兼容问题
+      format: 'es'
+    },
     server: {
       port: 3000,
       host: '0.0.0.0',

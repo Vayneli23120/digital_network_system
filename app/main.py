@@ -99,6 +99,21 @@ for dir_path in [config.storage.backup_dir, config.storage.photo_dir, config.sto
 
 # ============ 静态文件挂载 ============
 
+# 扫码枪专用静态页面（纯HTML+JS，兼容旧版Chromium）
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+# 扫码枪终端路由 - 返回纯HTML页面
+@app.get("/scanner", include_in_schema=False)
+async def scanner_terminal():
+    """扫码枪终端页面（兼容旧版浏览器）"""
+    scanner_html = Path(__file__).parent / "static" / "scanner.html"
+    if scanner_html.exists():
+        from fastapi.responses import FileResponse
+        return FileResponse(str(scanner_html), media_type="text/html")
+    return {"error": "Scanner page not found"}
+
 # 前端静态文件（Vue SPA）- assets 目录挂载到 /assets
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
@@ -215,7 +230,7 @@ async def cache_clear(prefix: str = None):
 async def spa_fallback(full_path: str):
     """Vue SPA fallback - 返回前端 index.html（仅对非 API 路径）"""
     # 排除 API 和文档路径
-    if full_path.startswith(("api/", "docs", "redoc", "openapi", "health", "ready")):
+    if full_path.startswith(("api/", "docs", "redoc", "openapi", "health", "ready", "scanner", "static")):
         # 让 FastAPI 返回 404
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")
