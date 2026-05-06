@@ -3,151 +3,374 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>扫码枪终端</title>
+    <title>扫码枪终端 - Network Automation System</title>
     <style>
+        /* 系统设计变量 */
+        :root {
+            --font-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --radius-sm: 6px;
+            --radius-md: 8px;
+            --radius-lg: 12px;
+            --gap-sm: 8px;
+            --gap-md: 16px;
+
+            /* 品牌色 */
+            --accent-primary: #00d4aa;
+            --accent-secondary: #00a8ff;
+            --accent-warning: #ffb800;
+            --accent-danger: #ff4757;
+
+            /* 状态色 */
+            --status-active: #00d4aa;
+            --status-idle: #6b7280;
+
+            /* 明亮主题 */
+            --bg-primary: #f0f4fa;
+            --bg-secondary: #ffffff;
+            --bg-card: #ffffff;
+            --bg-hover: #f1f5f9;
+            --text-primary: #0D1B2A;
+            --text-secondary: #3A4A5C;
+            --text-muted: #9BAABB;
+            --border-default: #E2E8F2;
+            --shadow-card: 0 1px 3px rgba(0, 48, 135, 0.06), 0 1px 2px rgba(0, 48, 135, 0.04);
+
+            --color-gb: #003087;
+            --color-gb-deep: #001F5C;
+            --color-gy: #FFCC00;
+        }
+
+        /* 暗黑主题 */
+        .dark {
+            --bg-primary: #0a0e14;
+            --bg-secondary: #0d1117;
+            --bg-card: #1a1f26;
+            --bg-hover: #21262d;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --text-muted: #484f58;
+            --border-default: #30363d;
+            --shadow-card: 0 0 0 1px #30363d, 0 4px 12px rgba(0, 0, 0, 0.3);
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
             padding: 0;
         }
+
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-            background: #f5f5f5;
+            font-family: var(--font-body);
+            background: var(--bg-primary);
+            color: var(--text-primary);
             min-height: 100vh;
-            padding: 20px;
+            padding: var(--gap-md);
         }
+
+        /* 顶部导航条 */
+        .topbar {
+            background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-deep) 100%);
+            padding: var(--gap-sm) var(--gap-md);
+            border-radius: var(--radius-lg);
+            margin-bottom: var(--gap-md);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .topbar-title {
+            color: #fff;
+            font-size: 18px;
+            font-weight: 600;
+            letter-spacing: 1px;
+        }
+
+        .topbar-accent {
+            color: var(--color-gy);
+            font-size: 14px;
+            margin-left: var(--gap-sm);
+        }
+
+        /* 容器 */
         .container {
             max-width: 400px;
             margin: 0 auto;
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            background: var(--bg-card);
+            padding: var(--gap-md);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-card);
         }
+
         h1 {
-            font-size: 24px;
-            text-align: center;
-            margin-bottom: 16px;
-        }
-        h2 {
             font-size: 20px;
             text-align: center;
-            color: #409eff;
-            margin-bottom: 8px;
+            margin-bottom: var(--gap-sm);
+            color: var(--text-primary);
         }
+
+        h2 {
+            font-size: 18px;
+            text-align: center;
+            color: var(--accent-primary);
+            margin-bottom: var(--gap-sm);
+        }
+
         .tip {
             text-align: center;
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
-            margin-bottom: 20px;
+            margin-bottom: var(--gap-md);
         }
+
         .session-info {
             text-align: center;
-            margin-bottom: 16px;
+            margin-bottom: var(--gap-md);
+            padding: var(--gap-md);
+            background: var(--bg-hover);
+            border-radius: var(--radius-md);
         }
+
         .session-info p {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
         }
+
+        .session-code {
+            color: var(--accent-primary);
+            font-weight: 600;
+            font-size: 16px;
+        }
+
+        .session-type-badge {
+            display: inline-block;
+            background: rgba(0, 212, 170, 0.1);
+            color: var(--accent-primary);
+            padding: 4px 12px;
+            border-radius: var(--radius-sm);
+            font-size: 14px;
+            margin-bottom: var(--gap-sm);
+        }
+
+        /* 输入框 */
         input {
             width: 100%;
             height: 48px;
-            font-size: 18px;
-            padding: 8px 12px;
-            border: 2px solid #409eff;
-            border-radius: 4px;
+            font-size: 16px;
+            padding: 12px 16px;
+            border: 2px solid var(--border-default);
+            border-radius: var(--radius-md);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
             outline: none;
+            transition: border-color 0.2s;
         }
+
         input:focus {
-            border-color: #66b1ff;
+            border-color: var(--accent-primary);
         }
-        button {
+
+        input::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* 按钮 */
+        .btn {
             width: 100%;
             height: 48px;
-            font-size: 18px;
-            background: #409eff;
-            color: #fff;
+            font-size: 16px;
+            font-weight: 500;
             border: none;
-            border-radius: 4px;
+            border-radius: var(--radius-md);
             cursor: pointer;
-            margin-top: 12px;
+            margin-top: var(--gap-sm);
+            transition: all 0.2s;
         }
-        button:disabled {
-            background: #ccc;
+
+        .btn-primary {
+            background: var(--accent-primary);
+            color: #fff;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            background: #00c4a0;
+        }
+
+        .btn-primary:disabled {
+            background: var(--text-muted);
             cursor: not-allowed;
         }
-        button.exit-btn {
-            background: #f56c6c;
-            margin-top: 20px;
+
+        .btn-danger {
+            background: var(--accent-danger);
+            color: #fff;
+            margin-top: var(--gap-md);
         }
+
+        .btn-danger:hover {
+            background: #e64550;
+        }
+
+        /* 扫码列表 */
         .scan-list {
-            background: #f9f9f9;
-            padding: 16px;
-            border-radius: 4px;
+            background: var(--bg-hover);
+            padding: var(--gap-md);
+            border-radius: var(--radius-md);
             min-height: 100px;
-            margin-top: 16px;
+            margin-top: var(--gap-md);
         }
+
         .scan-list h3 {
-            font-size: 16px;
-            margin-bottom: 12px;
+            font-size: 14px;
+            margin-bottom: var(--gap-sm);
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: var(--gap-sm);
         }
+
+        .item-count {
+            background: var(--accent-primary);
+            color: #fff;
+            padding: 2px 8px;
+            border-radius: var(--radius-sm);
+            font-size: 12px;
+        }
+
         .item-card {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            background: #fff;
-            padding: 12px;
-            border-radius: 4px;
-            border: 1px solid #eee;
-            margin-bottom: 8px;
+            background: var(--bg-card);
+            padding: 12px var(--gap-md);
+            border-radius: var(--radius-md);
+            border: 1px solid var(--border-default);
+            margin-bottom: var(--gap-sm);
         }
+
         .item-info {
             display: flex;
             flex-direction: column;
             gap: 4px;
         }
+
         .serial {
-            font-weight: bold;
-            font-size: 16px;
-        }
-        .name {
-            color: #666;
+            font-weight: 600;
             font-size: 14px;
+            color: var(--text-primary);
         }
+
+        .name {
+            color: var(--text-secondary);
+            font-size: 13px;
+        }
+
         .qty {
-            color: #409eff;
+            color: var(--accent-primary);
             font-size: 12px;
         }
+
         .remove-btn {
-            width: 32px;
-            height: 32px;
-            background: #f56c6c;
+            width: 28px;
+            height: 28px;
+            background: var(--accent-danger);
             color: #fff;
             border: none;
-            border-radius: 50%;
-            font-size: 18px;
+            border-radius: var(--radius-sm);
+            font-size: 16px;
             cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
+
         .empty-tip {
             text-align: center;
-            color: #999;
+            color: var(--text-muted);
+            font-size: 14px;
+            padding: 20px;
         }
+
+        /* 消息提示 */
+        .message {
+            text-align: center;
+            margin-top: var(--gap-sm);
+            font-size: 14px;
+            padding: 8px;
+            border-radius: var(--radius-sm);
+        }
+
         .error {
-            color: #f56c6c;
-            text-align: center;
-            margin-top: 12px;
+            background: rgba(255, 71, 87, 0.1);
+            color: var(--accent-danger);
         }
+
         .success {
-            color: #67c23a;
-            text-align: center;
-            margin-top: 12px;
+            background: rgba(0, 212, 170, 0.1);
+            color: var(--accent-primary);
         }
+
+        /* 状态指示 */
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: var(--gap-sm);
+            justify-content: center;
+            margin-bottom: var(--gap-md);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--status-active);
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .status-text {
+            color: var(--accent-primary);
+            font-size: 14px;
+        }
+
         .hidden {
-            display: none;
+            display: none !important;
+        }
+
+        /* 暗黑模式切换按钮 */
+        .theme-toggle {
+            position: fixed;
+            top: var(--gap-md);
+            right: var(--gap-md);
+            width: 40px;
+            height: 40px;
+            background: var(--bg-card);
+            border: 1px solid var(--border-default);
+            border-radius: var(--radius-md);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 18px;
         }
     </style>
 </head>
 <body>
+    <!-- 主题切换按钮 -->
+    <button class="theme-toggle" onclick="toggleTheme()" title="切换主题">
+        <span id="themeIcon">☀️</span>
+    </button>
+
+    <!-- 顶部导航条 -->
+    <div class="topbar">
+        <span class="topbar-title">NETWORK AUTOMATION SYSTEM</span>
+        <span class="topbar-accent">扫码枪终端</span>
+    </div>
+
     <!-- 加入会话阶段 -->
     <div id="joinPhase" class="container">
         <h1>扫码枪终端</h1>
@@ -158,15 +381,20 @@
             placeholder="扫描二维码或输入会话码"
             autofocus
         >
-        <button id="joinBtn" onclick="joinSession()">加入会话</button>
-        <p id="joinError" class="error hidden"></p>
+        <button class="btn btn-primary" id="joinBtn" onclick="joinSession()">加入会话</button>
+        <p id="joinError" class="message error hidden"></p>
     </div>
 
     <!-- 扫码阶段 -->
     <div id="scanPhase" class="container hidden">
         <div class="session-info">
-            <h2 id="sessionType">入库扫描</h2>
-            <p>会话码: <span id="sessionCode"></span></p>
+            <div class="session-type-badge" id="sessionTypeBadge">入库扫描</div>
+            <p>会话码: <span class="session-code" id="sessionCode"></span></p>
+        </div>
+
+        <div class="status-indicator">
+            <div class="status-dot"></div>
+            <span class="status-text">扫码枪已连接</span>
         </div>
 
         <input
@@ -175,17 +403,21 @@
             placeholder="扫描备件序列号"
             autofocus
         >
-        <button id="scanBtn" onclick="scanSerial()">确认扫描</button>
+        <button class="btn btn-primary" id="scanBtn" onclick="scanSerial()">确认扫描</button>
 
         <div class="scan-list">
-            <h3>已扫描 <span id="itemCount">0</span> 项</h3>
+            <h3>
+                已扫描
+                <span class="item-count" id="itemCount">0</span>
+                项
+            </h3>
             <div id="itemsList"></div>
             <p id="emptyTip" class="empty-tip">等待扫描...</p>
         </div>
 
-        <button class="exit-btn" onclick="exitSession()">退出会话</button>
-        <p id="scanError" class="error hidden"></p>
-        <p id="scanSuccess" class="success hidden"></p>
+        <button class="btn btn-danger" onclick="exitSession()">退出会话</button>
+        <p id="scanError" class="message error hidden"></p>
+        <p id="scanSuccess" class="message success hidden"></p>
     </div>
 
     <script>
@@ -205,6 +437,31 @@
         const joinError = document.getElementById('joinError');
         const scanError = document.getElementById('scanError');
         const scanSuccess = document.getElementById('scanSuccess');
+
+        // 主题切换
+        function toggleTheme() {
+            const body = document.body;
+            const icon = document.getElementById('themeIcon');
+            if (body.classList.contains('dark')) {
+                body.classList.remove('dark');
+                icon.textContent = '☀️';
+                localStorage.setItem('theme', 'light');
+            } else {
+                body.classList.add('dark');
+                icon.textContent = '🌙';
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+
+        // 初始化主题
+        function initTheme() {
+            const savedTheme = localStorage.getItem('theme');
+            const icon = document.getElementById('themeIcon');
+            if (savedTheme === 'dark') {
+                document.body.classList.add('dark');
+                icon.textContent = '🌙';
+            }
+        }
 
         // 解析扫码内容
         function parseScanContent(content) {
@@ -264,7 +521,7 @@
                 // 更新界面
                 document.getElementById('sessionCode').textContent = sessionCode;
                 const typeTexts = { in: '入库扫描', out: '出库扫描', maintenance: '维修备件', task: '运维任务' };
-                document.getElementById('sessionType').textContent = typeTexts[sessionType] || '扫描';
+                document.getElementById('sessionTypeBadge').textContent = typeTexts[sessionType] || '扫描';
 
                 // 获取已有项目
                 await refreshSession();
@@ -395,6 +652,9 @@
         serialInput.addEventListener('keypress', function(e) {
             if (e.key === 'Enter') scanSerial();
         });
+
+        // 初始化主题
+        initTheme();
     </script>
 </body>
 </html>
