@@ -428,6 +428,7 @@
         let sessionCode = '';
         let sessionType = '';
         let scannedItems = [];
+        let pollTimer = null;  // 轮询定时器
 
         // DOM 元素
         const joinPhase = document.getElementById('joinPhase');
@@ -492,6 +493,38 @@
             scanError.classList.add('hidden');
         }
 
+        // 开始轮询（从后端同步最新状态）
+        function startPolling() {
+            if (pollTimer) return;
+            pollTimer = setInterval(async () => {
+                if (!sessionCode) return;
+                try {
+                    const response = await fetch(API_BASE + '/scan/sessions/' + sessionCode);
+                    if (response.ok) {
+                        const result = await response.json();
+                        // 同步items列表
+                        scannedItems = result.items || [];
+                        updateItemsList();
+
+                        // 如果会话过期或完成，退出
+                        if (result.status === 'expired' || result.status === 'completed') {
+                            exitSession();
+                        }
+                    }
+                } catch (e) {
+                    console.error('轮询失败:', e);
+                }
+            }, 2000);  // 每2秒同步一次
+        }
+
+        // 停止轮询
+        function stopPolling() {
+            if (pollTimer) {
+                clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }
+
         // 加入会话
         async function joinSession() {
             clearMessages();
@@ -530,6 +563,9 @@
                 joinPhase.classList.add('hidden');
                 scanPhase.classList.remove('hidden');
                 serialInput.focus();
+
+                // 启动轮询同步状态
+                startPolling();
             } catch (e) {
                 showError(joinError, '网络错误: ' + e.message);
             }
@@ -651,6 +687,9 @@
 
         // 退出会话
         function exitSession() {
+            // 停止轮询
+            stopPolling();
+
             sessionCode = '';
             sessionType = '';
             scannedItems = [];

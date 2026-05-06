@@ -149,7 +149,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
 import JsBarcode from 'jsbarcode'
@@ -219,12 +219,22 @@ const generateBarcode = () => {
           background: '#fff',
           lineColor: '#003087'
         })
+      } else if (svg) {
+        // 清空SVG
+        svg.innerHTML = ''
       }
     } catch (e) {
       console.error('条形码生成失败:', e)
     }
   })
 }
+
+// 监听sessionCode变化重新生成条形码
+watch(sessionCode, (newCode) => {
+  if (newCode) {
+    generateBarcode()
+  }
+})
 
 // 创建会话
 const createSession = async () => {
