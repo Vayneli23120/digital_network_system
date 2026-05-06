@@ -239,6 +239,7 @@
         :default-type="scanMode"
         :part-id="scanInForm.part_id"
         :po-number="scanInForm.po_number"
+        :auto-start="scanDialogVisible && scanInForm.part_id && scanInForm.po_number"
         @complete="onScanSessionComplete"
         @cancel="scanDialogVisible = false"
       />

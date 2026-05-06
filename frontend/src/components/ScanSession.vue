@@ -171,6 +171,7 @@ const props = defineProps({
   reference: String,
   partId: Number,  // 入库备件ID
   poNumber: String,  // PO号
+  autoStart: Boolean,  // 是否自动创建会话（对话框打开时）
   onComplete: Function // 完成回调
 })
 
@@ -217,17 +218,17 @@ const resetState = () => {
   stopPolling()
 }
 
-// 当partId和poNumber都有值时（入库模式），自动创建会话
+// 当autoStart变为true时（入库模式，对话框打开），自动创建会话
 watch(
-  () => [props.partId, props.poNumber],
-  ([newPartId, newPoNumber]) => {
-    if (newPartId && newPoNumber) {
+  () => props.autoStart,
+  (autoStart) => {
+    if (autoStart && props.partId && props.poNumber) {
       // 先重置状态，确保创建新会话
       resetState()
       createSession()
     }
   },
-  { immediate: true }
+  { immediate: false }  // 不立即执行，等待autoStart变为true
 )
 
 // 计算属性
