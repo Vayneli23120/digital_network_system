@@ -626,9 +626,27 @@
         }
 
         // 移除项目
-        function removeItem(index) {
-            scannedItems.splice(index, 1);
-            updateItemsList();
+        async function removeItem(index) {
+            const item = scannedItems[index];
+            if (!item) return;
+
+            try {
+                // 先调用后端删除
+                const response = await fetch(API_BASE + '/scan/sessions/' + sessionCode + '/items/' + item.serial_number, {
+                    method: 'DELETE'
+                });
+
+                if (response.ok) {
+                    // 后端删除成功，本地也移除
+                    scannedItems.splice(index, 1);
+                    updateItemsList();
+                } else {
+                    const error = await response.json();
+                    console.error('移除失败:', error.detail);
+                }
+            } catch (e) {
+                console.error('移除失败:', e.message);
+            }
         }
 
         // 退出会话

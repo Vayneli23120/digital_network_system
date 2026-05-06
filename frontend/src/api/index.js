@@ -426,6 +426,10 @@ export function addScanItem(sessionCode, serialNumber, quantity = 1) {
   })
 }
 
+export function removeScanItem(sessionCode, serialNumber) {
+  return api.delete(`/scan/sessions/${sessionCode}/items/${serialNumber}`)
+}
+
 export function completeScanSession(sessionCode) {
   return api.post(`/scan/sessions/${sessionCode}/complete`)
 }

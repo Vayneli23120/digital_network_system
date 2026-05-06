@@ -187,6 +187,31 @@ async def add_scan_item(
     }
 
 
+@router.delete("/sessions/{session_code}/items/{serial_number}")
+async def remove_scan_item(session_code: str, serial_number: str):
+    """移除扫描项（扫码枪或PC端调用）"""
+    session = scan_sessions.get(session_code)
+
+    if not session:
+        raise HTTPException(status_code=404, detail="会话不存在或已过期")
+
+    if session["expires_at"] < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="会话已过期")
+
+    # 找到并移除该项
+    for i, item in enumerate(session["items"]):
+        if item["serial_number"] == serial_number:
+            session["items"].pop(i)
+            return {
+                "session_code": session_code,
+                "removed_serial": serial_number,
+                "total_items": len(session["items"]),
+                "message": f"已移除: {serial_number}"
+            }
+
+    raise HTTPException(status_code=404, detail="未找到该序列号")
+
+
 @router.get("/sessions/{session_code}")
 async def get_scan_session(
     session_code: str,

@@ -25,17 +25,15 @@
 
     <!-- 扫码阶段 -->
     <div v-else class="scan-phase">
-      <!-- 二维码显示 -->
-      <div v-if="!joined" class="qr-section">
-        <div class="qr-tip">
-          <h3>扫码枪扫描下方二维码</h3>
-          <p>扫描后即可开始扫描备件序列号</p>
+      <!-- 条形码显示 -->
+      <div v-if="!joined" class="barcode-section">
+        <div class="barcode-tip">
+          <h3>扫码枪扫描下方条形码</h3>
+          <p>扫描条形码即可加入会话，开始扫描备件序列号</p>
         </div>
-        <div class="qr-display">
-          <div class="qr-code" :style="{ background: qrPattern }">
-            <div class="qr-content">{{ qrContent }}</div>
-            <div class="session-code">{{ sessionCode }}</div>
-          </div>
+        <div class="barcode-display">
+          <svg id="barcodeSvg" class="barcode-svg"></svg>
+          <div class="barcode-text">NAS-SCAN:{{ sessionCode }}</div>
         </div>
         <p class="session-info">
           会话码：<strong>{{ sessionCode }}</strong>
@@ -151,14 +149,16 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim } from '@element-plus/icons-vue'
+import JsBarcode from 'jsbarcode'
 import {
   createScanSession,
   getScanSession,
   completeScanSession,
-  deleteScanSession
+  deleteScanSession,
+  removeScanItem
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 
@@ -178,7 +178,6 @@ const emit = defineEmits(['complete', 'cancel'])
 // 状态
 const creating = ref(false)
 const sessionCode = ref('')
-const qrContent = ref('')
 const expiresAt = ref('')
 const joined = ref(false)
 const scanItems = ref([])
@@ -205,21 +204,27 @@ const sessionTypeText = computed(() => {
   return texts[sessionForm.value.session_type] || ''
 })
 
-// 生成简单的二维码图案（CSS模拟）
-const qrPattern = computed(() => {
-  if (!sessionCode.value) return '#fff'
-  // 使用会话码生成伪随机图案
-  const code = sessionCode.value
-  let pattern = 'linear-gradient(45deg, '
-  for (let i = 0; i < code.length; i++) {
-    const c = code.charCodeAt(i)
-    const x = (c % 8) * 12.5
-    const y = ((c * 7) % 8) * 12.5
-    pattern += `#333 ${x}% ${y}%, #fff ${x + 12.5}% ${y + 12.5}%, `
-  }
-  pattern += '#fff 100%)'
-  return pattern
-})
+// 生成条形码
+const generateBarcode = () => {
+  nextTick(() => {
+    try {
+      const svg = document.getElementById('barcodeSvg')
+      if (svg && sessionCode.value) {
+        JsBarcode(svg, `NAS-SCAN:${sessionCode.value}`, {
+          format: 'CODE128',
+          width: 2,
+          height: 80,
+          displayValue: false,
+          margin: 10,
+          background: '#fff',
+          lineColor: '#003087'
+        })
+      }
+    } catch (e) {
+      console.error('条形码生成失败:', e)
+    }
+  })
+}
 
 // 创建会话
 const createSession = async () => {
@@ -230,9 +235,11 @@ const createSession = async () => {
       reference: sessionForm.value.reference
     })
     sessionCode.value = result.session_code
-    qrContent.value = result.qr_content
     expiresAt.value = result.expires_at
     ElMessage.success('扫码会话已创建')
+
+    // 生成条形码
+    generateBarcode()
 
     // 开始轮询检查状态
     startPolling()
@@ -293,8 +300,19 @@ const updateItemQuantity = (row) => {
 }
 
 // 移除项
-const removeItem = (index) => {
-  scanItems.value.splice(index, 1)
+const removeItem = async (index) => {
+  const item = scanItems.value[index]
+  if (!item) return
+
+  try {
+    // 调用后端删除
+    await removeScanItem(sessionCode.value, item.serial_number)
+    // 本地也移除
+    scanItems.value.splice(index, 1)
+    ElMessage.success(`已移除: ${item.serial_number}`)
+  } catch (e) {
+    ElMessage.error('移除失败: ' + (e.response?.data?.detail || e.message))
+  }
 }
 
 // 提交会话
@@ -373,59 +391,46 @@ onUnmounted(() => {
   max-width: 400px;
 }
 
-.qr-section {
+.barcode-section {
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 20px;
 }
 
-.qr-tip {
+.barcode-tip {
   text-align: center;
   margin-bottom: 20px;
 }
 
-.qr-tip h3 {
+.barcode-tip h3 {
   font-size: 18px;
   margin-bottom: 8px;
 }
 
-.qr-tip p {
+.barcode-tip p {
   color: var(--el-text-color-secondary);
 }
 
-.qr-display {
+.barcode-display {
   margin: 20px 0;
-}
-
-.qr-code {
-  width: 200px;
-  height: 200px;
   display: flex;
   flex-direction: column;
-  justify-content: center;
   align-items: center;
+}
+
+.barcode-svg {
   border: 2px solid var(--el-border-color);
   border-radius: 8px;
-  background-size: 100% 100%;
+  background: #fff;
 }
 
-.qr-content {
-  font-size: 12px;
-  color: var(--el-text-color-secondary);
-  padding: 4px 8px;
-  background: rgba(255,255,255,0.9);
-  border-radius: 4px;
-}
-
-.session-code {
-  font-size: 28px;
-  font-weight: bold;
-  letter-spacing: 4px;
-  padding: 8px 16px;
-  background: rgba(255,255,255,0.95);
-  border-radius: 4px;
+.barcode-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--el-color-primary);
   margin-top: 8px;
+  letter-spacing: 2px;
 }
 
 .session-info {
