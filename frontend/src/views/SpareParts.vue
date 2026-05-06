@@ -42,7 +42,7 @@
       <!-- 搜索和过滤 -->
       <el-form :inline="true" class="filter-form">
         <el-form-item label="搜索">
-          <el-input v-model="search" placeholder="名称/型号/序列号/PO号" clearable @clear="loadParts" />
+          <el-input v-model="search" placeholder="名称/型号" clearable @clear="loadParts" />
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="category" placeholder="全部" clearable @change="loadParts">
