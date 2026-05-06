@@ -200,12 +200,35 @@ const submitForm = ref({
   reference: props.reference || ''
 })
 
-// 当partId有值时（入库模式），自动创建会话
-watch(() => props.partId, (newPartId) => {
-  if (newPartId && props.poNumber && !sessionCode.value) {
-    createSession()
+// 停止轮询
+const stopPolling = () => {
+  if (pollTimer.value) {
+    clearInterval(pollTimer.value)
+    pollTimer.value = null
   }
-}, { immediate: true })
+}
+
+// 重置状态（每次打开对话框时调用）
+const resetState = () => {
+  sessionCode.value = ''
+  expiresAt.value = ''
+  joined.value = false
+  scanItems.value = []
+  stopPolling()
+}
+
+// 当partId和poNumber都有值时（入库模式），自动创建会话
+watch(
+  () => [props.partId, props.poNumber],
+  ([newPartId, newPoNumber]) => {
+    if (newPartId && newPoNumber) {
+      // 先重置状态，确保创建新会话
+      resetState()
+      createSession()
+    }
+  },
+  { immediate: true }
+)
 
 // 计算属性
 const sessionTypeText = computed(() => {
@@ -300,14 +323,6 @@ const startPolling = () => {
       }
     }
   }, 2000)
-}
-
-// 停止轮询
-const stopPolling = () => {
-  if (pollTimer.value) {
-    clearInterval(pollTimer.value)
-    pollTimer.value = null
-  }
 }
 
 // 刷新会话
