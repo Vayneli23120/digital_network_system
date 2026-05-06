@@ -24,6 +24,7 @@ class MovementCreate(BaseModel):
     part_id: int
     movement_type: str  # "in", "out", or "scrap_in"
     quantity: int
+    serial_number: Optional[str] = None  # 序列号
     reason: Optional[str] = None
     operator: Optional[str] = None
     reference: Optional[str] = None
@@ -44,6 +45,7 @@ async def api_create_movement(movement: MovementCreate, db: Session = Depends(ge
             part_id=movement.part_id,
             movement_type=movement.movement_type,
             quantity=movement.quantity,
+            serial_number=movement.serial_number,
             reason=movement.reason,
             operator=movement.operator,
             reference=movement.reference,

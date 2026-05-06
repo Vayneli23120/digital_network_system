@@ -115,19 +115,16 @@
         <el-divider content-position="left">备件更换</el-divider>
         <el-form-item label="更换备件">
           <div class="spare-parts-section">
-            <!-- 扫码添加备件 -->
-            <div class="spare-scan">
-              <ScanInput
-                mode="select"
-                placeholder="扫码枪扫描序列号，或手动输入查询"
-                @found="onScanPartFound"
-                @added="onScanPartAdded"
-                style="width: 100%"
-              />
-              <div class="spare-scan-tip">↑ 使用扫码枪扫描备件序列号，快速添加</div>
+            <!-- 扫码添加备件按钮 -->
+            <div class="spare-scan-btn">
+              <el-button type="primary" @click="openScanDialog">
+                <el-icon><Aim /></el-icon>
+                扫码添加备件
+              </el-button>
+              <div class="spare-scan-tip">点击后用扫码枪扫描条形码建立连接，再扫描备件序列号</div>
             </div>
 
-            <!-- 搜索添加备件 -->
+            <!-- 手动搜索添加备件 -->
             <div class="spare-search">
               <el-select
                 v-model="selectedSparePart"
@@ -162,6 +159,9 @@
             <!-- 已选备件列表 -->
             <div class="selected-parts" v-if="maintForm.spare_parts.length > 0">
               <el-table :data="maintForm.spare_parts" size="small" border>
+                <el-table-column prop="serial_number" label="序列号" width="150">
+                  <template #default="{ row }">{{ row.serial_number || '-' }}</template>
+                </el-table-column>
                 <el-table-column prop="part_number" label="型号" width="150" />
                 <el-table-column prop="name" label="名称" width="150" />
                 <el-table-column prop="quantity" label="数量" width="80">
@@ -170,10 +170,10 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="unit_price" label="单价" width="80">
-                  <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
+                  <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
                 </el-table-column>
                 <el-table-column prop="total" label="小计" width="80">
-                  <template #default="{ row }">¥{{ (row.quantity * row.unit_price).toFixed(2) }}</template>
+                  <template #default="{ row }">¥{{ (row.quantity * (row.unit_price || 0)).toFixed(2) }}</template>
                 </el-table-column>
                 <el-table-column label="操作" width="60">
                   <template #default="{ row, $index }">
@@ -216,6 +216,7 @@
                   :value="part.id"
                 />
               </el-select>
+              <el-input v-model="returnPartSerial" placeholder="序列号" style="width: 120px" />
               <el-input v-model="returnPartNumber" placeholder="型号（手动输入）" style="width: 130px" />
               <el-input v-model="returnPartName" placeholder="名称" style="width: 130px" />
               <el-input-number v-model="returnPartQty" :min="1" style="width: 90px" />
@@ -225,6 +226,9 @@
 
             <div class="return-parts-table" v-if="maintForm.return_parts.length > 0">
               <el-table :data="maintForm.return_parts" size="small" border>
+                <el-table-column prop="serial_number" label="序列号" width="150">
+                  <template #default="{ row }">{{ row.serial_number || '-' }}</template>
+                </el-table-column>
                 <el-table-column prop="part_number" label="型号" width="150" />
                 <el-table-column prop="name" label="名称" width="150" />
                 <el-table-column prop="quantity" label="数量" width="80">
@@ -275,15 +279,26 @@
         <el-button type="primary" @click="editMode ? updateMaintenance() : addMaintenance()">确定</el-button>
       </template>
     </el-dialog>
+
+    <!-- 扫码添加备件对话框 -->
+    <el-dialog v-model="scanDialogVisible" title="扫码添加备件" width="700px">
+      <ScanSession
+        ref="scanSessionRef"
+        default-type="out"
+        :auto-start="scanDialogVisible"
+        @complete="onScanSessionComplete"
+        @cancel="scanDialogVisible = false"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, InfoFilled } from '@element-plus/icons-vue'
+import { Plus, Search, InfoFilled, Aim } from '@element-plus/icons-vue'
 import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement } from '@/api'
-import ScanInput from '@/components/ScanInput.vue'
+import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime } from '@/utils/time'
 import dayjs from 'dayjs'
 
@@ -306,9 +321,15 @@ const sortBy = ref('maint_time_desc')
 const sparePartOptions = ref([])
 const spareLoading = ref(false)
 const selectedSparePart = ref(null)
+const currentFoundPart = ref(null)  // 当前扫码找到的备件
+
+// 扫码对话框
+const scanDialogVisible = ref(false)
+const scanSessionRef = ref(null)
 
 // 返回件录入
 const selectedReturnPart = ref(null)
+const returnPartSerial = ref('')
 const returnPartNumber = ref('')
 const returnPartName = ref('')
 const returnPartQty = ref(1)
@@ -379,30 +400,68 @@ const searchReturnParts = async (query) => {
   await searchSpareParts(query)
 }
 
-// 扫码找到备件
+// 扫码找到备件（只显示信息，不自动添加）
 const onScanPartFound = (part) => {
-  // 自动添加到表单
-  const existing = maintForm.value.spare_parts.find(p => p.part_id === part.id)
-  if (existing) {
-    existing.quantity += 1
-    ElMessage.info(`${part.name} 数量+1`)
-  } else {
-    maintForm.value.spare_parts.push({
-      part_id: part.id,
-      part_number: part.part_number,
-      name: part.name,
-      serial_number: part.serial_number,
-      unit_price: part.unit_price || 0,
-      quantity: 1
-    })
-    ElMessage.success(`已添加: ${part.name}`)
-  }
-  updatePartsCost()
+  // 不自动添加，等用户点击按钮后再添加
+  currentFoundPart.value = part
 }
 
-// 扫码添加备件（从ScanInput组件）
+// 扫码添加备件（从ScanInput组件点击按钮）
 const onScanPartAdded = (item) => {
-  onScanPartFound(item)
+  // 加入更换列表
+  const existing = maintForm.value.spare_parts.find(p => p.part_id === item.id)
+  if (existing) {
+    existing.quantity += 1
+    ElMessage.info(`${item.name} 数量+1`)
+  } else {
+    maintForm.value.spare_parts.push({
+      part_id: item.id,
+      part_number: item.part_number,
+      name: item.name,
+      serial_number: item.serial_number,
+      unit_price: item.unit_price || 0,
+      quantity: 1
+    })
+    // 如果是出库操作，提示用户
+    if (item.action === 'out') {
+      ElMessage.success(`已出库并加入: ${item.name}`)
+    } else {
+      ElMessage.success(`已添加: ${item.name}`)
+    }
+  }
+  updatePartsCost()
+  currentFoundPart.value = null
+}
+
+// 打开扫码对话框
+const openScanDialog = () => {
+  scanDialogVisible.value = true
+}
+
+// 扫码会话完成
+const onScanSessionComplete = async (result) => {
+  // 将扫描的备件加入更换列表（已在扫码会话中自动出库，标记跳过重复出库）
+  for (const item of result.items) {
+    const existing = maintForm.value.spare_parts.find(p => p.serial_number === item.serial_number)
+    if (existing) {
+      existing.quantity += 1
+      ElMessage.info(`${item.name} 数量+1`)
+    } else {
+      maintForm.value.spare_parts.push({
+        part_id: item.part_id,
+        part_number: item.part_number,
+        name: item.name,
+        serial_number: item.serial_number,
+        unit_price: item.unit_price || 0,
+        quantity: 1,
+        is_from_scan: true  // 标记为扫码添加，已在扫码会话中出库
+      })
+      ElMessage.success(`已添加: ${item.name}`)
+    }
+  }
+  updatePartsCost()
+  scanDialogVisible.value = false
+  ElMessage.success(`已添加 ${result.items.length} 个备件到更换列表`)
 }
 
 // 添加备件到表单
@@ -461,12 +520,14 @@ const addReturnPart = () => {
     part_id: partId,
     part_number: partNumber,
     name: partName || partNumber,
+    serial_number: returnPartSerial.value,
     quantity: returnPartQty.value,
     scrap_in: selectedReturnPart.value ? returnPartScrap.value : false
   })
 
   // 清空输入
   selectedReturnPart.value = null
+  returnPartSerial.value = ''
   returnPartNumber.value = ''
   returnPartName.value = ''
   returnPartQty.value = 1
@@ -576,16 +637,19 @@ const addMaintenance = async () => {
       parts_replaced: JSON.stringify(combinedParts)
     })
 
-    // 处理备件出库
+    // 处理备件出库（只处理手动添加的，扫码添加的已在扫码会话中自动出库）
     for (const part of maintForm.value.spare_parts) {
-      await createMovement({
-        part_id: part.part_id,
-        movement_type: 'out',
-        quantity: part.quantity,
-        reason: `维修更换 - ${maintForm.value.maint_type}`,
-        operator: 'Web',
-        reference: device?.name
-      })
+      if (part.part_id && !part.is_from_scan) {
+        await createMovement({
+          part_id: part.part_id,
+          movement_type: 'out',
+          quantity: part.quantity,
+          serial_number: part.serial_number,
+          reason: `维修更换 - ${maintForm.value.maint_type}`,
+          operator: 'Web',
+          reference: device?.name
+        })
+      }
     }
 
     // 处理返回件入报废库
@@ -595,6 +659,7 @@ const addMaintenance = async () => {
           part_id: part.part_id,
           movement_type: 'scrap_in',
           quantity: part.quantity,
+          serial_number: part.serial_number,
           reason: `维修返回件入库 - 报废`,
           operator: 'Web',
           reference: device?.name
@@ -683,7 +748,9 @@ const resetForm = () => {
   }
   selectedSparePart.value = null
   sparePartOptions.value = []
+  currentFoundPart.value = null
   selectedReturnPart.value = null
+  returnPartSerial.value = ''
   returnPartNumber.value = ''
   returnPartName.value = ''
   returnPartQty.value = 1
@@ -736,7 +803,7 @@ onMounted(() => {
   width: 100%;
 }
 
-.spare-scan {
+.spare-scan-btn {
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -760,9 +827,9 @@ onMounted(() => {
 
 .spare-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--el-text-color-secondary);
   padding: 4px 8px;
-  background: #f4f4f5;
+  background: var(--el-fill-color-light);
   border-radius: 4px;
 }
 

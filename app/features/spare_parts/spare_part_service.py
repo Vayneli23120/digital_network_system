@@ -232,6 +232,7 @@ def create_movement(
     part_id: int,
     movement_type: str,
     quantity: int,
+    serial_number: Optional[str] = None,
     reason: Optional[str] = None,
     operator: Optional[str] = None,
     reference: Optional[str] = None,
@@ -243,6 +244,7 @@ def create_movement(
         part_id: 备件 ID
         movement_type: "in" 或 "out"
         quantity: 数量
+        serial_number: 序列号（扫码出库时记录）
         reason: 原因
         operator: 操作人
         reference: 关联单号
@@ -295,6 +297,7 @@ def create_movement(
         part_id=part_id,
         movement_type=movement_type,
         quantity=quantity,
+        serial_number=serial_number,
         reason=reason,
         operator=operator,
         reference=reference,
@@ -360,6 +363,8 @@ def list_movements(
                 "name": m.part.name if m.part else None,
                 "movement_type": m.movement_type,
                 "quantity": m.quantity,
+                "serial_number": m.serial_number,
+                "unit_price": float(m.part.unit_price) if m.part and m.part.unit_price else 0.0,
                 "reason": m.reason,
                 "operator": m.operator,
                 "reference": m.reference,
@@ -392,8 +397,12 @@ def get_movement(db: Session, movement_id: int) -> Dict[str, Any]:
     return {
         "id": movement.id,
         "part_id": movement.part_id,
+        "part_number": movement.part.part_number if movement.part else None,
+        "name": movement.part.name if movement.part else None,
         "movement_type": movement.movement_type,
         "quantity": movement.quantity,
+        "serial_number": movement.serial_number,
+        "unit_price": float(movement.part.unit_price) if movement.part and movement.part.unit_price else 0.0,
         "reason": movement.reason,
         "operator": movement.operator,
         "reference": movement.reference,

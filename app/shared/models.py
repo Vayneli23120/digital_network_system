@@ -351,18 +351,19 @@ class SparePartMovement(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     part_id = Column(Integer, ForeignKey("spare_parts.id", ondelete="CASCADE"), nullable=False, index=True)
-    movement_type = Column(String(10), nullable=False)  # in / out
+    movement_type = Column(String(10), nullable=False)  # in / out / scrap_in
     quantity = Column(Integer, nullable=False)
+    serial_number = Column(String(100), nullable=True)  # 序列号（扫码出库时记录）
     reason = Column(String(500), nullable=True)  # 出入库原因
     operator = Column(String(100), nullable=True)  # 操作人
-    reference = Column(String(200), nullable=True)  # 关联工单/设备编号等
+    reference = Column(String(200), nullable=True)  # 关联设备/工单等
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关系
     part = relationship("SparePart", back_populates="movements")
 
     def __repr__(self):
-        return f"<SparePartMovement(part_id={self.part_id}, type={self.movement_type}, qty={self.quantity})>"
+        return f"<SparePartMovement(part_id={self.part_id}, type={self.movement_type}, qty={self.quantity}, sn={self.serial_number})>"
 
 
 class SparePartInstance(Base):

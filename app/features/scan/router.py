@@ -475,25 +475,21 @@ async def complete_scan_session(
 
         db.commit()
 
-        # 创建出入库历史记录（如果有出库的备件）
+        # 创建出入库历史记录（每个序列号单独记录）
         if out_count > 0:
-            # 按备件分组创建记录
-            part_out_counts = {}
             for item in session["items"]:
                 if item.get("part_id"):
-                    part_out_counts[item["part_id"]] = part_out_counts.get(item["part_id"], 0) + 1
-
-            for part_id, count in part_out_counts.items():
-                movement = SparePartMovement(
-                    part_id=part_id,
-                    movement_type="out",
-                    quantity=count,
-                    reason=data.reason if data else "扫码出库",
-                    operator="",
-                    reference="",
-                    created_at=datetime.utcnow()
-                )
-                db.add(movement)
+                    movement = SparePartMovement(
+                        part_id=item["part_id"],
+                        movement_type="out",
+                        quantity=1,
+                        serial_number=item.get("serial_number"),
+                        reason=data.reason if data else "扫码出库",
+                        operator="",
+                        reference="",
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(movement)
             db.commit()
 
         # 不删除会话，保留让扫码枪端能获取completed状态

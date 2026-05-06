@@ -115,6 +115,9 @@
                 <el-button type="primary" link>{{ row.name || '-' }}</el-button>
               </template>
             </el-table-column>
+            <el-table-column prop="serial_number" label="序列号" width="150">
+              <template #default="{ row }">{{ row.serial_number || '-' }}</template>
+            </el-table-column>
             <el-table-column prop="movement_type" label="类型" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.movement_type === 'in' ? 'success' : 'warning'" size="small">
@@ -123,8 +126,10 @@
               </template>
             </el-table-column>
             <el-table-column prop="quantity" label="数量" width="80" align="right" />
+            <el-table-column prop="unit_price" label="单价" width="80">
+              <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+            </el-table-column>
             <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="reference" label="参考编号" width="120" show-overflow-tooltip />
           </el-table>
           <div class="pagination-bar">
             <el-pagination
@@ -150,10 +155,11 @@
         </el-descriptions-item>
         <el-descriptions-item label="备件名称">{{ currentMovement.name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备件型号">{{ currentMovement.part_number || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="序列号">{{ currentMovement.serial_number || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数量">{{ currentMovement.quantity }}</el-descriptions-item>
-        <el-descriptions-item label="单价">¥{{ currentMovement.unit_price?.toFixed(2) || '0.00' }}</el-descriptions-item>
+        <el-descriptions-item label="单价">¥{{ (currentMovement.unit_price || 0).toFixed(2) }}</el-descriptions-item>
         <el-descriptions-item label="原因" :span="2">{{ currentMovement.reason || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="参考编号">{{ currentMovement.reference || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="关联设备">{{ currentMovement.reference || '-' }}</el-descriptions-item>
         <el-descriptions-item label="操作人">{{ currentMovement.operator || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -288,6 +294,9 @@
         <el-table-column prop="serial_number" label="序列号" width="150" />
         <el-table-column prop="po_number" label="PO号" width="100">
           <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="unit_price" label="单价" width="80">
+          <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
         <el-table-column prop="location" label="位置" width="80">
           <template #default="{ row }">{{ row.location || '-' }}</template>
@@ -749,7 +758,7 @@ onMounted(loadParts)
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: #fafafa;
+  background: var(--el-fill-color-light);
   border-radius: 6px;
   margin-bottom: 16px;
 }

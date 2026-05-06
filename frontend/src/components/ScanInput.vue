@@ -130,7 +130,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, Plus, Minus } from '@element-plus/icons-vue'
-import { getPartBySerialNumber, createPart, createMovement } from '@/api'
+import { getPartBySerialNumber, getPartList, createPart, createMovement } from '@/api'
 
 // 使用 Aim 图标代替 Scan（瞄准/扫描）
 
