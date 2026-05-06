@@ -46,9 +46,7 @@ def list_parts(
     if search:
         query = query.filter(
             SparePart.name.contains(search) |
-            SparePart.part_number.contains(search) |
-            SparePart.serial_number.contains(search) |
-            SparePart.po_number.contains(search)
+            SparePart.part_number.contains(search)
         )
 
     total = query.count()
@@ -61,8 +59,6 @@ def list_parts(
                 "id": p.id,
                 "name": p.name,
                 "part_number": p.part_number,
-                "serial_number": p.serial_number,
-                "po_number": p.po_number,
                 "category": p.category,
                 "manufacturer": p.manufacturer,
                 "description": p.description,
@@ -100,8 +96,6 @@ def get_part(db: Session, part_id: int) -> Dict[str, Any]:
         "id": part.id,
         "name": part.name,
         "part_number": part.part_number,
-        "serial_number": part.serial_number,
-        "po_number": part.po_number,
         "category": part.category,
         "manufacturer": part.manufacturer,
         "description": part.description,

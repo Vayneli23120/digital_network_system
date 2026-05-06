@@ -64,12 +64,6 @@
       <el-table :data="parts" stripe border v-loading="loading">
         <el-table-column prop="name" label="名称" width="150" />
         <el-table-column prop="part_number" label="型号" width="150" />
-        <el-table-column prop="serial_number" label="序列号" width="150">
-          <template #default="{ row }">{{ row.serial_number || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="po_number" label="PO号" width="120">
-          <template #default="{ row }">{{ row.po_number || '-' }}</template>
-        </el-table-column>
         <el-table-column prop="category" label="分类" width="100" />
         <el-table-column prop="manufacturer" label="厂商" width="120" />
         <el-table-column prop="quantity_in_stock" label="库存" width="100">
@@ -84,11 +78,12 @@
           <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
         </el-table-column>
         <el-table-column prop="location" label="存放位置" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button size="small" type="success" @click="showInDialog(row)">入库</el-button>
             <el-button size="small" type="warning" @click="showOutDialog(row)">出库</el-button>
             <el-button size="small" @click="showEditDialog(row)">编辑</el-button>
+            <el-button size="small" type="info" @click="showInstancesDialog(row)">实例</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -141,12 +136,6 @@
         </el-form-item>
         <el-form-item label="型号" required>
           <el-input v-model="form.part_number" />
-        </el-form-item>
-        <el-form-item label="序列号">
-          <el-input v-model="form.serial_number" placeholder="扫码枪扫描或手动输入" />
-        </el-form-item>
-        <el-form-item label="PO号">
-          <el-input v-model="form.po_number" placeholder="采购订单号" />
         </el-form-item>
         <el-form-item label="分类">
           <el-select v-model="form.category">
@@ -276,7 +265,7 @@ const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(null)
 const form = reactive({
-  name: '', part_number: '', serial_number: '', po_number: '', category: '', manufacturer: '',
+  name: '', part_number: '', category: '', manufacturer: '',
   description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: ''
 })
 
@@ -350,7 +339,7 @@ const loadParts = async () => {
 
 const showAddDialog = () => {
   isEdit.value = false
-  Object.assign(form, { name: '', part_number: '', serial_number: '', po_number: '', category: '', manufacturer: '', description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: '' })
+  Object.assign(form, { name: '', part_number: '', category: '', manufacturer: '', description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: '' })
   dialogVisible.value = true
 }
 

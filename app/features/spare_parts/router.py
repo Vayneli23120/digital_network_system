@@ -25,10 +25,8 @@ router = APIRouter(prefix="/api/spare-parts", tags=["备件管理"])
 
 class SparePartCreate(BaseModel):
     name: str
-    part_number: str
-    serial_number: Optional[str] = None  # 序列号
-    po_number: Optional[str] = None  # 采购订单号
-    category: Optional[str] = None
+    part_number: str  # 型号（唯一）
+    category: Optional[str] = None  # 模块/电源/线缆/其他
     manufacturer: Optional[str] = None
     description: Optional[str] = None
     quantity_in_stock: int = 0
@@ -39,8 +37,6 @@ class SparePartCreate(BaseModel):
 
 class SparePartUpdate(BaseModel):
     name: Optional[str] = None
-    serial_number: Optional[str] = None  # 序列号
-    po_number: Optional[str] = None  # 采购订单号
     category: Optional[str] = None
     manufacturer: Optional[str] = None
     description: Optional[str] = None
