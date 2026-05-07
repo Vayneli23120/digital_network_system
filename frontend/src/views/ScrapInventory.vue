@@ -117,8 +117,8 @@
             </el-table-column>
             <el-table-column prop="movement_type" label="类型" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.movement_type === 'scrap_in' ? 'danger' : 'success'" size="small">
-                  {{ row.movement_type === 'scrap_in' ? '报废入库' : '报废出库' }}
+                <el-tag :type="row.movement_type === 'scrap_in' ? 'warning' : 'danger'" size="small">
+                  {{ row.movement_type === 'scrap_in' ? '报废入库' : '已报废' }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -142,45 +142,32 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报废详情对话框（显示该备件的报废入库和出库历史） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废记录'" width="700px">
+    <!-- 报废详情对话框（只显示当前在报废库中的实例） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="650px">
       <div v-if="currentScrapItem" class="part-info-header">
         <el-row :gutter="16">
-          <el-col :span="6">
-            <el-statistic title="入库数量" :value="currentScrapItem.scrap_in_count || 0" />
+          <el-col :span="8">
+            <el-statistic title="报废库存" :value="currentScrapItem.quantity || 0" />
           </el-col>
-          <el-col :span="6">
-            <el-statistic title="出库数量" :value="currentScrapItem.scrap_out_count || 0" />
-          </el-col>
-          <el-col :span="6">
-            <el-statistic title="当前库存" :value="currentScrapItem.quantity || 0" />
-          </el-col>
-          <el-col :span="6">
+          <el-col :span="8">
             <el-statistic title="库存总价" :value="currentScrapItem.total_value || 0" :precision="2" suffix="元" />
           </el-col>
         </el-row>
       </div>
 
-      <el-table :data="scrapInstances" v-loading="instancesLoading" stripe border size="small" style="margin-top: 16px">
-        <el-table-column prop="movement_type" label="类型" width="100">
-          <template #default="{ row }">
-            <el-tag :type="row.movement_type === 'scrap_in' ? 'success' : 'danger'" size="small">
-              {{ row.movement_type === 'scrap_in' ? '入库' : '出库' }}
-            </el-tag>
-          </template>
-        </el-table-column>
+      <el-table :data="currentScrapItem?.instances || []" stripe border size="small" style="margin-top: 16px">
         <el-table-column prop="serial_number" label="序列号" width="150" />
         <el-table-column prop="unit_price" label="单价" width="100">
           <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
-        <el-table-column prop="scraped_at" label="时间" width="160">
+        <el-table-column prop="scraped_at" label="报废入库时间" width="160">
           <template #default="{ row }">{{ row.scraped_at ? formatDateTime(row.scraped_at) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="reason" label="报废原因" min-width="150" show-overflow-tooltip />
         <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
       </el-table>
 
-      <el-empty v-if="!instancesLoading && scrapInstances.length === 0" description="该备件暂无报废记录" />
+      <el-empty v-if="!currentScrapItem?.instances?.length" description="该备件暂无报废库存" />
     </el-dialog>
 
     <!-- 扫码录入对话框 -->
@@ -372,8 +359,6 @@ const historyTotal = ref(0)
 // 详情对话框
 const detailDialogVisible = ref(false)
 const currentScrapItem = ref(null)
-const scrapInstances = ref([])  // 报废实例列表
-const instancesLoading = ref(false)
 
 // 扫码录入
 const scanDialogVisible = ref(false)
@@ -420,7 +405,7 @@ const scrapOutForm = reactive({
 const scrapOutScanDialogVisible = ref(false)
 const scrapOutScanSessionRef = ref(null)
 
-// 加载报废库存（按备件分组，计算 scrap_in - scrap_out）
+// 加载报废库存（按序列号跟踪，再按备件分组）
 const loadScrapItems = async () => {
   loading.value = true
   try {
@@ -430,9 +415,31 @@ const loadScrapItems = async () => {
     const scrapInMovements = scrapInResult.items || []
     const scrapOutMovements = scrapOutResult.items || []
 
-    // 按备件分组统计入库
-    const groupedMap = {}
+    // 按序列号跟踪：收集报废入库的序列号，排除已报废出库的序列号
+    const scrapInBySerial = {}  // 序列号 -> 入库记录
+    const scrapOutSerials = new Set()  // 已报废出库的序列号集合
+
     scrapInMovements.forEach(item => {
+      if (item.serial_number) {
+        scrapInBySerial[item.serial_number] = item
+      }
+    })
+
+    scrapOutMovements.forEach(item => {
+      if (item.serial_number) {
+        scrapOutSerials.add(item.serial_number)
+      }
+    })
+
+    // 当前报废库存 = 报废入库 - 报废出库（集合差）
+    const currentScrapSerials = Object.keys(scrapInBySerial).filter(
+      serial => !scrapOutSerials.has(serial)
+    )
+
+    // 按备件分组显示当前报废库存
+    const groupedMap = {}
+    currentScrapSerials.forEach(serial => {
+      const item = scrapInBySerial[serial]
       const key = item.part_id || `unknown_${item.part_number || 'unknown'}`
       if (!groupedMap[key]) {
         groupedMap[key] = {
@@ -441,17 +448,15 @@ const loadScrapItems = async () => {
           part_number: item.part_number || '未知',
           manufacturer: '',
           unit_price: item.unit_price || 0,
-          scrap_in_count: 0,
-          scrap_out_count: 0,
-          quantity: 0,  // 净库存 = scrap_in - scrap_out
+          quantity: 0,
           total_value: 0,
-          scrap_in_instances: [],  // 报废入库实例
-          scrap_out_instances: []  // 报废出库实例
+          instances: []  // 当前在报废库中的实例
         }
       }
-      groupedMap[key].scrap_in_count += item.quantity
-      groupedMap[key].scrap_in_instances.push({
-        serial_number: item.serial_number,
+      groupedMap[key].quantity += 1
+      groupedMap[key].total_value += (item.unit_price || 0)
+      groupedMap[key].instances.push({
+        serial_number: serial,
         unit_price: item.unit_price,
         scraped_at: item.created_at,
         movement_type: 'scrap_in',
@@ -460,46 +465,7 @@ const loadScrapItems = async () => {
       })
     })
 
-    // 统计出库（减少库存）
-    scrapOutMovements.forEach(item => {
-      const key = item.part_id || `unknown_${item.part_number || 'unknown'}`
-      if (!groupedMap[key]) {
-        // 如果没有入库记录却有出库记录，创建一个基础项
-        groupedMap[key] = {
-          part_id: item.part_id,
-          name: item.name || item.part_number || '未知',
-          part_number: item.part_number || '未知',
-          manufacturer: '',
-          unit_price: item.unit_price || 0,
-          scrap_in_count: 0,
-          scrap_out_count: 0,
-          quantity: 0,
-          total_value: 0,
-          scrap_in_instances: [],
-          scrap_out_instances: []
-        }
-      }
-      groupedMap[key].scrap_out_count += item.quantity
-      groupedMap[key].scrap_out_instances.push({
-        serial_number: item.serial_number,
-        unit_price: item.unit_price,
-        scraped_at: item.created_at,
-        movement_type: 'scrap_out',
-        reason: item.reason,
-        reference: item.reference
-      })
-    })
-
-    // 计算净库存和总价
-    Object.keys(groupedMap).forEach(key => {
-      const item = groupedMap[key]
-      item.quantity = item.scrap_in_count - item.scrap_out_count
-      // 总价按当前库存计算
-      item.total_value = item.quantity * (item.unit_price || 0)
-    })
-
-    // 转为数组并应用筛选（只显示有库存的）
-    let items = Object.values(groupedMap).filter(item => item.quantity > 0)
+    // 应用筛选
     if (search.value) {
       const searchLower = search.value.toLowerCase()
       items = items.filter(item =>
@@ -564,12 +530,9 @@ const resetFilters = () => {
 }
 
 // 显示报废详情（该备件的报废入库和出库历史）
+// 显示报废详情（当前在报废库中的实例）
 const showScrapDetail = (row) => {
   currentScrapItem.value = row
-  // 合并入库和出库记录，按时间排序
-  const allInstances = [...(row.scrap_in_instances || []), ...(row.scrap_out_instances || [])]
-  allInstances.sort((a, b) => new Date(b.scraped_at) - new Date(a.scraped_at))
-  scrapInstances.value = allInstances
   detailDialogVisible.value = true
 }
 

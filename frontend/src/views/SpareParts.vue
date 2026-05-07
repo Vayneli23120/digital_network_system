@@ -118,10 +118,10 @@
             <el-table-column prop="serial_number" label="序列号" width="150">
               <template #default="{ row }">{{ row.serial_number || '-' }}</template>
             </el-table-column>
-            <el-table-column prop="movement_type" label="类型" width="80" align="center">
+            <el-table-column prop="movement_type" label="类型" width="100" align="center">
               <template #default="{ row }">
-                <el-tag :type="row.movement_type === 'in' ? 'success' : 'warning'" size="small">
-                  {{ row.movement_type === 'in' ? '入库' : '出库' }}
+                <el-tag :type="getMovementTypeTag(row.movement_type)" size="small">
+                  {{ getMovementTypeText(row.movement_type) }}
                 </el-tag>
               </template>
             </el-table-column>
@@ -149,8 +149,8 @@
       <el-descriptions :column="2" border v-if="currentMovement">
         <el-descriptions-item label="时间">{{ formatDateTime(currentMovement.created_at) }}</el-descriptions-item>
         <el-descriptions-item label="类型">
-          <el-tag :type="currentMovement.movement_type === 'in' ? 'success' : 'warning'" size="small">
-            {{ currentMovement.movement_type === 'in' ? '入库' : '出库' }}
+          <el-tag :type="getMovementTypeTag(currentMovement.movement_type)" size="small">
+            {{ getMovementTypeText(currentMovement.movement_type) }}
           </el-tag>
         </el-descriptions-item>
         <el-descriptions-item label="备件名称">{{ currentMovement.name || '-' }}</el-descriptions-item>
@@ -552,6 +552,17 @@ const loadParts = async () => {
   } finally {
     loading.value = false
   }
+}
+
+// 出入库类型显示
+const getMovementTypeTag = (type) => {
+  const tags = { in: 'success', out: 'warning', scrap_in: 'info', scrap_out: 'danger' }
+  return tags[type] || ''
+}
+
+const getMovementTypeText = (type) => {
+  const texts = { in: '入库', out: '出库', scrap_in: '报废入库', scrap_out: '已报废' }
+  return texts[type] || type
 }
 
 // 重置筛选条件
