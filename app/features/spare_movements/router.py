@@ -22,7 +22,7 @@ router = APIRouter(prefix="/api/spare-movements", tags=["备件出入库"])
 
 class MovementCreate(BaseModel):
     part_id: int
-    movement_type: str  # "in", "out", or "scrap_in"
+    movement_type: str  # "in", "out", "scrap_in", or "scrap_out"
     quantity: int
     serial_number: Optional[str] = None  # 序列号
     reason: Optional[str] = None
@@ -38,6 +38,7 @@ async def api_create_movement(movement: MovementCreate, db: Session = Depends(ge
     - movement_type="in": 入库，增加库存
     - movement_type="out": 出库，减少库存（库存不足时拒绝）
     - movement_type="scrap_in": 报废入库，增加库存（用于返回件）
+    - movement_type="scrap_out": 报废出库，不改变库存（用于报废件销毁/回收等）
     """
     try:
         return svc_create_movement(

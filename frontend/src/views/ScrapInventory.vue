@@ -43,7 +43,7 @@
             <div class="toolbar-left">
               <el-input
                 v-model="search"
-                placeholder="搜索名称/型号/序列号"
+                placeholder="搜索名称/型号"
                 clearable
                 class="search-input"
                 @keyup.enter="loadScrapItems"
@@ -62,11 +62,8 @@
             </div>
           </div>
 
-          <!-- 表格 -->
+          <!-- 表格 - 按备件类型分组 -->
           <el-table :data="scrapItems" stripe border v-loading="loading">
-            <el-table-column prop="serial_number" label="序列号" width="150">
-              <template #default="{ row }">{{ row.serial_number || '-' }}</template>
-            </el-table-column>
             <el-table-column prop="name" label="名称" width="150">
               <template #default="{ row }">
                 <el-button type="primary" link @click="showScrapDetail(row)">
@@ -74,28 +71,25 @@
                 </el-button>
               </template>
             </el-table-column>
-            <el-table-column prop="part_number" label="型号" width="150">
-              <template #default="{ row }">{{ row.part_number || '-' }}</template>
+            <el-table-column prop="part_number" label="型号" width="150" />
+            <el-table-column prop="manufacturer" label="厂商" width="120">
+              <template #default="{ row }">{{ row.manufacturer || '-' }}</template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价" width="100">
-              <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+            <el-table-column prop="quantity" label="库存" width="100">
+              <template #default="{ row }">
+                <el-tag type="danger">{{ row.quantity }}</el-tag>
+              </template>
             </el-table-column>
-            <el-table-column prop="scraped_at" label="报废时间" width="160">
-              <template #default="{ row }">{{ formatDateTime(row.scraped_at) }}</template>
+            <el-table-column label="总价" width="100">
+              <template #default="{ row }">¥{{ row.total_value.toFixed(2) }}</template>
             </el-table-column>
-            <el-table-column prop="reason" label="报废原因" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
+            <el-table-column label="操作" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" type="success" @click="showManualInDialog(row)">入库</el-button>
+                <el-button size="small" type="danger" @click="showScrapOutDialog(row)">报废</el-button>
+              </template>
+            </el-table-column>
           </el-table>
-
-          <div class="pagination-bar">
-            <el-pagination
-              v-model:current-page="page"
-              :page-size="50"
-              layout="total, prev, pager, next"
-              :total="total"
-              @current-change="loadScrapItems"
-            />
-          </div>
         </el-card>
       </el-tab-pane>
 
@@ -123,7 +117,9 @@
             </el-table-column>
             <el-table-column prop="movement_type" label="类型" width="100" align="center">
               <template #default="{ row }">
-                <el-tag type="danger" size="small">报废入库</el-tag>
+                <el-tag :type="row.movement_type === 'scrap_in' ? 'danger' : 'success'" size="small">
+                  {{ row.movement_type === 'scrap_in' ? '报废入库' : '报废出库' }}
+                </el-tag>
               </template>
             </el-table-column>
             <el-table-column prop="quantity" label="数量" width="80" align="right" />
@@ -146,38 +142,32 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报废详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" title="报废件详情" width="600px">
-      <el-descriptions :column="2" border v-if="currentScrapItem">
-        <el-descriptions-item label="序列号">{{ currentScrapItem.serial_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="名称">{{ currentScrapItem.name }}</el-descriptions-item>
-        <el-descriptions-item label="型号">{{ currentScrapItem.part_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="单价">¥{{ (currentScrapItem.unit_price || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="报废时间">{{ formatDateTime(currentScrapItem.scraped_at) }}</el-descriptions-item>
-        <el-descriptions-item label="报废原因">{{ currentScrapItem.reason || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="入库时间">{{ currentScrapItem.in_stock_at ? formatDateTime(currentScrapItem.in_stock_at) : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="出库时间">{{ currentScrapItem.out_at ? formatDateTime(currentScrapItem.out_at) : '-' }}</el-descriptions-item>
-        <el-descriptions-item label="原位置">{{ currentScrapItem.location || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="备注">{{ currentScrapItem.notes || '-' }}</el-descriptions-item>
-      </el-descriptions>
+    <!-- 报废详情对话框（显示该备件的报废实例列表） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废清单'" width="650px">
+      <div v-if="currentScrapItem" class="part-info-header">
+        <el-row :gutter="16">
+          <el-col :span="6">
+            <el-statistic title="报废数量" :value="currentScrapItem.quantity || 0" />
+          </el-col>
+          <el-col :span="6">
+            <el-statistic title="报废总价" :value="currentScrapItem.total_value || 0" :precision="2" suffix="元" />
+          </el-col>
+        </el-row>
+      </div>
 
-      <!-- 使用历史 -->
-      <el-divider content-position="left">使用历史</el-divider>
-      <el-table :data="currentScrapHistory" size="small" border v-if="currentScrapHistory.length > 0">
-        <el-table-column prop="movement_type" label="类型" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.movement_type === 'in' ? 'success' : row.movement_type === 'out' ? 'warning' : 'danger'" size="small">
-              {{ row.movement_type === 'in' ? '入库' : row.movement_type === 'out' ? '出库' : '报废' }}
-            </el-tag>
-          </template>
+      <el-table :data="scrapInstances" v-loading="instancesLoading" stripe border size="small" style="margin-top: 16px">
+        <el-table-column prop="serial_number" label="序列号" width="150" />
+        <el-table-column prop="unit_price" label="单价" width="100">
+          <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
-        <el-table-column prop="reason" label="原因" min-width="150" />
-        <el-table-column prop="reference" label="关联" width="120" />
-        <el-table-column prop="created_at" label="时间" width="160">
-          <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
+        <el-table-column prop="scraped_at" label="报废时间" width="160">
+          <template #default="{ row }">{{ row.scraped_at ? formatDateTime(row.scraped_at) : '-' }}</template>
         </el-table-column>
+        <el-table-column prop="reason" label="报废原因" min-width="150" show-overflow-tooltip />
+        <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
       </el-table>
-      <el-empty v-else description="暂无历史记录" :image-size="60" />
+
+      <el-empty v-if="!instancesLoading && scrapInstances.length === 0" description="该备件暂无报废实例" />
     </el-dialog>
 
     <!-- 扫码录入对话框 -->
@@ -264,12 +254,59 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 手动入库对话框（从备件库存页面复制） -->
+    <el-dialog v-model="manualInDialogVisible" title="手动报废入库" width="500px">
+      <el-form :model="manualInForm" label-width="80px">
+        <el-form-item label="备件">
+          <el-input :value="currentManualPart?.name" disabled />
+        </el-form-item>
+        <el-form-item label="序列号" required>
+          <el-input v-model="manualInForm.serial_number" placeholder="输入序列号" />
+        </el-form-item>
+        <el-form-item label="单价">
+          <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" placeholder="单价" />
+        </el-form-item>
+        <el-form-item label="报废原因">
+          <el-input v-model="manualInForm.reason" type="textarea" placeholder="报废原因" />
+        </el-form-item>
+        <el-form-item label="关联维修">
+          <el-input v-model="manualInForm.reference" placeholder="关联维修单号" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualInDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="submitManualIn" :loading="manualInSubmitting">确认入库</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 报废出库对话框 -->
+    <el-dialog v-model="scrapOutDialogVisible" title="报废出库" width="500px">
+      <el-form :model="scrapOutForm" label-width="80px">
+        <el-form-item label="备件">
+          <el-input :value="currentScrapOutPart?.name" disabled />
+        </el-form-item>
+        <el-form-item label="序列号" required>
+          <el-input v-model="scrapOutForm.serial_number" placeholder="输入要出库的序列号" />
+          <div class="scrap-out-tip">输入报废库中要出库（销毁/回收）的序列号</div>
+        </el-form-item>
+        <el-form-item label="出库原因" required>
+          <el-input v-model="scrapOutForm.reason" type="textarea" placeholder="出库原因（如：销毁、回收等）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="scrapOutDialogVisible = false">取消</el-button>
+        <el-button type="danger" @click="submitScrapOut" :loading="scrapOutSubmitting" :disabled="!scrapOutForm.serial_number || !scrapOutForm.reason">
+          确认出库
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
@@ -277,12 +314,10 @@ import ScanSession from '@/components/ScanSession.vue'
 
 // 状态
 const activeTab = ref('scrap')
-const scrapItems = ref([])
+const scrapItems = ref([])  // 按备件分组的报废库存
 const loading = ref(false)
 const search = ref('')
 const category = ref('')
-const page = ref(1)
-const total = ref(0)
 
 // 统计
 const stats = reactive({
@@ -301,7 +336,8 @@ const historyTotal = ref(0)
 // 详情对话框
 const detailDialogVisible = ref(false)
 const currentScrapItem = ref(null)
-const currentScrapHistory = ref([])
+const scrapInstances = ref([])  // 报废实例列表
+const instancesLoading = ref(false)
 
 // 扫码录入
 const scanDialogVisible = ref(false)
@@ -324,32 +360,73 @@ const manualForm = reactive({
   reference: ''
 })
 
-// 加载报废库存
+// 手动入库
+const manualInDialogVisible = ref(false)
+const currentManualPart = ref(null)
+const manualInSubmitting = ref(false)
+const manualInForm = reactive({
+  serial_number: '',
+  unit_price: 0,
+  reason: '',
+  reference: ''
+})
+
+// 报废出库
+const scrapOutDialogVisible = ref(false)
+const currentScrapOutPart = ref(null)
+const scrapOutSubmitting = ref(false)
+const scrapOutForm = reactive({
+  serial_number: '',
+  reason: ''
+})
+
+// 加载报废库存（按备件分组）
 const loadScrapItems = async () => {
   loading.value = true
   try {
-    // 查询报废入库记录
-    const params = {
-      movement_type: 'scrap_in',
-      search: search.value,
-      skip: (page.value - 1) * 50,
-      limit: 50
-    }
-    const result = await getMovements(params)
-    scrapItems.value = (result.items || []).map(item => ({
-      serial_number: item.serial_number,
-      name: item.name,
-      part_number: item.part_number,
-      unit_price: item.unit_price,
-      scraped_at: item.created_at,
-      reason: item.reason,
-      reference: item.reference,
-      part_id: item.part_id
-    }))
-    total.value = result.total || 0
+    // 查询所有报废入库记录
+    const result = await getMovements({ movement_type: 'scrap_in', limit: 200 })
+    const allMovements = result.items || []
 
-    // 计算统计
-    updateStats()
+    // 按备件分组统计
+    const groupedMap = {}
+    allMovements.forEach(item => {
+      const key = item.part_id || `unknown_${item.part_number || 'unknown'}`
+      if (!groupedMap[key]) {
+        groupedMap[key] = {
+          part_id: item.part_id,
+          name: item.name || item.part_number || '未知',
+          part_number: item.part_number || '未知',
+          manufacturer: '',
+          unit_price: item.unit_price || 0,
+          quantity: 0,
+          total_value: 0,
+          instances: []
+        }
+      }
+      groupedMap[key].quantity += item.quantity
+      groupedMap[key].total_value += (item.unit_price || 0) * item.quantity
+      groupedMap[key].instances.push({
+        serial_number: item.serial_number,
+        unit_price: item.unit_price,
+        scraped_at: item.created_at,
+        reason: item.reason,
+        reference: item.reference
+      })
+    })
+
+    // 转为数组并应用筛选
+    let items = Object.values(groupedMap)
+    if (search.value) {
+      const searchLower = search.value.toLowerCase()
+      items = items.filter(item =>
+        item.name.toLowerCase().includes(searchLower) ||
+        item.part_number.toLowerCase().includes(searchLower)
+      )
+    }
+
+    scrapItems.value = items
+    updateStats(allMovements)
   } catch (e) {
     ElMessage.error('加载报废库存失败：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -358,18 +435,17 @@ const loadScrapItems = async () => {
 }
 
 // 更新统计
-const updateStats = () => {
-  const uniqueTypes = new Set(scrapItems.value.map(item => item.part_number))
-  stats.total_types = uniqueTypes.size
-  stats.total_quantity = scrapItems.value.length
-  stats.total_value = scrapItems.value.reduce((sum, item) => sum + (item.unit_price || 0), 0)
+const updateStats = (allMovements) => {
+  stats.total_types = scrapItems.value.length
+  stats.total_quantity = allMovements.reduce((sum, item) => sum + item.quantity, 0)
+  stats.total_value = scrapItems.value.reduce((sum, item) => sum + item.total_value, 0)
 
   // 本月新增
   const now = new Date()
   const thisMonth = now.getMonth()
   const thisYear = now.getFullYear()
-  stats.month_count = scrapItems.value.filter(item => {
-    const itemDate = new Date(item.scraped_at)
+  stats.month_count = allMovements.filter(item => {
+    const itemDate = new Date(item.created_at)
     return itemDate.getMonth() === thisMonth && itemDate.getFullYear() === thisYear
   }).length
 }
@@ -400,28 +476,10 @@ const resetFilters = () => {
   loadScrapItems()
 }
 
-// 显示报废详情
-const showScrapDetail = async (row) => {
+// 显示报废详情（该备件的报废实例列表）
+const showScrapDetail = (row) => {
   currentScrapItem.value = row
-  currentScrapHistory.value = []
-
-  // 查询该序列号的完整历史
-  if (row.serial_number) {
-    try {
-      const info = await getPartBySerialNumber(row.serial_number)
-      currentScrapItem.value = {
-        ...row,
-        in_stock_at: info.in_stock_at,
-        out_at: info.out_at,
-        location: info.location,
-        notes: info.notes
-      }
-      currentScrapHistory.value = info.history || []
-    } catch (e) {
-      // 如果查询失败，使用现有数据
-    }
-  }
-
+  scrapInstances.value = row.instances || []
   detailDialogVisible.value = true
 }
 
@@ -470,7 +528,6 @@ const submitScrapFromScan = async () => {
 
 // 显示手动录入对话框
 const showManualDialog = async () => {
-  // 加载备件列表供选择
   const result = await getPartList({ limit: 100 })
   partOptions.value = result.items || []
 
@@ -534,17 +591,13 @@ const submitManualScrap = async () => {
   submitting.value = true
   try {
     let partId = manualForm.part_id
-    let partNumber = manualForm.part_number_manual
-    let name = manualForm.name_manual || manualForm.part_number_manual
 
     if (foundPartInfo.value) {
       partId = foundPartInfo.value.id
-      partNumber = foundPartInfo.value.part_number
-      name = foundPartInfo.value.name
     }
 
-    if (!partId && !partNumber) {
-      ElMessage.warning('请选择或输入备件型号')
+    if (!partId) {
+      ElMessage.warning('请选择备件型号')
       submitting.value = false
       return
     }
@@ -566,6 +619,88 @@ const submitManualScrap = async () => {
     ElMessage.error('报废入库失败：' + (e.response?.data?.detail || e.message))
   } finally {
     submitting.value = false
+  }
+}
+
+// 显示手动入库对话框（针对某个备件）
+const showManualInDialog = (row) => {
+  currentManualPart.value = row
+  Object.assign(manualInForm, {
+    serial_number: '',
+    unit_price: row.unit_price || 0,
+    reason: '',
+    reference: ''
+  })
+  manualInDialogVisible.value = true
+}
+
+// 提交手动入库
+const submitManualIn = async () => {
+  if (!manualInForm.serial_number) {
+    ElMessage.warning('请输入序列号')
+    return
+  }
+
+  manualInSubmitting.value = true
+  try {
+    await createMovement({
+      part_id: currentManualPart.value.part_id,
+      movement_type: 'scrap_in',
+      quantity: 1,
+      serial_number: manualInForm.serial_number,
+      reason: manualInForm.reason || '报废入库',
+      reference: manualInForm.reference
+    })
+    ElMessage.success('报废入库成功')
+    manualInDialogVisible.value = false
+    loadScrapItems()
+    loadHistory()
+  } catch (e) {
+    ElMessage.error('入库失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    manualInSubmitting.value = false
+  }
+}
+
+// 显示报废出库对话框
+const showScrapOutDialog = (row) => {
+  currentScrapOutPart.value = row
+  Object.assign(scrapOutForm, {
+    serial_number: '',
+    reason: ''
+  })
+  scrapOutDialogVisible.value = true
+}
+
+// 提交报废出库
+const submitScrapOut = async () => {
+  if (!scrapOutForm.serial_number) {
+    ElMessage.warning('请输入序列号')
+    return
+  }
+  if (!scrapOutForm.reason) {
+    ElMessage.warning('请填写出库原因')
+    return
+  }
+
+  scrapOutSubmitting.value = true
+  try {
+    await createMovement({
+      part_id: currentScrapOutPart.value.part_id,
+      movement_type: 'scrap_out',
+      quantity: 1,
+      serial_number: scrapOutForm.serial_number,
+      reason: scrapOutForm.reason,
+      reference: ''
+    })
+    ElMessage.success('报废出库成功')
+    scrapOutDialogVisible.value = false
+    loadScrapItems()
+    loadHistory()
+  } catch (e) {
+    ElMessage.error('出库失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    scrapOutSubmitting.value = false
   }
 }
 
@@ -619,5 +754,10 @@ onMounted(() => {
 .toolbar-right {
   display: flex;
   gap: 8px;
+}
+.scrap-out-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  margin-top: 8px;
 }
 </style>

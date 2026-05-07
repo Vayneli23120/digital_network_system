@@ -242,7 +242,7 @@ def create_movement(
     Args:
         db: 数据库会话
         part_id: 备件 ID
-        movement_type: "in" 或 "out"
+        movement_type: "in", "out", "scrap_in", "scrap_out"
         quantity: 数量
         serial_number: 序列号（扫码出库时记录）
         reason: 原因
@@ -271,8 +271,11 @@ def create_movement(
         part.quantity_in_stock -= quantity
     elif movement_type == "in" or movement_type == "scrap_in":
         part.quantity_in_stock += quantity
+    elif movement_type == "scrap_out":
+        # 报废出库不影响备件库存，只记录出库操作
+        pass
     else:
-        raise ValueError("movement_type 必须为 'in', 'out' 或 'scrap_in'")
+        raise ValueError("movement_type 必须为 'in', 'out', 'scrap_in' 或 'scrap_out'")
 
     # 更新备件状态
     if part.quantity_in_stock == 0:
