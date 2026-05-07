@@ -450,6 +450,7 @@ def list_movements(
                 "source_device_id": m.source_device_id,
                 "source_device_name": m.source_device.name if m.source_device else None,
                 "po_number": m.po_number,  # PO号
+                "session_code": m.session_code,  # 批次码
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in movements
@@ -458,14 +459,14 @@ def list_movements(
 
 
 def get_movement(db: Session, movement_id: int) -> Dict[str, Any]:
-    """获取出入库记录详情
+    """获取出入库记录详情（包含同批次备件清单）
 
     Args:
         db: 数据库会话
         movement_id: 记录 ID
 
     Returns:
-        记录信息字典
+        记录信息字典（包含 batch_items 同批次备件清单）
 
     Raises:
         ResourceNotFoundException: 记录不存在
@@ -476,6 +477,25 @@ def get_movement(db: Session, movement_id: int) -> Dict[str, Any]:
     if not movement:
         raise ResourceNotFoundException("SparePartMovement")
 
+    # 查询同批次的备件清单（通过 session_code 关联）
+    batch_items = []
+    if movement.session_code:
+        batch_movements = db.query(SparePartMovement).filter(
+            SparePartMovement.session_code == movement.session_code,
+            SparePartMovement.id != movement_id  # 排除当前记录
+        ).all()
+        batch_items = [
+            {
+                "id": m.id,
+                "serial_number": m.serial_number,
+                "po_number": m.po_number,
+                "part_number": m.part.part_number if m.part else None,
+                "name": m.part.name if m.part else None,
+                "unit_price": float(m.part.unit_price) if m.part and m.part.unit_price else 0.0,
+            }
+            for m in batch_movements
+        ]
+
     return {
         "id": movement.id,
         "part_id": movement.part_id,
@@ -484,9 +504,17 @@ def get_movement(db: Session, movement_id: int) -> Dict[str, Any]:
         "movement_type": movement.movement_type,
         "quantity": movement.quantity,
         "serial_number": movement.serial_number,
+        "po_number": movement.po_number,  # PO号
+        "session_code": movement.session_code,  # 批次码
         "unit_price": float(movement.part.unit_price) if movement.part and movement.part.unit_price else 0.0,
         "reason": movement.reason,
         "operator": movement.operator,
         "reference": movement.reference,
+        "target_device_id": movement.target_device_id,
+        "target_device_name": movement.target_device.name if movement.target_device else None,
+        "source_device_id": movement.source_device_id,
+        "source_device_name": movement.source_device.name if movement.source_device else None,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
+        "batch_items": batch_items,  # 同批次备件清单
+        "batch_total": len(batch_items) + 1,  # 本批次总数量（包含当前记录）
     }

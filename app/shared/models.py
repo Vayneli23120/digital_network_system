@@ -355,6 +355,7 @@ class SparePartMovement(Base):
     quantity = Column(Integer, nullable=False)
     serial_number = Column(String(100), nullable=True)  # 序列号（扫码出库时记录）
     po_number = Column(String(100), nullable=True)  # PO号（关联采购订单）
+    session_code = Column(String(20), nullable=True, index=True)  # 扫码会话码（关联同批次出库）
     reason = Column(String(500), nullable=True)  # 出入库原因
     operator = Column(String(100), nullable=True)  # 操作人
     reference = Column(String(200), nullable=True)  # 关联设备/工单等

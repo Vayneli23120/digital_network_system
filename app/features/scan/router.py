@@ -598,7 +598,7 @@ async def complete_scan_session(
 
         db.commit()
 
-        # 创建出入库历史记录（每个序列号单独记录，包含PO号）
+        # 创建出入库历史记录（每个序列号单独记录，包含PO号和批次码）
         if out_count > 0:
             for item in session["items"]:
                 if item.get("part_id"):
@@ -614,6 +614,7 @@ async def complete_scan_session(
                         quantity=1,
                         serial_number=item.get("serial_number"),
                         po_number=po_number,  # 记录PO号
+                        session_code=session_code,  # 记录批次码（同批次出库关联）
                         reason=data.reason if data else "扫码出库",
                         operator="",
                         reference=session.get("reference") or "",
@@ -658,6 +659,7 @@ async def complete_scan_session(
                     quantity=1,
                     serial_number=item.get("serial_number"),
                     po_number=po_number,  # 记录PO号
+                    session_code=session_code,  # 记录批次码
                     reason=data.reason if data else "扫码报废入库",
                     operator="",
                     reference=session.get("reference") or "",
@@ -739,6 +741,7 @@ async def complete_scan_session(
                     quantity=1,
                     serial_number=item.get("serial_number"),
                     po_number=po_number,  # 记录PO号
+                    session_code=session_code,  # 记录批次码
                     reason=data.reason if data else "扫码报废出库",
                     operator="",
                     reference="",

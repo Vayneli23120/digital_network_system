@@ -206,7 +206,7 @@
     </el-tabs>
 
     <!-- 出入库详情对话框 -->
-    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="500px">
+    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="700px">
       <el-descriptions :column="2" border v-if="currentMovement">
         <el-descriptions-item label="时间">{{ formatDateTime(currentMovement.created_at) }}</el-descriptions-item>
         <el-descriptions-item label="类型">
@@ -225,7 +225,29 @@
         <el-descriptions-item label="原因" :span="2">{{ currentMovement.reason || '-' }}</el-descriptions-item>
         <el-descriptions-item label="关联单号">{{ currentMovement.reference || '-' }}</el-descriptions-item>
         <el-descriptions-item label="操作人">{{ currentMovement.operator || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="批次码" v-if="currentMovement.session_code">
+          <el-tag type="info" size="small">{{ currentMovement.session_code }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="批次总数" v-if="currentMovement.session_code">
+          {{ currentMovement.batch_total || 1 }} 件
+        </el-descriptions-item>
       </el-descriptions>
+
+      <!-- 同批次备件清单 -->
+      <div v-if="currentMovement?.batch_items?.length > 0" style="margin-top: 16px">
+        <el-divider content-position="left">本批次其他备件（共 {{ currentMovement.batch_items.length }} 件）</el-divider>
+        <el-table :data="currentMovement.batch_items" size="small" stripe border>
+          <el-table-column prop="serial_number" label="序列号" width="120" />
+          <el-table-column prop="po_number" label="PO号" width="80">
+            <template #default="{ row }">{{ row.po_number || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="part_number" label="型号" width="120" />
+          <el-table-column prop="name" label="名称" width="120" />
+          <el-table-column prop="unit_price" label="单价" width="80">
+            <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+          </el-table-column>
+        </el-table>
+      </div>
     </el-dialog>
 
     <!-- 新增/编辑对话框 -->
@@ -452,7 +474,7 @@
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
-import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getPartInstances, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
+import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getMovementDetail, getPartInstances, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 
@@ -563,8 +585,14 @@ const showScanDialog = (mode) => {
 const movementDetailVisible = ref(false)
 const currentMovement = ref(null)
 
-const showMovementDetail = (row) => {
-  currentMovement.value = row
+const showMovementDetail = async (row) => {
+  // 获取完整详情（包含同批次备件清单）
+  try {
+    const detail = await getMovementDetail(row.id)
+    currentMovement.value = detail
+  } catch (e) {
+    currentMovement.value = row  // 失败时使用行数据
+  }
   movementDetailVisible.value = true
 }
 
