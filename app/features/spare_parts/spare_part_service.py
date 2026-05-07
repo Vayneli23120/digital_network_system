@@ -287,18 +287,24 @@ def create_movement(
                 instance.installed_by = operator
 
     elif movement_type == "in" or movement_type == "scrap_in":
-        part.quantity_in_stock += quantity
-
-        # 返回件入库，状态改为待报废，记录来源设备
-        if movement_type == "scrap_in" and serial_number and source_device_id:
+        # 返回件入库：验证状态必须为 inuse
+        if movement_type == "scrap_in" and serial_number:
             instance = db.query(SparePartInstance).filter(
                 SparePartInstance.serial_number == serial_number
             ).first()
             if instance:
+                # 验证状态必须是 inuse（在设备上使用）
+                if instance.status != "inuse":
+                    raise ValueError(
+                        f"备件状态为 '{instance.status}'，只有 'inuse'(在设备上使用) 状态的备件才能作为返回件入库"
+                    )
                 instance.status = "pending_scrap"  # 待报废状态
-                instance.removed_from_device_id = source_device_id
+                if source_device_id:
+                    instance.removed_from_device_id = source_device_id
                 instance.removed_at = datetime.utcnow()
                 instance.installed_device_id = None  # 清除安装设备
+
+        part.quantity_in_stock += quantity
 
     elif movement_type == "scrap_out":
         # 报废出库：验证状态为待报废，更新为已报废

@@ -697,7 +697,7 @@ const onReturnPartSelect = () => {
 }
 
 // 手动添加返回件
-const addReturnPart = () => {
+const addReturnPart = async () => {
   if (!returnPartSerial.value) {
     ElMessage.warning('请输入序列号')
     return
@@ -713,13 +713,29 @@ const addReturnPart = () => {
   let partNumber = returnPartNumber.value
   let partName = returnPartName.value || returnPartNumber.value
   let partId = null
+  let unitPrice = 0
 
+  // 如果已经选择了备件型号
   if (selectedReturnPart.value) {
     const part = sparePartOptions.value.find(p => p.id === selectedReturnPart.value)
     if (part) {
       partId = part.id
       partNumber = part.part_number
       partName = part.name || part.part_number
+      unitPrice = part.unit_price || 0
+    }
+  } else {
+    // 如果没有选择备件型号，尝试通过序列号查询
+    try {
+      const info = await getPartBySerialNumber(returnPartSerial.value)
+      partId = info.id
+      partNumber = info.part_number
+      partName = info.name
+      unitPrice = info.unit_price || 0
+      ElMessage.success(`已自动识别: ${info.name || info.part_number}`)
+    } catch (e) {
+      // 序列号未找到，使用手动输入的信息
+      partId = null
     }
   }
 
@@ -728,12 +744,13 @@ const addReturnPart = () => {
     part_number: partNumber,
     name: partName,
     serial_number: returnPartSerial.value,
+    unit_price: unitPrice,
     quantity: returnPartQty.value,
-    scrap_in: selectedReturnPart.value ? returnPartScrap.value : false,
+    scrap_in: partId ? returnPartScrap.value : false,  // 有备件ID才能入报废库
     is_from_scan: false
   })
 
-  ElMessage.success(`已添加返回件: ${returnPartSerial.value}`)
+  ElMessage.success(`已添加返回件: ${returnPartSerial.value}${partId ? '' : '（未匹配备件ID）'}`)
 
   returnScanInput.value = ''
   returnFoundInfo.value = null
