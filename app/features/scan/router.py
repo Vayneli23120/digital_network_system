@@ -197,7 +197,7 @@ async def add_scan_item(
             "scanned_at": datetime.utcnow()
         }
 
-        # 检查session中是否已有该序列号（防止重复扫描）
+        # 检查session中是否已有该序列号
         existing = None
         for item in session["items"]:
             if item["serial_number"] == data.serial_number:
@@ -205,14 +205,12 @@ async def add_scan_item(
                 break
 
         if existing:
-            # 已存在则提示重复，不重复添加
             return {
                 "session_code": data.session_code,
                 "item": existing,
                 "total_items": len(session["items"]),
-                "found_in_stock": existing_instance is not None and existing_instance.status == "in_stock",
                 "is_duplicate": True,
-                "is_session_duplicate": True,  # 会话中已存在
+                "is_session_duplicate": True,
                 "message": f"序列号 {data.serial_number} 已在本次扫描列表中"
             }
         else:
@@ -222,20 +220,75 @@ async def add_scan_item(
             "session_code": data.session_code,
             "item": scan_item,
             "total_items": len(session["items"]),
-            "found_in_stock": existing_instance is not None and existing_instance.status == "in_stock",
             "is_duplicate": existing_instance is not None,
-            "is_session_duplicate": False,
-            "message": f"已添加: {part.name}" if not existing_instance else f"序列号已存在库存中（状态: {existing_instance.status})"
+            "message": f"已添加: {part.name}"
         }
 
-    # 出库/返回件模式：查询已有备件实例
+    # 返回件/报废入库模式：如果有预设的 part_id，使用它
+    if session["session_type"] == "return" and session.get("part_id"):
+        part = db.query(SparePart).filter(SparePart.id == session["part_id"]).first()
+        if not part:
+            raise HTTPException(status_code=404, detail="备件不存在")
+
+        scan_item = {
+            "serial_number": data.serial_number,
+            "part_id": part.id,
+            "part_number": part.part_number,
+            "name": part.name,
+            "quantity": 1,
+            "unit_price": float(part.unit_price) if part.unit_price else None,
+            "scanned_at": datetime.utcnow()
+        }
+
+        # 检查session中是否已有该序列号
+        existing = None
+        for item in session["items"]:
+            if item["serial_number"] == data.serial_number:
+                existing = item
+                break
+
+        if existing:
+            return {
+                "session_code": data.session_code,
+                "item": existing,
+                "total_items": len(session["items"]),
+                "is_duplicate": True,
+                "is_session_duplicate": True,
+                "message": f"序列号 {data.serial_number} 已在本次扫描列表中"
+            }
+        else:
+            session["items"].append(scan_item)
+
+        return {
+            "session_code": data.session_code,
+            "item": scan_item,
+            "total_items": len(session["items"]),
+            "message": f"已添加: {part.name}"
+        }
+
+    # 出库/报废出库模式：查询已有备件实例或报废入库记录
     instance = db.query(SparePartInstance).filter(
         SparePartInstance.serial_number == data.serial_number
-    ).first()  # 返回件可以查询任何状态的实例，不只是in_stock
+    ).first()
 
     part = None
     if instance:
         part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
+
+    # 报废出库模式：如果实例表没找到，从报废入库记录中查找
+    if not instance and session["session_type"] == "scrap_out":
+        scrap_in_movement = db.query(SparePartMovement).filter(
+            SparePartMovement.serial_number == data.serial_number,
+            SparePartMovement.movement_type == "scrap_in"
+        ).first()
+        if scrap_in_movement:
+            part = db.query(SparePart).filter(SparePart.id == scrap_in_movement.part_id).first()
+            # 创建一个虚拟的 instance 信息
+            instance = {
+                "part_id": scrap_in_movement.part_id,
+                "serial_number": data.serial_number,
+                "unit_price": scrap_in_movement.unit_price if hasattr(scrap_in_movement, 'unit_price') else None
+            }
 
     # 获取该序列号的出入库历史（返回件需要）
     history = []
@@ -252,17 +305,39 @@ async def add_scan_item(
                 "created_at": m.created_at.isoformat() if m.created_at else None
             })
 
+    # 获取 part_id 和 unit_price（处理 instance 可能是 ORM 对象或字典的情况）
+    instance_part_id = None
+    instance_unit_price = None
+    instance_id = None
+    instance_status = None
+    instance_in_stock_at = None
+    instance_out_at = None
+
+    if instance:
+        if isinstance(instance, dict):
+            # 从报废入库记录创建的虚拟 instance
+            instance_part_id = instance.get("part_id")
+            instance_unit_price = instance.get("unit_price")
+        else:
+            # ORM 对象
+            instance_part_id = instance.part_id
+            instance_unit_price = float(instance.unit_price) if instance.unit_price else None
+            instance_id = instance.id
+            instance_status = instance.status
+            instance_in_stock_at = instance.in_stock_at.isoformat() if instance.in_stock_at else None
+            instance_out_at = instance.out_at.isoformat() if instance.out_at else None
+
     scan_item = {
         "serial_number": data.serial_number,
-        "part_id": instance.part_id if instance else None,
-        "instance_id": instance.id if instance else None,
+        "part_id": instance_part_id,
+        "instance_id": instance_id,
         "part_number": part.part_number if part else None,
         "name": part.name if part else None,
         "quantity": data.quantity,
-        "unit_price": float(instance.unit_price) if instance and instance.unit_price else (float(part.unit_price) if part and part.unit_price else None),
-        "instance_status": instance.status if instance else None,  # 实例状态
-        "in_stock_at": instance.in_stock_at.isoformat() if instance and instance.in_stock_at else None,
-        "out_at": instance.out_at.isoformat() if instance and instance.out_at else None,
+        "unit_price": instance_unit_price or (float(part.unit_price) if part and part.unit_price else None),
+        "instance_status": instance_status,  # 实例状态
+        "in_stock_at": instance_in_stock_at,
+        "out_at": instance_out_at,
         "history": history,  # 返回件历史
         "scanned_at": datetime.utcnow()
     }
@@ -529,23 +604,74 @@ async def complete_scan_session(
             "message": f"出库成功，共 {out_count} 件"
         }
 
-    # 返回件处理：只返回扫描结果，不进行库存操作
+    # 返回件处理：创建报废入库记录
     if session["session_type"] == "return":
-        # 返回件扫描不修改库存状态，只返回匹配的设备信息
+        scrap_in_count = len(session["items"])
+
+        # 创建报废入库历史记录（每个序列号单独记录）
+        for item in session["items"]:
+            if item.get("part_id"):
+                movement = SparePartMovement(
+                    part_id=item["part_id"],
+                    movement_type="scrap_in",
+                    quantity=1,
+                    serial_number=item.get("serial_number"),
+                    reason=data.reason if data else "扫码报废入库",
+                    operator="",
+                    reference="",
+                    created_at=datetime.utcnow()
+                )
+                db.add(movement)
+        db.commit()
+
         return {
             "session_code": session_code,
             "status": "completed",
             "items": session["items"],
-            "matched_count": len([i for i in session["items"] if i.get("part_id")]),
-            "message": f"返回件扫描完成，匹配 {len([i for i in session['items'] if i.get('part_id')])} 件"
+            "scrap_in_count": scrap_in_count,
+            "message": f"报废入库成功，共 {scrap_in_count} 件"
         }
 
-    # 报废出库处理：创建报废出库记录，不修改备件库存状态
+    # 报废出库处理：验证序列号在报废库存中，然后创建报废出库记录
     if session["session_type"] == "scrap_out":
-        scrap_out_count = len(session["items"])
+        valid_items = []
+        invalid_items = []
 
-        # 创建报废出库历史记录（每个序列号单独记录）
         for item in session["items"]:
+            serial_number = item.get("serial_number")
+            if not serial_number:
+                continue
+
+            # 验证该序列号是否在报废库存中（有 scrap_in 且没有 scrap_out）
+            scrap_in_exists = db.query(SparePartMovement).filter(
+                SparePartMovement.serial_number == serial_number,
+                SparePartMovement.movement_type == "scrap_in"
+            ).first()
+
+            scrap_out_exists = db.query(SparePartMovement).filter(
+                SparePartMovement.serial_number == serial_number,
+                SparePartMovement.movement_type == "scrap_out"
+            ).first()
+
+            if scrap_in_exists and not scrap_out_exists:
+                # 在报废库存中，可以报废
+                valid_items.append(item)
+            else:
+                # 不在报废库存中
+                reason_msg = ""
+                if not scrap_in_exists:
+                    reason_msg = "该序列号未入库到报废库存"
+                elif scrap_out_exists:
+                    reason_msg = "该序列号已报废出库"
+                else:
+                    reason_msg = "该序列号不在报废库存中"
+                invalid_items.append({
+                    "serial_number": serial_number,
+                    "reason": reason_msg
+                })
+
+        # 只为有效的序列号创建报废出库记录
+        for item in valid_items:
             if item.get("part_id"):
                 movement = SparePartMovement(
                     part_id=item["part_id"],
@@ -563,9 +689,10 @@ async def complete_scan_session(
         return {
             "session_code": session_code,
             "status": "completed",
-            "items": session["items"],
-            "scrap_out_count": scrap_out_count,
-            "message": f"报废出库成功，共 {scrap_out_count} 件"
+            "items": valid_items,
+            "scrap_out_count": len(valid_items),
+            "invalid_items": invalid_items,
+            "message": f"报废出库成功 {len(valid_items)} 件，无效 {len(invalid_items)} 件"
         }
 
     # 删除会话（其他类型）

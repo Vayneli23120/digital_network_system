@@ -22,7 +22,7 @@ except ImportError:
 from pydantic import BaseModel
 
 from app.shared.database import get_db
-from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup
+from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart
 from app.shared.config import get_config
 
 config = get_config()
@@ -360,3 +360,46 @@ async def delete_device_photo(device_id: int, photo_id: int):
     db.commit()
 
     return {"message": "删除成功"}
+
+
+@router.get("/{device_id}/inventory")
+async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
+    """获取设备当前安装的备件列表
+
+    Args:
+        device_id: 设备 ID
+
+    Returns:
+        设备当前安装的备件列表
+    """
+    # 验证设备存在
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 查询当前安装在该设备上的备件
+    instances = db.query(SparePartInstance).filter(
+        SparePartInstance.installed_device_id == device_id,
+        SparePartInstance.status == "installed"
+    ).all()
+
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "items": [
+            {
+                "instance_id": i.id,
+                "serial_number": i.serial_number,
+                "part_id": i.part_id,
+                "part_number": i.part.part_number if i.part else None,
+                "part_name": i.part.name if i.part else None,
+                "category": i.part.category if i.part else None,
+                "unit_price": float(i.unit_price) if i.unit_price else 0.0,
+                "installed_at": i.installed_at.isoformat() if i.installed_at else None,
+                "installed_by": i.installed_by,
+                "notes": i.notes,
+            }
+            for i in instances
+        ],
+        "total": len(instances)
+    }

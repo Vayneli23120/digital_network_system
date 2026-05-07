@@ -222,6 +222,23 @@
                 <el-statistic title="总拥有成本 (TCO)" :value="(device?.purchase_cost || 0) + calculateMaintCost()" :precision="2" prefix="¥" />
               </div>
             </el-tab-pane>
+            <el-tab-pane label="设备资产" name="inventory">
+              <el-table :data="deviceInventory" v-loading="inventoryLoading" stripe border size="small">
+                <el-table-column prop="part_number" label="型号" width="120" />
+                <el-table-column prop="part_name" label="名称" width="150" />
+                <el-table-column prop="serial_number" label="序列号" width="120" />
+                <el-table-column prop="category" label="分类" width="80" />
+                <el-table-column prop="unit_price" label="单价" width="80">
+                  <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+                </el-table-column>
+                <el-table-column prop="installed_at" label="安装时间" width="160">
+                  <template #default="{ row }">{{ formatDateTime(row.installed_at) }}</template>
+                </el-table-column>
+                <el-table-column prop="installed_by" label="安装人" width="80" />
+                <el-table-column prop="notes" label="备注" min-width="100" show-overflow-tooltip />
+              </el-table>
+              <el-empty v-if="deviceInventory.length === 0 && !inventoryLoading" description="当前无安装备件" :image-size="60" />
+            </el-tab-pane>
           </el-tabs>
         </el-card>
       </el-col>
@@ -338,10 +355,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi } from '@/api'
+import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import axios from 'axios'
 
@@ -355,6 +372,10 @@ const showEditDialog = ref(false)
 const showConfigDialog = ref(false)
 const editMode = ref(false)
 const configContent = ref('')
+
+// 设备资产相关
+const deviceInventory = ref([])
+const inventoryLoading = ref(false)
 
 const faultForm = ref({
   severity: 'major',
@@ -467,6 +488,27 @@ const loadDevice = async () => {
     loading.value = false
   }
 }
+
+// 加载设备资产
+const loadDeviceInventory = async () => {
+  if (!route.params.id) return
+  inventoryLoading.value = true
+  try {
+    const data = await getDeviceInventory(route.params.id)
+    deviceInventory.value = data.items || []
+  } catch (error) {
+    ElMessage.error('加载设备资产失败')
+  } finally {
+    inventoryLoading.value = false
+  }
+}
+
+// 监听 Tab 切换，切换到资产 Tab 时加载资产数据
+watch(activeTab, (newTab) => {
+  if (newTab === 'inventory') {
+    loadDeviceInventory()
+  }
+})
 
 const backupNow = async () => {
   try {

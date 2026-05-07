@@ -44,6 +44,10 @@ export function deletePhoto(deviceId, photoId) {
   return api.delete(`/devices/${deviceId}/photos/${photoId}`)
 }
 
+export function getDeviceInventory(deviceId) {
+  return api.get(`/devices/${deviceId}/inventory`)
+}
+
 // 备份相关
 export function backupDevice(deviceId, operator) {
   return api.post(`/backups/backup/${deviceId}`, null, {

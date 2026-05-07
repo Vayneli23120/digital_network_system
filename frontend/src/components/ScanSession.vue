@@ -140,10 +140,9 @@
           <el-button
             type="primary"
             @click="submitSession"
-            :disabled="scanItems.length === 0"
             :loading="submitting"
           >
-            确认提交（{{ scanItems.length }} 项）
+            确认提交
           </el-button>
         </div>
       </div>
@@ -185,8 +184,7 @@ const props = defineProps({
   partId: Number,  // 入库备件ID
   poNumber: String,  // PO号
   location: String,  // 存放位置
-  autoStart: Boolean,  // 是否自动创建会话（对话框打开时）
-  onComplete: Function // 完成回调
+  autoStart: Boolean  // 是否自动创建会话（对话框打开时）
 })
 
 // Emits
@@ -411,8 +409,6 @@ const removeItem = async (index) => {
 
 // 提交会话
 const submitSession = async () => {
-  if (scanItems.value.length === 0) return
-
   submitting.value = true
   try {
     // 提交时传递包含单价和备注的 items，以及入库原因
@@ -421,21 +417,22 @@ const submitSession = async () => {
       unit_price: item.unit_price || 0,
       notes: item.notes || ''  // 每个备件的备注
     }))
-    const result = await completeScanSession(sessionCode.value, itemsWithNotes, submitForm.value.reason)
+    const result = await completeScanSession(sessionCode.value, itemsWithNotes.length > 0 ? itemsWithNotes : null, submitForm.value.reason)
     stopPolling()
 
-    // 触发完成回调
+    // 触发完成回调，传递后端返回的完整结果
     emit('complete', {
       session_type: sessionForm.value.session_type,
-      items: scanItems.value,
+      items: result.items || scanItems.value,
       operator: submitForm.value.operator,
       reason: submitForm.value.reason,
-      reference: submitForm.value.reference
+      reference: submitForm.value.reference,
+      scrap_in_count: result.scrap_in_count,
+      scrap_out_count: result.scrap_out_count,
+      added_count: result.added_count,
+      out_count: result.out_count,
+      message: result.message
     })
-
-    if (props.onComplete) {
-      props.onComplete(scanItems.value)
-    }
 
     // 不显示完成对话框，直接关闭让父组件处理
     // completeMessage.value = `成功处理 ${scanItems.value.length} 个备件`

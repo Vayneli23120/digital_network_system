@@ -64,11 +64,23 @@ async def api_list_movements(
     part_id: Optional[int] = Query(None),
     movement_type: Optional[str] = Query(None),
     operator: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
     db: Session = Depends(get_db),
 ):
-    """出入库记录列表"""
+    """出入库记录列表
+
+    支持筛选：
+    - part_id: 指定备件
+    - movement_type: 类型（in/out/scrap_in/scrap_out）
+    - operator: 操作人
+    - keyword: 搜索关键词（名称/型号/序列号）
+    - start_date/end_date: 时间范围
+    """
     return svc_list_movements(
-        db, skip=skip, limit=limit, part_id=part_id, movement_type=movement_type, operator=operator,
+        db, skip=skip, limit=limit, part_id=part_id, movement_type=movement_type,
+        operator=operator, keyword=keyword, start_date=start_date, end_date=end_date,
     )
 
 

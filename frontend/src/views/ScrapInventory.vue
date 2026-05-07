@@ -7,10 +7,6 @@
           <template #header>
             <div class="card-header">
               <span>报废资产管理</span>
-              <div class="header-buttons">
-                <el-button type="success" @click="showScanDialog">扫码录入</el-button>
-                <el-button type="primary" @click="showManualDialog">手动录入</el-button>
-              </div>
             </div>
           </template>
 
@@ -72,9 +68,6 @@
               </template>
             </el-table-column>
             <el-table-column prop="part_number" label="型号" width="150" />
-            <el-table-column prop="manufacturer" label="厂商" width="120">
-              <template #default="{ row }">{{ row.manufacturer || '-' }}</template>
-            </el-table-column>
             <el-table-column prop="quantity" label="库存" width="100">
               <template #default="{ row }">
                 <el-tag type="danger">{{ row.quantity }}</el-tag>
@@ -85,8 +78,10 @@
             </el-table-column>
             <el-table-column label="操作" width="140" fixed="right">
               <template #default="{ row }">
-                <el-button size="small" type="success" @click="showManualInDialog(row)">入库</el-button>
-                <el-button size="small" type="danger" @click="showScrapOutDialog(row)">报废</el-button>
+                <div class="action-btns">
+                  <el-button size="small" type="success" @click="showInDialog(row)">入库</el-button>
+                  <el-button size="small" type="danger" @click="showScrapOutDialog(row)">报废</el-button>
+                </div>
               </template>
             </el-table-column>
           </el-table>
@@ -152,6 +147,9 @@
           <el-col :span="8">
             <el-statistic title="库存总价" :value="currentScrapItem.total_value || 0" :precision="2" suffix="元" />
           </el-col>
+          <el-col :span="8" v-if="currentScrapItem.noSerialCount">
+            <el-statistic title="无序列号" :value="currentScrapItem.noSerialCount" />
+          </el-col>
         </el-row>
       </div>
 
@@ -167,7 +165,7 @@
         <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
       </el-table>
 
-      <el-empty v-if="!currentScrapItem?.instances?.length" description="该备件暂无报废库存" />
+      <el-empty v-if="!currentScrapItem?.instances?.length && !currentScrapItem?.noSerialCount" description="该备件暂无报废库存" />
     </el-dialog>
 
     <!-- 扫码录入对话框 -->
@@ -255,14 +253,27 @@
       </template>
     </el-dialog>
 
-    <!-- 手动入库对话框（从备件库存页面复制） -->
-    <el-dialog v-model="manualInDialogVisible" title="手动报废入库" width="500px">
-      <el-form :model="manualInForm" label-width="80px">
+    <!-- 入库对话框 -->
+    <el-dialog v-model="manualInDialogVisible" title="报废入库" width="500px">
+      <!-- 扫码枪入库 -->
+      <div class="scrap-in-scan-btn">
+        <el-button type="success" @click="openScrapInScanDialog">
+          <el-icon><Aim /></el-icon>
+          扫码枪入库
+        </el-button>
+        <div class="scrap-out-scan-tip">点击后用扫码枪扫描条形码建立连接，再扫描序列号</div>
+      </div>
+
+      <el-divider />
+
+      <!-- 手动输入 -->
+      <div class="manual-title">手动输入</div>
+      <el-form :model="manualInForm" label-width="80px" style="margin-top: 12px">
         <el-form-item label="备件">
           <el-input :value="currentManualPart?.name" disabled />
         </el-form-item>
         <el-form-item label="序列号" required>
-          <el-input v-model="manualInForm.serial_number" placeholder="输入序列号" />
+          <el-input v-model="manualInForm.serial_number" placeholder="输入序列号（支持扫码枪直接输入）" />
         </el-form-item>
         <el-form-item label="单价">
           <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" placeholder="单价" />
@@ -277,6 +288,21 @@
       <template #footer>
         <el-button @click="manualInDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="submitManualIn" :loading="manualInSubmitting">确认入库</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 扫码入库对话框 -->
+    <el-dialog v-model="scrapInScanDialogVisible" title="扫码枪报废入库" width="700px">
+      <ScanSession
+        ref="scrapInScanSessionRef"
+        default-type="return"
+        :part-id="currentManualPart?.part_id"
+        :auto-start="scrapInScanDialogVisible"
+        @complete="onScrapInScanComplete"
+        @cancel="scrapInScanDialogVisible = false"
+      />
+      <template #footer>
+        <el-button @click="scrapInScanDialogVisible = false">关闭</el-button>
       </template>
     </el-dialog>
 
@@ -405,7 +431,12 @@ const scrapOutForm = reactive({
 const scrapOutScanDialogVisible = ref(false)
 const scrapOutScanSessionRef = ref(null)
 
-// 加载报废库存（按序列号跟踪，再按备件分组）
+// 报废入库扫码
+const scrapInScanDialogVisible = ref(false)
+const scrapInScanSessionRef = ref(null)
+const scrapInScanItems = ref([])
+
+// 加载报废库存（按序列号跟踪有序列号的，按数量跟踪无序列号的）
 const loadScrapItems = async () => {
   loading.value = true
   try {
@@ -415,29 +446,46 @@ const loadScrapItems = async () => {
     const scrapInMovements = scrapInResult.items || []
     const scrapOutMovements = scrapOutResult.items || []
 
-    // 按序列号跟踪：收集报废入库的序列号，排除已报废出库的序列号
+    // 按序列号跟踪有序列号的入库
     const scrapInBySerial = {}  // 序列号 -> 入库记录
     const scrapOutSerials = new Set()  // 已报废出库的序列号集合
+
+    // 按备件跟踪无序列号的数量
+    const scrapInByPart = {}  // part_id -> { quantity, item }
+    const scrapOutByPart = {}  // part_id -> 出库数量
 
     scrapInMovements.forEach(item => {
       if (item.serial_number) {
         scrapInBySerial[item.serial_number] = item
+      } else {
+        // 无序列号的按备件ID统计数量
+        const partKey = item.part_id || `unknown_${item.part_number || 'unknown'}`
+        if (!scrapInByPart[partKey]) {
+          scrapInByPart[partKey] = { quantity: 0, item: item }
+        }
+        scrapInByPart[partKey].quantity += item.quantity
       }
     })
 
     scrapOutMovements.forEach(item => {
       if (item.serial_number) {
         scrapOutSerials.add(item.serial_number)
+      } else {
+        // 无序列号的按备件ID统计数量
+        const partKey = item.part_id || `unknown_${item.part_number || 'unknown'}`
+        scrapOutByPart[partKey] = (scrapOutByPart[partKey] || 0) + item.quantity
       }
     })
 
-    // 当前报废库存 = 报废入库 - 报废出库（集合差）
+    // 当前报废库存（有序列号的）= 报废入库序列号 - 报废出库序列号
     const currentScrapSerials = Object.keys(scrapInBySerial).filter(
       serial => !scrapOutSerials.has(serial)
     )
 
     // 按备件分组显示当前报废库存
     const groupedMap = {}
+
+    // 处理有序列号的报废库存
     currentScrapSerials.forEach(serial => {
       const item = scrapInBySerial[serial]
       const key = item.part_id || `unknown_${item.part_number || 'unknown'}`
@@ -450,7 +498,7 @@ const loadScrapItems = async () => {
           unit_price: item.unit_price || 0,
           quantity: 0,
           total_value: 0,
-          instances: []  // 当前在报废库中的实例
+          instances: []
         }
       }
       groupedMap[key].quantity += 1
@@ -465,7 +513,36 @@ const loadScrapItems = async () => {
       })
     })
 
+    // 处理无序列号的报废库存（按数量计算）
+    Object.keys(scrapInByPart).forEach(partKey => {
+      const inData = scrapInByPart[partKey]
+      const inQty = inData.quantity || 0
+      const outQty = scrapOutByPart[partKey] || 0
+      const netQty = inQty - outQty
+
+      if (netQty > 0) {
+        const inRecord = inData.item
+        if (!groupedMap[partKey]) {
+          groupedMap[partKey] = {
+            part_id: inRecord?.part_id,
+            name: inRecord?.name || inRecord?.part_number || '未知',
+            part_number: inRecord?.part_number || '未知',
+            manufacturer: '',
+            unit_price: inRecord?.unit_price || 0,
+            quantity: 0,
+            total_value: 0,
+            instances: []
+          }
+        }
+        groupedMap[partKey].quantity += netQty
+        groupedMap[partKey].total_value += netQty * (inRecord?.unit_price || 0)
+        // 无序列号的显示数量（不展开实例）
+        groupedMap[partKey].noSerialCount = netQty
+      }
+    })
+
     // 应用筛选
+    let items = Object.values(groupedMap)
     if (search.value) {
       const searchLower = search.value.toLowerCase()
       items = items.filter(item =>
@@ -675,8 +752,8 @@ const submitManualScrap = async () => {
   }
 }
 
-// 显示手动入库对话框（针对某个备件）
-const showManualInDialog = (row) => {
+// 显示入库对话框
+const showInDialog = (row) => {
   currentManualPart.value = row
   Object.assign(manualInForm, {
     serial_number: '',
@@ -738,6 +815,37 @@ const submitScrapOut = async () => {
 
   scrapOutSubmitting.value = true
   try {
+    // 先验证序列号是否在报废库存中
+    const scrapInResult = await getMovements({
+      movement_type: 'scrap_in',
+      keyword: scrapOutForm.serial_number,
+      limit: 1
+    })
+    const scrapOutResult = await getMovements({
+      movement_type: 'scrap_out',
+      keyword: scrapOutForm.serial_number,
+      limit: 1
+    })
+
+    const hasScrapIn = scrapInResult.items?.some(
+      item => item.serial_number === scrapOutForm.serial_number
+    )
+    const hasScrapOut = scrapOutResult.items?.some(
+      item => item.serial_number === scrapOutForm.serial_number
+    )
+
+    if (!hasScrapIn) {
+      ElMessage.warning('该序列号不在报废库存中，无法报废')
+      scrapOutSubmitting.value = false
+      return
+    }
+    if (hasScrapOut) {
+      ElMessage.warning('该序列号已报废出库')
+      scrapOutSubmitting.value = false
+      return
+    }
+
+    // 验证通过，提交报废出库
     await createMovement({
       part_id: currentScrapOutPart.value.part_id,
       movement_type: 'scrap_out',
@@ -762,17 +870,47 @@ const openScrapOutScanDialog = () => {
   scrapOutScanDialogVisible.value = true
 }
 
-// 报废出库扫码会话完成（后端已创建出库记录，前端只需刷新数据）
+// 报废出库扫码会话完成（后端已验证并创建出库记录）
 const onScrapOutScanComplete = async (result) => {
-  const scrapOutCount = result.scrap_out_count || (result.items?.length || 0)
-  if (scrapOutCount === 0) {
+  const scrapOutCount = result.scrap_out_count || 0
+  const invalidItems = result.invalid_items || []
+
+  if (scrapOutCount === 0 && invalidItems.length === 0) {
     ElMessage.warning('未扫描任何序列号')
     return
   }
 
-  ElMessage.success(`已报废出库 ${scrapOutCount} 个件`)
+  if (invalidItems.length > 0) {
+    const invalidMsg = invalidItems.map(i => `${i.serial_number}: ${i.reason}`).join('\n')
+    ElMessage.warning(`以下序列号不在报废库存中:\n${invalidMsg}`)
+  }
+
+  if (scrapOutCount > 0) {
+    ElMessage.success(`已报废出库 ${scrapOutCount} 个件`)
+  }
+
   scrapOutScanDialogVisible.value = false
   scrapOutDialogVisible.value = false
+  loadScrapItems()
+  loadHistory()
+}
+
+// 打开报废入库扫码对话框
+const openScrapInScanDialog = () => {
+  scrapInScanDialogVisible.value = true
+}
+
+// 报废入库扫码会话完成
+const onScrapInScanComplete = async (result) => {
+  const itemCount = result.scrap_in_count || (result.items?.length || 0)
+  if (itemCount === 0) {
+    ElMessage.warning('未扫描任何序列号')
+    return
+  }
+
+  ElMessage.success(`已报废入库 ${itemCount} 个件`)
+  scrapInScanDialogVisible.value = false
+  manualInDialogVisible.value = false
   loadScrapItems()
   loadHistory()
 }
@@ -803,6 +941,11 @@ onMounted(() => {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
+}
+.action-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: nowrap;
 }
 .toolbar {
   display: flex;

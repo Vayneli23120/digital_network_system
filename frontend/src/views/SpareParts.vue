@@ -106,6 +106,57 @@
               <el-button @click="loadMovements"><el-icon><Refresh /></el-icon> 刷新</el-button>
             </div>
           </template>
+
+          <!-- 筛选工具栏 -->
+          <div class="toolbar">
+            <div class="toolbar-left">
+              <el-input
+                v-model="movementFilter.keyword"
+                placeholder="搜索名称/型号/序列号"
+                clearable
+                class="search-input"
+                @keyup.enter="loadMovements"
+                @clear="loadMovements"
+              />
+              <el-select v-model="movementFilter.movement_type" placeholder="类型" clearable class="type-select" @change="loadMovements">
+                <el-option label="入库" value="in" />
+                <el-option label="出库" value="out" />
+                <el-option label="报废入库" value="scrap_in" />
+                <el-option label="报废出库" value="scrap_out" />
+              </el-select>
+              <el-date-picker
+                v-model="movementFilter.start_date"
+                type="date"
+                placeholder="开始日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="date-picker"
+                @change="loadMovements"
+              />
+              <el-date-picker
+                v-model="movementFilter.end_date"
+                type="date"
+                placeholder="结束日期"
+                format="YYYY-MM-DD"
+                value-format="YYYY-MM-DD"
+                class="date-picker"
+                @change="loadMovements"
+              />
+              <el-input
+                v-model="movementFilter.operator"
+                placeholder="操作人"
+                clearable
+                class="operator-input"
+                @keyup.enter="loadMovements"
+                @clear="loadMovements"
+              />
+            </div>
+            <div class="toolbar-right">
+              <el-button size="small" @click="resetMovementFilter">重置</el-button>
+              <el-button size="small" type="primary" @click="loadMovements">搜索</el-button>
+            </div>
+          </div>
+
           <el-table :data="movements" v-loading="movementsLoading" stripe border @row-click="showMovementDetail">
             <el-table-column prop="created_at" label="时间" width="180">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
@@ -128,6 +179,13 @@
             <el-table-column prop="quantity" label="数量" width="80" align="right" />
             <el-table-column prop="unit_price" label="单价" width="80">
               <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+            </el-table-column>
+            <el-table-column label="设备" width="120">
+              <template #default="{ row }">
+                <span v-if="row.target_device_name">{{ row.target_device_name }}</span>
+                <span v-else-if="row.source_device_name">{{ row.source_device_name }}</span>
+                <span v-else>-</span>
+              </template>
             </el-table-column>
             <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
           </el-table>
@@ -158,8 +216,10 @@
         <el-descriptions-item label="序列号">{{ currentMovement.serial_number || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数量">{{ currentMovement.quantity }}</el-descriptions-item>
         <el-descriptions-item label="单价">¥{{ (currentMovement.unit_price || 0).toFixed(2) }}</el-descriptions-item>
+        <el-descriptions-item label="目标设备">{{ currentMovement.target_device_name || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="来源设备">{{ currentMovement.source_device_name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="原因" :span="2">{{ currentMovement.reason || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="关联设备">{{ currentMovement.reference || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="关联单号">{{ currentMovement.reference || '-' }}</el-descriptions-item>
         <el-descriptions-item label="操作人">{{ currentMovement.operator || '-' }}</el-descriptions-item>
       </el-descriptions>
     </el-dialog>
@@ -403,6 +463,15 @@ const movements = ref([])
 const movementsLoading = ref(false)
 const movementPage = ref(1)
 const movementTotal = ref(0)
+
+// 出入库筛选条件
+const movementFilter = reactive({
+  keyword: '',
+  movement_type: '',
+  start_date: '',
+  end_date: '',
+  operator: ''
+})
 
 // 备件详情对话框
 const detailDialogVisible = ref(false)
@@ -739,7 +808,15 @@ const submitMovement = async () => {
 const loadMovements = async () => {
   movementsLoading.value = true
   try {
-    const params = { skip: (movementPage.value - 1) * 50, limit: 50 }
+    const params = {
+      skip: (movementPage.value - 1) * 50,
+      limit: 50,
+      keyword: movementFilter.keyword || undefined,
+      movement_type: movementFilter.movement_type || undefined,
+      start_date: movementFilter.start_date || undefined,
+      end_date: movementFilter.end_date || undefined,
+      operator: movementFilter.operator || undefined
+    }
     const result = await getMovements(params)
     movements.value = result.items || []
     movementTotal.value = result.total || 0
@@ -748,6 +825,17 @@ const loadMovements = async () => {
   } finally {
     movementsLoading.value = false
   }
+}
+
+// 重置出入库筛选
+const resetMovementFilter = () => {
+  movementFilter.keyword = ''
+  movementFilter.movement_type = ''
+  movementFilter.start_date = ''
+  movementFilter.end_date = ''
+  movementFilter.operator = ''
+  movementPage.value = 1
+  loadMovements()
 }
 
 onMounted(loadParts)
@@ -772,14 +860,25 @@ onMounted(loadParts)
   background: var(--el-fill-color-light);
   border-radius: 6px;
   margin-bottom: 16px;
+  flex-wrap: wrap;
 }
 .toolbar-left {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 .search-input {
   width: 200px;
+}
+.type-select {
+  width: 120px;
+}
+.date-picker {
+  width: 140px;
+}
+.operator-input {
+  width: 120px;
 }
 .category-select {
   width: 100px;

@@ -4,6 +4,7 @@
 封装备件 CRUD 和统计的业务逻辑，供路由和测试使用。
 """
 
+from datetime import datetime, timedelta
 from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -328,6 +329,9 @@ def list_movements(
     part_id: Optional[int] = None,
     movement_type: Optional[str] = None,
     operator: Optional[str] = None,
+    keyword: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
 ) -> Dict[str, Any]:
     """获取出入库记录列表
 
@@ -338,6 +342,9 @@ def list_movements(
         part_id: 按备件 ID 过滤
         movement_type: 按类型过滤
         operator: 按操作人过滤
+        keyword: 搜索关键词（名称/型号/序列号）
+        start_date: 开始日期
+        end_date: 结束日期
 
     Returns:
         包含 total 和 items 的字典
@@ -350,6 +357,29 @@ def list_movements(
         query = query.filter(SparePartMovement.movement_type == movement_type)
     if operator:
         query = query.filter(SparePartMovement.operator == operator)
+
+    # 关键词搜索（名称、型号、序列号）
+    if keyword:
+        keyword_filter = f"%{keyword}%"
+        query = query.filter(
+            (SparePartMovement.serial_number.ilike(keyword_filter)) |
+            (SparePartMovement.part.has(SparePart.name.ilike(keyword_filter))) |
+            (SparePartMovement.part.has(SparePart.part_number.ilike(keyword_filter)))
+        )
+
+    # 时间范围筛选
+    if start_date:
+        try:
+            start_dt = datetime.strptime(start_date, "%Y-%m-%d")
+            query = query.filter(SparePartMovement.created_at >= start_dt)
+        except ValueError:
+            pass
+    if end_date:
+        try:
+            end_dt = datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1)
+            query = query.filter(SparePartMovement.created_at < end_dt)
+        except ValueError:
+            pass
 
     total = query.count()
     movements = query.order_by(
@@ -371,6 +401,10 @@ def list_movements(
                 "reason": m.reason,
                 "operator": m.operator,
                 "reference": m.reference,
+                "target_device_id": m.target_device_id,
+                "target_device_name": m.target_device.name if m.target_device else None,
+                "source_device_id": m.source_device_id,
+                "source_device_name": m.source_device.name if m.source_device else None,
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in movements

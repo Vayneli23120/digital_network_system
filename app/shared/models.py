@@ -351,16 +351,20 @@ class SparePartMovement(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     part_id = Column(Integer, ForeignKey("spare_parts.id", ondelete="CASCADE"), nullable=False, index=True)
-    movement_type = Column(String(10), nullable=False)  # in / out / scrap_in
+    movement_type = Column(String(10), nullable=False)  # in / out / scrap_in / scrap_out
     quantity = Column(Integer, nullable=False)
     serial_number = Column(String(100), nullable=True)  # 序列号（扫码出库时记录）
     reason = Column(String(500), nullable=True)  # 出入库原因
     operator = Column(String(100), nullable=True)  # 操作人
     reference = Column(String(200), nullable=True)  # 关联设备/工单等
+    target_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 出库目标设备
+    source_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 返回件来源设备
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # 关系
     part = relationship("SparePart", back_populates="movements")
+    target_device = relationship("Device", foreign_keys=[target_device_id])
+    source_device = relationship("Device", foreign_keys=[source_device_id])
 
     def __repr__(self):
         return f"<SparePartMovement(part_id={self.part_id}, type={self.movement_type}, qty={self.quantity}, sn={self.serial_number})>"
@@ -375,11 +379,17 @@ class SparePartInstance(Base):
     serial_number = Column(String(100), unique=True, nullable=False, index=True)  # 序列号（唯一）
     po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
     unit_price = Column(DECIMAL(10, 2), default=0)  # 该实例的采购价格（入库时可填写）
-    status = Column(String(20), default="in_stock", index=True)  # in_stock / out / scrapped
+    status = Column(String(20), default="in_stock", index=True)  # in_stock / installed / scrapped
     location = Column(String(200), nullable=True)  # 存放位置
     in_stock_at = Column(DateTime, nullable=True)  # 入库时间
     out_at = Column(DateTime, nullable=True)  # 出库时间
-    out_to_device = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 出库到设备
+    # 设备安装相关字段
+    installed_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 当前安装设备
+    installed_at = Column(DateTime, nullable=True)  # 安装时间
+    installed_by = Column(String(100), nullable=True)  # 安装操作人
+    removed_from_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 拆卸来源设备
+    removed_at = Column(DateTime, nullable=True)  # 拆卸时间
+    # 维修/任务关联字段（保留原有）
     out_to_maintenance = Column(Integer, ForeignKey("maintenance_records.id", ondelete="SET NULL"), nullable=True)  # 出库到维修单
     out_to_task = Column(Integer, ForeignKey("maintenance_tasks.id", ondelete="SET NULL"), nullable=True)  # 出库到运维任务
     notes = Column(String(500), nullable=True)  # 备注
@@ -388,6 +398,8 @@ class SparePartInstance(Base):
 
     # 关系
     part = relationship("SparePart", back_populates="instances")
+    installed_device = relationship("Device", foreign_keys=[installed_device_id])
+    removed_from_device = relationship("Device", foreign_keys=[removed_from_device_id])
 
     def __repr__(self):
         return f"<SparePartInstance(serial={self.serial_number}, status={self.status})>"
