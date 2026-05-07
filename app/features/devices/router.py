@@ -390,6 +390,7 @@ async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
             {
                 "instance_id": i.id,
                 "serial_number": i.serial_number,
+                "po_number": i.po_number,  # PO号
                 "part_id": i.part_id,
                 "part_number": i.part.part_number if i.part else None,
                 "part_name": i.part.name if i.part else None,

@@ -161,6 +161,9 @@
 
       <el-table :data="currentScrapItem?.instances || []" stripe border size="small" style="margin-top: 16px">
         <el-table-column prop="serial_number" label="序列号" width="150" />
+        <el-table-column prop="po_number" label="PO号" width="80">
+          <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
         <el-table-column label="来源设备" width="120">
           <template #default="{ row }">
             <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
@@ -518,6 +521,7 @@ const loadScrapItems = async () => {
       groupedMap[key].total_value += (item.unit_price || 0)
       groupedMap[key].instances.push({
         serial_number: serial,
+        po_number: item.po_number,  // PO号
         unit_price: item.unit_price,
         scraped_at: item.created_at,
         movement_type: 'scrap_in',

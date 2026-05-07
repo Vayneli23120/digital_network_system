@@ -158,36 +158,39 @@
           </div>
 
           <el-table :data="movements" v-loading="movementsLoading" stripe border @row-click="showMovementDetail">
-            <el-table-column prop="created_at" label="时间" width="180">
+            <el-table-column prop="created_at" label="时间" width="160">
               <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
             </el-table-column>
-            <el-table-column prop="name" label="备件名称" width="150">
+            <el-table-column prop="name" label="备件名称" width="130">
               <template #default="{ row }">
                 <el-button type="primary" link>{{ row.name || '-' }}</el-button>
               </template>
             </el-table-column>
-            <el-table-column prop="serial_number" label="序列号" width="150">
+            <el-table-column prop="serial_number" label="序列号" width="120">
               <template #default="{ row }">{{ row.serial_number || '-' }}</template>
             </el-table-column>
-            <el-table-column prop="movement_type" label="类型" width="100" align="center">
+            <el-table-column prop="po_number" label="PO号" width="80">
+              <template #default="{ row }">{{ row.po_number || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="movement_type" label="类型" width="80" align="center">
               <template #default="{ row }">
                 <el-tag :type="getMovementTypeTag(row.movement_type)" size="small">
                   {{ getMovementTypeText(row.movement_type) }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column prop="quantity" label="数量" width="80" align="right" />
+            <el-table-column prop="quantity" label="数量" width="60" align="right" />
             <el-table-column prop="unit_price" label="单价" width="80">
               <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
             </el-table-column>
-            <el-table-column label="设备" width="120">
+            <el-table-column label="设备" width="100">
               <template #default="{ row }">
                 <span v-if="row.target_device_name">{{ row.target_device_name }}</span>
                 <span v-else-if="row.source_device_name">{{ row.source_device_name }}</span>
                 <span v-else>-</span>
               </template>
             </el-table-column>
-            <el-table-column prop="reason" label="原因" min-width="150" show-overflow-tooltip />
+            <el-table-column prop="reason" label="原因" min-width="120" show-overflow-tooltip />
           </el-table>
           <div class="pagination-bar">
             <el-pagination
@@ -214,6 +217,7 @@
         <el-descriptions-item label="备件名称">{{ currentMovement.name || '-' }}</el-descriptions-item>
         <el-descriptions-item label="备件型号">{{ currentMovement.part_number || '-' }}</el-descriptions-item>
         <el-descriptions-item label="序列号">{{ currentMovement.serial_number || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="PO号">{{ currentMovement.po_number || '-' }}</el-descriptions-item>
         <el-descriptions-item label="数量">{{ currentMovement.quantity }}</el-descriptions-item>
         <el-descriptions-item label="单价">¥{{ (currentMovement.unit_price || 0).toFixed(2) }}</el-descriptions-item>
         <el-descriptions-item label="目标设备">{{ currentMovement.target_device_name || '-' }}</el-descriptions-item>

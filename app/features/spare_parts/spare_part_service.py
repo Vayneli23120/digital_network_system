@@ -449,6 +449,7 @@ def list_movements(
                 "target_device_name": m.target_device.name if m.target_device else None,
                 "source_device_id": m.source_device_id,
                 "source_device_name": m.source_device.name if m.source_device else None,
+                "po_number": m.po_number,  # PO号
                 "created_at": m.created_at.isoformat() if m.created_at else None,
             }
             for m in movements

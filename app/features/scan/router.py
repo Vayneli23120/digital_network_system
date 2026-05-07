@@ -598,15 +598,22 @@ async def complete_scan_session(
 
         db.commit()
 
-        # 创建出入库历史记录（每个序列号单独记录）
+        # 创建出入库历史记录（每个序列号单独记录，包含PO号）
         if out_count > 0:
             for item in session["items"]:
                 if item.get("part_id"):
+                    # 从实例获取PO号
+                    instance = db.query(SparePartInstance).filter(
+                        SparePartInstance.serial_number == item.get("serial_number")
+                    ).first()
+                    po_number = instance.po_number if instance else None
+
                     movement = SparePartMovement(
                         part_id=item["part_id"],
                         movement_type="out",
                         quantity=1,
                         serial_number=item.get("serial_number"),
+                        po_number=po_number,  # 记录PO号
                         reason=data.reason if data else "扫码出库",
                         operator="",
                         reference=session.get("reference") or "",
@@ -630,13 +637,15 @@ async def complete_scan_session(
         scrap_in_count = len(session["items"])
         device_id = session.get("device_id")  # 获取设备ID（来源设备）
 
-        # 创建报废入库历史记录（每个序列号单独记录）
+        # 创建报废入库历史记录（每个序列号单独记录，包含PO号）
         for item in session["items"]:
             if item.get("part_id"):
                 # 更新备件实例状态
                 instance = db.query(SparePartInstance).filter(
                     SparePartInstance.serial_number == item.get("serial_number")
                 ).first()
+                po_number = instance.po_number if instance else None
+
                 if instance:
                     instance.status = "pending_scrap"  # 待报废状态（进入报废库存）
                     instance.removed_from_device_id = device_id  # 记录来源设备
@@ -648,6 +657,7 @@ async def complete_scan_session(
                     movement_type="scrap_in",
                     quantity=1,
                     serial_number=item.get("serial_number"),
+                    po_number=po_number,  # 记录PO号
                     reason=data.reason if data else "扫码报废入库",
                     operator="",
                     reference=session.get("reference") or "",
@@ -714,14 +724,21 @@ async def complete_scan_session(
                     "reason": reason_msg
                 })
 
-        # 只为有效的序列号创建报废出库记录
+        # 只为有效的序列号创建报废出库记录（包含PO号）
         for item in valid_items:
             if item.get("part_id"):
+                # 从实例获取PO号
+                instance = db.query(SparePartInstance).filter(
+                    SparePartInstance.serial_number == item.get("serial_number")
+                ).first()
+                po_number = instance.po_number if instance else None
+
                 movement = SparePartMovement(
                     part_id=item["part_id"],
                     movement_type="scrap_out",
                     quantity=1,
                     serial_number=item.get("serial_number"),
+                    po_number=po_number,  # 记录PO号
                     reason=data.reason if data else "扫码报废出库",
                     operator="",
                     reference="",

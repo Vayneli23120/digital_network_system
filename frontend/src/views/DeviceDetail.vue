@@ -227,6 +227,9 @@
                 <el-table-column prop="part_number" label="型号" width="120" />
                 <el-table-column prop="part_name" label="名称" width="150" />
                 <el-table-column prop="serial_number" label="序列号" width="120" />
+                <el-table-column prop="po_number" label="PO号" width="80">
+                  <template #default="{ row }">{{ row.po_number || '-' }}</template>
+                </el-table-column>
                 <el-table-column prop="category" label="分类" width="80" />
                 <el-table-column prop="unit_price" label="单价" width="80">
                   <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
