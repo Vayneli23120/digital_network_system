@@ -29,7 +29,7 @@ scan_sessions = {}  # {session_code: {type, created_at, items, status}}
 
 class ScanSessionCreate(BaseModel):
     """创建扫码会话"""
-    session_type: str  # in, out, return, maintenance, task
+    session_type: str  # in, out, return, scrap_out, maintenance, task
     reference: Optional[str] = None  # 关联工单/任务ID
     device_id: Optional[int] = None
     part_id: Optional[int] = None  # 入库时选择的备件ID
@@ -538,6 +538,34 @@ async def complete_scan_session(
             "items": session["items"],
             "matched_count": len([i for i in session["items"] if i.get("part_id")]),
             "message": f"返回件扫描完成，匹配 {len([i for i in session['items'] if i.get('part_id')])} 件"
+        }
+
+    # 报废出库处理：创建报废出库记录，不修改备件库存状态
+    if session["session_type"] == "scrap_out":
+        scrap_out_count = len(session["items"])
+
+        # 创建报废出库历史记录（每个序列号单独记录）
+        for item in session["items"]:
+            if item.get("part_id"):
+                movement = SparePartMovement(
+                    part_id=item["part_id"],
+                    movement_type="scrap_out",
+                    quantity=1,
+                    serial_number=item.get("serial_number"),
+                    reason=data.reason if data else "扫码报废出库",
+                    operator="",
+                    reference="",
+                    created_at=datetime.utcnow()
+                )
+                db.add(movement)
+        db.commit()
+
+        return {
+            "session_code": session_code,
+            "status": "completed",
+            "items": session["items"],
+            "scrap_out_count": scrap_out_count,
+            "message": f"报废出库成功，共 {scrap_out_count} 件"
         }
 
     # 删除会话（其他类型）

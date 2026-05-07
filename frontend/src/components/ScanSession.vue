@@ -8,6 +8,7 @@
             <el-radio label="in">入库</el-radio>
             <el-radio label="out">出库</el-radio>
             <el-radio label="return">返回件</el-radio>
+            <el-radio label="scrap_out">报废出库</el-radio>
             <el-radio label="maintenance">维修备件</el-radio>
             <el-radio label="task">运维任务</el-radio>
           </el-radio-group>
@@ -239,7 +240,7 @@ onMounted(() => {
   if (props.autoStart) {
     if (props.defaultType === 'in' && props.partId && props.poNumber) {
       createSession()
-    } else if (props.defaultType === 'out' || props.defaultType === 'return') {
+    } else if (props.defaultType === 'out' || props.defaultType === 'return' || props.defaultType === 'scrap_out') {
       createSession()
     }
   }
@@ -254,7 +255,7 @@ watch(
       resetState()
       if (props.defaultType === 'in' && props.partId && props.poNumber) {
         createSession()
-      } else if (props.defaultType === 'out' || props.defaultType === 'return') {
+      } else if (props.defaultType === 'out' || props.defaultType === 'return' || props.defaultType === 'scrap_out') {
         createSession()
       }
     }
@@ -263,7 +264,7 @@ watch(
 
 // 计算属性
 const sessionTypeText = computed(() => {
-  const texts = { in: '入库', out: '出库', return: '返回件', maintenance: '维修备件', task: '运维任务' }
+  const texts = { in: '入库', out: '出库', return: '返回件', scrap_out: '报废出库', maintenance: '维修备件', task: '运维任务' }
   return texts[sessionForm.value.session_type] || ''
 })
 

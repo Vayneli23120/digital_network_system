@@ -295,18 +295,30 @@
 
     <!-- 报废出库对话框 -->
     <el-dialog v-model="scrapOutDialogVisible" title="报废出库" width="500px">
-      <el-form :model="scrapOutForm" label-width="80px">
-        <el-form-item label="备件">
-          <el-input :value="currentScrapOutPart?.name" disabled />
-        </el-form-item>
-        <el-form-item label="序列号" required>
-          <el-input v-model="scrapOutForm.serial_number" placeholder="输入要出库的序列号" />
-          <div class="scrap-out-tip">输入报废库中要出库（销毁/回收）的序列号</div>
-        </el-form-item>
-        <el-form-item label="出库原因" required>
-          <el-input v-model="scrapOutForm.reason" type="textarea" placeholder="出库原因（如：销毁、回收等）" />
-        </el-form-item>
-      </el-form>
+      <div class="scrap-out-scan-btn">
+        <el-button type="danger" @click="openScrapOutScanDialog">
+          <el-icon><Aim /></el-icon>
+          扫码报废出库
+        </el-button>
+        <div class="scrap-out-scan-tip">点击后用扫码枪扫描条形码建立连接，再扫描要出库的序列号</div>
+      </div>
+
+      <el-divider />
+
+      <div class="scrap-out-manual">
+        <div class="manual-title">手动输入</div>
+        <el-form :model="scrapOutForm" label-width="80px">
+          <el-form-item label="备件">
+            <el-input :value="currentScrapOutPart?.name" disabled />
+          </el-form-item>
+          <el-form-item label="序列号" required>
+            <el-input v-model="scrapOutForm.serial_number" placeholder="输入要出库的序列号" />
+          </el-form-item>
+          <el-form-item label="出库原因" required>
+            <el-input v-model="scrapOutForm.reason" type="textarea" placeholder="出库原因（如：销毁、回收等）" />
+          </el-form-item>
+        </el-form>
+      </div>
       <template #footer>
         <el-button @click="scrapOutDialogVisible = false">取消</el-button>
         <el-button type="danger" @click="submitScrapOut" :loading="scrapOutSubmitting" :disabled="!scrapOutForm.serial_number || !scrapOutForm.reason">
@@ -314,13 +326,24 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- 报废出库扫码对话框 -->
+    <el-dialog v-model="scrapOutScanDialogVisible" title="扫码报废出库" width="700px">
+      <ScanSession
+        ref="scrapOutScanSessionRef"
+        default-type="scrap_out"
+        :auto-start="scrapOutScanDialogVisible"
+        @complete="onScrapOutScanComplete"
+        @cancel="scrapOutScanDialogVisible = false"
+      />
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, Aim } from '@element-plus/icons-vue'
 import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -392,6 +415,10 @@ const scrapOutForm = reactive({
   serial_number: '',
   reason: ''
 })
+
+// 报废出库扫码
+const scrapOutScanDialogVisible = ref(false)
+const scrapOutScanSessionRef = ref(null)
 
 // 加载报废库存（按备件分组，计算 scrap_in - scrap_out）
 const loadScrapItems = async () => {
@@ -767,6 +794,46 @@ const submitScrapOut = async () => {
   }
 }
 
+// 打开报废出库扫码对话框
+const openScrapOutScanDialog = () => {
+  scrapOutScanDialogVisible.value = true
+}
+
+// 报废出库扫码会话完成
+const onScrapOutScanComplete = async (result) => {
+  const items = result.items || []
+  if (items.length === 0) {
+    ElMessage.warning('未扫描任何序列号')
+    return
+  }
+
+  // 批量报废出库
+  submitting.value = true
+  try {
+    for (const item of items) {
+      if (item.part_id) {
+        await createMovement({
+          part_id: item.part_id,
+          movement_type: 'scrap_out',
+          quantity: 1,
+          serial_number: item.serial_number,
+          reason: '扫码报废出库',
+          reference: ''
+        })
+      }
+    }
+    ElMessage.success(`已报废出库 ${items.length} 个件`)
+    scrapOutScanDialogVisible.value = false
+    scrapOutDialogVisible.value = false
+    loadScrapItems()
+    loadHistory()
+  } catch (e) {
+    ElMessage.error('报废出库失败：' + (e.response?.data?.detail || e.message))
+  } finally {
+    submitting.value = false
+  }
+}
+
 onMounted(() => {
   loadScrapItems()
   loadHistory()
@@ -818,9 +885,25 @@ onMounted(() => {
   display: flex;
   gap: 8px;
 }
-.scrap-out-tip {
+.scrap-out-scan-btn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.scrap-out-scan-tip {
   font-size: 12px;
+  color: var(--el-color-danger);
+  padding: 4px 8px;
+  background: var(--el-color-danger-light-9);
+  border-radius: 4px;
+}
+.scrap-out-manual {
+  margin-top: 16px;
+}
+.manual-title {
+  font-size: 14px;
   color: var(--el-text-color-secondary);
-  margin-top: 8px;
+  margin-bottom: 12px;
 }
 </style>
