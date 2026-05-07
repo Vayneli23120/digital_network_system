@@ -29,7 +29,7 @@ scan_sessions = {}  # {session_code: {type, created_at, items, status}}
 
 class ScanSessionCreate(BaseModel):
     """创建扫码会话"""
-    session_type: str  # in, out, maintenance, task
+    session_type: str  # in, out, return, maintenance, task
     reference: Optional[str] = None  # 关联工单/任务ID
     device_id: Optional[int] = None
     part_id: Optional[int] = None  # 入库时选择的备件ID
@@ -228,15 +228,29 @@ async def add_scan_item(
             "message": f"已添加: {part.name}" if not existing_instance else f"序列号已存在库存中（状态: {existing_instance.status})"
         }
 
-    # 出库模式：查询已有备件实例
+    # 出库/返回件模式：查询已有备件实例
     instance = db.query(SparePartInstance).filter(
-        SparePartInstance.serial_number == data.serial_number,
-        SparePartInstance.status == "in_stock"
-    ).first()
+        SparePartInstance.serial_number == data.serial_number
+    ).first()  # 返回件可以查询任何状态的实例，不只是in_stock
 
     part = None
     if instance:
         part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
+
+    # 获取该序列号的出入库历史（返回件需要）
+    history = []
+    if instance and session["session_type"] == "return":
+        movements = db.query(SparePartMovement).filter(
+            SparePartMovement.serial_number == data.serial_number
+        ).order_by(SparePartMovement.created_at).all()
+        for m in movements:
+            history.append({
+                "id": m.id,
+                "movement_type": m.movement_type,
+                "reason": m.reason,
+                "reference": m.reference,
+                "created_at": m.created_at.isoformat() if m.created_at else None
+            })
 
     scan_item = {
         "serial_number": data.serial_number,
@@ -245,7 +259,11 @@ async def add_scan_item(
         "part_number": part.part_number if part else None,
         "name": part.name if part else None,
         "quantity": data.quantity,
-        "unit_price": float(part.unit_price) if part and part.unit_price else None,
+        "unit_price": float(instance.unit_price) if instance and instance.unit_price else (float(part.unit_price) if part and part.unit_price else None),
+        "instance_status": instance.status if instance else None,  # 实例状态
+        "in_stock_at": instance.in_stock_at.isoformat() if instance and instance.in_stock_at else None,
+        "out_at": instance.out_at.isoformat() if instance and instance.out_at else None,
+        "history": history,  # 返回件历史
         "scanned_at": datetime.utcnow()
     }
 
@@ -260,11 +278,21 @@ async def add_scan_item(
     else:
         session["items"].append(scan_item)
 
+    found_msg = "已找到" if instance else "未找到"
+    if session["session_type"] == "return":
+        return {
+            "session_code": data.session_code,
+            "item": scan_item,
+            "total_items": len(session["items"]),
+            "found_in_system": instance is not None,
+            "message": f"{found_msg}返回件: {part.name if part else data.serial_number}"
+        }
+
     return {
         "session_code": data.session_code,
         "item": scan_item,
         "total_items": len(session["items"]),
-        "found_in_stock": instance is not None,
+        "found_in_stock": instance is not None and instance.status == "in_stock",
         "message": f"已添加: {part.name if part else data.serial_number}" if instance else f"序列号 {data.serial_number} 未找到或在库中不存在"
     }
 
@@ -499,6 +527,17 @@ async def complete_scan_session(
             "items": session["items"],
             "out_count": out_count,
             "message": f"出库成功，共 {out_count} 件"
+        }
+
+    # 返回件处理：只返回扫描结果，不进行库存操作
+    if session["session_type"] == "return":
+        # 返回件扫描不修改库存状态，只返回匹配的设备信息
+        return {
+            "session_code": session_code,
+            "status": "completed",
+            "items": session["items"],
+            "matched_count": len([i for i in session["items"] if i.get("part_id")]),
+            "message": f"返回件扫描完成，匹配 {len([i for i in session['items'] if i.get('part_id')])} 件"
         }
 
     # 删除会话（其他类型）

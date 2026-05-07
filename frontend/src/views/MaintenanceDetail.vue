@@ -180,14 +180,17 @@
                 <el-option
                   v-for="part in sparePartOptions"
                   :key="part.id"
-                  :label="`${part.part_number} - ${part.name} (库存: ${part.quantity_in_stock})`"
+                  :label="part.is_serial_match ? `${part.serial_number} - ${part.name}` : `${part.part_number} - ${part.name} (库存: ${part.quantity_in_stock})`"
                   :value="part.id"
-                  :disabled="part.quantity_in_stock <= 0"
+                  :disabled="!part.is_serial_match && part.quantity_in_stock <= 0"
                 >
                   <div class="spare-option">
                     <span class="spare-number">{{ part.part_number }}</span>
                     <span class="spare-name">{{ part.name }}</span>
-                    <span class="spare-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
+                    <span v-if="part.is_serial_match" class="spare-sn">
+                      SN: {{ part.serial_number }}
+                    </span>
+                    <span v-else class="spare-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
                       库存: {{ part.quantity_in_stock }}
                     </span>
                   </div>
@@ -228,31 +231,90 @@
         <el-divider content-position="left">返回件信息</el-divider>
         <el-form-item label="返回件处理">
           <div class="return-parts-section">
-            <!-- 手动添加返回件 -->
-            <div class="return-add">
-              <el-select
-                v-model="selectedReturnPart"
-                placeholder="从备件库选择（可选）"
-                filterable
-                remote
-                :remote-method="searchReturnParts"
-                :loading="spareLoading"
+            <!-- 扫码查询返回件 -->
+            <div class="return-scan-area">
+              <el-button type="primary" @click="openReturnScanDialog">
+                <el-icon><Aim /></el-icon>
+                扫码添加返回件
+              </el-button>
+              <div class="return-scan-tip">点击后用扫码枪扫描条形码建立连接，再扫描返回件序列号</div>
+            </div>
+
+            <!-- 手动输入查询 -->
+            <div class="return-manual-query" style="margin-top: 12px">
+              <el-input
+                v-model="returnScanInput"
+                placeholder="手动输入序列号查询"
                 style="width: 200px"
+                @keyup.enter="scanReturnPart"
                 clearable
               >
-                <el-option
-                  v-for="part in sparePartOptions"
-                  :key="part.id"
-                  :label="`${part.part_number} - ${part.name}`"
-                  :value="part.id"
-                />
-              </el-select>
-              <el-input v-model="returnPartSerial" placeholder="序列号" style="width: 120px" />
-              <el-input v-model="returnPartNumber" placeholder="型号（手动输入）" style="width: 130px" />
-              <el-input v-model="returnPartName" placeholder="名称" style="width: 130px" />
-              <el-input-number v-model="returnPartQty" :min="1" style="width: 90px" />
-              <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
-              <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">添加</el-button>
+                <template #prefix><el-icon><Aim /></el-icon></template>
+              </el-input>
+              <el-button type="default" size="small" @click="scanReturnPart" :loading="returnScanLoading">
+                查询
+              </el-button>
+            </div>
+
+            <!-- 扫码识别结果（如果找到历史记录） -->
+            <div class="return-found-info" v-if="returnFoundInfo">
+              <el-card size="small" shadow="never">
+                <div class="found-header">
+                  <el-tag type="success" size="small">已识别</el-tag>
+                  <span>{{ returnFoundInfo.serial_number }}</span>
+                </div>
+                <el-descriptions :column="3" size="small" border>
+                  <el-descriptions-item label="型号">{{ returnFoundInfo.part_number }}</el-descriptions-item>
+                  <el-descriptions-item label="名称">{{ returnFoundInfo.name }}</el-descriptions-item>
+                  <el-descriptions-item label="单价">¥{{ (returnFoundInfo.unit_price || 0).toFixed(2) }}</el-descriptions-item>
+                  <el-descriptions-item label="入库时间">{{ returnFoundInfo.in_stock_at ? formatDateTime(returnFoundInfo.in_stock_at) : '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="出库时间">{{ returnFoundInfo.out_at ? formatDateTime(returnFoundInfo.out_at) : '-' }}</el-descriptions-item>
+                  <el-descriptions-item label="状态">
+                    <el-tag :type="returnFoundInfo.status === 'out' ? 'warning' : 'success'" size="small">
+                      {{ returnFoundInfo.status === 'out' ? '已出库' : '在库' }}
+                    </el-tag>
+                  </el-descriptions-item>
+                </el-descriptions>
+                <div class="found-actions">
+                  <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 90px" />
+                  <el-checkbox v-model="returnPartScrap">入报废库</el-checkbox>
+                  <el-button type="primary" size="small" @click="addFoundReturnPart">添加到列表</el-button>
+                  <el-button size="small" @click="clearReturnFound">清除</el-button>
+                </div>
+              </el-card>
+            </div>
+
+            <!-- 手动添加返回件（未识别时） -->
+            <div class="return-manual-area" v-if="!returnFoundInfo">
+              <div class="return-manual-row">
+                <el-select
+                  v-model="selectedReturnPart"
+                  placeholder="从备件库选择型号"
+                  filterable
+                  remote
+                  :remote-method="searchReturnParts"
+                  :loading="spareLoading"
+                  style="width: 180px"
+                  clearable
+                  @change="onReturnPartSelect"
+                >
+                  <el-option
+                    v-for="part in sparePartOptions"
+                    :key="part.id"
+                    :label="`${part.part_number} - ${part.name}`"
+                    :value="part.id"
+                  />
+                </el-select>
+                <el-input v-model="returnPartSerial" placeholder="序列号（必填）" style="width: 120px" />
+                <el-input v-model="returnPartNumber" placeholder="型号（手动）" style="width: 130px" />
+                <el-input v-model="returnPartName" placeholder="名称（默认=型号）" style="width: 130px" />
+              </div>
+              <div class="return-manual-row">
+                <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 90px" />
+                <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
+                <el-button type="primary" size="small" :disabled="!returnPartSerial" @click="addReturnPart">添加</el-button>
+              </div>
+              <div class="return-manual-tip">序列号未识别时：可选备件库型号自动填充，或手动输入型号/名称</div>
             </div>
 
             <div class="return-parts-table" v-if="editForm.return_parts.length > 0">
@@ -321,6 +383,20 @@
         @cancel="scanDialogVisible = false"
       />
     </el-dialog>
+
+    <!-- 扫码添加返回件对话框 -->
+    <el-dialog v-model="returnScanDialogVisible" title="扫码添加返回件" width="700px">
+      <ScanSession
+        ref="returnScanSessionRef"
+        default-type="return"
+        :auto-start="returnScanDialogVisible"
+        @complete="onReturnScanSessionComplete"
+        @cancel="returnScanDialogVisible = false"
+      />
+      <template #footer>
+        <el-button @click="returnScanDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -329,7 +405,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Edit, Delete } from '@element-plus/icons-vue'
-import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement } from '@/api'
+import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
 
@@ -351,7 +427,14 @@ const scanDialogVisible = ref(false)
 const scanSessionRef = ref(null)
 const originalSpareParts = ref([])  // 原始备件列表，用于判断新增
 
-// 返回件录入
+// 返回件扫码对话框
+const returnScanDialogVisible = ref(false)
+const returnScanSessionRef = ref(null)
+
+// 返回件扫码相关
+const returnScanInput = ref('')
+const returnScanLoading = ref(false)
+const returnFoundInfo = ref(null)
 const selectedReturnPart = ref(null)
 const returnPartNumber = ref('')
 const returnPartSerial = ref('')
@@ -382,7 +465,7 @@ const getMaintTypeText = (type) => {
 
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
-// 搜索备件
+// 搜索备件（支持序列号、型号、名称搜索）
 const searchSpareParts = async (query) => {
   if (!query || query.length < 1) {
     sparePartOptions.value = []
@@ -390,6 +473,28 @@ const searchSpareParts = async (query) => {
   }
   spareLoading.value = true
   try {
+    // 先尝试通过序列号查找
+    try {
+      const partBySerial = await getPartBySerialNumber(query)
+      if (partBySerial) {
+        // 如果找到，添加到选项列表
+        sparePartOptions.value = [{
+          id: partBySerial.id,
+          part_number: partBySerial.part_number,
+          name: partBySerial.name,
+          serial_number: partBySerial.serial_number,
+          quantity_in_stock: partBySerial.quantity_in_stock,
+          unit_price: partBySerial.unit_price,
+          is_serial_match: true  // 标记为序列号匹配
+        }]
+        spareLoading.value = false
+        return
+      }
+    } catch (e) {
+      // 序列号没找到，继续搜索型号/名称
+    }
+
+    // 搜索型号/名称
     const result = await getPartList({ search: query, limit: 20 })
     sparePartOptions.value = result.items || []
   } catch (e) {
@@ -419,7 +524,17 @@ const addSparePartToEditForm = () => {
   const part = sparePartOptions.value.find(p => p.id === selectedSparePart.value)
   if (!part) return
 
-  const existing = editForm.value.spare_parts.find(p => p.part_id === part.id)
+  // 如果是序列号匹配，检查是否已添加过该序列号
+  if (part.is_serial_match && part.serial_number) {
+    const existingBySerial = editForm.value.spare_parts.find(p => p.serial_number === part.serial_number)
+    if (existingBySerial) {
+      ElMessage.warning(`序列号 ${part.serial_number} 已在列表中`)
+      selectedSparePart.value = null
+      return
+    }
+  }
+
+  const existing = editForm.value.spare_parts.find(p => p.part_id === part.id && !p.serial_number)
   if (existing) {
     existing.quantity += 1
   } else {
@@ -427,8 +542,10 @@ const addSparePartToEditForm = () => {
       part_id: part.id,
       part_number: part.part_number,
       name: part.name,
+      serial_number: part.serial_number || null,  // 序列号匹配时携带SN
       unit_price: part.unit_price || 0,
-      quantity: 1
+      quantity: 1,
+      is_serial_match: part.is_serial_match || false  // 标记来源
     })
   }
 
@@ -439,6 +556,11 @@ const addSparePartToEditForm = () => {
 // 打开扫码对话框
 const openScanDialog = () => {
   scanDialogVisible.value = true
+}
+
+// 打开返回件扫码对话框
+const openReturnScanDialog = () => {
+  returnScanDialogVisible.value = true
 }
 
 // 扫码会话完成
@@ -467,6 +589,31 @@ const onScanSessionComplete = async (result) => {
   ElMessage.success(`已添加 ${result.items.length} 个备件到更换列表`)
 }
 
+// 返回件扫码会话完成
+const onReturnScanSessionComplete = async (result) => {
+  // 将扫描的返回件加入编辑表单（返回件扫码会话不会自动出库，只是查询信息）
+  for (const item of result.items) {
+    const existing = editForm.value.return_parts.find(p => p.serial_number === item.serial_number)
+    if (existing) {
+      ElMessage.warning(`序列号 ${item.serial_number} 已在列表中`)
+      continue
+    }
+    editForm.value.return_parts.push({
+      part_id: item.part_id,
+      part_number: item.part_number,
+      name: item.name,
+      serial_number: item.serial_number,
+      unit_price: item.unit_price || 0,
+      quantity: 1,
+      scrap_in: item.part_id ? true : false,  // 有备件ID默认入报废库
+      is_from_scan: true,
+      history: item.history || []
+    })
+    ElMessage.success(`已添加返回件: ${item.serial_number}`)
+  }
+  returnScanDialogVisible.value = false
+}
+
 // 移除备件
 const removeEditSparePart = (index) => {
   editForm.value.spare_parts.splice(index, 1)
@@ -490,15 +637,92 @@ const searchReturnParts = async (query) => {
   }
 }
 
+// 扫码查询返回件
+const scanReturnPart = async () => {
+  const serial = returnScanInput.value.trim()
+  if (!serial || serial.length < 4) {
+    ElMessage.warning('请输入至少4个字符的序列号')
+    return
+  }
+
+  returnScanLoading.value = true
+  try {
+    const info = await getPartBySerialNumber(serial)
+    returnFoundInfo.value = info
+    ElMessage.success(`已识别: ${info.name || info.part_number}`)
+    // 自动填充表单
+    returnPartSerial.value = info.serial_number
+    returnPartNumber.value = info.part_number
+    returnPartName.value = info.name
+    selectedReturnPart.value = info.id
+    returnPartScrap.value = true
+  } catch (e) {
+    returnFoundInfo.value = null
+    returnPartSerial.value = serial
+    ElMessage.info('序列号未在系统中找到，请手动输入型号/名称或从备件库选择')
+  } finally {
+    returnScanLoading.value = false
+  }
+}
+
+// 清除识别结果
+const clearReturnFound = () => {
+  returnFoundInfo.value = null
+  returnScanInput.value = ''
+  returnPartSerial.value = ''
+  returnPartNumber.value = ''
+  returnPartName.value = ''
+  selectedReturnPart.value = null
+  returnPartQty.value = 1
+}
+
+// 添加识别到的返回件
+const addFoundReturnPart = () => {
+  if (!returnFoundInfo.value) return
+
+  editForm.value.return_parts.push({
+    part_id: returnFoundInfo.value.id,
+    part_number: returnFoundInfo.value.part_number,
+    name: returnFoundInfo.value.name,
+    serial_number: returnFoundInfo.value.serial_number,
+    unit_price: returnFoundInfo.value.unit_price || 0,
+    quantity: returnPartQty.value,
+    scrap_in: returnPartScrap.value,
+    is_from_scan: true,
+    history: returnFoundInfo.value.history
+  })
+
+  ElMessage.success(`已添加返回件: ${returnFoundInfo.value.serial_number}`)
+  clearReturnFound()
+}
+
+// 选择备件型号时自动填充
+const onReturnPartSelect = () => {
+  if (!selectedReturnPart.value) return
+  const part = sparePartOptions.value.find(p => p.id === selectedReturnPart.value)
+  if (part) {
+    returnPartNumber.value = part.part_number
+    returnPartName.value = part.name || part.part_number
+    returnPartScrap.value = true
+  }
+}
+
 // 手动添加返回件
 const addReturnPart = () => {
-  if (!returnPartNumber.value && !selectedReturnPart.value) {
-    ElMessage.warning('请输入返回件型号或从备件库选择')
+  if (!returnPartSerial.value) {
+    ElMessage.warning('请输入序列号')
+    return
+  }
+
+  // 检查是否已添加过该序列号
+  const existing = editForm.value.return_parts.find(p => p.serial_number === returnPartSerial.value)
+  if (existing) {
+    ElMessage.warning(`序列号 ${returnPartSerial.value} 已在列表中`)
     return
   }
 
   let partNumber = returnPartNumber.value
-  let partName = returnPartName.value
+  let partName = returnPartName.value || returnPartNumber.value
   let partId = null
 
   if (selectedReturnPart.value) {
@@ -506,19 +730,24 @@ const addReturnPart = () => {
     if (part) {
       partId = part.id
       partNumber = part.part_number
-      partName = part.name
+      partName = part.name || part.part_number
     }
   }
 
   editForm.value.return_parts.push({
     part_id: partId,
     part_number: partNumber,
-    name: partName || partNumber,
+    name: partName,
     serial_number: returnPartSerial.value,
     quantity: returnPartQty.value,
-    scrap_in: selectedReturnPart.value ? returnPartScrap.value : false
+    scrap_in: selectedReturnPart.value ? returnPartScrap.value : false,
+    is_from_scan: false
   })
 
+  ElMessage.success(`已添加返回件: ${returnPartSerial.value}`)
+
+  returnScanInput.value = ''
+  returnFoundInfo.value = null
   selectedReturnPart.value = null
   returnPartSerial.value = ''
   returnPartNumber.value = ''
@@ -890,12 +1119,56 @@ onMounted(() => {
   width: 100%;
 }
 
-.return-add {
+.return-scan-area {
   display: flex;
   align-items: center;
   gap: 10px;
-  flex-wrap: wrap;
   margin-bottom: 12px;
+}
+
+.return-scan-tip {
+  font-size: 12px;
+  color: var(--el-color-primary);
+  padding: 4px 8px;
+  background: var(--el-color-primary-light-9);
+  border-radius: 4px;
+}
+
+.return-found-info {
+  margin-bottom: 16px;
+}
+
+.found-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.found-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.return-manual-area {
+  margin-bottom: 12px;
+}
+
+.return-manual-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.return-manual-tip {
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
+  padding: 4px 8px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
 }
 
 .return-parts-table {

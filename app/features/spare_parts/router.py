@@ -298,8 +298,8 @@ async def api_manual_stock_out(
 
 @router.get("/by-serial/{serial_number}")
 async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_db)):
-    """通过序列号查找备件实例（扫码枪接口）"""
-    from app.shared.models import SparePartInstance, SparePart
+    """通过序列号查找备件实例（扫码枪接口，返回完整历史信息）"""
+    from app.shared.models import SparePartInstance, SparePart, SparePartMovement
 
     instance = db.query(SparePartInstance).filter(
         SparePartInstance.serial_number == serial_number
@@ -310,6 +310,21 @@ async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_d
 
     part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
 
+    # 获取该序列号的出入库历史
+    movements = db.query(SparePartMovement).filter(
+        SparePartMovement.serial_number == serial_number
+    ).order_by(SparePartMovement.created_at).all()
+
+    history = []
+    for m in movements:
+        history.append({
+            "id": m.id,
+            "movement_type": m.movement_type,
+            "reason": m.reason,
+            "reference": m.reference,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        })
+
     return {
         "id": part.id if part else None,
         "instance_id": instance.id,
@@ -317,9 +332,14 @@ async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_d
         "part_number": part.part_number if part else None,
         "serial_number": instance.serial_number,
         "po_number": instance.po_number,
+        "unit_price": float(instance.unit_price) if instance.unit_price else (float(part.unit_price) if part and part.unit_price else 0),
         "status": instance.status,
         "location": instance.location,
         "quantity_in_stock": part.quantity_in_stock if part else 0,
+        "in_stock_at": instance.in_stock_at.isoformat() if instance.in_stock_at else None,
+        "out_at": instance.out_at.isoformat() if instance.out_at else None,
+        "notes": instance.notes,
+        "history": history,  # 出入库历史记录
     }
 
 

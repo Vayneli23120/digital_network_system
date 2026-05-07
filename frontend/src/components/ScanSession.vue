@@ -7,6 +7,7 @@
           <el-radio-group v-model="sessionForm.session_type">
             <el-radio label="in">入库</el-radio>
             <el-radio label="out">出库</el-radio>
+            <el-radio label="return">返回件</el-radio>
             <el-radio label="maintenance">维修备件</el-radio>
             <el-radio label="task">运维任务</el-radio>
           </el-radio-group>
@@ -234,11 +235,11 @@ const resetState = () => {
 
 // 组件挂载后检查是否需要自动创建会话
 onMounted(() => {
-  // 入库需要 partId 和 poNumber，出库不需要
+  // 入库需要 partId 和 poNumber，出库和返回件不需要
   if (props.autoStart) {
     if (props.defaultType === 'in' && props.partId && props.poNumber) {
       createSession()
-    } else if (props.defaultType === 'out') {
+    } else if (props.defaultType === 'out' || props.defaultType === 'return') {
       createSession()
     }
   }
@@ -253,7 +254,7 @@ watch(
       resetState()
       if (props.defaultType === 'in' && props.partId && props.poNumber) {
         createSession()
-      } else if (props.defaultType === 'out') {
+      } else if (props.defaultType === 'out' || props.defaultType === 'return') {
         createSession()
       }
     }
@@ -262,7 +263,7 @@ watch(
 
 // 计算属性
 const sessionTypeText = computed(() => {
-  const texts = { in: '入库', out: '出库', maintenance: '维修备件', task: '运维任务' }
+  const texts = { in: '入库', out: '出库', return: '返回件', maintenance: '维修备件', task: '运维任务' }
   return texts[sessionForm.value.session_type] || ''
 })
 
