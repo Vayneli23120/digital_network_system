@@ -379,7 +379,7 @@ class SparePartInstance(Base):
     serial_number = Column(String(100), unique=True, nullable=False, index=True)  # 序列号（唯一）
     po_number = Column(String(100), nullable=True, index=True)  # 采购订单号
     unit_price = Column(DECIMAL(10, 2), default=0)  # 该实例的采购价格（入库时可填写）
-    status = Column(String(20), default="in_stock", index=True)  # in_stock / installed / scrapped
+    status = Column(String(20), default="in_stock", index=True)  # in_stock(库存) / inuse(在设备上) / pending_scrap(待报废) / scrapped(已报废)
     location = Column(String(200), nullable=True)  # 存放位置
     in_stock_at = Column(DateTime, nullable=True)  # 入库时间
     out_at = Column(DateTime, nullable=True)  # 出库时间

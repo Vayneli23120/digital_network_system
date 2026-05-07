@@ -271,6 +271,16 @@ async def add_scan_item(
         SparePartInstance.serial_number == data.serial_number
     ).first()
 
+    # 返回件入库模式：检查备件必须是 inuse 状态（在设备上使用）
+    if session["session_type"] == "return":
+        if not instance:
+            raise HTTPException(status_code=400, detail="未找到该序列号的备件，无法作为返回件入库")
+        if instance.status != "inuse":
+            raise HTTPException(
+                status_code=400,
+                detail=f"该备件状态为 '{instance.status}'，只有 'inuse'(在设备上使用) 状态的备件才能作为返回件入库"
+            )
+
     part = None
     if instance:
         part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
@@ -553,9 +563,9 @@ async def complete_scan_session(
             ).first()
 
             if instance:
-                # 如果有设备ID，更新为安装状态
+                # 如果有设备ID，更新为在设备上使用状态
                 if device_id:
-                    instance.status = "installed"
+                    instance.status = "inuse"
                     instance.installed_device_id = device_id
                     instance.installed_at = datetime.utcnow()
                     instance.installed_by = ""
@@ -628,7 +638,7 @@ async def complete_scan_session(
                     SparePartInstance.serial_number == item.get("serial_number")
                 ).first()
                 if instance:
-                    instance.status = "scrapped"
+                    instance.status = "pending_scrap"  # 待报废状态（进入报废库存）
                     instance.removed_from_device_id = device_id  # 记录来源设备
                     instance.removed_at = datetime.utcnow()
                     instance.installed_device_id = None  # 清除安装设备
@@ -655,7 +665,7 @@ async def complete_scan_session(
             "message": f"报废入库成功，共 {scrap_in_count} 件"
         }
 
-    # 报废出库处理：验证序列号在报废库存中，然后创建报废出库记录
+    # 报废出库处理：验证序列号在报废库存中且状态为待报废，然后创建报废出库记录
     if session["session_type"] == "scrap_out":
         valid_items = []
         invalid_items = []
@@ -664,6 +674,11 @@ async def complete_scan_session(
             serial_number = item.get("serial_number")
             if not serial_number:
                 continue
+
+            # 检查备件实例状态是否为 pending_scrap（待报废）
+            instance = db.query(SparePartInstance).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
 
             # 验证该序列号是否在报废库存中（有 scrap_in 且没有 scrap_out）
             scrap_in_exists = db.query(SparePartMovement).filter(
@@ -676,13 +691,19 @@ async def complete_scan_session(
                 SparePartMovement.movement_type == "scrap_out"
             ).first()
 
-            if scrap_in_exists and not scrap_out_exists:
-                # 在报废库存中，可以报废
+            # 只有 pending_scrap 状态且存在报废入库记录的才能报废
+            if instance and instance.status == "pending_scrap" and scrap_in_exists and not scrap_out_exists:
+                # 可以报废，更新状态为已报废
+                instance.status = "scrapped"
                 valid_items.append(item)
             else:
-                # 不在报废库存中
+                # 不满足条件
                 reason_msg = ""
-                if not scrap_in_exists:
+                if not instance:
+                    reason_msg = "未找到该序列号的备件实例"
+                elif instance.status != "pending_scrap":
+                    reason_msg = f"备件状态为 {instance.status}，只有待报废状态才能报废出库"
+                elif not scrap_in_exists:
                     reason_msg = "该序列号未入库到报废库存"
                 elif scrap_out_exists:
                     reason_msg = "该序列号已报废出库"

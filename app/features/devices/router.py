@@ -377,10 +377,10 @@ async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
     if not device:
         raise HTTPException(status_code=404, detail="设备不存在")
 
-    # 查询当前安装在该设备上的备件
+    # 查询当前安装在该设备上的备件（状态为 inuse）
     instances = db.query(SparePartInstance).filter(
         SparePartInstance.installed_device_id == device_id,
-        SparePartInstance.status == "installed"
+        SparePartInstance.status == "inuse"
     ).all()
 
     return {

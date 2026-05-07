@@ -78,6 +78,92 @@ async def api_create_part(part: SparePartCreate, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@router.get("/by-serial/{serial_number}")
+async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_db)):
+    """通过序列号查找备件实例（扫码枪接口，返回完整历史信息）"""
+    from app.shared.models import SparePartInstance, SparePart, SparePartMovement
+
+    instance = db.query(SparePartInstance).filter(
+        SparePartInstance.serial_number == serial_number
+    ).first()
+
+    if not instance:
+        raise HTTPException(status_code=404, detail="未找到该序列号的备件")
+
+    part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
+
+    # 获取该序列号的出入库历史
+    movements = db.query(SparePartMovement).filter(
+        SparePartMovement.serial_number == serial_number
+    ).order_by(SparePartMovement.created_at).all()
+
+    history = []
+    for m in movements:
+        history.append({
+            "id": m.id,
+            "movement_type": m.movement_type,
+            "reason": m.reason,
+            "reference": m.reference,
+            "created_at": m.created_at.isoformat() if m.created_at else None
+        })
+
+    return {
+        "id": part.id if part else None,
+        "instance_id": instance.id,
+        "name": part.name if part else None,
+        "part_number": part.part_number if part else None,
+        "serial_number": instance.serial_number,
+        "po_number": instance.po_number,
+        "unit_price": float(instance.unit_price) if instance.unit_price else (float(part.unit_price) if part and part.unit_price else 0),
+        "status": instance.status,  # 返回实例状态：in_stock/inuse/pending_scrap/scrapped
+        "location": instance.location,
+        "quantity_in_stock": part.quantity_in_stock if part else 0,
+        "in_stock_at": instance.in_stock_at.isoformat() if instance.in_stock_at else None,
+        "out_at": instance.out_at.isoformat() if instance.out_at else None,
+        "notes": instance.notes,
+        "history": history,  # 出入库历史记录
+    }
+
+
+@router.get("/search-in-stock")
+async def api_search_in_stock_instances(
+    keyword: str = Query(None, description="搜索关键词（序列号/型号/名称）"),
+    limit: int = Query(20, ge=1, le=50),
+    db: Session = Depends(get_db),
+):
+    """搜索库存中的备件实例（维修更换备件专用接口，只返回 in_stock 状态）"""
+    from app.shared.models import SparePartInstance, SparePart
+
+    if not keyword or len(keyword) < 1:
+        return {"items": [], "total": 0}
+
+    # 只搜索 in_stock 状态的备件实例
+    keyword_filter = f"%{keyword}%"
+    instances = db.query(SparePartInstance).join(SparePart).filter(
+        SparePartInstance.status == "in_stock",
+        (SparePartInstance.serial_number.ilike(keyword_filter)) |
+        (SparePart.part_number.ilike(keyword_filter)) |
+        (SparePart.name.ilike(keyword_filter))
+    ).limit(limit).all()
+
+    items = []
+    for inst in instances:
+        part = inst.part
+        items.append({
+            "id": part.id if part else None,
+            "instance_id": inst.id,
+            "name": part.name if part else None,
+            "part_number": part.part_number if part else None,
+            "serial_number": inst.serial_number,
+            "unit_price": float(inst.unit_price) if inst.unit_price else (float(part.unit_price) if part and part.unit_price else 0),
+            "status": inst.status,
+            "location": inst.location,
+            "quantity_in_stock": part.quantity_in_stock if part else 0,
+        })
+
+    return {"items": items, "total": len(items)}
+
+
 @router.get("/{part_id}")
 async def api_get_part(part_id: int, db: Session = Depends(get_db)):
     """备件详情"""
@@ -293,53 +379,6 @@ async def api_manual_stock_out(
         "message": f"出库成功，序列号: {data.serial_number}",
         "serial_number": data.serial_number,
         "new_stock": part.quantity_in_stock
-    }
-
-
-@router.get("/by-serial/{serial_number}")
-async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_db)):
-    """通过序列号查找备件实例（扫码枪接口，返回完整历史信息）"""
-    from app.shared.models import SparePartInstance, SparePart, SparePartMovement
-
-    instance = db.query(SparePartInstance).filter(
-        SparePartInstance.serial_number == serial_number
-    ).first()
-
-    if not instance:
-        raise HTTPException(status_code=404, detail="未找到该序列号的备件")
-
-    part = db.query(SparePart).filter(SparePart.id == instance.part_id).first()
-
-    # 获取该序列号的出入库历史
-    movements = db.query(SparePartMovement).filter(
-        SparePartMovement.serial_number == serial_number
-    ).order_by(SparePartMovement.created_at).all()
-
-    history = []
-    for m in movements:
-        history.append({
-            "id": m.id,
-            "movement_type": m.movement_type,
-            "reason": m.reason,
-            "reference": m.reference,
-            "created_at": m.created_at.isoformat() if m.created_at else None
-        })
-
-    return {
-        "id": part.id if part else None,
-        "instance_id": instance.id,
-        "name": part.name if part else None,
-        "part_number": part.part_number if part else None,
-        "serial_number": instance.serial_number,
-        "po_number": instance.po_number,
-        "unit_price": float(instance.unit_price) if instance.unit_price else (float(part.unit_price) if part and part.unit_price else 0),
-        "status": instance.status,
-        "location": instance.location,
-        "quantity_in_stock": part.quantity_in_stock if part else 0,
-        "in_stock_at": instance.in_stock_at.isoformat() if instance.in_stock_at else None,
-        "out_at": instance.out_at.isoformat() if instance.out_at else None,
-        "notes": instance.notes,
-        "history": history,  # 出入库历史记录
     }
 
 

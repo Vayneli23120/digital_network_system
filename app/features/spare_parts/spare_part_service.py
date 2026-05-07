@@ -275,13 +275,13 @@ def create_movement(
             )
         part.quantity_in_stock -= quantity
 
-        # 如果指定了目标设备，更新备件实例状态
+        # 如果指定了目标设备，更新备件实例状态为在设备上使用
         if serial_number and target_device_id:
             instance = db.query(SparePartInstance).filter(
                 SparePartInstance.serial_number == serial_number
             ).first()
             if instance:
-                instance.status = "installed"
+                instance.status = "inuse"
                 instance.installed_device_id = target_device_id
                 instance.installed_at = datetime.utcnow()
                 instance.installed_by = operator
@@ -289,20 +289,25 @@ def create_movement(
     elif movement_type == "in" or movement_type == "scrap_in":
         part.quantity_in_stock += quantity
 
-        # 返回件入库，记录来源设备
+        # 返回件入库，状态改为待报废，记录来源设备
         if movement_type == "scrap_in" and serial_number and source_device_id:
             instance = db.query(SparePartInstance).filter(
                 SparePartInstance.serial_number == serial_number
             ).first()
             if instance:
-                instance.status = "scrapped"
+                instance.status = "pending_scrap"  # 待报废状态
                 instance.removed_from_device_id = source_device_id
                 instance.removed_at = datetime.utcnow()
                 instance.installed_device_id = None  # 清除安装设备
 
     elif movement_type == "scrap_out":
-        # 报废出库不影响备件库存，只记录出库操作
-        pass
+        # 报废出库：验证状态为待报废，更新为已报废
+        if serial_number:
+            instance = db.query(SparePartInstance).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
+            if instance and instance.status == "pending_scrap":
+                instance.status = "scrapped"
     else:
         raise ValueError("movement_type 必须为 'in', 'out', 'scrap_in' 或 'scrap_out'")
 

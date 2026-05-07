@@ -276,6 +276,11 @@ export function getPartBySerialNumber(serialNumber) {
   return api.get(`/spare-parts/by-serial/${serialNumber}`)
 }
 
+// 搜索库存中的备件实例（维修更换备件专用，只返回 in_stock 状态）
+export function searchInStockParts(keyword) {
+  return api.get('/spare-parts/search-in-stock', { params: { keyword } })
+}
+
 // 获取备件实例列表
 export function getPartInstances(partId, status = null) {
   const params = status ? { status } : {}

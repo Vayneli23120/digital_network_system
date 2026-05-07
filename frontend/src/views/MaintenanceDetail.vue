@@ -409,7 +409,7 @@ import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Edit, Delete } from '@element-plus/icons-vue'
-import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber } from '@/api'
+import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
 
@@ -469,7 +469,7 @@ const getMaintTypeText = (type) => {
 
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
-// 搜索备件（支持序列号、型号、名称搜索）
+// 搜索备件（只搜索库存中 in_stock 状态的备件）
 const searchSpareParts = async (query) => {
   if (!query || query.length < 1) {
     sparePartOptions.value = []
@@ -477,48 +477,33 @@ const searchSpareParts = async (query) => {
   }
   spareLoading.value = true
   try {
-    // 先尝试通过序列号查找
-    try {
-      const partBySerial = await getPartBySerialNumber(query)
-      if (partBySerial) {
-        // 如果找到，添加到选项列表
-        sparePartOptions.value = [{
-          id: partBySerial.id,
-          part_number: partBySerial.part_number,
-          name: partBySerial.name,
-          serial_number: partBySerial.serial_number,
-          quantity_in_stock: partBySerial.quantity_in_stock,
-          unit_price: partBySerial.unit_price,
-          is_serial_match: true  // 标记为序列号匹配
-        }]
-        spareLoading.value = false
-        return
-      }
-    } catch (e) {
-      // 序列号没找到，继续搜索型号/名称
+    // 使用专用接口搜索库存中的备件（只返回 in_stock 状态）
+    const result = await searchInStockParts(query)
+    if (result.items && result.items.length > 0) {
+      sparePartOptions.value = result.items.map(item => ({
+        id: item.id,
+        part_number: item.part_number,
+        name: item.name,
+        serial_number: item.serial_number,
+        quantity_in_stock: item.quantity_in_stock,
+        unit_price: item.unit_price,
+        is_serial_match: true,  // 标记为精确匹配
+        instance_status: item.status  // 实例状态
+      }))
+    } else {
+      sparePartOptions.value = []
     }
-
-    // 搜索型号/名称
-    const result = await getPartList({ search: query, limit: 20 })
-    sparePartOptions.value = result.items || []
   } catch (e) {
     ElMessage.error('搜索备件失败')
+    sparePartOptions.value = []
   } finally {
     spareLoading.value = false
   }
 }
 
-// 加载初始备件列表
+// 加载初始备件列表（不自动加载，用户需输入搜索）
 const loadInitialSpareParts = async () => {
-  spareLoading.value = true
-  try {
-    const result = await getPartList({ limit: 50 })
-    sparePartOptions.value = result.items || []
-  } catch (e) {
-    console.error('加载备件失败:', e)
-  } finally {
-    spareLoading.value = false
-  }
+  sparePartOptions.value = []
 }
 
 // 添加备件到编辑表单
