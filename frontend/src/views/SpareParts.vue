@@ -206,47 +206,161 @@
     </el-tabs>
 
     <!-- 出入库详情对话框 -->
-    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="700px">
-      <el-descriptions :column="2" border v-if="currentMovement">
-        <el-descriptions-item label="时间">{{ formatDateTime(currentMovement.created_at) }}</el-descriptions-item>
-        <el-descriptions-item label="类型">
-          <el-tag :type="getMovementTypeTag(currentMovement.movement_type)" size="small">
-            {{ getMovementTypeText(currentMovement.movement_type) }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="备件名称">{{ currentMovement.name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="备件型号">{{ currentMovement.part_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="序列号">{{ currentMovement.serial_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="PO号">{{ currentMovement.po_number || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="数量">{{ currentMovement.quantity }}</el-descriptions-item>
-        <el-descriptions-item label="单价">¥{{ (currentMovement.unit_price || 0).toFixed(2) }}</el-descriptions-item>
-        <el-descriptions-item label="目标设备">{{ currentMovement.target_device_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="来源设备">{{ currentMovement.source_device_name || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="原因" :span="2">{{ currentMovement.reason || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="关联单号">{{ currentMovement.reference || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="操作人">{{ currentMovement.operator || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="批次码" v-if="currentMovement.session_code">
-          <el-tag type="info" size="small">{{ currentMovement.session_code }}</el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="批次总数" v-if="currentMovement.session_code">
-          {{ currentMovement.batch_total || 1 }} 件
-        </el-descriptions-item>
-      </el-descriptions>
+    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="800px">
+      <!-- 批次概览 -->
+      <div v-if="currentMovement" class="movement-overview">
+        <el-row :gutter="16">
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">时间</div>
+              <div class="overview-value">{{ formatDateTime(currentMovement.created_at) }}</div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">类型</div>
+              <div class="overview-value">
+                <el-tag :type="getMovementTypeTag(currentMovement.movement_type)" size="small">
+                  {{ getMovementTypeText(currentMovement.movement_type) }}
+                </el-tag>
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">批次总数</div>
+              <div class="overview-value">
+                <span class="batch-count">{{ currentMovement.batch_total || 1 }}</span> 件
+              </div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">批次码</div>
+              <div class="overview-value">
+                <el-tag v-if="currentMovement.session_code" type="info" size="small">
+                  {{ currentMovement.session_code }}
+                </el-tag>
+                <span v-else>-</span>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
+        <el-row :gutter="16" style="margin-top: 12px">
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">目标设备</div>
+              <div class="overview-value">{{ currentMovement.target_device_name || '-' }}</div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">来源设备</div>
+              <div class="overview-value">{{ currentMovement.source_device_name || '-' }}</div>
+            </div>
+          </el-col>
+          <el-col :span="12">
+            <div class="overview-item">
+              <div class="overview-label">原因</div>
+              <div class="overview-value">{{ currentMovement.reason || '-' }}</div>
+            </div>
+          </el-col>
+        </el-row>
+      </div>
 
-      <!-- 同批次备件清单 -->
-      <div v-if="currentMovement?.batch_items?.length > 0" style="margin-top: 16px">
-        <el-divider content-position="left">本批次其他备件（共 {{ currentMovement.batch_items.length }} 件）</el-divider>
-        <el-table :data="currentMovement.batch_items" size="small" stripe border>
-          <el-table-column prop="serial_number" label="序列号" width="120" />
-          <el-table-column prop="po_number" label="PO号" width="80">
-            <template #default="{ row }">{{ row.po_number || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="part_number" label="型号" width="120" />
-          <el-table-column prop="name" label="名称" width="120" />
-          <el-table-column prop="unit_price" label="单价" width="80">
-            <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
-          </el-table-column>
-        </el-table>
+      <!-- 本批次备件清单（横版卡片列表） -->
+      <div style="margin-top: 20px">
+        <div class="batch-title">
+          <el-icon><List /></el-icon>
+          <span>本批次备件清单</span>
+        </div>
+
+        <!-- 合并当前记录和batch_items，按时间排序 -->
+        <div class="batch-cards">
+          <!-- 当前记录 -->
+          <div class="batch-card current-card">
+            <div class="card-header">
+              <el-tag type="primary" size="small">当前查看</el-tag>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">序列号</div>
+                  <div class="card-value serial">{{ currentMovement?.serial_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">PO号</div>
+                  <div class="card-value">{{ currentMovement?.po_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">型号</div>
+                  <div class="card-value">{{ currentMovement?.part_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">名称</div>
+                  <div class="card-value">{{ currentMovement?.name || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">单价</div>
+                  <div class="card-value price">¥{{ (currentMovement?.unit_price || 0).toFixed(2) }}</div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+
+          <!-- 同批次其他备件 -->
+          <div v-for="(item, idx) in currentMovement?.batch_items || []" :key="item.id" class="batch-card">
+            <div class="card-header">
+              <el-tag type="info" size="small">批次 #{{ idx + 2 }}</el-tag>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">序列号</div>
+                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">PO号</div>
+                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">型号</div>
+                  <div class="card-value">{{ item.part_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">名称</div>
+                  <div class="card-value">{{ item.name || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">单价</div>
+                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+
+        <!-- 批次汇总 -->
+        <div v-if="currentMovement?.batch_items?.length > 0" class="batch-summary">
+          <span>本批次共 <strong>{{ currentMovement.batch_total }}</strong> 件备件</span>
+          <span style="margin-left: 20px">总价值 <strong>¥{{ batchTotalValue.toFixed(2) }}</strong></span>
+        </div>
       </div>
     </el-dialog>
 
@@ -473,7 +587,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh } from '@element-plus/icons-vue'
+import { Refresh, List } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getMovementDetail, getPartInstances, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -584,6 +698,18 @@ const showScanDialog = (mode) => {
 // 出入库详情
 const movementDetailVisible = ref(false)
 const currentMovement = ref(null)
+
+// 批次总价值计算
+const batchTotalValue = computed(() => {
+  if (!currentMovement.value) return 0
+  let total = currentMovement.value.unit_price || 0
+  if (currentMovement.value.batch_items) {
+    for (const item of currentMovement.value.batch_items) {
+      total += item.unit_price || 0
+    }
+  }
+  return total
+})
 
 const showMovementDetail = async (row) => {
   // 获取完整详情（包含同批次备件清单）
@@ -918,5 +1044,97 @@ onMounted(loadParts)
 .toolbar-right {
   display: flex;
   gap: 8px;
+}
+
+/* 出入库详情样式 */
+.movement-overview {
+  background: var(--el-fill-color-light);
+  padding: 16px;
+  border-radius: 8px;
+}
+.overview-item {
+  text-align: center;
+}
+.overview-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.overview-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+.batch-count {
+  color: var(--el-color-primary);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.batch-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.batch-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.batch-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.current-card {
+  background: var(--el-color-primary-light-9);
+  border: 1px solid var(--el-color-primary-light-5);
+}
+
+.card-header {
+  margin-bottom: 8px;
+}
+
+.card-item {
+  text-align: center;
+}
+
+.card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.card-value.serial {
+  color: var(--el-color-primary);
+}
+
+.card-value.price {
+  color: var(--el-color-success);
+}
+
+.batch-summary {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--el-fill-color);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.batch-summary strong {
+  color: var(--el-color-primary);
+  font-size: 16px;
 }
 </style>
