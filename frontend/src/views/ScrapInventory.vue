@@ -118,6 +118,12 @@
               </template>
             </el-table-column>
             <el-table-column prop="quantity" label="数量" width="80" align="right" />
+            <el-table-column label="来源设备" width="120">
+              <template #default="{ row }">
+                <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
+                <span v-else>-</span>
+              </template>
+            </el-table-column>
             <el-table-column prop="unit_price" label="单价" width="100">
               <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
             </el-table-column>
@@ -155,6 +161,13 @@
 
       <el-table :data="currentScrapItem?.instances || []" stripe border size="small" style="margin-top: 16px">
         <el-table-column prop="serial_number" label="序列号" width="150" />
+        <el-table-column label="来源设备" width="120">
+          <template #default="{ row }">
+            <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
+            <span v-else-if="row.removed_from_device_id">{{ row.removed_from_device_id }}</span>
+            <span v-else>-</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="unit_price" label="单价" width="100">
           <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
