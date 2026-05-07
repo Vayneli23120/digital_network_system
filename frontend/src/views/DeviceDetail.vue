@@ -223,23 +223,106 @@
               </div>
             </el-tab-pane>
             <el-tab-pane label="设备资产" name="inventory">
-              <el-table :data="deviceInventory" v-loading="inventoryLoading" stripe border size="small">
-                <el-table-column prop="part_number" label="型号" width="120" />
-                <el-table-column prop="part_name" label="名称" width="150" />
-                <el-table-column prop="serial_number" label="序列号" width="120" />
-                <el-table-column prop="po_number" label="PO号" width="80">
-                  <template #default="{ row }">{{ row.po_number || '-' }}</template>
-                </el-table-column>
-                <el-table-column prop="category" label="分类" width="80" />
-                <el-table-column prop="unit_price" label="单价" width="80">
-                  <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
-                </el-table-column>
-                <el-table-column prop="installed_at" label="安装时间" width="160">
-                  <template #default="{ row }">{{ formatDateTime(row.installed_at) }}</template>
-                </el-table-column>
-                <el-table-column prop="installed_by" label="安装人" width="80" />
-                <el-table-column prop="notes" label="备注" min-width="100" show-overflow-tooltip />
-              </el-table>
+              <!-- 设备资产概览 -->
+              <div v-if="deviceInventory.length > 0" class="inventory-overview">
+                <el-row :gutter="16">
+                  <el-col :span="6">
+                    <div class="overview-item">
+                      <div class="overview-label">安装备件</div>
+                      <div class="overview-value">
+                        <span class="inventory-count">{{ deviceInventory.length }}</span> 件
+                      </div>
+                    </div>
+                  </el-col>
+                  <el-col :span="6">
+                    <div class="overview-item">
+                      <div class="overview-label">总价值</div>
+                      <div class="overview-value price">¥{{ inventoryTotalValue.toFixed(2) }}</div>
+                    </div>
+                  </el-col>
+                </el-row>
+              </div>
+
+              <!-- 备件清单（横版卡片列表） -->
+              <div style="margin-top: 16px" v-if="deviceInventory.length > 0">
+                <div class="inventory-title">
+                  <el-icon><List /></el-icon>
+                  <span>安装备件清单</span>
+                </div>
+
+                <div class="inventory-cards">
+                  <div v-for="(item, idx) in deviceInventory" :key="item.serial_number || idx" class="inventory-card">
+                    <div class="card-header">
+                      <el-tag type="success" size="small">备件 #{{ idx + 1 }}</el-tag>
+                    </div>
+                    <el-row :gutter="12">
+                      <el-col :span="4">
+                        <div class="card-item">
+                          <div class="card-label">序列号</div>
+                          <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="3">
+                        <div class="card-item">
+                          <div class="card-label">PO号</div>
+                          <div class="card-value">{{ item.po_number || '-' }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="4">
+                        <div class="card-item">
+                          <div class="card-label">型号</div>
+                          <div class="card-value">{{ item.part_number || '-' }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="4">
+                        <div class="card-item">
+                          <div class="card-label">名称</div>
+                          <div class="card-value">{{ item.part_name || '-' }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="3">
+                        <div class="card-item">
+                          <div class="card-label">单价</div>
+                          <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="3">
+                        <div class="card-item">
+                          <div class="card-label">分类</div>
+                          <div class="card-value">{{ item.category || '-' }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="3">
+                        <div class="card-item">
+                          <div class="card-label">安装人</div>
+                          <div class="card-value">{{ item.installed_by || '-' }}</div>
+                        </div>
+                      </el-col>
+                    </el-row>
+                    <el-row :gutter="12" style="margin-top: 8px">
+                      <el-col :span="6">
+                        <div class="card-item">
+                          <div class="card-label">安装时间</div>
+                          <div class="card-value">{{ formatDateTime(item.installed_at) }}</div>
+                        </div>
+                      </el-col>
+                      <el-col :span="18">
+                        <div class="card-item">
+                          <div class="card-label">备注</div>
+                          <div class="card-value">{{ item.notes || '-' }}</div>
+                        </div>
+                      </el-col>
+                    </el-row>
+                  </div>
+                </div>
+
+                <!-- 汇总 -->
+                <div class="inventory-summary">
+                  <span>本设备安装 <strong>{{ deviceInventory.length }}</strong> 件备件</span>
+                  <span style="margin-left: 20px">总价值 <strong>¥{{ inventoryTotalValue.toFixed(2) }}</strong></span>
+                </div>
+              </div>
+
               <el-empty v-if="deviceInventory.length === 0 && !inventoryLoading" description="当前无安装备件" :image-size="60" />
             </el-tab-pane>
           </el-tabs>
@@ -361,6 +444,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Connection, Download, Upload, Picture, List } from '@element-plus/icons-vue'
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import axios from 'axios'
@@ -379,6 +463,11 @@ const configContent = ref('')
 // 设备资产相关
 const deviceInventory = ref([])
 const inventoryLoading = ref(false)
+
+// 设备资产总价值计算
+const inventoryTotalValue = computed(() => {
+  return deviceInventory.value.reduce((sum, item) => sum + (item.unit_price || 0), 0)
+})
 
 const faultForm = ref({
   severity: 'major',
@@ -857,5 +946,95 @@ onMounted(() => {
 .maint-link:hover {
   text-decoration: underline;
   color: #66b1ff;
+}
+
+/* 设备资产卡片样式 */
+.inventory-overview {
+  background: var(--el-fill-color-light);
+  padding: 16px;
+  border-radius: 8px;
+}
+.inventory-overview .overview-item {
+  text-align: center;
+}
+.inventory-overview .overview-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.inventory-overview .overview-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+.inventory-count {
+  color: var(--el-color-success);
+  font-size: 18px;
+  font-weight: 600;
+}
+.inventory-overview .overview-value.price {
+  color: var(--el-color-success);
+}
+
+.inventory-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.inventory-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.inventory-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.inventory-card .card-header {
+  margin-bottom: 8px;
+}
+
+.inventory-card .card-item {
+  text-align: center;
+}
+
+.inventory-card .card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.inventory-card .card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.inventory-card .card-value.serial {
+  color: var(--el-color-primary);
+}
+
+.inventory-card .card-value.price {
+  color: var(--el-color-success);
+}
+
+.inventory-summary {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--el-fill-color);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.inventory-summary strong {
+  color: var(--el-color-success);
+  font-size: 16px;
 }
 </style>

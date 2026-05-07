@@ -31,22 +31,57 @@
 
           <el-divider>备件信息</el-divider>
 
-          <!-- 备件列表显示 -->
+          <!-- 备件列表显示（横版卡片） -->
           <div class="spare-parts-display" v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
-            <el-table :data="maintenance.spare_parts_list" border size="small">
-              <el-table-column prop="serial_number" label="序列号" width="150">
-                <template #default="{ row }">{{ row.serial_number || '-' }}</template>
-              </el-table-column>
-              <el-table-column prop="part_number" label="型号" width="150" />
-              <el-table-column prop="name" label="名称" width="150" />
-              <el-table-column prop="quantity" label="数量" width="80" />
-              <el-table-column prop="unit_price" label="单价" width="100">
-                <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
-              </el-table-column>
-              <el-table-column prop="total" label="小计" width="100">
-                <template #default="{ row }">¥{{ ((row.quantity || 1) * (row.unit_price || 0)).toFixed(2) }}</template>
-              </el-table-column>
-            </el-table>
+            <div class="parts-title">
+              <el-icon><List /></el-icon>
+              <span>更换备件清单</span>
+            </div>
+            <div class="spare-parts-cards">
+              <div v-for="(part, idx) in maintenance.spare_parts_list" :key="part.serial_number || idx" class="spare-part-card">
+                <div class="card-header">
+                  <el-tag type="primary" size="small">备件 #{{ idx + 1 }}</el-tag>
+                </div>
+                <el-row :gutter="12">
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">序列号</div>
+                      <div class="card-value serial">{{ part.serial_number || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">型号</div>
+                      <div class="card-value">{{ part.part_number || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">名称</div>
+                      <div class="card-value">{{ part.name || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="2">
+                    <div class="card-item">
+                      <div class="card-label">数量</div>
+                      <div class="card-value">{{ part.quantity || 1 }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="3">
+                    <div class="card-item">
+                      <div class="card-label">单价</div>
+                      <div class="card-value price">¥{{ (part.unit_price || 0).toFixed(2) }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="3">
+                    <div class="card-item">
+                      <div class="card-label">小计</div>
+                      <div class="card-value price">¥{{ ((part.quantity || 1) * (part.unit_price || 0)).toFixed(2) }}</div>
+                    </div>
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
             <div class="parts-total">
               备件总成本: <span class="cost">¥{{ (maintenance.parts_cost || 0).toFixed(2) }}</span>
             </div>
@@ -55,23 +90,47 @@
 
           <el-divider>返回件信息</el-divider>
 
-          <!-- 返回件列表显示 -->
+          <!-- 返回件列表显示（横版卡片） -->
           <div class="return-parts-display" v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
-            <el-table :data="maintenance.return_parts_list" border size="small">
-              <el-table-column prop="serial_number" label="序列号" width="150">
-                <template #default="{ row }">{{ row.serial_number || '-' }}</template>
-              </el-table-column>
-              <el-table-column prop="part_number" label="型号" width="150" />
-              <el-table-column prop="name" label="名称" width="150" />
-              <el-table-column prop="quantity" label="数量" width="80" />
-              <el-table-column prop="scrap_in" label="入报废库" width="100">
-                <template #default="{ row }">
-                  <el-tag :type="row.scrap_in ? 'success' : 'info'" size="small">
-                    {{ row.scrap_in ? '已入库' : '不入库' }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
+            <div class="parts-title">
+              <el-icon><List /></el-icon>
+              <span>返回件清单</span>
+            </div>
+            <div class="return-parts-cards">
+              <div v-for="(part, idx) in maintenance.return_parts_list" :key="part.serial_number || idx" class="return-part-card">
+                <div class="card-header">
+                  <el-tag type="warning" size="small">返回件 #{{ idx + 1 }}</el-tag>
+                  <el-tag v-if="part.scrap_in" type="success" size="small" style="margin-left: 8px">已入报废库</el-tag>
+                  <el-tag v-else type="info" size="small" style="margin-left: 8px">不入库</el-tag>
+                </div>
+                <el-row :gutter="12">
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">序列号</div>
+                      <div class="card-value serial">{{ part.serial_number || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">型号</div>
+                      <div class="card-value">{{ part.part_number || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="4">
+                    <div class="card-item">
+                      <div class="card-label">名称</div>
+                      <div class="card-value">{{ part.name || '-' }}</div>
+                    </div>
+                  </el-col>
+                  <el-col :span="2">
+                    <div class="card-item">
+                      <div class="card-label">数量</div>
+                      <div class="card-value">{{ part.quantity || 1 }}</div>
+                    </div>
+                  </el-col>
+                </el-row>
+              </div>
+            </div>
             <div class="return-tip">注：无固定资产的返回件可选择不入报废库</div>
           </div>
           <el-empty description="无返回件" v-else :image-size="60" />
@@ -408,7 +467,7 @@
 import { ref, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete } from '@element-plus/icons-vue'
+import { Aim, Edit, Delete, List } from '@element-plus/icons-vue'
 import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
@@ -1219,5 +1278,94 @@ onMounted(() => {
 
 .no-return-tip {
   margin-top: 8px;
+}
+
+/* 备件卡片样式 */
+.parts-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.spare-parts-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.spare-part-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.spare-part-card .card-header {
+  margin-bottom: 8px;
+}
+
+.spare-part-card .card-item {
+  text-align: center;
+}
+
+.spare-part-card .card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.spare-part-card .card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.spare-part-card .card-value.serial {
+  color: var(--el-color-primary);
+}
+
+.spare-part-card .card-value.price {
+  color: var(--el-color-success);
+}
+
+/* 返回件卡片样式 */
+.return-parts-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.return-part-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.return-part-card .card-header {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+}
+
+.return-part-card .card-item {
+  text-align: center;
+}
+
+.return-part-card .card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.return-part-card .card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.return-part-card .card-value.serial {
+  color: var(--el-color-primary);
 }
 </style>

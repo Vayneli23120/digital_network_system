@@ -143,43 +143,99 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报废详情对话框（只显示当前在报废库中的实例） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="650px">
-      <div v-if="currentScrapItem" class="part-info-header">
+    <!-- 报废详情对话框（横版卡片列表） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="800px">
+      <!-- 批次概览 -->
+      <div v-if="currentScrapItem" class="scrap-overview">
         <el-row :gutter="16">
-          <el-col :span="8">
-            <el-statistic title="报废库存" :value="currentScrapItem.quantity || 0" />
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">报废库存</div>
+              <div class="overview-value">
+                <span class="scrap-count">{{ currentScrapItem.quantity || 0 }}</span> 件
+              </div>
+            </div>
           </el-col>
-          <el-col :span="8">
-            <el-statistic title="库存总价" :value="currentScrapItem.total_value || 0" :precision="2" suffix="元" />
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">库存总价</div>
+              <div class="overview-value price">¥{{ (currentScrapItem.total_value || 0).toFixed(2) }}</div>
+            </div>
           </el-col>
-          <el-col :span="8" v-if="currentScrapItem.noSerialCount">
-            <el-statistic title="无序列号" :value="currentScrapItem.noSerialCount" />
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">型号</div>
+              <div class="overview-value">{{ currentScrapItem.part_number || '-' }}</div>
+            </div>
+          </el-col>
+          <el-col :span="6" v-if="currentScrapItem.noSerialCount">
+            <div class="overview-item">
+              <div class="overview-label">无序列号</div>
+              <div class="overview-value">{{ currentScrapItem.noSerialCount }} 件</div>
+            </div>
           </el-col>
         </el-row>
       </div>
 
-      <el-table :data="currentScrapItem?.instances || []" stripe border size="small" style="margin-top: 16px">
-        <el-table-column prop="serial_number" label="序列号" width="150" />
-        <el-table-column prop="po_number" label="PO号" width="80">
-          <template #default="{ row }">{{ row.po_number || '-' }}</template>
-        </el-table-column>
-        <el-table-column label="来源设备" width="120">
-          <template #default="{ row }">
-            <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
-            <span v-else-if="row.removed_from_device_id">{{ row.removed_from_device_id }}</span>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column prop="unit_price" label="单价" width="100">
-          <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
-        </el-table-column>
-        <el-table-column prop="scraped_at" label="报废入库时间" width="160">
-          <template #default="{ row }">{{ row.scraped_at ? formatDateTime(row.scraped_at) : '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="reason" label="报废原因" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
-      </el-table>
+      <!-- 报废件清单（横版卡片列表） -->
+      <div style="margin-top: 20px">
+        <div class="scrap-title">
+          <el-icon><List /></el-icon>
+          <span>报废件清单</span>
+        </div>
+
+        <div class="scrap-cards" v-if="currentScrapItem?.instances?.length > 0">
+          <div v-for="(item, idx) in currentScrapItem?.instances || []" :key="item.serial_number || idx" class="scrap-card">
+            <div class="card-header">
+              <el-tag type="danger" size="small">报废 #{{ idx + 1 }}</el-tag>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">序列号</div>
+                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">PO号</div>
+                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">单价</div>
+                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                </div>
+              </el-col>
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">来源设备</div>
+                  <div class="card-value">{{ item.source_device_name || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">报废入库时间</div>
+                  <div class="card-value">{{ item.scraped_at ? formatDateTime(item.scraped_at) : '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="5">
+                <div class="card-item">
+                  <div class="card-label">报废原因</div>
+                  <div class="card-value">{{ item.reason || '-' }}</div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+
+        <!-- 批次汇总 -->
+        <div v-if="currentScrapItem?.instances?.length > 0" class="scrap-summary">
+          <span>共 <strong>{{ currentScrapItem.quantity }}</strong> 件报废备件</span>
+          <span style="margin-left: 20px">总价值 <strong>¥{{ (currentScrapItem.total_value || 0).toFixed(2) }}</strong></span>
+        </div>
+      </div>
 
       <el-empty v-if="!currentScrapItem?.instances?.length && !currentScrapItem?.noSerialCount" description="该备件暂无报废库存" />
     </el-dialog>
@@ -372,7 +428,7 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Aim } from '@element-plus/icons-vue'
+import { Refresh, Aim, List } from '@element-plus/icons-vue'
 import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -1010,5 +1066,95 @@ onMounted(() => {
   font-size: 14px;
   color: var(--el-text-color-secondary);
   margin-bottom: 12px;
+}
+
+/* 报废详情样式 */
+.scrap-overview {
+  background: var(--el-fill-color-light);
+  padding: 16px;
+  border-radius: 8px;
+}
+.overview-item {
+  text-align: center;
+}
+.overview-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.overview-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+.scrap-count {
+  color: var(--el-color-danger);
+  font-size: 18px;
+  font-weight: 600;
+}
+.overview-value.price {
+  color: var(--el-color-success);
+}
+
+.scrap-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.scrap-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.scrap-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.scrap-card .card-header {
+  margin-bottom: 8px;
+}
+
+.scrap-card .card-item {
+  text-align: center;
+}
+
+.scrap-card .card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.scrap-card .card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.scrap-card .card-value.serial {
+  color: var(--el-color-primary);
+}
+
+.scrap-card .card-value.price {
+  color: var(--el-color-success);
+}
+
+.scrap-summary {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--el-fill-color);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.scrap-summary strong {
+  color: var(--el-color-danger);
+  font-size: 16px;
 }
 </style>

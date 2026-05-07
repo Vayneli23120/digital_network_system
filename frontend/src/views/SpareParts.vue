@@ -477,37 +477,93 @@
       />
     </el-dialog>
 
-    <!-- 备件详情对话框（库存清单） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="650px">
-      <div v-if="currentDetailPart" class="part-info-header">
+    <!-- 备件详情对话框（库存清单，横版卡片） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="800px">
+      <!-- 库存概览 -->
+      <div v-if="currentDetailPart" class="stock-overview">
         <el-row :gutter="16">
           <el-col :span="6">
-            <el-statistic title="在库数量" :value="currentDetailPart.in_stock_count || 0" />
+            <div class="overview-item">
+              <div class="overview-label">在库数量</div>
+              <div class="overview-value">
+                <span class="stock-count">{{ currentDetailPart.in_stock_count || 0 }}</span> 件
+              </div>
+            </div>
           </el-col>
           <el-col :span="6">
-            <el-statistic title="库存总价" :value="totalStockValue" :precision="2" suffix="元" />
+            <div class="overview-item">
+              <div class="overview-label">库存总价</div>
+              <div class="overview-value price">¥{{ totalStockValue.toFixed(2) }}</div>
+            </div>
+          </el-col>
+          <el-col :span="6">
+            <div class="overview-item">
+              <div class="overview-label">型号</div>
+              <div class="overview-value">{{ currentDetailPart.part_number || '-' }}</div>
+            </div>
           </el-col>
         </el-row>
       </div>
 
-      <el-table :data="inStockInstances" v-loading="instancesLoading" stripe border size="small" style="margin-top: 16px">
-        <el-table-column prop="serial_number" label="序列号" width="150" />
-        <el-table-column prop="po_number" label="PO号" width="100">
-          <template #default="{ row }">{{ row.po_number || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="unit_price" label="单价" width="80">
-          <template #default="{ row }">¥{{ row.unit_price?.toFixed(2) || '0.00' }}</template>
-        </el-table-column>
-        <el-table-column prop="location" label="位置" width="80">
-          <template #default="{ row }">{{ row.location || '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="in_stock_at" label="入库时间" width="140">
-          <template #default="{ row }">{{ row.in_stock_at ? formatDateTime(row.in_stock_at) : '-' }}</template>
-        </el-table-column>
-        <el-table-column prop="notes" label="备注" min-width="150" show-overflow-tooltip>
-          <template #default="{ row }">{{ row.notes || '-' }}</template>
-        </el-table-column>
-      </el-table>
+      <!-- 库存清单（横版卡片列表） -->
+      <div style="margin-top: 20px">
+        <div class="stock-title">
+          <el-icon><List /></el-icon>
+          <span>在库备件清单</span>
+        </div>
+
+        <div class="stock-cards" v-if="inStockInstances.length > 0">
+          <div v-for="(item, idx) in inStockInstances" :key="item.serial_number || idx" class="stock-card">
+            <div class="card-header">
+              <el-tag type="success" size="small">库存 #{{ idx + 1 }}</el-tag>
+            </div>
+            <el-row :gutter="12">
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">序列号</div>
+                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">PO号</div>
+                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">单价</div>
+                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                </div>
+              </el-col>
+              <el-col :span="3">
+                <div class="card-item">
+                  <div class="card-label">位置</div>
+                  <div class="card-value">{{ item.location || '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="4">
+                <div class="card-item">
+                  <div class="card-label">入库时间</div>
+                  <div class="card-value">{{ item.in_stock_at ? formatDateTime(item.in_stock_at) : '-' }}</div>
+                </div>
+              </el-col>
+              <el-col :span="7">
+                <div class="card-item">
+                  <div class="card-label">备注</div>
+                  <div class="card-value">{{ item.notes || '-' }}</div>
+                </div>
+              </el-col>
+            </el-row>
+          </div>
+        </div>
+
+        <!-- 汇总 -->
+        <div v-if="inStockInstances.length > 0" class="stock-summary">
+          <span>共 <strong>{{ inStockInstances.length }}</strong> 件在库备件</span>
+          <span style="margin-left: 20px">总价值 <strong>¥{{ totalStockValue.toFixed(2) }}</strong></span>
+        </div>
+      </div>
 
       <el-empty v-if="!instancesLoading && inStockInstances.length === 0" description="该备件暂无在库实例" />
     </el-dialog>
@@ -1135,6 +1191,96 @@ onMounted(loadParts)
 }
 .batch-summary strong {
   color: var(--el-color-primary);
+  font-size: 16px;
+}
+
+/* 备件库存清单样式 */
+.stock-overview {
+  background: var(--el-fill-color-light);
+  padding: 16px;
+  border-radius: 8px;
+}
+.stock-overview .overview-item {
+  text-align: center;
+}
+.stock-overview .overview-label {
+  color: var(--el-text-color-secondary);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.stock-overview .overview-value {
+  font-size: 14px;
+  font-weight: 500;
+}
+.stock-count {
+  color: var(--el-color-success);
+  font-size: 18px;
+  font-weight: 600;
+}
+.stock-overview .overview-value.price {
+  color: var(--el-color-success);
+}
+
+.stock-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  color: var(--el-text-color-primary);
+}
+
+.stock-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stock-card {
+  background: var(--el-fill-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  border: 1px solid var(--el-border-color-light);
+}
+
+.stock-card .card-header {
+  margin-bottom: 8px;
+}
+
+.stock-card .card-item {
+  text-align: center;
+}
+
+.stock-card .card-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.stock-card .card-value {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.stock-card .card-value.serial {
+  color: var(--el-color-primary);
+}
+
+.stock-card .card-value.price {
+  color: var(--el-color-success);
+}
+
+.stock-summary {
+  margin-top: 16px;
+  padding: 12px;
+  background: var(--el-fill-color);
+  border-radius: 6px;
+  text-align: center;
+  font-size: 14px;
+  color: var(--el-text-color-regular);
+}
+.stock-summary strong {
+  color: var(--el-color-success);
   font-size: 16px;
 }
 </style>
