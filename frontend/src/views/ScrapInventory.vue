@@ -799,39 +799,19 @@ const openScrapOutScanDialog = () => {
   scrapOutScanDialogVisible.value = true
 }
 
-// 报废出库扫码会话完成
+// 报废出库扫码会话完成（后端已创建出库记录，前端只需刷新数据）
 const onScrapOutScanComplete = async (result) => {
-  const items = result.items || []
-  if (items.length === 0) {
+  const scrapOutCount = result.scrap_out_count || (result.items?.length || 0)
+  if (scrapOutCount === 0) {
     ElMessage.warning('未扫描任何序列号')
     return
   }
 
-  // 批量报废出库
-  submitting.value = true
-  try {
-    for (const item of items) {
-      if (item.part_id) {
-        await createMovement({
-          part_id: item.part_id,
-          movement_type: 'scrap_out',
-          quantity: 1,
-          serial_number: item.serial_number,
-          reason: '扫码报废出库',
-          reference: ''
-        })
-      }
-    }
-    ElMessage.success(`已报废出库 ${items.length} 个件`)
-    scrapOutScanDialogVisible.value = false
-    scrapOutDialogVisible.value = false
-    loadScrapItems()
-    loadHistory()
-  } catch (e) {
-    ElMessage.error('报废出库失败：' + (e.response?.data?.detail || e.message))
-  } finally {
-    submitting.value = false
-  }
+  ElMessage.success(`已报废出库 ${scrapOutCount} 个件`)
+  scrapOutScanDialogVisible.value = false
+  scrapOutDialogVisible.value = false
+  loadScrapItems()
+  loadHistory()
 }
 
 onMounted(() => {
