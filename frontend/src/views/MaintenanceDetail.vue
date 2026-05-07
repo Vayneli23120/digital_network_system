@@ -378,7 +378,9 @@
       <ScanSession
         ref="scanSessionRef"
         default-type="out"
+        :device-id="maintenance?.device_id"
         :auto-start="scanDialogVisible"
+        :reference="maintenance?.maint_no"
         @complete="onScanSessionComplete"
         @cancel="scanDialogVisible = false"
       />
@@ -389,7 +391,9 @@
       <ScanSession
         ref="returnScanSessionRef"
         default-type="return"
+        :device-id="maintenance?.device_id"
         :auto-start="returnScanDialogVisible"
+        :reference="maintenance?.maint_no"
         @complete="onReturnScanSessionComplete"
         @cancel="returnScanDialogVisible = false"
       />
@@ -887,12 +891,28 @@ const updateMaintenanceRecord = async () => {
     })
 
     // 处理备件出库 - 仅在通过手动搜索添加（非扫码）时需要
-    // 扫码添加的备件已在 ScanSession 完成时自动出库
-    // 此处不再重复出库
+    // 扫码添加的备件已在 ScanSession 完成时自动出库并关联设备
+    // 手动添加的备件需要在此处出库并关联设备
+    for (const part of editForm.value.spare_parts) {
+      if (!part.is_from_scan && part.part_id) {
+        await createMovement({
+          part_id: part.part_id,
+          movement_type: 'out',
+          quantity: part.quantity || 1,
+          serial_number: part.serial_number,
+          reason: `维修备件更换 - ${maintenance.value.maint_no}`,
+          operator: 'Web',
+          reference: maintenance.value.maint_no,
+          target_device_id: maintenance.value.device_id  // 关联目标设备
+        })
+      }
+    }
 
-    // 处理返回件入报废库
+    // 处理返回件入报废库 - 记录来源设备
+    // 扫码添加的返回件已在 ScanSession 完成时自动入报废库并记录来源设备
+    // 手动添加的返回件需要在此处入报废库
     for (const part of editForm.value.return_parts) {
-      if (part.scrap_in && part.part_id) {
+      if (!part.is_from_scan && part.scrap_in && part.part_id) {
         await createMovement({
           part_id: part.part_id,
           movement_type: 'scrap_in',
@@ -900,7 +920,8 @@ const updateMaintenanceRecord = async () => {
           serial_number: part.serial_number,
           reason: `维修返回件入库 - 报废`,
           operator: 'Web',
-          reference: maintenance.value.maint_no
+          reference: maintenance.value.maint_no,
+          source_device_id: maintenance.value.device_id  // 记录来源设备
         })
       }
     }

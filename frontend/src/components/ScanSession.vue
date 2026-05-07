@@ -178,12 +178,13 @@ import { formatDateTime } from '@/utils/time'
 const props = defineProps({
   defaultType: {
     type: String,
-    default: 'in' // in, out, maintenance, task
+    default: 'in' // in, out, maintenance, task, return, scrap_out
   },
   reference: String,
   partId: Number,  // 入库备件ID
   poNumber: String,  // PO号
   location: String,  // 存放位置
+  deviceId: Number,  // 设备ID（出库/返回件时关联设备）
   autoStart: Boolean  // 是否自动创建会话（对话框打开时）
 })
 
@@ -307,7 +308,8 @@ const createSession = async () => {
       reference: sessionForm.value.reference,
       part_id: props.partId,  // 入库备件ID
       po_number: props.poNumber,  // PO号
-      location: props.location  // 存放位置
+      location: props.location,  // 存放位置
+      device_id: props.deviceId  // 设备ID（出库/返回件关联设备）
     })
     sessionCode.value = result.session_code
     expiresAt.value = result.expires_at

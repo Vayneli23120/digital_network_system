@@ -9,7 +9,7 @@ from typing import Optional, Dict, Any, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.shared.models import SparePart, SparePartMovement
+from app.shared.models import SparePart, SparePartMovement, SparePartInstance
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
@@ -237,6 +237,8 @@ def create_movement(
     reason: Optional[str] = None,
     operator: Optional[str] = None,
     reference: Optional[str] = None,
+    target_device_id: Optional[int] = None,
+    source_device_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """创建备件出入库记录
 
@@ -249,6 +251,8 @@ def create_movement(
         reason: 原因
         operator: 操作人
         reference: 关联单号
+        target_device_id: 出库目标设备（备件安装到设备）
+        source_device_id: 返回件来源设备（从哪台设备拆卸）
 
     Returns:
         出入库记录信息
@@ -270,8 +274,32 @@ def create_movement(
                 f"库存不足：当前 {part.quantity_in_stock}，需要 {quantity}"
             )
         part.quantity_in_stock -= quantity
+
+        # 如果指定了目标设备，更新备件实例状态
+        if serial_number and target_device_id:
+            instance = db.query(SparePartInstance).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
+            if instance:
+                instance.status = "installed"
+                instance.installed_device_id = target_device_id
+                instance.installed_at = datetime.utcnow()
+                instance.installed_by = operator
+
     elif movement_type == "in" or movement_type == "scrap_in":
         part.quantity_in_stock += quantity
+
+        # 返回件入库，记录来源设备
+        if movement_type == "scrap_in" and serial_number and source_device_id:
+            instance = db.query(SparePartInstance).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
+            if instance:
+                instance.status = "scrapped"
+                instance.removed_from_device_id = source_device_id
+                instance.removed_at = datetime.utcnow()
+                instance.installed_device_id = None  # 清除安装设备
+
     elif movement_type == "scrap_out":
         # 报废出库不影响备件库存，只记录出库操作
         pass
@@ -305,6 +333,8 @@ def create_movement(
         reason=reason,
         operator=operator,
         reference=reference,
+        target_device_id=target_device_id,
+        source_device_id=source_device_id,
     )
     db.add(movement)
     db.commit()
@@ -315,9 +345,12 @@ def create_movement(
         "part_id": movement.part_id,
         "movement_type": movement.movement_type,
         "quantity": movement.quantity,
+        "serial_number": movement.serial_number,
         "reason": movement.reason,
         "operator": movement.operator,
         "reference": movement.reference,
+        "target_device_id": movement.target_device_id,
+        "source_device_id": movement.source_device_id,
         "created_at": movement.created_at.isoformat() if movement.created_at else None,
     }
 

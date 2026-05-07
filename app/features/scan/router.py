@@ -540,9 +540,11 @@ async def complete_scan_session(
             "message": f"入库成功，新增 {len(session['items'])} 件，库存: {part.quantity_in_stock}"
         }
 
-    # 出库处理：更新备件实例状态
+    # 出库处理：更新备件实例状态，关联设备
     if session["session_type"] == "out":
         out_count = 0
+        device_id = session.get("device_id")  # 获取设备ID
+
         for item in session["items"]:
             serial_number = item["serial_number"]
             instance = db.query(SparePartInstance).filter(
@@ -551,8 +553,16 @@ async def complete_scan_session(
             ).first()
 
             if instance:
-                instance.status = "out"
-                instance.out_at = datetime.utcnow()
+                # 如果有设备ID，更新为安装状态
+                if device_id:
+                    instance.status = "installed"
+                    instance.installed_device_id = device_id
+                    instance.installed_at = datetime.utcnow()
+                    instance.installed_by = ""
+                else:
+                    instance.status = "out"
+                    instance.out_at = datetime.utcnow()
+
                 # 更新备注
                 notes = item.get("notes", "")
                 out_note = f"扫码出库"
@@ -589,7 +599,8 @@ async def complete_scan_session(
                         serial_number=item.get("serial_number"),
                         reason=data.reason if data else "扫码出库",
                         operator="",
-                        reference="",
+                        reference=session.get("reference") or "",
+                        target_device_id=device_id,  # 关联目标设备
                         created_at=datetime.utcnow()
                     )
                     db.add(movement)
@@ -604,13 +615,24 @@ async def complete_scan_session(
             "message": f"出库成功，共 {out_count} 件"
         }
 
-    # 返回件处理：创建报废入库记录
+    # 返回件处理：创建报废入库记录，记录来源设备
     if session["session_type"] == "return":
         scrap_in_count = len(session["items"])
+        device_id = session.get("device_id")  # 获取设备ID（来源设备）
 
         # 创建报废入库历史记录（每个序列号单独记录）
         for item in session["items"]:
             if item.get("part_id"):
+                # 更新备件实例状态
+                instance = db.query(SparePartInstance).filter(
+                    SparePartInstance.serial_number == item.get("serial_number")
+                ).first()
+                if instance:
+                    instance.status = "scrapped"
+                    instance.removed_from_device_id = device_id  # 记录来源设备
+                    instance.removed_at = datetime.utcnow()
+                    instance.installed_device_id = None  # 清除安装设备
+
                 movement = SparePartMovement(
                     part_id=item["part_id"],
                     movement_type="scrap_in",
@@ -618,7 +640,8 @@ async def complete_scan_session(
                     serial_number=item.get("serial_number"),
                     reason=data.reason if data else "扫码报废入库",
                     operator="",
-                    reference="",
+                    reference=session.get("reference") or "",
+                    source_device_id=device_id,  # 记录来源设备
                     created_at=datetime.utcnow()
                 )
                 db.add(movement)

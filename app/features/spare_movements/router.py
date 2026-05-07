@@ -28,6 +28,8 @@ class MovementCreate(BaseModel):
     reason: Optional[str] = None
     operator: Optional[str] = None
     reference: Optional[str] = None
+    target_device_id: Optional[int] = None  # 出库目标设备
+    source_device_id: Optional[int] = None  # 返回件来源设备
 
 
 @router.post("/")
@@ -37,7 +39,9 @@ async def api_create_movement(movement: MovementCreate, db: Session = Depends(ge
 
     - movement_type="in": 入库，增加库存
     - movement_type="out": 出库，减少库存（库存不足时拒绝）
+        - target_device_id: 指定目标设备，备件安装到设备上
     - movement_type="scrap_in": 报废入库，增加库存（用于返回件）
+        - source_device_id: 指定来源设备，记录从哪台设备拆卸
     - movement_type="scrap_out": 报废出库，不改变库存（用于报废件销毁/回收等）
     """
     try:
@@ -50,6 +54,8 @@ async def api_create_movement(movement: MovementCreate, db: Session = Depends(ge
             reason=movement.reason,
             operator=movement.operator,
             reference=movement.reference,
+            target_device_id=movement.target_device_id,
+            source_device_id=movement.source_device_id,
         )
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="备件不存在")
