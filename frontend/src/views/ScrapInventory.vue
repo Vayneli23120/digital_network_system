@@ -522,7 +522,9 @@ const loadScrapItems = async () => {
         scraped_at: item.created_at,
         movement_type: 'scrap_in',
         reason: item.reason,
-        reference: item.reference
+        reference: item.reference,
+        source_device_name: item.source_device_name,  // 来源设备名称
+        removed_from_device_id: item.source_device_id  // 来源设备ID（备用）
       })
     })
 
