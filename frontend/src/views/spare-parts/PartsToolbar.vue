@@ -1,28 +1,24 @@
 <template>
   <div class="parts-toolbar">
     <!-- 统计卡片 -->
-    <el-row :gutter="16" class="stats-row">
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <el-statistic :title="t('spareStatsTotal')" :value="stats.total_parts" />
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <el-statistic :title="t('spareStatsQuantity')" :value="stats.total_quantity" />
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <el-statistic :title="t('spareStatsLowStock')" :value="stats.low_stock_count" value-style="color: #F56C6C" />
-        </el-card>
-      </el-col>
-      <el-col :span="6">
-        <el-card shadow="hover" class="stat-card">
-          <el-statistic :title="t('spareStatsValue')" :value="stats.total_value" :precision="2" />
-        </el-card>
-      </el-col>
-    </el-row>
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_parts }}</div>
+        <div class="stat-label">{{ t('spareStatsTotal') }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">{{ stats.total_quantity }}</div>
+        <div class="stat-label">{{ t('spareStatsQuantity') }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" style="color: var(--accent-warning)">{{ stats.low_stock_count }}</div>
+        <div class="stat-label">{{ t('spareStatsLowStock') }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value">¥{{ formatValue(stats.total_value) }}</div>
+        <div class="stat-label">{{ t('spareStatsValue') }}</div>
+      </div>
+    </div>
 
     <!-- 操作按钮 -->
     <div class="action-buttons">
@@ -46,17 +42,16 @@ defineProps({
 })
 
 defineEmits(['scan-in', 'scan-out', 'add'])
+
+const formatValue = (val) => {
+  if (!val) return '0'
+  return val.toLocaleString()
+}
 </script>
 
 <style scoped>
 .parts-toolbar {
   margin-bottom: 16px;
-}
-.stats-row {
-  margin-bottom: 16px;
-}
-.stat-card {
-  text-align: center;
 }
 .action-buttons {
   display: flex;

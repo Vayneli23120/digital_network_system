@@ -90,39 +90,56 @@
     </el-card>
 
     <!-- 添加/编辑维修记录对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="700px">
-      <el-form :model="maintForm" label-width="120px">
-        <el-form-item :label="t('faultDeviceLabel')" required>
-          <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
-            <el-option
-              v-for="device in devices"
-              :key="device.id"
-              :label="device.name"
-              :value="device.id"
-            />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('maintType')" required>
-          <el-select v-model="maintForm.maint_type">
-            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
-            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
-            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
-            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
-          </el-select>
-        </el-form-item>
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="1100px" class="edit-maint-dialog">
+      <div class="edit-dialog-content">
+        <!-- 基础信息 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Setting /></el-icon>
+            {{ t('maintBasicInfo') || '基础信息' }}
+          </div>
+          <el-form :model="maintForm" label-width="80px">
+            <el-form-item :label="t('faultDeviceLabel')" required>
+              <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
+                <el-option
+                  v-for="device in devices"
+                  :key="device.id"
+                  :label="device.name"
+                  :value="device.id"
+                />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('maintType')" required>
+              <el-select v-model="maintForm.maint_type" style="width: 200px">
+                <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
+                <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
+                <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
+                <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <!-- 备件选择区域 -->
-        <el-divider content-position="left">{{ t('maintSparePartsSection') }}</el-divider>
-        <el-form-item :label="t('maintSparePartsLabel')">
-          <div class="spare-parts-section">
-            <!-- 扫码添加备件按钮 -->
-            <div class="spare-scan-btn">
-              <el-button type="primary" @click="openScanDialog">
-                <el-icon><Aim /></el-icon>
-                {{ t('maintScanAddSpare') }}
-              </el-button>
-              <div class="spare-scan-tip">{{ t('maintScanTip') }}</div>
-            </div>
+        <!-- 备件更换 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Box /></el-icon>
+            {{ t('maintSparePartsSection') }}
+          </div>
+          <el-form :model="maintForm" label-width="80px">
+            <el-form-item :label="t('maintSparePartsLabel')">
+              <div class="spare-parts-section">
+                <!-- 扫码功能条 -->
+                <div class="scan-action-bar">
+                  <el-button type="default" class="scan-btn" @click="openScanDialog">
+                    <el-icon><Aim /></el-icon>
+                    {{ t('maintScanAddSpare') }}
+                  </el-button>
+                  <div class="scan-tip-badge">
+                    <el-icon><InfoFilled /></el-icon>
+                    {{ t('maintScanTip') }}
+                  </div>
+                </div>
 
             <!-- 手动搜索添加备件 -->
             <div class="spare-search">
@@ -192,27 +209,38 @@
               <span>{{ t('maintNoSpareTip') }}</span>
             </div>
           </div>
-        </el-form-item>
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <el-divider content-position="left">{{ t('maintReturnPartsSection') }}</el-divider>
-        <el-form-item :label="t('maintReturnPartsLabel')">
-          <div class="return-parts-section">
-            <!-- 扫码查询返回件 -->
-            <div class="return-scan-area">
-              <el-input
-                v-model="returnScanInput"
-                :placeholder="t('maintReturnScanPlaceholder')"
-                style="width: 200px"
-                @keyup.enter="scanReturnPart"
-                clearable
-              >
-                <template #prefix><el-icon><Aim /></el-icon></template>
-              </el-input>
-              <el-button type="primary" size="small" @click="scanReturnPart" :loading="returnScanLoading">
-                {{ t('spareQuery') }}
-              </el-button>
-              <div class="return-scan-tip">{{ t('maintReturnScanTip') }}</div>
-            </div>
+        <!-- 返回件 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><RefreshRight /></el-icon>
+            {{ t('maintReturnPartsSection') }}
+          </div>
+          <el-form :model="maintForm" label-width="80px">
+            <el-form-item :label="t('maintReturnPartsLabel')">
+              <div class="return-parts-section">
+                <!-- 扫码功能条 -->
+                <div class="scan-action-bar return">
+                  <el-input
+                    v-model="returnScanInput"
+                    :placeholder="t('maintReturnScanPlaceholder')"
+                    style="width: 180px"
+                    @keyup.enter="scanReturnPart"
+                    clearable
+                  >
+                    <template #prefix><el-icon><Aim /></el-icon></template>
+                  </el-input>
+                  <el-button type="default" class="scan-btn" size="small" @click="scanReturnPart" :loading="returnScanLoading">
+                    {{ t('spareQuery') }}
+                  </el-button>
+                  <div class="scan-tip-badge">
+                    <el-icon><InfoFilled /></el-icon>
+                    {{ t('maintReturnScanTip') }}
+                  </div>
+                </div>
 
             <!-- 扫码识别结果（如果找到历史记录） -->
             <div class="return-found-info" v-if="returnFoundInfo">
@@ -308,23 +336,32 @@
               <el-tag type="info">{{ t('maintReturnNoPartsTip') }}</el-tag>
             </div>
           </div>
-        </el-form-item>
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <el-divider />
-
-        <el-form-item :label="t('maintLaborHours')">
-          <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" />
-        </el-form-item>
-        <el-form-item :label="t('maintLaborCost')">
-          <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" />
-        </el-form-item>
-        <el-form-item :label="t('maintVendor')">
-          <el-input v-model="maintForm.vendor" />
-        </el-form-item>
-        <el-form-item :label="t('maintDesc')" required>
-          <el-input v-model="maintForm.description" type="textarea" :rows="4" />
-        </el-form-item>
-      </el-form>
+        <!-- 成本与描述 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Document /></el-icon>
+            {{ t('maintCostDescSection') || '成本与描述' }}
+          </div>
+          <el-form :model="maintForm" label-width="80px">
+            <el-form-item :label="t('maintLaborHours')">
+              <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" />
+            </el-form-item>
+            <el-form-item :label="t('maintLaborCost')">
+              <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" />
+            </el-form-item>
+            <el-form-item :label="t('maintVendor')">
+              <el-input v-model="maintForm.vendor" />
+            </el-form-item>
+            <el-form-item :label="t('maintDesc')" required>
+              <el-input v-model="maintForm.description" type="textarea" :rows="4" />
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="editMode ? updateMaintenance() : addMaintenance()">{{ t('maintConfirm') }}</el-button>
@@ -332,7 +369,7 @@
     </el-dialog>
 
     <!-- 扫码添加备件对话框 -->
-    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="700px">
+    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="900px">
       <ScanSession
         ref="scanSessionRef"
         default-type="out"
@@ -347,7 +384,7 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, InfoFilled, Aim } from '@element-plus/icons-vue'
+import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document } from '@element-plus/icons-vue'
 import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement, getPartBySerialNumber } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime } from '@/utils/time'
@@ -1142,5 +1179,96 @@ onMounted(() => {
   .spare-search .el-select {
     width: 100% !important;
   }
+}
+
+/* ===== 编辑对话框样式 ===== */
+.edit-dialog-content {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+/* Section 卡片化 */
+.form-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: all 0.2s;
+}
+
+.form-section:hover {
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.08);
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-section-title .el-icon {
+  color: var(--color-gb);
+}
+
+/* 扫码功能条 */
+.scan-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+
+.scan-action-bar.return {
+  background: linear-gradient(135deg, #636e72 0%, #4a5455 100%);
+}
+
+.scan-action-bar .scan-btn {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+  font-weight: 600;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.scan-action-bar .scan-btn:hover {
+  background: rgba(255,255,255,0.25);
+  transform: translateY(-1px);
+}
+
+.scan-tip-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+}
+
+/* 暗色模式适配 */
+.dark .form-section {
+  background: var(--bg-card);
+  border-color: var(--border-default);
+}
+
+.dark .form-section:hover {
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.1);
+}
+
+.dark .form-section-title .el-icon {
+  color: var(--accent-primary);
 }
 </style>

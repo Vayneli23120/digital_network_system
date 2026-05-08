@@ -161,6 +161,62 @@
             </div>
           </div>
         </div>
+
+        <!-- Maintenance Tasks -->
+        <div class="status-card clickable" @click="navigateTo('/planned-maintenance')">
+          <div class="card-header">
+            <div class="card-icon maintenance">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>
+              </svg>
+            </div>
+            <span class="card-label">{{ t('dashMaintenance') }}</span>
+          </div>
+          <div class="card-body">
+            <div class="metric-main">
+              <span class="metric-value warning">{{ stats.maintenance?.in_progress || 0 }}</span>
+              <span class="metric-unit">{{ t('dashMaintenanceInProgress') }}</span>
+            </div>
+            <div class="inventory-stats">
+              <div class="inventory-row">
+                <span class="inventory-label">{{ t('dashMaintenancePending') }}</span>
+                <span class="inventory-value">{{ stats.maintenance?.pending || 0 }}</span>
+              </div>
+              <div class="inventory-row">
+                <span class="inventory-label">{{ t('dashMaintenanceCompleted') }}</span>
+                <span class="inventory-value">{{ stats.maintenance?.completed || 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Spare Inventory -->
+        <div class="status-card clickable" @click="navigateTo('/spare-parts')">
+          <div class="card-header">
+            <div class="card-icon inventory">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/>
+              </svg>
+            </div>
+            <span class="card-label">{{ t('dashSpareInventory') }}</span>
+          </div>
+          <div class="card-body">
+            <div class="metric-main">
+              <span class="metric-value">{{ stats.spare_parts?.total_models || 0 }}</span>
+              <span class="metric-unit">{{ t('dashSpareModels') }}</span>
+            </div>
+            <div class="inventory-stats">
+              <div class="inventory-row">
+                <span class="inventory-label">{{ t('dashSpareTotalQty') }}</span>
+                <span class="inventory-value">{{ stats.spare_parts?.total_quantity || 0 }}</span>
+              </div>
+              <div class="inventory-row">
+                <span class="inventory-label">{{ t('dashSpareLowStock') }}</span>
+                <span class="inventory-value warning">{{ stats.spare_parts?.low_stock_count || 0 }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
 
@@ -956,7 +1012,7 @@ onUnmounted(() => {
 
 .overview-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 16px;
 }
 
@@ -1004,6 +1060,8 @@ onUnmounted(() => {
 .card-icon.faults { background: rgba(255, 71, 87, 0.15); color: var(--accent-danger); }
 .card-icon.backups { background: rgba(0, 212, 170, 0.15); color: var(--accent-primary); }
 .card-icon.cost { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+.card-icon.maintenance { background: rgba(138, 43, 226, 0.15); color: #8a2be2; }
+.card-icon.inventory { background: rgba(46, 139, 87, 0.15); color: #2e8b57; }
 
 .card-label {
   font-size: 12px;
@@ -1607,6 +1665,12 @@ onUnmounted(() => {
 }
 
 /* ===== Responsive ===== */
+@media (max-width: 1200px) {
+  .overview-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 @media (max-width: 1024px) {
   .overview-grid {
     grid-template-columns: repeat(2, 1fr);
@@ -1636,7 +1700,7 @@ onUnmounted(() => {
   }
 
   .overview-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
   }
 
   .footer-stats {
