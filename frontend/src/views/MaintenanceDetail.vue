@@ -31,52 +31,49 @@
 
           <el-divider>备件信息</el-divider>
 
-          <!-- 备件列表显示（横版卡片） -->
+          <!-- 备件列表显示（紧凑行布局） -->
           <div class="spare-parts-display" v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
             <div class="parts-title">
               <el-icon><List /></el-icon>
               <span>更换备件清单</span>
             </div>
-            <div class="spare-parts-cards">
-              <div v-for="(part, idx) in maintenance.spare_parts_list" :key="part.serial_number || idx" class="spare-part-card">
-                <div class="card-header">
-                  <el-tag type="primary" size="small">备件 #{{ idx + 1 }}</el-tag>
-                </div>
+            <div class="spare-parts-list">
+              <div v-for="(part, idx) in maintenance.spare_parts_list" :key="part.serial_number || idx" class="spare-row">
                 <el-row :gutter="12">
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">序列号</div>
-                      <div class="card-value serial">{{ part.serial_number || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">序列号</span>
+                      <span class="row-value serial">{{ part.serial_number || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">型号</div>
-                      <div class="card-value">{{ part.part_number || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">型号</span>
+                      <span class="row-value">{{ part.part_number || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">名称</div>
-                      <div class="card-value">{{ part.name || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">名称</span>
+                      <span class="row-value">{{ part.name || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="2">
-                    <div class="card-item">
-                      <div class="card-label">数量</div>
-                      <div class="card-value">{{ part.quantity || 1 }}</div>
+                    <div class="row-item">
+                      <span class="row-label">数量</span>
+                      <span class="row-value">{{ part.quantity || 1 }}</span>
                     </div>
                   </el-col>
                   <el-col :span="3">
-                    <div class="card-item">
-                      <div class="card-label">单价</div>
-                      <div class="card-value price">¥{{ (part.unit_price || 0).toFixed(2) }}</div>
+                    <div class="row-item">
+                      <span class="row-label">单价</span>
+                      <span class="row-value price">¥{{ (part.unit_price || 0).toFixed(2) }}</span>
                     </div>
                   </el-col>
                   <el-col :span="3">
-                    <div class="card-item">
-                      <div class="card-label">小计</div>
-                      <div class="card-value price">¥{{ ((part.quantity || 1) * (part.unit_price || 0)).toFixed(2) }}</div>
+                    <div class="row-item">
+                      <span class="row-label">小计</span>
+                      <span class="row-value price">¥{{ ((part.quantity || 1) * (part.unit_price || 0)).toFixed(2) }}</span>
                     </div>
                   </el-col>
                 </el-row>
@@ -90,42 +87,47 @@
 
           <el-divider>返回件信息</el-divider>
 
-          <!-- 返回件列表显示（横版卡片） -->
+          <!-- 返回件列表显示（紧凑行布局） -->
           <div class="return-parts-display" v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
             <div class="parts-title">
               <el-icon><List /></el-icon>
               <span>返回件清单</span>
             </div>
-            <div class="return-parts-cards">
-              <div v-for="(part, idx) in maintenance.return_parts_list" :key="part.serial_number || idx" class="return-part-card">
-                <div class="card-header">
-                  <el-tag type="warning" size="small">返回件 #{{ idx + 1 }}</el-tag>
-                  <el-tag v-if="part.scrap_in" type="success" size="small" style="margin-left: 8px">已入报废库</el-tag>
-                  <el-tag v-else type="info" size="small" style="margin-left: 8px">不入库</el-tag>
-                </div>
+            <div class="return-parts-list">
+              <div v-for="(part, idx) in maintenance.return_parts_list" :key="part.serial_number || idx" class="return-row">
                 <el-row :gutter="12">
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">序列号</div>
-                      <div class="card-value serial">{{ part.serial_number || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">序列号</span>
+                      <span class="row-value serial">{{ part.serial_number || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">型号</div>
-                      <div class="card-value">{{ part.part_number || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">型号</span>
+                      <span class="row-value">{{ part.part_number || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="4">
-                    <div class="card-item">
-                      <div class="card-label">名称</div>
-                      <div class="card-value">{{ part.name || '-' }}</div>
+                    <div class="row-item">
+                      <span class="row-label">名称</span>
+                      <span class="row-value">{{ part.name || '-' }}</span>
                     </div>
                   </el-col>
                   <el-col :span="2">
-                    <div class="card-item">
-                      <div class="card-label">数量</div>
-                      <div class="card-value">{{ part.quantity || 1 }}</div>
+                    <div class="row-item">
+                      <span class="row-label">数量</span>
+                      <span class="row-value">{{ part.quantity || 1 }}</span>
+                    </div>
+                  </el-col>
+                  <el-col :span="4">
+                    <div class="row-item">
+                      <span class="row-label">入报废库</span>
+                      <span class="row-value">
+                        <el-tag :type="part.scrap_in ? 'success' : 'info'" size="small">
+                          {{ part.scrap_in ? '已入库' : '不入库' }}
+                        </el-tag>
+                      </span>
                     </div>
                   </el-col>
                 </el-row>
@@ -1280,7 +1282,7 @@ onMounted(() => {
   margin-top: 8px;
 }
 
-/* 备件卡片样式 */
+/* 备件紧凑行样式 */
 .parts-title {
   display: flex;
   align-items: center;
@@ -1290,82 +1292,85 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-.spare-parts-cards {
+.spare-parts-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.spare-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.spare-row:last-child {
+  border-bottom: none;
+}
+
+.spare-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.spare-row .row-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.spare-part-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.spare-part-card .card-header {
-  margin-bottom: 8px;
-}
-
-.spare-part-card .card-item {
-  text-align: center;
-}
-
-.spare-part-card .card-label {
+.spare-row .row-label {
   color: var(--el-text-color-secondary);
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.spare-part-card .card-value {
+.spare-row .row-value {
   font-size: 13px;
+}
+
+.spare-row .row-value.serial {
+  color: var(--el-color-primary);
   font-weight: 500;
 }
 
-.spare-part-card .card-value.serial {
-  color: var(--el-color-primary);
-}
-
-.spare-part-card .card-value.price {
+.spare-row .row-value.price {
   color: var(--el-color-success);
-}
-
-/* 返回件卡片样式 */
-.return-parts-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.return-part-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.return-part-card .card-header {
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-}
-
-.return-part-card .card-item {
-  text-align: center;
-}
-
-.return-part-card .card-label {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-  margin-bottom: 4px;
-}
-
-.return-part-card .card-value {
-  font-size: 13px;
   font-weight: 500;
 }
 
-.return-part-card .card-value.serial {
+/* 返回件紧凑行样式 */
+.return-parts-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.return-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.return-row:last-child {
+  border-bottom: none;
+}
+
+.return-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.return-row .row-item {
+  display: flex;
+  flex-direction: column;
+}
+
+.return-row .row-label {
+  color: var(--el-text-color-secondary);
+  font-size: 11px;
+  margin-bottom: 2px;
+}
+
+.return-row .row-value {
+  font-size: 13px;
+}
+
+.return-row .row-value.serial {
   color: var(--el-color-primary);
+  font-weight: 500;
 }
 </style>

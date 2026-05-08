@@ -143,8 +143,8 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报废详情对话框（横版卡片列表） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="800px">
+    <!-- 报废详情对话框（紧凑行布局） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="750px">
       <!-- 批次概览 -->
       <div v-if="currentScrapItem" class="scrap-overview">
         <el-row :gutter="16">
@@ -177,53 +177,50 @@
         </el-row>
       </div>
 
-      <!-- 报废件清单（横版卡片列表） -->
-      <div style="margin-top: 20px">
+      <!-- 报废件清单（紧凑行布局） -->
+      <div style="margin-top: 16px">
         <div class="scrap-title">
           <el-icon><List /></el-icon>
           <span>报废件清单</span>
         </div>
 
-        <div class="scrap-cards" v-if="currentScrapItem?.instances?.length > 0">
-          <div v-for="(item, idx) in currentScrapItem?.instances || []" :key="item.serial_number || idx" class="scrap-card">
-            <div class="card-header">
-              <el-tag type="danger" size="small">报废 #{{ idx + 1 }}</el-tag>
-            </div>
+        <div class="scrap-list" v-if="currentScrapItem?.instances?.length > 0">
+          <div v-for="(item, idx) in currentScrapItem?.instances || []" :key="item.serial_number || idx" class="scrap-row">
             <el-row :gutter="12">
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">序列号</div>
-                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">序列号</span>
+                  <span class="row-value serial">{{ item.serial_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">PO号</div>
-                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">PO号</span>
+                  <span class="row-value">{{ item.po_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">单价</div>
-                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                <div class="row-item">
+                  <span class="row-label">单价</span>
+                  <span class="row-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</span>
                 </div>
               </el-col>
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">来源设备</div>
-                  <div class="card-value">{{ item.source_device_name || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">来源设备</span>
+                  <span class="row-value">{{ item.source_device_name || '-' }}</span>
                 </div>
               </el-col>
-              <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">报废入库时间</div>
-                  <div class="card-value">{{ item.scraped_at ? formatDateTime(item.scraped_at) : '-' }}</div>
+              <el-col :span="4">
+                <div class="row-item">
+                  <span class="row-label">报废入库时间</span>
+                  <span class="row-value">{{ item.scraped_at ? formatDateTime(item.scraped_at) : '-' }}</span>
                 </div>
               </el-col>
-              <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">报废原因</div>
-                  <div class="card-value">{{ item.reason || '-' }}</div>
+              <el-col :span="6">
+                <div class="row-item">
+                  <span class="row-label">报废原因</span>
+                  <span class="row-value note">{{ item.reason || '-' }}</span>
                 </div>
               </el-col>
             </el-row>
@@ -1104,49 +1101,58 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-.scrap-cards {
+.scrap-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.scrap-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.scrap-row:last-child {
+  border-bottom: none;
+}
+
+.scrap-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.row-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.scrap-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.scrap-card .card-header {
-  margin-bottom: 8px;
-}
-
-.scrap-card .card-item {
-  text-align: center;
-}
-
-.scrap-card .card-label {
+.row-label {
   color: var(--el-text-color-secondary);
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.scrap-card .card-value {
+.row-value {
   font-size: 13px;
+}
+
+.row-value.serial {
+  color: var(--el-color-primary);
   font-weight: 500;
 }
 
-.scrap-card .card-value.serial {
-  color: var(--el-color-primary);
+.row-value.price {
+  color: var(--el-color-success);
+  font-weight: 500;
 }
 
-.scrap-card .card-value.price {
-  color: var(--el-color-success);
+.row-value.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scrap-summary {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 12px;
+  padding: 10px;
   background: var(--el-fill-color);
   border-radius: 6px;
   text-align: center;

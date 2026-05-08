@@ -243,73 +243,70 @@
                 </el-row>
               </div>
 
-              <!-- 备件清单（横版卡片列表） -->
-              <div style="margin-top: 16px" v-if="deviceInventory.length > 0">
+              <!-- 备件清单（紧凑行布局） -->
+              <div style="margin-top: 12px" v-if="deviceInventory.length > 0">
                 <div class="inventory-title">
                   <el-icon><List /></el-icon>
                   <span>安装备件清单</span>
                 </div>
 
-                <div class="inventory-cards">
-                  <div v-for="(item, idx) in deviceInventory" :key="item.serial_number || idx" class="inventory-card">
-                    <div class="card-header">
-                      <el-tag type="success" size="small">备件 #{{ idx + 1 }}</el-tag>
-                    </div>
+                <div class="inventory-list">
+                  <div v-for="(item, idx) in deviceInventory" :key="item.serial_number || idx" class="inventory-row">
                     <el-row :gutter="12">
                       <el-col :span="4">
-                        <div class="card-item">
-                          <div class="card-label">序列号</div>
-                          <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">序列号</span>
+                          <span class="row-value serial">{{ item.serial_number || '-' }}</span>
                         </div>
                       </el-col>
                       <el-col :span="3">
-                        <div class="card-item">
-                          <div class="card-label">PO号</div>
-                          <div class="card-value">{{ item.po_number || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">PO号</span>
+                          <span class="row-value">{{ item.po_number || '-' }}</span>
                         </div>
                       </el-col>
                       <el-col :span="4">
-                        <div class="card-item">
-                          <div class="card-label">型号</div>
-                          <div class="card-value">{{ item.part_number || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">型号</span>
+                          <span class="row-value">{{ item.part_number || '-' }}</span>
                         </div>
                       </el-col>
                       <el-col :span="4">
-                        <div class="card-item">
-                          <div class="card-label">名称</div>
-                          <div class="card-value">{{ item.part_name || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">名称</span>
+                          <span class="row-value">{{ item.part_name || '-' }}</span>
                         </div>
                       </el-col>
                       <el-col :span="3">
-                        <div class="card-item">
-                          <div class="card-label">单价</div>
-                          <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                        <div class="row-item">
+                          <span class="row-label">单价</span>
+                          <span class="row-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</span>
                         </div>
                       </el-col>
                       <el-col :span="3">
-                        <div class="card-item">
-                          <div class="card-label">分类</div>
-                          <div class="card-value">{{ item.category || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">分类</span>
+                          <span class="row-value">{{ item.category || '-' }}</span>
                         </div>
                       </el-col>
                       <el-col :span="3">
-                        <div class="card-item">
-                          <div class="card-label">安装人</div>
-                          <div class="card-value">{{ item.installed_by || '-' }}</div>
+                        <div class="row-item">
+                          <span class="row-label">安装人</span>
+                          <span class="row-value">{{ item.installed_by || '-' }}</span>
                         </div>
                       </el-col>
                     </el-row>
-                    <el-row :gutter="12" style="margin-top: 8px">
-                      <el-col :span="6">
-                        <div class="card-item">
-                          <div class="card-label">安装时间</div>
-                          <div class="card-value">{{ formatDateTime(item.installed_at) }}</div>
+                    <el-row :gutter="12" style="margin-top: 4px">
+                      <el-col :span="5">
+                        <div class="row-item">
+                          <span class="row-label">安装时间</span>
+                          <span class="row-value">{{ formatDateTime(item.installed_at) }}</span>
                         </div>
                       </el-col>
-                      <el-col :span="18">
-                        <div class="card-item">
-                          <div class="card-label">备注</div>
-                          <div class="card-value">{{ item.notes || '-' }}</div>
+                      <el-col :span="19">
+                        <div class="row-item">
+                          <span class="row-label">备注</span>
+                          <span class="row-value note">{{ item.notes || '-' }}</span>
                         </div>
                       </el-col>
                     </el-row>
@@ -948,7 +945,7 @@ onMounted(() => {
   color: #66b1ff;
 }
 
-/* 设备资产卡片样式 */
+/* 设备资产紧凑行样式 */
 .inventory-overview {
   background: var(--el-fill-color-light);
   padding: 16px;
@@ -984,49 +981,58 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-.inventory-cards {
+.inventory-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.inventory-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.inventory-row:last-child {
+  border-bottom: none;
+}
+
+.inventory-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.inventory-row .row-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.inventory-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.inventory-card .card-header {
-  margin-bottom: 8px;
-}
-
-.inventory-card .card-item {
-  text-align: center;
-}
-
-.inventory-card .card-label {
+.inventory-row .row-label {
   color: var(--el-text-color-secondary);
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.inventory-card .card-value {
+.inventory-row .row-value {
   font-size: 13px;
+}
+
+.inventory-row .row-value.serial {
+  color: var(--el-color-primary);
   font-weight: 500;
 }
 
-.inventory-card .card-value.serial {
-  color: var(--el-color-primary);
+.inventory-row .row-value.price {
+  color: var(--el-color-success);
+  font-weight: 500;
 }
 
-.inventory-card .card-value.price {
-  color: var(--el-color-success);
+.inventory-row .row-value.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .inventory-summary {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 12px;
+  padding: 10px;
   background: var(--el-fill-color);
   border-radius: 6px;
   text-align: center;

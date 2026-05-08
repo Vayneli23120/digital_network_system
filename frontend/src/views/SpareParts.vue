@@ -206,7 +206,7 @@
     </el-tabs>
 
     <!-- 出入库详情对话框 -->
-    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="800px">
+    <el-dialog v-model="movementDetailVisible" title="出入库详情" width="750px">
       <!-- 批次概览 -->
       <div v-if="currentMovement" class="movement-overview">
         <el-row :gutter="16">
@@ -246,7 +246,7 @@
             </div>
           </el-col>
         </el-row>
-        <el-row :gutter="16" style="margin-top: 12px">
+        <el-row :gutter="16" style="margin-top: 8px">
           <el-col :span="6">
             <div class="overview-item">
               <div class="overview-label">目标设备</div>
@@ -268,88 +268,82 @@
         </el-row>
       </div>
 
-      <!-- 本批次备件清单（横版卡片列表） -->
-      <div style="margin-top: 20px">
+      <!-- 本批次备件清单（紧凑行布局） -->
+      <div style="margin-top: 16px">
         <div class="batch-title">
           <el-icon><List /></el-icon>
           <span>本批次备件清单</span>
         </div>
 
-        <!-- 合并当前记录和batch_items，按时间排序 -->
-        <div class="batch-cards">
+        <!-- 合并当前记录和batch_items -->
+        <div class="batch-list">
           <!-- 当前记录 -->
-          <div class="batch-card current-card">
-            <div class="card-header">
-              <el-tag type="primary" size="small">当前查看</el-tag>
-            </div>
+          <div class="batch-row current-row">
             <el-row :gutter="12">
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">序列号</div>
-                  <div class="card-value serial">{{ currentMovement?.serial_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">序列号</span>
+                  <span class="row-value serial">{{ currentMovement?.serial_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">PO号</div>
-                  <div class="card-value">{{ currentMovement?.po_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">PO号</span>
+                  <span class="row-value">{{ currentMovement?.po_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">型号</div>
-                  <div class="card-value">{{ currentMovement?.part_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">型号</span>
+                  <span class="row-value">{{ currentMovement?.part_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">名称</div>
-                  <div class="card-value">{{ currentMovement?.name || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">名称</span>
+                  <span class="row-value">{{ currentMovement?.name || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">单价</div>
-                  <div class="card-value price">¥{{ (currentMovement?.unit_price || 0).toFixed(2) }}</div>
+                <div class="row-item">
+                  <span class="row-label">单价</span>
+                  <span class="row-value price">¥{{ (currentMovement?.unit_price || 0).toFixed(2) }}</span>
                 </div>
               </el-col>
             </el-row>
           </div>
 
           <!-- 同批次其他备件 -->
-          <div v-for="(item, idx) in currentMovement?.batch_items || []" :key="item.id" class="batch-card">
-            <div class="card-header">
-              <el-tag type="info" size="small">批次 #{{ idx + 2 }}</el-tag>
-            </div>
+          <div v-for="(item, idx) in currentMovement?.batch_items || []" :key="item.id" class="batch-row">
             <el-row :gutter="12">
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">序列号</div>
-                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">序列号</span>
+                  <span class="row-value serial">{{ item.serial_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">PO号</div>
-                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">PO号</span>
+                  <span class="row-value">{{ item.po_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">型号</div>
-                  <div class="card-value">{{ item.part_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">型号</span>
+                  <span class="row-value">{{ item.part_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="5">
-                <div class="card-item">
-                  <div class="card-label">名称</div>
-                  <div class="card-value">{{ item.name || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">名称</span>
+                  <span class="row-value">{{ item.name || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">单价</div>
-                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                <div class="row-item">
+                  <span class="row-label">单价</span>
+                  <span class="row-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</span>
                 </div>
               </el-col>
             </el-row>
@@ -477,8 +471,8 @@
       />
     </el-dialog>
 
-    <!-- 备件详情对话框（库存清单，横版卡片） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="800px">
+    <!-- 备件详情对话框（库存清单，紧凑表格） -->
+    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="750px">
       <!-- 库存概览 -->
       <div v-if="currentDetailPart" class="stock-overview">
         <el-row :gutter="16">
@@ -505,53 +499,50 @@
         </el-row>
       </div>
 
-      <!-- 库存清单（横版卡片列表） -->
-      <div style="margin-top: 20px">
+      <!-- 库存清单（紧凑行布局） -->
+      <div style="margin-top: 16px">
         <div class="stock-title">
           <el-icon><List /></el-icon>
           <span>在库备件清单</span>
         </div>
 
-        <div class="stock-cards" v-if="inStockInstances.length > 0">
-          <div v-for="(item, idx) in inStockInstances" :key="item.serial_number || idx" class="stock-card">
-            <div class="card-header">
-              <el-tag type="success" size="small">库存 #{{ idx + 1 }}</el-tag>
-            </div>
+        <div class="stock-list" v-if="inStockInstances.length > 0">
+          <div v-for="(item, idx) in inStockInstances" :key="item.serial_number || idx" class="stock-row">
             <el-row :gutter="12">
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">序列号</div>
-                  <div class="card-value serial">{{ item.serial_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">序列号</span>
+                  <span class="row-value serial">{{ item.serial_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">PO号</div>
-                  <div class="card-value">{{ item.po_number || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">PO号</span>
+                  <span class="row-value">{{ item.po_number || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">单价</div>
-                  <div class="card-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</div>
+                <div class="row-item">
+                  <span class="row-label">单价</span>
+                  <span class="row-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</span>
                 </div>
               </el-col>
               <el-col :span="3">
-                <div class="card-item">
-                  <div class="card-label">位置</div>
-                  <div class="card-value">{{ item.location || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">位置</span>
+                  <span class="row-value">{{ item.location || '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="4">
-                <div class="card-item">
-                  <div class="card-label">入库时间</div>
-                  <div class="card-value">{{ item.in_stock_at ? formatDateTime(item.in_stock_at) : '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">入库时间</span>
+                  <span class="row-value">{{ item.in_stock_at ? formatDateTime(item.in_stock_at) : '-' }}</span>
                 </div>
               </el-col>
               <el-col :span="7">
-                <div class="card-item">
-                  <div class="card-label">备注</div>
-                  <div class="card-value">{{ item.notes || '-' }}</div>
+                <div class="row-item">
+                  <span class="row-label">备注</span>
+                  <span class="row-value note">{{ item.notes || '-' }}</span>
                 </div>
               </el-col>
             </el-row>
@@ -1135,54 +1126,63 @@ onMounted(loadParts)
   color: var(--el-text-color-primary);
 }
 
-.batch-cards {
+.batch-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.batch-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.batch-row:last-child {
+  border-bottom: none;
+}
+
+.batch-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.current-row {
+  background: var(--el-color-primary-light-9);
+  border-bottom: 1px solid var(--el-color-primary-light-5);
+}
+
+.row-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.batch-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.current-card {
-  background: var(--el-color-primary-light-9);
-  border: 1px solid var(--el-color-primary-light-5);
-}
-
-.card-header {
-  margin-bottom: 8px;
-}
-
-.card-item {
-  text-align: center;
-}
-
-.card-label {
+.row-label {
   color: var(--el-text-color-secondary);
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.card-value {
+.row-value {
   font-size: 13px;
+}
+
+.row-value.serial {
+  color: var(--el-color-primary);
   font-weight: 500;
 }
 
-.card-value.serial {
-  color: var(--el-color-primary);
+.row-value.price {
+  color: var(--el-color-success);
+  font-weight: 500;
 }
 
-.card-value.price {
-  color: var(--el-color-success);
+.row-value.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .batch-summary {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 12px;
+  padding: 10px;
   background: var(--el-fill-color);
   border-radius: 6px;
   text-align: center;
@@ -1230,49 +1230,58 @@ onMounted(loadParts)
   color: var(--el-text-color-primary);
 }
 
-.stock-cards {
+.stock-list {
+  border: 1px solid var(--el-border-color-light);
+  border-radius: 6px;
+}
+
+.stock-row {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--el-border-color-lighter);
+}
+
+.stock-row:last-child {
+  border-bottom: none;
+}
+
+.stock-row:nth-child(odd) {
+  background: var(--el-fill-color-lighter);
+}
+
+.row-item {
   display: flex;
   flex-direction: column;
-  gap: 12px;
 }
 
-.stock-card {
-  background: var(--el-fill-color-lighter);
-  border-radius: 8px;
-  padding: 12px 16px;
-  border: 1px solid var(--el-border-color-light);
-}
-
-.stock-card .card-header {
-  margin-bottom: 8px;
-}
-
-.stock-card .card-item {
-  text-align: center;
-}
-
-.stock-card .card-label {
+.row-label {
   color: var(--el-text-color-secondary);
   font-size: 11px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 
-.stock-card .card-value {
+.row-value {
   font-size: 13px;
+}
+
+.row-value.serial {
+  color: var(--el-color-primary);
   font-weight: 500;
 }
 
-.stock-card .card-value.serial {
-  color: var(--el-color-primary);
+.row-value.price {
+  color: var(--el-color-success);
+  font-weight: 500;
 }
 
-.stock-card .card-value.price {
-  color: var(--el-color-success);
+.row-value.note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .stock-summary {
-  margin-top: 16px;
-  padding: 12px;
+  margin-top: 12px;
+  padding: 10px;
   background: var(--el-fill-color);
   border-radius: 6px;
   text-align: center;
