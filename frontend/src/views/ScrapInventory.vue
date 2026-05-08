@@ -144,7 +144,7 @@
     </el-tabs>
 
     <!-- 报废详情对话框 -->
-    <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="750px">
+    <el-dialog v-model="detailDialogVisible" title="报废库存清单" width="750px">
       <!-- 概览（紧凑） -->
       <div v-if="currentScrapItem" class="compact-header">
         <span>报废库存: <strong class="text-danger">{{ currentScrapItem.quantity || 0 }}</strong> 件</span>

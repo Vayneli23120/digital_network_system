@@ -364,8 +364,8 @@
       />
     </el-dialog>
 
-    <!-- 备件详情对话框（库存清单） -->
-    <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="750px">
+    <!-- 备件详情对话框 -->
+    <el-dialog v-model="detailDialogVisible" title="库存清单" width="750px">
       <!-- 库存概览（紧凑） -->
       <div v-if="currentDetailPart" class="compact-header">
         <span>在库: <strong>{{ currentDetailPart.in_stock_count || 0 }}</strong> 件</span>
