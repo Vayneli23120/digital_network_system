@@ -1,93 +1,273 @@
 <template>
   <div class="maintenance-page">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>{{ t('maintTitle') }}</span>
-          <el-button type="primary" @click="openAddDialog">
-            <el-icon><Plus /></el-icon>
-            {{ t('maintAddRecord') }}
-          </el-button>
+    <!-- 顶部统计 Dashboard -->
+    <section class="stats-dashboard">
+      <div class="stats-header">
+        <span class="stats-title">{{ t('maintStatsTitle') }}</span>
+        <button class="refresh-btn" @click="loadMaintenances" :disabled="loading">
+          <el-icon><Refresh /></el-icon>
+        </button>
+      </div>
+      <div class="stats-grid">
+        <!-- 总维修单 -->
+        <div class="stat-card total" @click="filterByStatus('')">
+          <div class="card-icon">
+            <el-icon><Document /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.total }}</div>
+            <div class="metric-label">{{ t('maintStatsTotal') }}</div>
+          </div>
         </div>
-      </template>
+        <!-- 维修中 -->
+        <div class="stat-card repairing" @click="filterByStatus('repairing')">
+          <div class="card-icon">
+            <el-icon><Setting /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.repairing }}</div>
+            <div class="metric-label">{{ t('maintStatsRepairing') }}</div>
+          </div>
+        </div>
+        <!-- 待验证 -->
+        <div class="stat-card verifying" @click="filterByStatus('verifying')">
+          <div class="card-icon">
+            <el-icon><CircleCheck /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.verifying }}</div>
+            <div class="metric-label">{{ t('maintStatsVerifying') }}</div>
+          </div>
+        </div>
+        <!-- 已完成 -->
+        <div class="stat-card completed" @click="filterByStatus('completed')">
+          <div class="card-icon">
+            <el-icon><SuccessFilled /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.completed }}</div>
+            <div class="metric-label">{{ t('maintStatsCompleted') }}</div>
+          </div>
+        </div>
+        <!-- 超时工单 -->
+        <div class="stat-card overdue" @click="filterByStatus('overdue')">
+          <div class="card-icon">
+            <el-icon><WarningFilled /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value danger">{{ stats.overdue }}</div>
+            <div class="metric-label">{{ t('maintStatsOverdue') }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <!-- 筛选栏 -->
-      <div class="filter-bar">
+    <!-- 高级筛选工具栏 -->
+    <section class="filter-section">
+      <div class="filter-toolbar">
+        <!-- 搜索框 -->
         <el-input
           v-model="searchText"
           :placeholder="t('maintSearchPlaceholder')"
-          style="width: 220px"
+          class="search-input"
           clearable
           @input="filterMaintenances"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="filterMaintType" :placeholder="t('maintType')" clearable style="width: 140px" @change="filterMaintenances">
-          <el-option :label="t('maintTypePreventive')" value="preventive" />
-          <el-option :label="t('maintTypeCorrective')" value="corrective" />
-          <el-option :label="t('maintTypeUpgrade')" value="upgrade" />
-          <el-option :label="t('maintTypeEmergency')" value="emergency" />
-        </el-select>
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          :range-separator="t('maintDateTo')"
-          :start-placeholder="t('maintDateStart')"
-          :end-placeholder="t('maintDateEnd')"
-          value-format="YYYY-MM-DD"
-          style="width: 240px"
-          @change="filterMaintenances"
-        />
-        <el-select v-model="sortBy" :placeholder="t('maintSort')" style="width: 150px" @change="filterMaintenances">
-          <el-option :label="t('maintSortTimeDesc')" value="maint_time_desc" />
-          <el-option :label="t('maintSortTimeAsc')" value="maint_time_asc" />
-          <el-option :label="t('maintSortCostDesc')" value="total_cost_desc" />
-          <el-option :label="t('maintSortCostAsc')" value="total_cost_asc" />
-        </el-select>
-      </div>
 
-      <el-table :data="filteredMaintenances" style="width: 100%" v-loading="loading">
+        <!-- 状态 Chips -->
+        <div class="status-chips">
+          <el-tag
+            :class="['status-chip', { active: filterStatus === '' }]"
+            @click="filterByStatus('')"
+          >{{ t('maintFilterAll') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-created', { active: filterStatus === 'created' }]"
+            @click="filterByStatus('created')"
+          >{{ t('maintStatusLabelCreated') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-diagnosing', { active: filterStatus === 'diagnosing' }]"
+            @click="filterByStatus('diagnosing')"
+          >{{ t('maintStatusLabelDiagnosing') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-repairing', { active: filterStatus === 'repairing' }]"
+            @click="filterByStatus('repairing')"
+          >{{ t('maintStatusLabelRepairing') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-verifying', { active: filterStatus === 'verifying' }]"
+            @click="filterByStatus('verifying')"
+          >{{ t('maintStatusLabelVerifying') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-completed', { active: filterStatus === 'completed' }]"
+            @click="filterByStatus('completed')"
+          >{{ t('maintStatusLabelCompleted') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-overdue', { active: filterStatus === 'overdue' }]"
+            type="danger"
+            @click="filterByStatus('overdue')"
+          >{{ t('maintFilterOverdue') }}</el-tag>
+        </div>
+
+        <!-- 更多筛选 -->
+        <div class="more-filters">
+          <el-select v-model="filterPriority" :placeholder="t('maintPriority')" clearable style="width: 100px" @change="filterMaintenances">
+            <el-option label="P1" value="P1" />
+            <el-option label="P2" value="P2" />
+            <el-option label="P3" value="P3" />
+            <el-option label="P4" value="P4" />
+          </el-select>
+          <el-select v-model="filterMaintType" :placeholder="t('maintType')" clearable style="width: 120px" @change="filterMaintenances">
+            <el-option :label="t('maintTypePreventive')" value="preventive" />
+            <el-option :label="t('maintTypeCorrective')" value="corrective" />
+            <el-option :label="t('maintTypeUpgrade')" value="upgrade" />
+            <el-option :label="t('maintTypeEmergency')" value="emergency" />
+          </el-select>
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            :range-separator="t('maintDateTo')"
+            :start-placeholder="t('maintDateStart')"
+            :end-placeholder="t('maintDateEnd')"
+            value-format="YYYY-MM-DD"
+            style="width: 200px"
+            @change="filterMaintenances"
+          />
+        </div>
+
+        <!-- 新增按钮 -->
+        <el-button type="primary" class="add-btn" @click="openAddDialog">
+          <el-icon><Plus /></el-icon>
+          {{ t('maintAddRecord') }}
+        </el-button>
+      </div>
+    </section>
+
+    <!-- 维修单数据面板 -->
+    <section class="data-section">
+      <el-table
+        :data="filteredMaintenances"
+        class="modern-table"
+        v-loading="loading"
+        :row-class-name="tableRowClassName"
+      >
+        <!-- 维修单号 -->
         <el-table-column prop="maint_no" :label="t('maintColNo')" width="180">
           <template #default="{ row }">
-            <router-link :to="`/maintenance/${row.id}`" class="maint-link">
-              {{ row.maint_no }}
+            <router-link :to="`/maintenance/${row.id}`" class="maint-no-link">
+              <span class="maint-no-text">{{ row.maint_no }}</span>
+              <el-icon class="link-arrow"><ArrowRight /></el-icon>
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="device_name" :label="t('maintColDevice')" width="160" />
-        <el-table-column prop="maint_type" :label="t('maintColType')" width="100">
+
+        <!-- 状态 -->
+        <el-table-column prop="status" :label="t('maintStatusLabel')" width="100">
           <template #default="{ row }">
-            <el-tag :type="getMaintTypeType(row.maint_type)">
+            <el-tag :type="getStatusColor(row.status)" size="small" class="status-tag">
+              {{ row.status_label || getStatusLabel(row.status) }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <!-- 优先级 -->
+        <el-table-column prop="priority" :label="t('maintPriority')" width="70">
+          <template #default="{ row }">
+            <el-tag :type="getPriorityColor(row.priority)" size="small" class="priority-tag">
+              {{ row.priority || 'P3' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+
+        <!-- 设备 -->
+        <el-table-column prop="device_name" :label="t('maintColDevice')" width="140" />
+
+        <!-- 负责人 -->
+        <el-table-column prop="current_owner" :label="t('maintOwner')" width="100">
+          <template #default="{ row }">
+            <span class="owner-cell">{{ row.current_owner || t('maintOwnerUnassigned') }}</span>
+          </template>
+        </el-table-column>
+
+        <!-- 类型 -->
+        <el-table-column prop="maint_type" :label="t('maintColType')" width="90">
+          <template #default="{ row }">
+            <el-tag :type="getMaintTypeType(row.maint_type)" size="small">
               {{ getMaintTypeText(row.maint_type) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="parts_cost" :label="t('maintColPartsCost')" width="100">
-          <template #default="{ row }">¥{{ row.parts_cost?.toFixed(2) || '0.00' }}</template>
-        </el-table-column>
-        <el-table-column prop="labor_cost" :label="t('maintColLaborCost')" width="100">
-          <template #default="{ row }">¥{{ row.labor_cost?.toFixed(2) || '0.00' }}</template>
-        </el-table-column>
-        <el-table-column prop="total_cost" :label="t('maintColTotalCost')" width="100">
+
+        <!-- 进度 -->
+        <el-table-column prop="progress_percent" :label="t('maintProgress')" width="100">
           <template #default="{ row }">
-            ¥{{ ((row.parts_cost || 0) + (row.labor_cost || 0)).toFixed(2) }}
+            <div class="mini-progress">
+              <div class="progress-track">
+                <div class="progress-fill" :style="{ width: getProgressPercent(row.status) + '%' }" :class="row.status"></div>
+              </div>
+              <span class="progress-text">{{ getProgressPercent(row.status) }}%</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column prop="maint_time" :label="t('maintColTime')" width="160">
+
+        <!-- SLA -->
+        <el-table-column prop="sla_remaining" :label="t('maintSlaDeadline')" width="100">
+          <template #default="{ row }">
+            <div class="sla-cell" :class="{ overdue: isOverdue(row) }">
+              <span class="sla-time">{{ row.sla_remaining || '--' }}</span>
+            </div>
+          </template>
+        </el-table-column>
+
+        <!-- 成本 -->
+        <el-table-column prop="total_cost" :label="t('maintColTotalCost')" width="90">
+          <template #default="{ row }">
+            <span class="cost-value">¥{{ ((row.parts_cost || 0) + (row.labor_cost || 0)).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+
+        <!-- 时间 -->
+        <el-table-column prop="maint_time" :label="t('maintColTime')" width="140">
           <template #default="{ row }">{{ formatDateTime(row.maint_time || row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="description" :label="t('maintColDesc')" min-width="200" />
-        <el-table-column :label="t('colOperation')" width="180" fixed="right">
+
+        <!-- 操作 -->
+        <el-table-column :label="t('colOperation')" width="120" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="editMaintenance(row)">{{ t('actionEdit') }}</el-button>
-            <el-button type="danger" size="small" @click="deleteMaintenance(row)">{{ t('actionDelete') }}</el-button>
+            <div class="action-icons">
+              <el-tooltip content="查看详情" placement="top">
+                <el-button type="primary" link @click="viewDetail(row)" class="action-icon">
+                  <el-icon><View /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="编辑" placement="top">
+                <el-button type="default" link @click="editMaintenance(row)" class="action-icon">
+                  <el-icon><Edit /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <el-tooltip content="删除" placement="top">
+                <el-button type="danger" link @click="deleteMaintenance(row)" class="action-icon">
+                  <el-icon><Delete /></el-icon>
+                </el-button>
+              </el-tooltip>
+            </div>
           </template>
         </el-table-column>
       </el-table>
+
+      <!-- 分页 -->
       <div class="pagination-bar">
-        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadMaintenances" @current-change="loadMaintenances" />
+        <el-pagination
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          layout="total, sizes, prev, pager, next"
+          :total="filteredTotal"
+          @size-change="handlePageSizeChange"
+          @current-change="handlePageChange"
+        />
       </div>
-    </el-card>
+    </section>
 
     <!-- 添加/编辑维修记录对话框 -->
     <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="1100px" class="edit-maint-dialog">
@@ -383,14 +563,16 @@
 
 <script setup>
 import { ref, onMounted, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document } from '@element-plus/icons-vue'
+import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document, Edit, Delete, View, ArrowRight, Refresh, CircleCheck, SuccessFilled, WarningFilled } from '@element-plus/icons-vue'
 import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement, getPartBySerialNumber } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime } from '@/utils/time'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 
+const router = useRouter()
 const { t } = useI18n()
 
 const maintenances = ref([])
@@ -404,9 +586,112 @@ const showAddDialog = ref(false)
 const editMode = ref(false)
 
 const searchText = ref('')
+const filterStatus = ref('')
+const filterPriority = ref('')
 const filterMaintType = ref('')
 const dateRange = ref([])
 const sortBy = ref('maint_time_desc')
+
+// 统计数据
+const stats = computed(() => {
+  const list = maintenances.value
+  const totalCount = list.length
+  const repairingCount = list.filter(m => m.status === 'repairing').length
+  const verifyingCount = list.filter(m => m.status === 'verifying').length
+  const completedCount = list.filter(m => m.status === 'completed').length
+  const overdueCount = list.filter(m => {
+    if (m.sla_remaining && m.sla_remaining === '已超期') return true
+    if (m.sla_remaining && m.sla_remaining === 'Overdue') return true
+    if (m.sla_deadline) {
+      const deadline = new Date(m.sla_deadline)
+      return deadline < new Date()
+    }
+    return false
+  }).length
+  return {
+    total: totalCount,
+    repairing: repairingCount,
+    verifying: verifyingCount,
+    completed: completedCount,
+    overdue: overdueCount
+  }
+})
+
+// 分页后的总数
+const filteredTotal = computed(() => filteredMaintenances.value.length)
+
+// 状态颜色映射
+const STATUS_COLORS = {
+  'created': 'info',
+  'diagnosing': 'primary',
+  'repairing': 'warning',
+  'verifying': '',
+  'completed': 'success',
+  'cancelled': 'danger'
+}
+
+const STATUS_LABELS = {
+  'created': '创建',
+  'diagnosing': '诊断',
+  'repairing': '维修',
+  'verifying': '验证',
+  'completed': '完成',
+  'cancelled': '取消'
+}
+
+const STATUS_PERCENT = {
+  'created': 20,
+  'diagnosing': 40,
+  'repairing': 60,
+  'verifying': 80,
+  'completed': 100,
+  'cancelled': 0
+}
+
+const getStatusColor = (status) => STATUS_COLORS[status] || 'info'
+const getStatusLabel = (status) => STATUS_LABELS[status] || status
+const getProgressPercent = (status) => STATUS_PERCENT[status] || 20
+
+const getPriorityColor = (priority) => {
+  const colors = { 'P1': 'danger', 'P2': 'warning', 'P3': 'info', 'P4': 'success' }
+  return colors[priority] || 'info'
+}
+
+const isOverdue = (row) => {
+  if (row.sla_remaining && (row.sla_remaining === '已超期' || row.sla_remaining === 'Overdue')) return true
+  if (row.sla_deadline) {
+    return new Date(row.sla_deadline) < new Date()
+  }
+  return false
+}
+
+// 状态筛选
+const filterByStatus = (status) => {
+  filterStatus.value = status
+  currentPage.value = 1
+  filterMaintenances()
+}
+
+// 分页处理
+const handlePageSizeChange = () => {
+  currentPage.value = 1
+}
+
+const handlePageChange = () => {
+  // 分页切换
+}
+
+// 表格行样式
+const tableRowClassName = ({ row, rowIndex }) => {
+  if (row.status === 'cancelled') return 'cancelled-row'
+  if (isOverdue(row)) return 'overdue-row'
+  return ''
+}
+
+// 查看详情
+const viewDetail = (row) => {
+  router.push(`/maintenance/${row.id}`)
+}
 
 // 备件相关
 const sparePartOptions = ref([])
@@ -735,8 +1020,23 @@ const filterMaintenances = () => {
     const search = searchText.value.toLowerCase()
     result = result.filter(m =>
       m.device_name?.toLowerCase().includes(search) ||
-      m.maint_no?.toLowerCase().includes(search)
+      m.maint_no?.toLowerCase().includes(search) ||
+      m.description?.toLowerCase().includes(search)
     )
+  }
+
+  // 状态筛选
+  if (filterStatus.value) {
+    if (filterStatus.value === 'overdue') {
+      result = result.filter(m => isOverdue(m))
+    } else {
+      result = result.filter(m => m.status === filterStatus.value)
+    }
+  }
+
+  // 优先级筛选
+  if (filterPriority.value) {
+    result = result.filter(m => (m.priority || 'P3') === filterPriority.value)
   }
 
   if (filterMaintType.value) {
@@ -950,56 +1250,445 @@ onMounted(() => {
 <style scoped>
 .maintenance-page {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.card-header {
+/* ===== 统计 Dashboard ===== */
+.stats-dashboard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.stats-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
 }
 
-.filter-bar {
+.stats-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.refresh-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
   display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 48, 135, 0.08);
+}
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.stat-card.total .card-icon {
+  background: rgba(9, 132, 227, 0.15);
+  color: #0984e3;
+}
+
+.stat-card.repairing .card-icon {
+  background: rgba(225, 112, 85, 0.15);
+  color: #e17055;
+}
+
+.stat-card.verifying .card-icon {
+  background: rgba(116, 185, 255, 0.15);
+  color: #74b9ff;
+}
+
+.stat-card.completed .card-icon {
+  background: rgba(0, 184, 148, 0.15);
+  color: #00b894;
+}
+
+.stat-card.overdue .card-icon {
+  background: rgba(214, 48, 49, 0.15);
+  color: #d63031;
+}
+
+.card-body {
+  flex: 1;
+}
+
+.metric-value {
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.metric-value.danger {
+  color: #d63031;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+/* ===== 筛选工具栏 ===== */
+.filter-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+}
+
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
-.maint-link {
-  color: #409EFF;
+.search-input {
+  width: 220px;
+}
+
+.status-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.status-chip {
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 6px;
+}
+
+.status-chip.active {
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.status-chip.chip-created { background: rgba(9, 132, 227, 0.1); border-color: rgba(9, 132, 227, 0.3); color: #0984e3; }
+.status-chip.chip-diagnosing { background: rgba(9, 132, 227, 0.15); border-color: rgba(9, 132, 227, 0.4); color: #0984e3; }
+.status-chip.chip-repairing { background: rgba(225, 112, 85, 0.1); border-color: rgba(225, 112, 85, 0.3); color: #e17055; }
+.status-chip.chip-verifying { background: rgba(116, 185, 255, 0.1); border-color: rgba(116, 185, 255, 0.3); color: #74b9ff; }
+.status-chip.chip-completed { background: rgba(0, 184, 148, 0.1); border-color: rgba(0, 184, 148, 0.3); color: #00b894; }
+
+.more-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.add-btn {
+  margin-left: auto;
+}
+
+/* ===== 数据面板 ===== */
+.data-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+/* 现代化表格 */
+.modern-table {
+  width: 100%;
+}
+
+.modern-table :deep(.el-table__header-wrapper) {
+  border-bottom: 2px solid var(--border-default);
+}
+
+.modern-table :deep(th.el-table__cell) {
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.modern-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.modern-table :deep(.el-table__row) {
+  transition: all 0.2s;
+}
+
+.modern-table :deep(.el-table__row:hover > td) {
+  background: var(--bg-hover) !important;
+}
+
+.modern-table :deep(.cancelled-row) {
+  opacity: 0.6;
+}
+
+.modern-table :deep(.overdue-row) {
+  background: rgba(214, 48, 49, 0.05);
+}
+
+/* 维修单号链接 */
+.maint-no-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-primary);
   text-decoration: none;
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.maint-no-link:hover {
+  color: var(--accent-secondary);
+}
+
+.maint-no-link:hover .link-arrow {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.link-arrow {
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+/* 状态标签 */
+.status-tag {
   font-weight: 500;
 }
 
-.maint-link:hover {
-  text-decoration: underline;
-  color: #66b1ff;
+/* 优先级标签 */
+.priority-tag {
+  font-family: 'JetBrains Mono', monospace;
 }
 
+/* 负责人 */
+.owner-cell {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 进度条 */
+.mini-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.progress-track {
+  width: 60px;
+  height: 6px;
+  background: var(--bg-tertiary);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+
+.progress-fill.created { background: rgba(9, 132, 227, 0.4); }
+.progress-fill.diagnosing { background: rgba(9, 132, 227, 0.6); }
+.progress-fill.repairing { background: rgba(225, 112, 85, 0.7); }
+.progress-fill.verifying { background: rgba(116, 185, 255, 0.8); }
+.progress-fill.completed { background: #00b894; }
+.progress-fill.cancelled { background: #d63031; }
+
+.progress-text {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-tertiary);
+}
+
+/* SLA */
+.sla-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sla-time {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+}
+
+.sla-cell.overdue .sla-time {
+  color: #d63031;
+  font-weight: 500;
+}
+
+/* 成本 */
+.cost-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 操作图标 */
+.action-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.action-icon {
+  padding: 4px;
+}
+
+.action-icon:hover {
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+/* 分页 */
 .pagination-bar {
   margin-top: 16px;
   display: flex;
   justify-content: flex-end;
 }
 
+/* ===== 响应式 ===== */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .status-chips {
+    flex-wrap: wrap;
+  }
+
+  .more-filters {
+    flex-wrap: wrap;
+  }
+
+  .add-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* ===== 暗色模式 ===== */
+.dark .stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 184, 148, 0.1);
+}
+
+.dark .stat-card.total .card-icon { background: rgba(9, 132, 227, 0.2); }
+.dark .stat-card.repairing .card-icon { background: rgba(225, 112, 85, 0.2); }
+.dark .stat-card.verifying .card-icon { background: rgba(116, 185, 255, 0.2); }
+.dark .stat-card.completed .card-icon { background: rgba(0, 184, 148, 0.2); }
+.dark .stat-card.overdue .card-icon { background: rgba(214, 48, 49, 0.2); }
+
+.dark .status-chip.chip-created { background: rgba(9, 132, 227, 0.15); }
+.dark .status-chip.chip-diagnosing { background: rgba(9, 132, 227, 0.2); }
+.dark .status-chip.chip-repairing { background: rgba(225, 112, 85, 0.15); }
+.dark .status-chip.chip-verifying { background: rgba(116, 185, 255, 0.15); }
+.dark .status-chip.chip-completed { background: rgba(0, 184, 148, 0.15); }
+
+.dark .modern-table :deep(.overdue-row) {
+  background: rgba(214, 48, 49, 0.1);
+}
+
+/* ===== 编辑对话框样式 ===== */
+.edit-dialog-content {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.form-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: all 0.2s;
+}
+
+.form-section:hover {
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.08);
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-section-title .el-icon {
+  color: var(--color-gb);
+}
+
 /* 备件选择区域 */
 .spare-parts-section {
   width: 100%;
-}
-
-.spare-scan-btn {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-.spare-scan-tip {
-  font-size: 12px;
-  color: var(--el-color-primary);
-  padding: 4px 8px;
-  background: var(--el-color-primary-light-9);
-  border-radius: 4px;
 }
 
 .spare-search {
@@ -1033,10 +1722,6 @@ onMounted(() => {
   margin-top: 12px;
 }
 
-.no-parts-tip .el-icon {
-  font-size: 16px;
-}
-
 .parts-summary {
   margin-top: 10px;
   padding: 8px 12px;
@@ -1051,7 +1736,6 @@ onMounted(() => {
   font-size: 16px;
 }
 
-/* 备件下拉选项样式 */
 .spare-option {
   display: flex;
   align-items: center;
@@ -1080,21 +1764,6 @@ onMounted(() => {
 /* 返回件区域样式 */
 .return-parts-section {
   width: 100%;
-}
-
-.return-scan-area {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.return-scan-tip {
-  font-size: 12px;
-  color: var(--el-color-primary);
-  padding: 4px 8px;
-  background: var(--el-color-primary-light-9);
-  border-radius: 4px;
 }
 
 .return-found-info {
@@ -1157,66 +1826,6 @@ onMounted(() => {
   font-size: 12px;
 }
 
-.no-return-tip {
-  margin-top: 8px;
-}
-
-@media (max-width: 768px) {
-  .filter-bar {
-    flex-wrap: wrap;
-  }
-  .filter-bar .el-input, .filter-bar .el-select {
-    width: 100% !important;
-  }
-  .card-header {
-    flex-direction: column;
-    gap: 8px;
-    align-items: flex-start;
-  }
-  .spare-search {
-    flex-direction: column;
-  }
-  .spare-search .el-select {
-    width: 100% !important;
-  }
-}
-
-/* ===== 编辑对话框样式 ===== */
-.edit-dialog-content {
-  max-width: 980px;
-  margin: 0 auto;
-}
-
-/* Section 卡片化 */
-.form-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  margin-bottom: 20px;
-  transition: all 0.2s;
-}
-
-.form-section:hover {
-  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.08);
-}
-
-.form-section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.form-section-title .el-icon {
-  color: var(--color-gb);
-}
-
 /* 扫码功能条 */
 .scan-action-bar {
   display: flex;
@@ -1259,11 +1868,6 @@ onMounted(() => {
 }
 
 /* 暗色模式适配 */
-.dark .form-section {
-  background: var(--bg-card);
-  border-color: var(--border-default);
-}
-
 .dark .form-section:hover {
   box-shadow: 0 2px 8px rgba(0, 184, 148, 0.1);
 }

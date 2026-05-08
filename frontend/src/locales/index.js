@@ -1280,6 +1280,16 @@ export const languages = {
     maintProgressCompleted: '100%',
     maintProgressCancelled: '0%',
 
+    // 维修列表页统计和筛选
+    maintStatsTitle: '维修运营统计',
+    maintStatsTotal: '总维修单',
+    maintStatsRepairing: '维修中',
+    maintStatsVerifying: '待验证',
+    maintStatsCompleted: '已完成',
+    maintStatsOverdue: '超时工单',
+    maintFilterAll: '全部',
+    maintFilterOverdue: '超时',
+
     // 维修提示消息
     maintLoadFailed: '加载维修记录失败',
     maintDeviceLoadFailed: '加载设备列表失败',
@@ -2865,6 +2875,16 @@ export const languages = {
     maintProgressVerifying: '80%',
     maintProgressCompleted: '100%',
     maintProgressCancelled: '0%',
+
+    // Maintenance List Stats and Filters
+    maintStatsTitle: 'Maintenance Statistics',
+    maintStatsTotal: 'Total',
+    maintStatsRepairing: 'Repairing',
+    maintStatsVerifying: 'Verifying',
+    maintStatsCompleted: 'Completed',
+    maintStatsOverdue: 'Overdue',
+    maintFilterAll: 'All',
+    maintFilterOverdue: 'Overdue',
 
     // Maintenance Messages
     maintLoadFailed: 'Failed to load maintenance records',
