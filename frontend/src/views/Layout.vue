@@ -537,7 +537,7 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   height: 3px;
-  background: #FFCC00;
+  background: #f6b93b;
 }
 
 /* 暗黑模式：科技风格 - 深灰背景 */
@@ -571,13 +571,13 @@ onUnmounted(() => {
 
 /* 明亮模式：黄色 Logo */
 .topbar:not(.dark) .logo-oval {
-  background: #FFCC00;
+  background: #f6b93b;
   color: #001F5C;
 }
 
 /* 暗黑模式：科技渐变 Logo */
 .topbar.dark .logo-oval {
-  background: linear-gradient(135deg, #00d4aa, #00a8ff);
+  background: linear-gradient(135deg, #00b894, #0984e3);
   color: #fff;
 }
 
@@ -594,7 +594,7 @@ onUnmounted(() => {
 
 /* 明亮模式：黄色文字 */
 .topbar:not(.dark) .logo-text {
-  color: #FFCC00;
+  color: #f6b93b;
 }
 
 /* 暗黑模式：白色文字 */
@@ -634,7 +634,7 @@ onUnmounted(() => {
 
 .topbar:not(.dark) .tn.active {
   color: #001F5C;
-  background: #FFCC00;
+  background: #f6b93b;
 }
 
 /* 暗黑模式导航按钮 */
@@ -648,7 +648,7 @@ onUnmounted(() => {
 }
 
 .topbar.dark .tn.active {
-  color: #00d4aa;
+  color: #00b894;
   background: rgba(0, 212, 170, 0.1);
 }
 
@@ -681,7 +681,7 @@ onUnmounted(() => {
 
 .topbar:not(.dark) .search-wrap:focus-within,
 .topbar:not(.dark) .search-wrap.active {
-  border-color: #FFCC00;
+  border-color: #f6b93b;
   background: rgba(255, 255, 255, 0.18);
   box-shadow: 0 0 0 3px rgba(255, 204, 0, 0.2);
 }
@@ -711,7 +711,7 @@ onUnmounted(() => {
 
 .topbar.dark .search-wrap:focus-within,
 .topbar.dark .search-wrap.active {
-  border-color: #00d4aa;
+  border-color: #00b894;
   box-shadow: 0 0 0 2px rgba(0, 212, 170, 0.15);
 }
 
@@ -886,8 +886,8 @@ onUnmounted(() => {
 
 .topbar.dark .icon-btn:hover {
   background: var(--bg-hover);
-  border-color: #00d4aa;
-  color: #00d4aa;
+  border-color: #00b894;
+  color: #00b894;
 }
 
 .icon-btn .el-icon {
@@ -924,13 +924,13 @@ onUnmounted(() => {
 
 /* 明亮模式头像 */
 .topbar:not(.dark) .avatar {
-  background: #FFCC00;
+  background: #f6b93b;
   color: #001F5C;
 }
 
 /* 暗黑模式头像 */
 .topbar.dark .avatar {
-  background: linear-gradient(135deg, #00d4aa, #00a8ff);
+  background: linear-gradient(135deg, #00b894, #0984e3);
   color: #fff;
 }
 
@@ -964,7 +964,7 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #00d4aa, #00a8ff);
+  background: linear-gradient(135deg, #00b894, #0984e3);
   color: #fff;
 }
 
@@ -1129,7 +1129,7 @@ onUnmounted(() => {
 
 /* 暗黑模式激活项 */
 .sidebar.dark .si.active {
-  color: #00d4aa;
+  color: #00b894;
 }
 
 .si .el-icon {

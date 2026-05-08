@@ -12,8 +12,8 @@ const locale = ref(zhCn)
 </script>
 
 <style>
-/* Import DM Sans and DM Mono fonts (fallback to system fonts) */
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@300;400;500&display=swap');
+/* 使用 Geist 字体（企业级标准） */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
 
 * {
   margin: 0;
@@ -22,9 +22,9 @@ const locale = ref(zhCn)
 }
 
 #app {
-  font-family: var(--font-body);
-  font-size: var(--fs-body);
-  line-height: var(--lh-body);
+  font-family: 'Geist', 'Satoshi', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
   color: var(--ink);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -37,14 +37,14 @@ body {
   background: var(--bg);
 }
 
-/* Override Element Plus defaults for dense enterprise look */
+/* Override Element Plus defaults */
 .el-card {
-  border-radius: var(--radius-panel);
+  border-radius: var(--radius-md);
   border-color: var(--border);
 }
 
 .el-button {
-  font-family: var(--font-body);
+  font-family: 'Geist', 'Satoshi', sans-serif;
   border-radius: var(--radius-sm);
 }
 
@@ -53,7 +53,8 @@ body {
 }
 
 .el-table {
-  font-size: 12.5px;
+  font-family: 'Geist', sans-serif;
+  font-size: 13px;
 }
 
 .el-table th.el-table__cell {
@@ -65,6 +66,6 @@ body {
 
 /* Mono numbers */
 .mono {
-  font-family: var(--font-mono);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
 }
 </style>

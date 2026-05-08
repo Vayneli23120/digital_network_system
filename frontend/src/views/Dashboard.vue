@@ -575,7 +575,7 @@ const initDevicePieChart = (devices) => {
           style: {
             fill: isDark ? '#8b949e' : '#6B7A8D',
             text: '设备',
-            font: '13px Inter',
+            font: '13px Geist',
             textAlign: 'center'
           }
         }
@@ -649,7 +649,7 @@ const initFaultLineChart = () => {
       bottom: 0,
       itemWidth: 12,
       itemHeight: 12,
-      textStyle: { color: axisColor, fontFamily: 'Inter', fontSize: 12 }
+      textStyle: { color: axisColor, fontFamily: 'Geist', fontSize: 12 }
     },
     grid: {
       left: '3%',
