@@ -223,63 +223,36 @@
               </div>
             </el-tab-pane>
             <el-tab-pane label="设备资产" name="inventory">
-              <!-- 设备资产概览 -->
-              <div v-if="deviceInventory.length > 0" class="inventory-overview">
-                <el-row :gutter="16">
-                  <el-col :span="6">
-                    <div class="overview-item">
-                      <div class="overview-label">安装备件</div>
-                      <div class="overview-value">
-                        <span class="inventory-count">{{ deviceInventory.length }}</span> 件
-                      </div>
-                    </div>
-                  </el-col>
-                  <el-col :span="6">
-                    <div class="overview-item">
-                      <div class="overview-label">总价值</div>
-                      <div class="overview-value price">¥{{ inventoryTotalValue.toFixed(2) }}</div>
-                    </div>
-                  </el-col>
-                </el-row>
+              <!-- 概览（紧凑） -->
+              <div v-if="deviceInventory.length > 0" class="compact-header">
+                <span>安装备件: <strong class="text-success">{{ deviceInventory.length }}</strong> 件</span>
+                <span>总价值: <strong class="text-success">¥{{ inventoryTotalValue.toFixed(2) }}</strong></span>
               </div>
 
               <!-- 备件清单表格 -->
-              <div style="margin-top: 12px" v-if="deviceInventory.length > 0">
-                <div class="list-header">
-                  <el-icon><List /></el-icon>
-                  <span>安装备件清单</span>
-                </div>
-
-                <el-table :data="deviceInventory" v-loading="inventoryLoading" stripe border size="small">
-                  <el-table-column prop="serial_number" label="序列号" width="120">
-                    <template #default="{ row }">
-                      <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="po_number" label="PO号" width="80">
-                    <template #default="{ row }">{{ row.po_number || '-' }}</template>
-                  </el-table-column>
-                  <el-table-column prop="part_number" label="型号" width="120" />
-                  <el-table-column prop="part_name" label="名称" width="150" />
-                  <el-table-column prop="category" label="分类" width="80" />
-                  <el-table-column prop="unit_price" label="单价" width="80">
-                    <template #default="{ row }">
-                      <span class="cell-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column prop="installed_at" label="安装时间" width="160">
-                    <template #default="{ row }">{{ formatDateTime(row.installed_at) }}</template>
-                  </el-table-column>
-                  <el-table-column prop="installed_by" label="安装人" width="80" />
-                  <el-table-column prop="notes" label="备注" min-width="100" show-overflow-tooltip />
-                </el-table>
-
-                <!-- 汇总 -->
-                <div class="list-summary">
-                  <span>本设备安装 <strong>{{ deviceInventory.length }}</strong> 件备件</span>
-                  <span style="margin-left: 20px">总价值 <strong>¥{{ inventoryTotalValue.toFixed(2) }}</strong></span>
-                </div>
-              </div>
+              <el-table :data="deviceInventory" v-loading="inventoryLoading" stripe border size="small" style="margin-top: 8px">
+                <el-table-column prop="serial_number" label="序列号" width="120">
+                  <template #default="{ row }">
+                    <span class="text-primary">{{ row.serial_number || '-' }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="po_number" label="PO号" width="80">
+                  <template #default="{ row }">{{ row.po_number || '-' }}</template>
+                </el-table-column>
+                <el-table-column prop="part_number" label="型号" width="120" />
+                <el-table-column prop="part_name" label="名称" width="150" />
+                <el-table-column prop="category" label="分类" width="80" />
+                <el-table-column prop="unit_price" label="单价" width="80">
+                  <template #default="{ row }">
+                    <span class="text-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="installed_at" label="安装时间" width="160">
+                  <template #default="{ row }">{{ formatDateTime(row.installed_at) }}</template>
+                </el-table-column>
+                <el-table-column prop="installed_by" label="安装人" width="80" />
+                <el-table-column prop="notes" label="备注" min-width="100" show-overflow-tooltip />
+              </el-table>
 
               <el-empty v-if="deviceInventory.length === 0 && !inventoryLoading" description="当前无安装备件" :image-size="60" />
             </el-tab-pane>
@@ -402,7 +375,7 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Download, Upload, Picture, List } from '@element-plus/icons-vue'
+import { Connection, Download, Upload, Picture } from '@element-plus/icons-vue'
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import axios from 'axios'
@@ -906,63 +879,25 @@ onMounted(() => {
   color: #66b1ff;
 }
 
-/* 设备资产样式 */
-.inventory-overview {
-  background: var(--el-fill-color-light);
-  padding: 16px;
-  border-radius: 8px;
-}
-.inventory-overview .overview-item {
-  text-align: center;
-}
-.inventory-overview .overview-label {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-.inventory-overview .overview-value {
-  font-size: 14px;
-  font-weight: 500;
-}
-.inventory-count {
-  color: var(--el-color-success);
-  font-size: 18px;
-  font-weight: 600;
-}
-.inventory-overview .overview-value.price {
-  color: var(--el-color-success);
-}
-
-.list-header {
+/* 紧凑头部样式 */
+.compact-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.compact-header strong {
   font-weight: 600;
-  color: var(--el-text-color-primary);
 }
-
-.list-summary {
-  margin-top: 12px;
-  padding: 10px;
-  background: var(--el-fill-color);
-  border-radius: 6px;
-  text-align: center;
-  font-size: 14px;
-  color: var(--el-text-color-regular);
-}
-.list-summary strong {
-  color: var(--el-color-success);
-  font-size: 16px;
-}
-
-.cell-primary {
+.text-primary {
   color: var(--el-color-primary);
   font-weight: 500;
 }
-
-.cell-success {
+.text-success {
   color: var(--el-color-success);
-  font-weight: 500;
+  font-weight: 600;
 }
 </style>

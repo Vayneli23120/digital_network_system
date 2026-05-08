@@ -207,107 +207,48 @@
 
     <!-- 出入库详情对话框 -->
     <el-dialog v-model="movementDetailVisible" title="出入库详情" width="750px">
-      <!-- 批次概览 -->
-      <div v-if="currentMovement" class="movement-overview">
-        <el-row :gutter="16">
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">时间</div>
-              <div class="overview-value">{{ formatDateTime(currentMovement.created_at) }}</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">类型</div>
-              <div class="overview-value">
-                <el-tag :type="getMovementTypeTag(currentMovement.movement_type)" size="small">
-                  {{ getMovementTypeText(currentMovement.movement_type) }}
-                </el-tag>
-              </div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">批次总数</div>
-              <div class="overview-value">
-                <span class="batch-count">{{ currentMovement.batch_total || 1 }}</span> 件
-              </div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">批次码</div>
-              <div class="overview-value">
-                <el-tag v-if="currentMovement.session_code" type="info" size="small">
-                  {{ currentMovement.session_code }}
-                </el-tag>
-                <span v-else>-</span>
-              </div>
-            </div>
-          </el-col>
-        </el-row>
-        <el-row :gutter="16" style="margin-top: 8px">
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">目标设备</div>
-              <div class="overview-value">{{ currentMovement.target_device_name || '-' }}</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">来源设备</div>
-              <div class="overview-value">{{ currentMovement.source_device_name || '-' }}</div>
-            </div>
-          </el-col>
-          <el-col :span="12">
-            <div class="overview-item">
-              <div class="overview-label">原因</div>
-              <div class="overview-value">{{ currentMovement.reason || '-' }}</div>
-            </div>
-          </el-col>
-        </el-row>
+      <!-- 批次概览（紧凑） -->
+      <div v-if="currentMovement" class="compact-header">
+        <span>时间: {{ formatDateTime(currentMovement.created_at) }}</span>
+        <span>
+          <el-tag :type="getMovementTypeTag(currentMovement.movement_type)" size="small">
+            {{ getMovementTypeText(currentMovement.movement_type) }}
+          </el-tag>
+        </span>
+        <span>批次: <strong>{{ currentMovement.batch_total || 1 }}</strong> 件</span>
+        <span v-if="currentMovement.session_code">批次码: {{ currentMovement.session_code }}</span>
+        <span v-if="currentMovement.target_device_name">目标设备: {{ currentMovement.target_device_name }}</span>
+        <span v-if="currentMovement.source_device_name">来源设备: {{ currentMovement.source_device_name }}</span>
+        <span v-if="currentMovement.reason">原因: {{ currentMovement.reason }}</span>
       </div>
 
       <!-- 本批次备件清单表格 -->
-      <div style="margin-top: 16px">
-        <div class="list-header">
-          <el-icon><List /></el-icon>
-          <span>本批次备件清单</span>
-        </div>
-
-        <el-table :data="batchAllItems" stripe border size="small">
-          <el-table-column label="" width="60">
-            <template #default="{ row }">
-              <el-tag v-if="row.isCurrent" type="primary" size="small">当前</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="serial_number" label="序列号" width="150">
-            <template #default="{ row }">
-              <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="po_number" label="PO号" width="100">
-            <template #default="{ row }">{{ row.po_number || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="part_number" label="型号" width="120">
-            <template #default="{ row }">{{ row.part_number || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="name" label="名称" min-width="120">
-            <template #default="{ row }">{{ row.name || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="unit_price" label="单价" width="80">
-            <template #default="{ row }">
-              <span class="cell-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
-            </template>
-          </el-table-column>
-        </el-table>
-
-        <!-- 批次汇总 -->
-        <div v-if="currentMovement?.batch_items?.length > 0" class="list-summary">
-          <span>本批次共 <strong>{{ currentMovement.batch_total }}</strong> 件备件</span>
-          <span style="margin-left: 20px">总价值 <strong>¥{{ batchTotalValue.toFixed(2) }}</strong></span>
-        </div>
-      </div>
+      <el-table :data="batchAllItems" stripe border size="small" style="margin-top: 8px">
+        <el-table-column label="" width="60">
+          <template #default="{ row }">
+            <el-tag v-if="row.isCurrent" type="primary" size="small">当前</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="serial_number" label="序列号" width="150">
+          <template #default="{ row }">
+            <span class="text-primary">{{ row.serial_number || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="po_number" label="PO号" width="100">
+          <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="part_number" label="型号" width="120">
+          <template #default="{ row }">{{ row.part_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="name" label="名称" min-width="120">
+          <template #default="{ row }">{{ row.name || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="unit_price" label="单价" width="80">
+          <template #default="{ row }">
+            <span class="text-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+      </el-table>
     </el-dialog>
 
     <!-- 新增/编辑对话框 -->
@@ -423,72 +364,40 @@
       />
     </el-dialog>
 
-    <!-- 备件详情对话框（库存清单，标准表格） -->
+    <!-- 备件详情对话框（库存清单） -->
     <el-dialog v-model="detailDialogVisible" :title="currentDetailPart?.name + ' - 库存清单'" width="750px">
-      <!-- 库存概览 -->
-      <div v-if="currentDetailPart" class="stock-overview">
-        <el-row :gutter="16">
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">在库数量</div>
-              <div class="overview-value">
-                <span class="stock-count">{{ currentDetailPart.in_stock_count || 0 }}</span> 件
-              </div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">库存总价</div>
-              <div class="overview-value price">¥{{ totalStockValue.toFixed(2) }}</div>
-            </div>
-          </el-col>
-          <el-col :span="6">
-            <div class="overview-item">
-              <div class="overview-label">型号</div>
-              <div class="overview-value">{{ currentDetailPart.part_number || '-' }}</div>
-            </div>
-          </el-col>
-        </el-row>
+      <!-- 库存概览（紧凑） -->
+      <div v-if="currentDetailPart" class="compact-header">
+        <span>在库: <strong>{{ currentDetailPart.in_stock_count || 0 }}</strong> 件</span>
+        <span>总价: <strong class="text-success">¥{{ totalStockValue.toFixed(2) }}</strong></span>
+        <span>型号: {{ currentDetailPart.part_number || '-' }}</span>
       </div>
 
       <!-- 库存清单表格 -->
-      <div style="margin-top: 16px">
-        <div class="list-header">
-          <el-icon><List /></el-icon>
-          <span>在库备件清单</span>
-        </div>
-
-        <el-table :data="inStockInstances" v-loading="instancesLoading" stripe border size="small">
-          <el-table-column prop="serial_number" label="序列号" width="150">
-            <template #default="{ row }">
-              <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="po_number" label="PO号" width="100">
-            <template #default="{ row }">{{ row.po_number || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="unit_price" label="单价" width="80">
-            <template #default="{ row }">
-              <span class="cell-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="location" label="位置" width="80">
-            <template #default="{ row }">{{ row.location || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="in_stock_at" label="入库时间" width="140">
-            <template #default="{ row }">{{ row.in_stock_at ? formatDateTime(row.in_stock_at) : '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="notes" label="备注" min-width="150" show-overflow-tooltip>
-            <template #default="{ row }">{{ row.notes || '-' }}</template>
-          </el-table-column>
-        </el-table>
-
-        <!-- 汇总 -->
-        <div v-if="inStockInstances.length > 0" class="list-summary">
-          <span>共 <strong>{{ inStockInstances.length }}</strong> 件在库备件</span>
-          <span style="margin-left: 20px">总价值 <strong>¥{{ totalStockValue.toFixed(2) }}</strong></span>
-        </div>
-      </div>
+      <el-table :data="inStockInstances" v-loading="instancesLoading" stripe border size="small" style="margin-top: 8px">
+        <el-table-column prop="serial_number" label="序列号" width="150">
+          <template #default="{ row }">
+            <span class="text-primary">{{ row.serial_number || '-' }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="po_number" label="PO号" width="100">
+          <template #default="{ row }">{{ row.po_number || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="unit_price" label="单价" width="80">
+          <template #default="{ row }">
+            <span class="text-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="location" label="位置" width="80">
+          <template #default="{ row }">{{ row.location || '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="in_stock_at" label="入库时间" width="140">
+          <template #default="{ row }">{{ row.in_stock_at ? formatDateTime(row.in_stock_at) : '-' }}</template>
+        </el-table-column>
+        <el-table-column prop="notes" label="备注" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.notes || '-' }}</template>
+        </el-table-column>
+      </el-table>
 
       <el-empty v-if="!instancesLoading && inStockInstances.length === 0" description="该备件暂无在库实例" />
     </el-dialog>
@@ -568,7 +477,7 @@
 <script setup>
 import { ref, onMounted, reactive, computed } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, List } from '@element-plus/icons-vue'
+import { Refresh } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, createMovement, getMovements, getMovementDetail, getPartInstances, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -1042,61 +951,26 @@ onMounted(loadParts)
   gap: 8px;
 }
 
-/* 出入库详情样式 */
-.movement-overview {
-  background: var(--el-fill-color-light);
-  padding: 16px;
-  border-radius: 8px;
-}
-.overview-item {
-  text-align: center;
-}
-.overview-label {
-  color: var(--el-text-color-secondary);
-  font-size: 12px;
-  margin-bottom: 4px;
-}
-.overview-value {
-  font-size: 14px;
-  font-weight: 500;
-}
-.batch-count {
-  color: var(--el-color-primary);
-  font-size: 18px;
-  font-weight: 600;
-}
-
-.list-header {
+/* 紧凑头部样式 */
+.compact-header {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+  font-size: 13px;
+}
+.compact-header strong {
   font-weight: 600;
-  color: var(--el-text-color-primary);
 }
-
-.list-summary {
-  margin-top: 12px;
-  padding: 10px;
-  background: var(--el-fill-color);
-  border-radius: 6px;
-  text-align: center;
-  font-size: 14px;
-  color: var(--el-text-color-regular);
-}
-.list-summary strong {
-  color: var(--el-color-primary);
-  font-size: 16px;
-}
-
-.cell-primary {
+.text-primary {
   color: var(--el-color-primary);
   font-weight: 500;
 }
-
-.cell-success {
+.text-success {
   color: var(--el-color-success);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* 备件库存清单样式 */
