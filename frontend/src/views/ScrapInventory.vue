@@ -143,7 +143,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <!-- 报废详情对话框（紧凑行布局） -->
+    <!-- 报废详情对话框（标准表格） -->
     <el-dialog v-model="detailDialogVisible" :title="currentScrapItem?.name + ' - 报废库存清单'" width="750px">
       <!-- 批次概览 -->
       <div v-if="currentScrapItem" class="scrap-overview">
@@ -177,58 +177,43 @@
         </el-row>
       </div>
 
-      <!-- 报废件清单（紧凑行布局） -->
+      <!-- 报废件清单表格 -->
       <div style="margin-top: 16px">
-        <div class="scrap-title">
+        <div class="list-header">
           <el-icon><List /></el-icon>
           <span>报废件清单</span>
         </div>
 
-        <div class="scrap-list" v-if="currentScrapItem?.instances?.length > 0">
-          <div v-for="(item, idx) in currentScrapItem?.instances || []" :key="item.serial_number || idx" class="scrap-row">
-            <el-row :gutter="12">
-              <el-col :span="4">
-                <div class="row-item">
-                  <span class="row-label">序列号</span>
-                  <span class="row-value serial">{{ item.serial_number || '-' }}</span>
-                </div>
-              </el-col>
-              <el-col :span="3">
-                <div class="row-item">
-                  <span class="row-label">PO号</span>
-                  <span class="row-value">{{ item.po_number || '-' }}</span>
-                </div>
-              </el-col>
-              <el-col :span="3">
-                <div class="row-item">
-                  <span class="row-label">单价</span>
-                  <span class="row-value price">¥{{ (item.unit_price || 0).toFixed(2) }}</span>
-                </div>
-              </el-col>
-              <el-col :span="4">
-                <div class="row-item">
-                  <span class="row-label">来源设备</span>
-                  <span class="row-value">{{ item.source_device_name || '-' }}</span>
-                </div>
-              </el-col>
-              <el-col :span="4">
-                <div class="row-item">
-                  <span class="row-label">报废入库时间</span>
-                  <span class="row-value">{{ item.scraped_at ? formatDateTime(item.scraped_at) : '-' }}</span>
-                </div>
-              </el-col>
-              <el-col :span="6">
-                <div class="row-item">
-                  <span class="row-label">报废原因</span>
-                  <span class="row-value note">{{ item.reason || '-' }}</span>
-                </div>
-              </el-col>
-            </el-row>
-          </div>
-        </div>
+        <el-table :data="currentScrapItem?.instances || []" stripe border size="small">
+          <el-table-column prop="serial_number" label="序列号" width="150">
+            <template #default="{ row }">
+              <span class="cell-primary">{{ row.serial_number || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="po_number" label="PO号" width="100">
+            <template #default="{ row }">{{ row.po_number || '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="unit_price" label="单价" width="80">
+            <template #default="{ row }">
+              <span class="cell-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="来源设备" width="120">
+            <template #default="{ row }">
+              <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
+              <span v-else-if="row.removed_from_device_id">{{ row.removed_from_device_id }}</span>
+              <span v-else>-</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="scraped_at" label="报废入库时间" width="160">
+            <template #default="{ row }">{{ row.scraped_at ? formatDateTime(row.scraped_at) : '-' }}</template>
+          </el-table-column>
+          <el-table-column prop="reason" label="报废原因" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="reference" label="关联维修" width="120" show-overflow-tooltip />
+        </el-table>
 
         <!-- 批次汇总 -->
-        <div v-if="currentScrapItem?.instances?.length > 0" class="scrap-summary">
+        <div v-if="currentScrapItem?.instances?.length > 0" class="list-summary">
           <span>共 <strong>{{ currentScrapItem.quantity }}</strong> 件报废备件</span>
           <span style="margin-left: 20px">总价值 <strong>¥{{ (currentScrapItem.total_value || 0).toFixed(2) }}</strong></span>
         </div>
@@ -1092,7 +1077,7 @@ onMounted(() => {
   color: var(--el-color-success);
 }
 
-.scrap-title {
+.list-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1101,56 +1086,7 @@ onMounted(() => {
   color: var(--el-text-color-primary);
 }
 
-.scrap-list {
-  border: 1px solid var(--el-border-color-light);
-  border-radius: 6px;
-}
-
-.scrap-row {
-  padding: 8px 12px;
-  border-bottom: 1px solid var(--el-border-color-lighter);
-}
-
-.scrap-row:last-child {
-  border-bottom: none;
-}
-
-.scrap-row:nth-child(odd) {
-  background: var(--el-fill-color-lighter);
-}
-
-.row-item {
-  display: flex;
-  flex-direction: column;
-}
-
-.row-label {
-  color: var(--el-text-color-secondary);
-  font-size: 11px;
-  margin-bottom: 2px;
-}
-
-.row-value {
-  font-size: 13px;
-}
-
-.row-value.serial {
-  color: var(--el-color-primary);
-  font-weight: 500;
-}
-
-.row-value.price {
-  color: var(--el-color-success);
-  font-weight: 500;
-}
-
-.row-value.note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scrap-summary {
+.list-summary {
   margin-top: 12px;
   padding: 10px;
   background: var(--el-fill-color);
@@ -1159,8 +1095,18 @@ onMounted(() => {
   font-size: 14px;
   color: var(--el-text-color-regular);
 }
-.scrap-summary strong {
+.list-summary strong {
   color: var(--el-color-danger);
   font-size: 16px;
+}
+
+.cell-primary {
+  color: var(--el-color-primary);
+  font-weight: 500;
+}
+
+.cell-success {
+  color: var(--el-color-success);
+  font-weight: 500;
 }
 </style>
