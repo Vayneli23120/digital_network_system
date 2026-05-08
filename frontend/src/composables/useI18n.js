@@ -6,8 +6,13 @@ const currentLang = ref(getCurrentLang())
 
 // 获取翻译函数
 export function useI18n() {
-  const t = (key) => {
-    return languages[currentLang.value]?.[key] || languages['zh']?.[key] || key
+  const t = (key, params = {}) => {
+    let text = languages[currentLang.value]?.[key] || languages['zh']?.[key] || key
+    // 替换参数占位符，如 {count}, {name} 等
+    Object.keys(params).forEach(param => {
+      text = text.replace(new RegExp(`\\{${param}\\}`, 'g'), params[param])
+    })
+    return text
   }
 
   // 切换语言

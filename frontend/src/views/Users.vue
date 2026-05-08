@@ -2,26 +2,26 @@
   <div class="users-page">
     <!-- 页面标题 -->
     <div class="page-header">
-      <h1>用户管理</h1>
+      <h1>{{ t('userTitle') }}</h1>
       <div class="header-actions">
         <el-button type="primary" :icon="Plus" @click="showAddDialog = true">
-          添加用户
+          {{ t('userAdd') }}
         </el-button>
-        <el-button :icon="Refresh" @click="loadUsers">刷新</el-button>
+        <el-button :icon="Refresh" @click="loadUsers">{{ t('toolRefresh') }}</el-button>
       </div>
     </div>
 
     <!-- 用户列表 -->
     <el-card class="table-card">
       <el-table :data="users" v-loading="loading" stripe>
-        <el-table-column prop="username" label="用户名" width="120" />
-        <el-table-column prop="full_name" label="姓名" width="150">
+        <el-table-column prop="username" :label="t('userUsername')" width="120" />
+        <el-table-column prop="full_name" :label="t('userFullName')" width="150">
           <template #default="{ row }">{{ row.full_name || '-' }}</template>
         </el-table-column>
-        <el-table-column prop="email" label="邮箱" width="200">
+        <el-table-column prop="email" :label="t('userEmail')" width="200">
           <template #default="{ row }">{{ row.email || '-' }}</template>
         </el-table-column>
-        <el-table-column label="角色" width="200">
+        <el-table-column :label="t('userRole')" width="200">
           <template #default="{ row }">
             <el-tag v-for="role in row.roles" :key="role.id" size="small" type="info" class="role-tag">
               {{ role.name }}
@@ -29,111 +29,116 @@
             <span v-if="!row.roles || row.roles.length === 0">-</span>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="100">
+        <el-table-column :label="t('userStatus')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.is_active ? 'success' : 'danger'" size="small">
-              {{ row.is_active ? '启用' : '禁用' }}
+              {{ row.is_active ? t('userEnabled') : t('userDisabled') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="超级用户" width="100">
+        <el-table-column :label="t('userSuperuser')" width="100">
           <template #default="{ row }">
-            <el-tag v-if="row.is_superuser" type="warning" size="small">是</el-tag>
+            <el-tag v-if="row.is_superuser" type="warning" size="small">{{ t('statusYes') }}</el-tag>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column prop="last_login" label="最后登录" width="160">
-          <template #default="{ row }">{{ row.last_login ? formatDateTime(row.last_login) : '从未登录' }}</template>
+        <el-table-column prop="last_login" :label="t('userLastLogin')" width="160">
+          <template #default="{ row }">{{ row.last_login ? formatDateTime(row.last_login) : t('userNeverLogin') }}</template>
         </el-table-column>
-        <el-table-column prop="created_at" label="创建时间" width="160">
+        <el-table-column prop="created_at" :label="t('colCreatedAt')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column :label="t('colOperation')" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" link @click="editUser(row)">编辑</el-button>
-            <el-button type="warning" size="small" link @click="resetPassword(row)">重置密码</el-button>
+            <el-button type="primary" size="small" link @click="editUser(row)">{{ t('actionEdit') }}</el-button>
+            <el-button type="warning" size="small" link @click="resetPassword(row)">{{ t('userResetPassword') }}</el-button>
             <el-button
               v-if="!row.is_superuser"
               type="danger"
               size="small"
               link
               @click="deleteUserConfirm(row)"
-            >删除</el-button>
+            >{{ t('actionDelete') }}</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="t('msgNoUsers')" :image-size="80">
+            <el-button type="primary" size="small" @click="showAddDialog = true">{{ t('userAdd') }}</el-button>
+          </el-empty>
+        </template>
       </el-table>
     </el-card>
 
     <!-- 添加用户对话框 -->
-    <el-dialog v-model="showAddDialog" title="添加用户" width="500px">
+    <el-dialog v-model="showAddDialog" :title="t('userAdd')" width="500px">
       <el-form :model="addForm" :rules="addRules" ref="addFormRef" label-width="80px">
-        <el-form-item label="用户名" prop="username">
-          <el-input v-model="addForm.username" placeholder="请输入用户名" />
+        <el-form-item :label="t('userUsername')" prop="username">
+          <el-input v-model="addForm.username" :placeholder="t('userUsernamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="姓名" prop="full_name">
-          <el-input v-model="addForm.full_name" placeholder="请输入姓名" />
+        <el-form-item :label="t('userFullName')" prop="full_name">
+          <el-input v-model="addForm.full_name" :placeholder="t('userFullNamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="addForm.email" placeholder="请输入邮箱" />
+        <el-form-item :label="t('userEmail')" prop="email">
+          <el-input v-model="addForm.email" :placeholder="t('userEmailPlaceholder')" />
         </el-form-item>
-        <el-form-item label="密码" prop="password">
-          <el-input v-model="addForm.password" type="password" placeholder="请输入密码" show-password />
+        <el-form-item :label="t('userPassword')" prop="password">
+          <el-input v-model="addForm.password" type="password" :placeholder="t('userPasswordPlaceholder')" show-password />
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="addForm.role_ids" multiple placeholder="请选择角色" style="width: 100%">
+        <el-form-item :label="t('userRole')">
+          <el-select v-model="addForm.role_ids" multiple :placeholder="t('userRolePlaceholder')" style="width: 100%">
             <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="addForm.is_active" active-text="启用" inactive-text="禁用" />
+        <el-form-item :label="t('userStatus')">
+          <el-switch v-model="addForm.is_active" :active-text="t('userEnabled')" :inactive-text="t('userDisabled')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="createUser" :loading="submitting">确定</el-button>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="createUser" :loading="submitting">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 编辑用户对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑用户" width="500px">
+    <el-dialog v-model="showEditDialog" :title="t('userEdit')" width="500px">
       <el-form :model="editForm" :rules="editRules" ref="editFormRef" label-width="80px">
-        <el-form-item label="用户名">
+        <el-form-item :label="t('userUsername')">
           <el-input :value="editForm.username" disabled />
         </el-form-item>
-        <el-form-item label="姓名" prop="full_name">
-          <el-input v-model="editForm.full_name" placeholder="请输入姓名" />
+        <el-form-item :label="t('userFullName')" prop="full_name">
+          <el-input v-model="editForm.full_name" :placeholder="t('userFullNamePlaceholder')" />
         </el-form-item>
-        <el-form-item label="邮箱" prop="email">
-          <el-input v-model="editForm.email" placeholder="请输入邮箱" />
+        <el-form-item :label="t('userEmail')" prop="email">
+          <el-input v-model="editForm.email" :placeholder="t('userEmailPlaceholder')" />
         </el-form-item>
-        <el-form-item label="角色">
-          <el-select v-model="editForm.role_ids" multiple placeholder="请选择角色" style="width: 100%">
+        <el-form-item :label="t('userRole')">
+          <el-select v-model="editForm.role_ids" multiple :placeholder="t('userRolePlaceholder')" style="width: 100%">
             <el-option v-for="role in roles" :key="role.id" :label="role.name" :value="role.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
-          <el-switch v-model="editForm.is_active" active-text="启用" inactive-text="禁用" />
+        <el-form-item :label="t('userStatus')">
+          <el-switch v-model="editForm.is_active" :active-text="t('userEnabled')" :inactive-text="t('userDisabled')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="updateUser" :loading="submitting">确定</el-button>
+        <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="updateUser" :loading="submitting">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 重置密码对话框 -->
-    <el-dialog v-model="showPasswordDialog" title="重置密码" width="400px">
+    <el-dialog v-model="showPasswordDialog" :title="t('userResetPassword')" width="400px">
       <el-form :model="passwordForm" :rules="passwordRules" ref="passwordFormRef" label-width="80px">
-        <el-form-item label="用户">
+        <el-form-item :label="t('userUser')">
           <el-input :value="passwordForm.username" disabled />
         </el-form-item>
-        <el-form-item label="新密码" prop="new_password">
-          <el-input v-model="passwordForm.new_password" type="password" placeholder="请输入新密码" show-password />
+        <el-form-item :label="t('userNewPassword')" prop="new_password">
+          <el-input v-model="passwordForm.new_password" type="password" :placeholder="t('userNewPasswordPlaceholder')" show-password />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showPasswordDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitPasswordReset" :loading="submitting">确定</el-button>
+        <el-button @click="showPasswordDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="submitPasswordReset" :loading="submitting">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -144,10 +149,13 @@ import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
 import {
   getUsers, createUser as createUserApi, updateUser as updateUserApi,
   deleteUser as deleteUserApi, getRoles
 } from '@/api'
+
+const { t } = useI18n()
 
 const users = ref([])
 const roles = ref([])
@@ -190,17 +198,17 @@ const passwordForm = ref({
 
 // 表单验证规则
 const addRules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }, { min: 3, message: '用户名至少3个字符', trigger: 'blur' }],
-  password: [{ required: true, message: '请输入密码', trigger: 'blur' }, { min: 6, message: '密码至少6个字符', trigger: 'blur' }],
-  email: [{ type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }]
+  username: [{ required: true, message: t('userUsernamePrompt'), trigger: 'blur' }, { min: 3, message: t('userUsernameMinLength'), trigger: 'blur' }],
+  password: [{ required: true, message: t('userPasswordPrompt'), trigger: 'blur' }, { min: 6, message: t('userPasswordMinLength'), trigger: 'blur' }],
+  email: [{ type: 'email', message: t('userEmailInvalidFormat'), trigger: 'blur' }]
 }
 
 const editRules = {
-  email: [{ type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }]
+  email: [{ type: 'email', message: t('userEmailInvalidFormat'), trigger: 'blur' }]
 }
 
 const passwordRules = {
-  new_password: [{ required: true, message: '请输入新密码', trigger: 'blur' }, { min: 6, message: '密码至少6个字符', trigger: 'blur' }]
+  new_password: [{ required: true, message: t('userNewPasswordPrompt'), trigger: 'blur' }, { min: 6, message: t('userPasswordMinLength'), trigger: 'blur' }]
 }
 
 // 加载用户列表
@@ -210,7 +218,7 @@ const loadUsers = async () => {
     const data = await getUsers()
     users.value = data || []
   } catch (e) {
-    ElMessage.error('加载用户列表失败')
+    ElMessage.error(t('userLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -222,7 +230,7 @@ const loadRoles = async () => {
     const data = await getRoles()
     roles.value = data || []
   } catch (e) {
-    console.error('加载角色失败', e)
+    console.error(t('userRoleLoadFailed'), e)
   }
 }
 
@@ -234,12 +242,12 @@ const createUser = async () => {
   submitting.value = true
   try {
     await createUserApi(addForm.value)
-    ElMessage.success('用户创建成功')
+    ElMessage.success(t('userCreateSuccess'))
     showAddDialog.value = false
     addForm.value = { username: '', full_name: '', email: '', password: '', role_ids: [], is_active: true }
     loadUsers()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '创建用户失败')
+    ElMessage.error(e.response?.data?.detail || t('userCreateFailed'))
   } finally {
     submitting.value = false
   }
@@ -271,11 +279,11 @@ const updateUser = async () => {
       role_ids: editForm.value.role_ids,
       is_active: editForm.value.is_active
     })
-    ElMessage.success('用户更新成功')
+    ElMessage.success(t('userUpdateSuccess'))
     showEditDialog.value = false
     loadUsers()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '更新用户失败')
+    ElMessage.error(e.response?.data?.detail || t('userUpdateFailed'))
   } finally {
     submitting.value = false
   }
@@ -300,10 +308,10 @@ const submitPasswordReset = async () => {
   try {
     // 使用更新用户 API 的扩展接口来重置密码
     await updateUserApi(passwordForm.value.id, { password: passwordForm.value.new_password })
-    ElMessage.success('密码重置成功')
+    ElMessage.success(t('userResetPasswordSuccess'))
     showPasswordDialog.value = false
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '密码重置失败')
+    ElMessage.error(e.response?.data?.detail || t('userResetPasswordFailed'))
   } finally {
     submitting.value = false
   }
@@ -312,15 +320,15 @@ const submitPasswordReset = async () => {
 // 删除用户确认
 const deleteUserConfirm = async (user) => {
   try {
-    await ElMessageBox.confirm(`确定删除用户 "${user.username}"？此操作不可恢复。`, '删除确认', {
+    await ElMessageBox.confirm(t('userDeleteConfirmMsg', { username: user.username }), t('userDeleteConfirmTitle'), {
       type: 'warning'
     })
     await deleteUserApi(user.id)
-    ElMessage.success('用户删除成功')
+    ElMessage.success(t('userDeleteSuccess'))
     loadUsers()
   } catch (e) {
     if (e !== 'cancel') {
-      ElMessage.error(e.response?.data?.detail || '删除用户失败')
+      ElMessage.error(e.response?.data?.detail || t('userDeleteFailed'))
     }
   }
 }

@@ -1,8 +1,8 @@
 <template>
   <div class="fault-detail-page">
-    <el-page-header @back="goBack" :title="'返回故障列表'">
+    <el-page-header @back="goBack" :title="t('faultDetailBack')">
       <template #content>
-        <span class="page-title">{{ fault.fault_no || '故障详情' }}</span>
+        <span class="page-title">{{ fault.fault_no || t('faultDetailTitle') }}</span>
       </template>
     </el-page-header>
 
@@ -11,34 +11,34 @@
       <el-col :span="16">
         <el-card class="fault-info-card">
           <template #header>
-            <span>故障信息</span>
+            <span>{{ t('faultDetailInfo') }}</span>
           </template>
 
           <el-descriptions :column="2" border v-if="fault.id">
-            <el-descriptions-item label="故障单号">{{ fault.fault_no }}</el-descriptions-item>
-            <el-descriptions-item label="设备名称">
+            <el-descriptions-item :label="t('faultNo')">{{ fault.fault_no }}</el-descriptions-item>
+            <el-descriptions-item :label="t('faultDevice')">
               <router-link :to="`/devices/${fault.device_id}`">{{ fault.device_name }}</router-link>
             </el-descriptions-item>
-            <el-descriptions-item label="故障级别">
+            <el-descriptions-item :label="t('faultLevel')">
               <el-tag :type="getSeverityType(fault.severity)">
                 {{ getSeverityText(fault.severity) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="当前状态">
+            <el-descriptions-item :label="t('faultDetailCurrentStatus')">
               <el-tag :type="getStatusType(fault.status)">
                 {{ getStatusText(fault.status) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="停机时长">{{ fault.downtime_minutes }} 分钟</el-descriptions-item>
-            <el-descriptions-item label="影响范围">{{ fault.impact || '无' }}</el-descriptions-item>
-            <el-descriptions-item label="报告人">{{ fault.reporter || 'Web' }}</el-descriptions-item>
-            <el-descriptions-item label="发生时间">{{ formatDateTime(fault.fault_time || fault.created_at) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('faultDowntime')">{{ fault.downtime_minutes }} {{ t('faultMinutes') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('faultImpact')">{{ fault.impact || t('faultNoImpact') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('faultReporter')">{{ fault.reporter || 'Web' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('faultOccurTime')">{{ formatDateTime(fault.fault_time || fault.created_at) }}</el-descriptions-item>
           </el-descriptions>
 
-          <el-divider>故障描述</el-divider>
-          <p class="description">{{ fault.description || '无描述' }}</p>
+          <el-divider>{{ t('faultDescription') }}</el-divider>
+          <p class="description">{{ fault.description || t('faultNoDescription') }}</p>
 
-          <el-divider v-if="fault.resolution">解决方案</el-divider>
+          <el-divider v-if="fault.resolution">{{ t('faultResolution') }}</el-divider>
           <p v-if="fault.resolution" class="description">{{ fault.resolution }}</p>
         </el-card>
 
@@ -47,7 +47,7 @@
           <el-space>
             <el-button type="primary" @click="showEditDialog = true">
               <el-icon><Edit /></el-icon>
-              编辑
+              {{ t('actionEdit') }}
             </el-button>
             <!-- 转维修按钮：未关闭且未关联维修单 -->
             <el-button
@@ -56,7 +56,7 @@
               @click="convertToMaintenance"
             >
               <el-icon><Tools /></el-icon>
-              转维修单
+              {{ t('faultDetailConvertMaintenance') }}
             </el-button>
             <el-button
               v-if="fault.status !== 'closed'"
@@ -64,11 +64,11 @@
               @click="closeFault"
             >
               <el-icon><CircleCheck /></el-icon>
-              关闭故障
+              {{ t('actionClose') }}
             </el-button>
             <el-button type="danger" @click="deleteFault">
               <el-icon><Delete /></el-icon>
-              删除
+              {{ t('actionDelete') }}
             </el-button>
           </el-space>
         </el-card>
@@ -76,26 +76,26 @@
         <!-- 关联的维修单信息 -->
         <el-card style="margin-top: 20px" v-if="maintenanceInfo">
           <template #header>
-            <span>关联维修单</span>
+            <span>{{ t('maintTitle') }}</span>
           </template>
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="维修单号">
+            <el-descriptions-item :label="t('maintNo')">
               <router-link :to="`/maintenance/${maintenanceInfo.id}`">
                 {{ maintenanceInfo.maint_no }}
               </router-link>
             </el-descriptions-item>
-            <el-descriptions-item label="维修类型">
+            <el-descriptions-item :label="t('maintType')">
               <el-tag>{{ getMaintTypeText(maintenanceInfo.maint_type) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="备件成本">¥{{ maintenanceInfo.parts_cost }}</el-descriptions-item>
-            <el-descriptions-item label="人工成本">¥{{ maintenanceInfo.labor_cost }}</el-descriptions-item>
-            <el-descriptions-item label="维修时间">{{ formatDateTime(maintenanceInfo.maint_time) }}</el-descriptions-item>
-            <el-descriptions-item label="总成本">
+            <el-descriptions-item :label="t('maintPartsCost')">¥{{ maintenanceInfo.parts_cost }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintLaborCost')">¥{{ maintenanceInfo.labor_cost }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintTime')">{{ formatDateTime(maintenanceInfo.maint_time) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintTotalCost')">
               <span class="total-cost">¥{{ (maintenanceInfo.parts_cost + maintenanceInfo.labor_cost).toFixed(2) }}</span>
             </el-descriptions-item>
           </el-descriptions>
-          <el-divider>维修描述</el-divider>
-          <p class="description">{{ maintenanceInfo.description || '无描述' }}</p>
+          <el-divider>{{ t('maintDescription') }}</el-divider>
+          <p class="description">{{ maintenanceInfo.description || t('faultNoDescription') }}</p>
         </el-card>
       </el-col>
 
@@ -103,7 +103,7 @@
       <el-col :span="8">
         <el-card class="timeline-card">
           <template #header>
-            <span>处理时间线</span>
+            <span>{{ t('faultDetailTimeline') }}</span>
           </template>
 
           <el-timeline>
@@ -113,41 +113,41 @@
               color="#409EFF"
             >
               <el-card>
-                <h4>故障发生</h4>
-                <p>报告人：{{ fault.reporter || 'Web' }}</p>
+                <h4>{{ t('faultDetailFaultOccur') }}</h4>
+                <p>{{ t('faultReporter') }}：{{ fault.reporter || 'Web' }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="fault.status === 'investigating'"
-              timestamp="处理中"
+              :timestamp="t('faultStatusInvestigating')"
               placement="top"
               color="#E6A23C"
             >
               <el-card>
-                <h4>开始调查</h4>
-                <p>故障正在处理中</p>
+                <h4>{{ t('faultDetailStartInvestigate') }}</h4>
+                <p>{{ t('faultDetailProcessing') }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="fault.status === 'resolved'"
-              timestamp="已解决"
+              :timestamp="t('faultStatusResolved')"
               placement="top"
               color="#67C23A"
             >
               <el-card>
-                <h4>故障解决</h4>
-                <p>故障已解决</p>
+                <h4>{{ t('faultDetailFaultResolved') }}</h4>
+                <p>{{ t('faultDetailFaultResolved') }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="fault.status === 'closed'"
-              timestamp="已关闭"
+              :timestamp="t('faultStatusClosed')"
               placement="top"
               color="#909399"
             >
               <el-card>
-                <h4>故障关闭</h4>
-                <p>故障记录已归档</p>
+                <h4>{{ t('faultDetailFaultClosed') }}</h4>
+                <p>{{ t('faultDetailRecordArchived') }}</p>
               </el-card>
             </el-timeline-item>
           </el-timeline>
@@ -156,7 +156,7 @@
         <!-- 设备快速信息 -->
         <el-card class="device-quick-info" style="margin-top: 20px" v-if="device">
           <template #header>
-            <span>设备信息</span>
+            <span>{{ t('faultDetailDeviceInfo') }}</span>
           </template>
           <div class="device-summary">
             <el-avatar :size="60" icon="Switch" />
@@ -173,40 +173,40 @@
     </el-row>
 
     <!-- 编辑故障对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑故障记录" width="600px">
+    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="600px">
       <el-form :model="editForm" label-width="120px">
-        <el-form-item label="故障级别" required>
+        <el-form-item :label="t('faultLevel')" required>
           <el-select v-model="editForm.severity">
-            <el-option label="严重 (Critical)" value="critical" />
-            <el-option label="主要 (Major)" value="major" />
-            <el-option label="次要 (Minor)" value="minor" />
-            <el-option label="警告 (Warning)" value="warning" />
+            <el-option :label="`${t('dashCritical')} (Critical)`" value="critical" />
+            <el-option :label="`${t('dashMajor')} (Major)`" value="major" />
+            <el-option :label="`${t('dashMinor')} (Minor)`" value="minor" />
+            <el-option :label="`${t('dashWarning')} (Warning)`" value="warning" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" required>
+        <el-form-item :label="t('faultStatus')" required>
           <el-select v-model="editForm.status">
-            <el-option label="待处理" value="open" />
-            <el-option label="处理中" value="investigating" />
-            <el-option label="已解决" value="resolved" />
-            <el-option label="已关闭" value="closed" />
+            <el-option :label="t('faultStatusOpen')" value="open" />
+            <el-option :label="t('faultStatusInvestigating')" value="investigating" />
+            <el-option :label="t('faultStatusResolved')" value="resolved" />
+            <el-option :label="t('faultStatusClosed')" value="closed" />
           </el-select>
         </el-form-item>
-        <el-form-item label="停机时长 (分钟)">
+        <el-form-item :label="t('faultDowntimeMinutes')">
           <el-input-number v-model="editForm.downtime_minutes" :min="0" />
         </el-form-item>
-        <el-form-item label="影响范围">
+        <el-form-item :label="t('faultImpact')">
           <el-input v-model="editForm.impact" type="textarea" :rows="2" />
         </el-form-item>
-        <el-form-item label="故障描述" required>
+        <el-form-item :label="t('faultDescription')" required>
           <el-input v-model="editForm.description" type="textarea" :rows="4" />
         </el-form-item>
-        <el-form-item label="解决方案">
-          <el-input v-model="editForm.resolution" type="textarea" :rows="3" placeholder="记录故障解决方案" />
+        <el-form-item :label="t('faultResolution')">
+          <el-input v-model="editForm.resolution" type="textarea" :rows="3" :placeholder="t('faultResolutionPlaceholder')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="updateFault">确定</el-button>
+        <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="updateFault">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -219,6 +219,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Tools } from '@element-plus/icons-vue'
 import { getFaultDetail, updateFault as updateFaultApi, deleteFault as deleteFaultApi, getDevices, convertFaultToMaintenance, getFaultMaintenance } from '@/api'
 import { formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const route = useRoute()
 const router = useRouter()
@@ -244,8 +247,8 @@ const getSeverityType = (severity) => {
 }
 
 const getSeverityText = (severity) => {
-  const texts = { critical: '严重', major: '主要', minor: '次要', warning: '警告' }
-  return texts[severity] || severity
+  const keys = { critical: 'dashCritical', major: 'dashMajor', minor: 'dashMinor', warning: 'dashWarning' }
+  return t(keys[severity]) || severity
 }
 
 const getStatusType = (status) => {
@@ -254,13 +257,13 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { open: '待处理', investigating: '处理中', resolved: '已解决', closed: '已关闭' }
-  return texts[status] || status
+  const keys = { open: 'faultStatusOpen', investigating: 'faultStatusInvestigating', resolved: 'faultStatusResolved', closed: 'faultStatusClosed' }
+  return t(keys[status]) || status
 }
 
 const getMaintTypeText = (type) => {
-  const texts = { preventive: '预防性', corrective: '修复性', upgrade: '升级', emergency: '紧急' }
-  return texts[type] || type
+  const keys = { preventive: 'maintTypePreventive', corrective: 'maintTypeCorrective', upgrade: 'maintTypeUpgrade', emergency: 'maintTypeEmergency' }
+  return t(keys[type]) || type
 }
 
 const loadFault = async () => {
@@ -290,7 +293,7 @@ const loadFault = async () => {
       maintenanceInfo.value = maintData.maintenance
     }
   } catch (error) {
-    ElMessage.error('加载故障详情失败')
+    ElMessage.error(t('faultDetailLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -303,21 +306,21 @@ const goBack = () => {
 const convertToMaintenance = async () => {
   try {
     await ElMessageBox.confirm(
-      '确定要将此故障转换为维修单吗？转换后故障状态将更新，维修单将继承故障信息。',
-      '转维修单',
+      t('faultDetailConvertConfirm'),
+      t('faultDetailConvertTitle'),
       {
-        confirmButtonText: '确定转换',
-        cancelButtonText: '取消',
+        confirmButtonText: t('faultDetailConfirmConvert'),
+        cancelButtonText: t('actionCancel'),
         type: 'warning'
       }
     )
 
     const result = await convertFaultToMaintenance(fault.value.id)
-    ElMessage.success(`维修单 ${result.maint_no} 创建成功`)
+    ElMessage.success(`${t('faultDetailMaintenanceCreated')} ${result.maint_no}`)
     loadFault()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error(error.response?.data?.detail || '转换失败')
+      ElMessage.error(error.response?.data?.detail || t('faultDetailConvertFailed'))
     }
   }
 }
@@ -325,46 +328,46 @@ const convertToMaintenance = async () => {
 const updateFault = async () => {
   try {
     await updateFaultApi(fault.value.id, editForm.value)
-    ElMessage.success('故障记录更新成功')
+    ElMessage.success(t('faultUpdateSuccess'))
     showEditDialog.value = false
     loadFault()
   } catch (error) {
-    ElMessage.error('更新故障记录失败')
+    ElMessage.error(t('faultUpdateFailed'))
   }
 }
 
 const closeFault = async () => {
   try {
-    await ElMessageBox.confirm('确定要关闭此故障吗？', '确认关闭', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('faultDetailCloseConfirm'), t('faultCloseTitle'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await updateFaultApi(fault.value.id, { status: 'closed' })
-    ElMessage.success('故障已关闭')
+    ElMessage.success(t('faultCloseSuccess'))
     loadFault()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('关闭故障失败')
+      ElMessage.error(t('faultCloseFailed'))
     }
   }
 }
 
 const deleteFault = async () => {
   try {
-    await ElMessageBox.confirm('确定要删除此故障记录吗？', '确认删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('faultDetailDeleteConfirm'), t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await deleteFaultApi(fault.value.id)
-    ElMessage.success('故障记录删除成功')
+    ElMessage.success(t('faultDetailDeleteSuccess'))
     router.push('/faults')
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除故障失败')
+      ElMessage.error(t('faultDetailDeleteFailed'))
     }
   }
 }

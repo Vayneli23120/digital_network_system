@@ -76,20 +76,20 @@ const toggleCollapse = () => {
 }
 
 .sidebar-inner {
-  padding: var(--gap-sm);
+  padding: var(--gap-md);
 }
 
 /* Collapse Toggle */
 .collapse-toggle {
   width: 100%;
   height: 36px;
-  margin-bottom: var(--gap-sm);
+  margin-bottom: var(--gap-md);
   display: flex;
   align-items: center;
   justify-content: center;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s;
@@ -98,17 +98,18 @@ const toggleCollapse = () => {
 .collapse-toggle:hover {
   background: var(--bg-hover);
   color: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .collapse-toggle .el-icon {
-  font-size: 16px;
+  font-size: 18px;
 }
 
 /* Sidebar Groups */
 .sidebar-groups {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-md);
+  gap: var(--gap-lg);
 }
 
 .sg {
@@ -118,13 +119,15 @@ const toggleCollapse = () => {
 }
 
 .sg-label {
-  padding: 6px 12px;
+  padding: 8px 12px;
   font-family: var(--font-display);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
   color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: var(--gap-xs);
 }
 
 /* Sidebar Item */
@@ -132,11 +135,11 @@ const toggleCollapse = () => {
   display: flex;
   align-items: center;
   gap: var(--gap-sm);
-  padding: 9px 12px;
-  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all 0.15s;
+  transition: all 0.2s;
   position: relative;
 }
 
@@ -147,8 +150,9 @@ const toggleCollapse = () => {
 
 .si.active {
   background: var(--sidebar-active-bg);
-  border-left: 2px solid var(--sidebar-active-border);
-  padding-left: 10px;
+  border-left: 3px solid var(--sidebar-active-border);
+  padding-left: 9px;
+  color: var(--sidebar-active-border);
 }
 
 /* Light mode active item */
@@ -162,12 +166,12 @@ const toggleCollapse = () => {
 }
 
 .si .el-icon {
-  font-size: 16px;
+  font-size: 18px;
   flex-shrink: 0;
 }
 
 .si-text {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
   white-space: nowrap;
 }
@@ -177,13 +181,41 @@ const toggleCollapse = () => {
 }
 
 .si-badge {
-  padding: 2px 6px;
+  padding: 2px 8px;
   font-family: var(--font-display);
   font-size: 10px;
   font-weight: 600;
   color: #fff;
   background: var(--accent-danger);
   border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+/* Collapsed state adjustments */
+.sidebar.collapsed .sidebar-inner {
+  padding: var(--gap-sm);
+}
+
+.sidebar.collapsed .collapse-toggle {
+  width: 48px;
+  margin: 0 auto var(--gap-md);
+}
+
+.sidebar.collapsed .sg-label {
+  display: none;
+}
+
+.sidebar.collapsed .si {
+  justify-content: center;
+  padding: 10px;
+}
+
+.sidebar.collapsed .si-badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  padding: 2px 4px;
+  font-size: 8px;
 }
 
 @media (max-width: 768px) {

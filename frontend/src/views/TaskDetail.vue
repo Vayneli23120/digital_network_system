@@ -1,8 +1,8 @@
 <template>
   <div class="task-detail-page">
-    <el-page-header @back="goBack" :title="'返回任务列表'">
+    <el-page-header @back="goBack" :title="t('taskDetailBack')">
       <template #content>
-        <span class="page-title">{{ task.task_no || '任务详情' }}</span>
+        <span class="page-title">{{ task.task_no || t('taskDetailTitle') }}</span>
       </template>
     </el-page-header>
 
@@ -11,77 +11,77 @@
       <el-col :span="16">
         <el-card class="task-info-card">
           <template #header>
-            <span>任务信息</span>
+            <span>{{ t('taskDetailInfo') }}</span>
           </template>
 
           <el-descriptions :column="2" border v-if="task.id">
-            <el-descriptions-item label="任务编号">{{ task.task_no }}</el-descriptions-item>
-            <el-descriptions-item label="设备名称">
+            <el-descriptions-item :label="t('taskDetailNo')">{{ task.task_no }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailDevice')">
               <router-link v-if="task.device_id" :to="`/devices/${task.device_id}`">{{ task.device_name }}</router-link>
-              <span v-else>{{ task.device_name || '通用任务' }}</span>
+              <span v-else>{{ task.device_name || t('taskDetailGenericTask') }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="计划日期">{{ formatDate(task.scheduled_date) }}</el-descriptions-item>
-            <el-descriptions-item label="当前状态">
+            <el-descriptions-item :label="t('taskDetailScheduledDate')">{{ formatDate(task.scheduled_date) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailCurrentStatus')">
               <el-tag :type="getStatusType(task.status)">{{ getStatusText(task.status) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="实际执行日期">
-              {{ task.actual_date ? formatDate(task.actual_date) : '未执行' }}
+            <el-descriptions-item :label="t('taskDetailActualDate')">
+              {{ task.actual_date ? formatDate(task.actual_date) : t('taskDetailNotExecuted') }}
             </el-descriptions-item>
-            <el-descriptions-item label="关联计划">
+            <el-descriptions-item :label="t('taskDetailRelatedPlan')">
               <span v-if="task.plan">{{ task.plan.name }} ({{ getPlanTypeText(task.plan.plan_type) }})</span>
-              <span v-else>手动创建</span>
+              <span v-else>{{ t('taskDetailManualCreated') }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="备注">{{ task.notes || '无' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ formatDateTime(task.created_at) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailNotes')">{{ task.notes || t('taskDetailNoNotes') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailCreatedAt')">{{ formatDateTime(task.created_at) }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
 
         <!-- 维修执行详情（已完成时显示） -->
         <el-card style="margin-top: 20px" v-if="task.maintenance">
           <template #header>
-            <span>维修执行详情</span>
+            <span>{{ t('taskDetailMaintInfo') }}</span>
           </template>
 
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="维修单号">
+            <el-descriptions-item :label="t('taskDetailMaintNo')">
               <router-link :to="`/maintenance/${task.maintenance.id}`">{{ task.maintenance.maint_no }}</router-link>
             </el-descriptions-item>
-            <el-descriptions-item label="维修类型">
+            <el-descriptions-item :label="t('taskDetailMaintType')">
               <el-tag>{{ getMaintTypeText(task.maintenance.maint_type) }}</el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="备件成本">¥{{ task.maintenance.parts_cost?.toFixed(2) || '0.00' }}</el-descriptions-item>
-            <el-descriptions-item label="人工成本">¥{{ task.maintenance.labor_cost?.toFixed(2) || '0.00' }}</el-descriptions-item>
-            <el-descriptions-item label="总成本">
+            <el-descriptions-item :label="t('taskDetailPartsCost')">¥{{ task.maintenance.parts_cost?.toFixed(2) || '0.00' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailLaborCost')">¥{{ task.maintenance.labor_cost?.toFixed(2) || '0.00' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailTotalCost')">
               <span class="total-cost">¥{{ ((task.maintenance.parts_cost || 0) + (task.maintenance.labor_cost || 0)).toFixed(2) }}</span>
             </el-descriptions-item>
-            <el-descriptions-item label="维修时间">{{ formatDateTime(task.maintenance.maint_time) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailMaintTime')">{{ formatDateTime(task.maintenance.maint_time) }}</el-descriptions-item>
           </el-descriptions>
 
           <!-- 更换备件详情 -->
-          <el-divider v-if="parsedParts && parsedParts.length > 0">更换备件</el-divider>
+          <el-divider v-if="parsedParts && parsedParts.length > 0">{{ t('taskDetailReplaceParts') }}</el-divider>
           <div v-if="parsedParts && parsedParts.length > 0" class="parts-detail">
             <el-table :data="parsedParts" size="small" border>
-              <el-table-column prop="part_number" label="型号" width="120" />
-              <el-table-column prop="name" label="名称" width="150" />
-              <el-table-column prop="quantity" label="数量" width="60" />
-              <el-table-column label="类型" width="100">
+              <el-table-column prop="part_number" :label="t('taskDetailColModel')" width="120" />
+              <el-table-column prop="name" :label="t('taskDetailColName')" width="150" />
+              <el-table-column prop="quantity" :label="t('taskDetailColQty')" width="60" />
+              <el-table-column :label="t('taskDetailReturnType')" width="100">
                 <template #default="{ row }">
                   <el-tag :type="row.is_return ? 'warning' : 'success'" size="small">
-                    {{ row.is_return ? '返回件' : '更换' }}
+                    {{ row.is_return ? t('taskDetailReturnPart') : t('taskDetailReplace') }}
                   </el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="报废入库" width="100">
+              <el-table-column :label="t('taskDetailScrapIn')" width="100">
                 <template #default="{ row }">
-                  <el-tag v-if="row.scrap_in" type="danger" size="small">已入库</el-tag>
+                  <el-tag v-if="row.scrap_in" type="danger" size="small">{{ t('taskDetailScrapInTag') }}</el-tag>
                   <span v-else>-</span>
                 </template>
               </el-table-column>
             </el-table>
           </div>
 
-          <el-divider>维修描述</el-divider>
-          <p class="description">{{ task.maintenance.description || '无描述' }}</p>
+          <el-divider>{{ t('taskDetailMaintDesc') }}</el-divider>
+          <p class="description">{{ task.maintenance.description || t('taskDetailNoDesc') }}</p>
         </el-card>
 
         <!-- 操作按钮 -->
@@ -93,7 +93,7 @@
               @click="startTask"
             >
               <el-icon><VideoPlay /></el-icon>
-              开始执行
+              {{ t('taskDetailBtnStart') }}
             </el-button>
             <el-button
               v-if="task.status === 'in_progress'"
@@ -101,7 +101,7 @@
               @click="showCompleteDialog = true"
             >
               <el-icon><Check /></el-icon>
-              完成任务
+              {{ t('taskDetailBtnComplete') }}
             </el-button>
             <el-button
               v-if="task.status === 'pending' || task.status === 'overdue'"
@@ -109,7 +109,7 @@
               @click="skipTask"
             >
               <el-icon><Close /></el-icon>
-              跳过
+              {{ t('taskDetailBtnSkip') }}
             </el-button>
             <el-button
               v-if="task.status === 'pending'"
@@ -117,7 +117,7 @@
               @click="deleteTask"
             >
               <el-icon><Delete /></el-icon>
-              删除
+              {{ t('taskDetailBtnDelete') }}
             </el-button>
           </el-space>
         </el-card>
@@ -127,7 +127,7 @@
       <el-col :span="8">
         <el-card class="timeline-card">
           <template #header>
-            <span>任务时间线</span>
+            <span>{{ t('taskDetailTimeline') }}</span>
           </template>
 
           <el-timeline>
@@ -137,19 +137,19 @@
               color="#409EFF"
             >
               <el-card>
-                <h4>任务创建</h4>
-                <p>计划日期: {{ formatDate(task.scheduled_date) }}</p>
+                <h4>{{ t('taskDetailTimelineCreated') }}</h4>
+                <p>{{ t('taskDetailTimelinePlanDate') }}: {{ formatDate(task.scheduled_date) }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="task.status === 'in_progress'"
-              timestamp="进行中"
+              :timestamp="t('taskDetailTimelineInProgress')"
               placement="top"
               color="#E6A23C"
             >
               <el-card>
-                <h4>开始执行</h4>
-                <p>任务正在执行中</p>
+                <h4>{{ t('taskDetailTimelineStarted') }}</h4>
+                <p>{{ t('taskDetailTimelineExecuting') }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
@@ -159,30 +159,30 @@
               color="#67C23A"
             >
               <el-card>
-                <h4>任务完成</h4>
-                <p v-if="task.maintenance">维修单: {{ task.maintenance.maint_no }}</p>
+                <h4>{{ t('taskDetailTimelineCompleted') }}</h4>
+                <p v-if="task.maintenance">{{ t('taskDetailTimelineMaintNo') }}: {{ task.maintenance.maint_no }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="task.status === 'skipped'"
-              timestamp="已跳过"
+              :timestamp="t('taskDetailTimelineSkipped')"
               placement="top"
               color="#909399"
             >
               <el-card>
-                <h4>任务跳过</h4>
-                <p>{{ task.notes || '原因未说明' }}</p>
+                <h4>{{ t('taskDetailTimelineTaskSkipped') }}</h4>
+                <p>{{ task.notes || t('taskDetailTimelineSkipReason') }}</p>
               </el-card>
             </el-timeline-item>
             <el-timeline-item
               v-if="task.status === 'overdue'"
-              timestamp="已超期"
+              :timestamp="t('taskDetailTimelineOverdue')"
               placement="top"
               color="#F56C6C"
             >
               <el-card>
-                <h4>任务超期</h4>
-                <p>计划日期已过，请尽快执行</p>
+                <h4>{{ t('taskDetailTimelineTaskOverdue') }}</h4>
+                <p>{{ t('taskDetailTimelineOverdueTip') }}</p>
               </el-card>
             </el-timeline-item>
           </el-timeline>
@@ -191,35 +191,35 @@
         <!-- 关联计划信息 -->
         <el-card class="plan-card" style="margin-top: 20px" v-if="task.plan">
           <template #header>
-            <span>关联计划</span>
+            <span>{{ t('taskDetailRelatedPlanTitle') }}</span>
           </template>
           <el-descriptions :column="1" border size="small">
-            <el-descriptions-item label="计划名称">{{ task.plan.name }}</el-descriptions-item>
-            <el-descriptions-item label="计划类型">
+            <el-descriptions-item :label="t('pmPlanName')">{{ task.plan.name }}</el-descriptions-item>
+            <el-descriptions-item :label="t('pmPlanType')">
               <el-tag :type="getPlanTypeColor(task.plan.plan_type)" size="small">
                 {{ getPlanTypeText(task.plan.plan_type) }}
               </el-tag>
             </el-descriptions-item>
-            <el-descriptions-item label="执行周期">{{ task.plan.cycle_days }} 天</el-descriptions-item>
+            <el-descriptions-item :label="t('taskDetailPlanCycle')">{{ task.plan.cycle_days }} {{ t('taskDetailPlanCycleUnit') }}</el-descriptions-item>
           </el-descriptions>
         </el-card>
       </el-col>
     </el-row>
 
     <!-- 完成任务对话框 -->
-    <el-dialog v-model="showCompleteDialog" title="完成任务" width="700px">
+    <el-dialog v-model="showCompleteDialog" :title="t('taskDetailCompleteTitle')" width="700px">
       <el-form :model="completeForm" label-width="120px">
-        <el-form-item label="维修描述">
-          <el-input v-model="completeForm.description" type="textarea" :rows="3" placeholder="记录运维工作内容" />
+        <el-form-item :label="t('taskDetailCompleteDesc')">
+          <el-input v-model="completeForm.description" type="textarea" :rows="3" :placeholder="t('taskDetailCompleteDescPlaceholder')" />
         </el-form-item>
 
         <!-- 备件更换 -->
-        <el-divider content-position="left">更换备件（从库存扣除）</el-divider>
-        <el-form-item label="选择备件">
+        <el-divider content-position="left">{{ t('taskDetailReplacePartsSection') }}</el-divider>
+        <el-form-item :label="t('taskDetailSelectPart')">
           <div class="parts-section">
             <el-select
               v-model="selectedPart"
-              placeholder="搜索备件型号或名称"
+              :placeholder="t('taskDetailSearchPartPlaceholder')"
               filterable
               remote
               :remote-method="searchParts"
@@ -239,7 +239,7 @@
                   <span class="part-number">{{ part.part_number }}</span>
                   <span class="part-name">{{ part.name }}</span>
                   <span class="part-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
-                    库存: {{ part.quantity_in_stock }}
+                    {{ t('taskDetailStockLabel') }}: {{ part.quantity_in_stock }}
                   </span>
                 </div>
               </el-option>
@@ -247,38 +247,38 @@
 
             <div class="selected-parts" v-if="completeForm.parts.length > 0">
               <el-table :data="completeForm.parts" size="small" border>
-                <el-table-column prop="part_number" label="型号" width="120" />
-                <el-table-column prop="name" label="名称" width="120" />
-                <el-table-column prop="quantity" label="数量" width="80">
+                <el-table-column prop="part_number" :label="t('taskDetailColModel')" width="120" />
+                <el-table-column prop="name" :label="t('taskDetailColName')" width="120" />
+                <el-table-column prop="quantity" :label="t('taskDetailColQty')" width="80">
                   <template #default="{ row, $index }">
                     <el-input-number v-model="row.quantity" :min="1" :max="row.max_qty" size="small" @change="updatePartsCost" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="unit_price" label="单价" width="80">
+                <el-table-column prop="unit_price" :label="t('taskDetailColUnitPrice')" width="80">
                   <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column label="小计" width="80">
+                <el-table-column :label="t('taskDetailColSubtotal')" width="80">
                   <template #default="{ row }">¥{{ (row.quantity * row.unit_price).toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="60">
+                <el-table-column :label="t('taskDetailColOperation')" width="60">
                   <template #default="{ $index }">
-                    <el-button type="danger" size="small" link @click="removePart($index)">删除</el-button>
+                    <el-button type="danger" size="small" link @click="removePart($index)">{{ t('pmBtnDelete') }}</el-button>
                   </template>
                 </el-table-column>
               </el-table>
-              <div class="parts-summary">备件总成本: <span class="total-cost">¥{{ completeForm.parts_cost.toFixed(2) }}</span></div>
+              <div class="parts-summary">{{ t('taskDetailPartsTotalCost') }}: <span class="total-cost">¥{{ completeForm.parts_cost.toFixed(2) }}</span></div>
             </div>
-            <el-tag v-else type="info">暂无更换备件</el-tag>
+            <el-tag v-else type="info">{{ t('taskDetailNoReplaceParts') }}</el-tag>
           </div>
         </el-form-item>
 
         <!-- 返回件 -->
-        <el-divider content-position="left">返回件（入报废库存）</el-divider>
-        <el-form-item label="换下的坏件">
+        <el-divider content-position="left">{{ t('taskDetailReturnPartsSection') }}</el-divider>
+        <el-form-item :label="t('taskDetailReturnPartsLabel')">
           <div class="return-section">
             <el-select
               v-model="selectedReturnPart"
-              placeholder="从备件库选择（可选）"
+              :placeholder="t('taskDetailReturnSelectPlaceholder')"
               filterable
               remote
               :remote-method="searchParts"
@@ -287,30 +287,30 @@
             >
               <el-option v-for="part in partOptions" :key="part.id" :label="`${part.part_number} - ${part.name}`" :value="part.id" />
             </el-select>
-            <el-input v-model="returnPartNumber" placeholder="型号（手动输入）" style="width: 120px" />
-            <el-input v-model="returnPartName" placeholder="名称" style="width: 120px" />
+            <el-input v-model="returnPartNumber" :placeholder="t('taskDetailReturnModelPlaceholder')" style="width: 120px" />
+            <el-input v-model="returnPartName" :placeholder="t('taskDetailReturnNamePlaceholder')" style="width: 120px" />
             <div style="display: flex; align-items: center; gap: 5px;">
-              <span>数量:</span>
+              <span>{{ t('taskDetailReturnQtyLabel') }}:</span>
               <el-input-number v-model="returnPartQty" :min="1" style="width: 100px" controls-position="right" />
             </div>
-            <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
-            <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">添加</el-button>
+            <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">{{ t('taskDetailReturnScrapLabel') }}</el-checkbox>
+            <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">{{ t('taskDetailReturnBtnAdd') }}</el-button>
           </div>
 
           <div class="return-parts-table" v-if="completeForm.return_parts.length > 0">
             <el-table :data="completeForm.return_parts" size="small" border>
-              <el-table-column prop="part_number" label="型号" width="120" />
-              <el-table-column prop="name" label="名称" width="120" />
-              <el-table-column prop="quantity" label="数量" width="60" />
-              <el-table-column label="入报废库" width="100">
+              <el-table-column prop="part_number" :label="t('taskDetailColModel')" width="120" />
+              <el-table-column prop="name" :label="t('taskDetailColName')" width="120" />
+              <el-table-column prop="quantity" :label="t('taskDetailColQty')" width="60" />
+              <el-table-column :label="t('taskDetailReturnScrapLabel')" width="100">
                 <template #default="{ row }">
-                  <el-tag v-if="row.scrap_in" type="warning">入库</el-tag>
-                  <el-tag v-else type="info">不入库</el-tag>
+                  <el-tag v-if="row.scrap_in" type="warning">{{ t('taskDetailReturnScrapTag') }}</el-tag>
+                  <el-tag v-else type="info">{{ t('taskDetailReturnNoScrapTag') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="60">
+              <el-table-column :label="t('taskDetailColOperation')" width="60">
                 <template #default="{ $index }">
-                  <el-button type="danger" size="small" link @click="removeReturnPart($index)">删除</el-button>
+                  <el-button type="danger" size="small" link @click="removeReturnPart($index)">{{ t('pmBtnDelete') }}</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -318,16 +318,16 @@
         </el-form-item>
 
         <el-divider />
-        <el-form-item label="人工工时(小时)">
+        <el-form-item :label="t('taskDetailLaborHoursLabel')">
           <el-input-number v-model="completeForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
-        <el-form-item label="人工成本">
+        <el-form-item :label="t('taskDetailLaborCostLabel')">
           <el-input-number v-model="completeForm.labor_cost" :min="0" :precision="2" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCompleteDialog = false">取消</el-button>
-        <el-button type="success" @click="completeTask">确认完成</el-button>
+        <el-button @click="showCompleteDialog = false">{{ t('taskDetailBtnCancel') }}</el-button>
+        <el-button type="success" @click="completeTask">{{ t('taskDetailBtnConfirmComplete') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -343,7 +343,9 @@ import {
   getPartList, createMovement
 } from '@/api'
 import { formatDate, formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
 
+const { t } = useI18n()
 const route = useRoute()
 const router = useRouter()
 
@@ -385,12 +387,12 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { pending: '待执行', in_progress: '进行中', completed: '已完成', overdue: '已超期', skipped: '已跳过' }
+  const texts = { pending: t('pmStatsPending'), in_progress: t('taskDetailTimelineInProgress'), completed: t('pmStatsCompleted'), overdue: t('taskDetailTimelineOverdue'), skipped: t('taskDetailTimelineSkipped') }
   return texts[status] || status
 }
 
 const getMaintTypeText = (type) => {
-  const texts = { preventive: '预防性', corrective: '修复性', upgrade: '升级', emergency: '紧急' }
+  const texts = { preventive: t('maintTypePreventive'), corrective: t('maintTypeCorrective'), upgrade: t('maintTypeUpgrade'), emergency: t('maintTypeEmergency') }
   return texts[type] || type
 }
 
@@ -400,7 +402,7 @@ const getPlanTypeColor = (type) => {
 }
 
 const getPlanTypeText = (type) => {
-  const texts = { routine_check: '例行巡检', parts_replace: '备件更换', vendor_service: '原厂保养' }
+  const texts = { routine_check: t('pmPlanTypeRoutine'), parts_replace: t('pmPlanTypeParts'), vendor_service: t('pmPlanTypeVendor') }
   return texts[type] || type
 }
 
@@ -414,42 +416,42 @@ const loadTask = async () => {
     const data = await getMaintenanceTask(taskId)
     task.value = data
   } catch (error) {
-    ElMessage.error('加载任务详情失败')
+    ElMessage.error(t('taskDetailMsgLoadFailed'))
   }
 }
 
 const startTask = async () => {
   try {
-    await ElMessageBox.confirm('确定要开始执行此任务吗？', '开始执行', { type: 'info' })
+    await ElMessageBox.confirm(t('taskDetailMsgConfirmStart'), t('taskDetailMsgStartTitle'), { type: 'info' })
     await startMaintenanceTask(task.value.id)
-    ElMessage.success('任务已开始')
+    ElMessage.success(t('taskDetailMsgStartSuccess'))
     loadTask()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('开始失败')
+    if (e !== 'cancel') ElMessage.error(t('taskDetailMsgStartFailed'))
   }
 }
 
 const skipTask = async () => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入跳过原因', '跳过任务', {
-      inputPlaceholder: '跳过原因（可选）'
+    const { value } = await ElMessageBox.prompt(t('taskDetailMsgSkipReasonPrompt'), t('taskDetailMsgSkipTitle'), {
+      inputPlaceholder: t('taskDetailMsgSkipPlaceholder')
     })
     await skipMaintenanceTask(task.value.id, value || '')
-    ElMessage.success('任务已跳过')
+    ElMessage.success(t('taskDetailMsgSkipSuccess'))
     router.push('/planned-maintenance')
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('跳过失败')
+    if (e !== 'cancel') ElMessage.error(t('taskDetailMsgSkipFailed'))
   }
 }
 
 const deleteTask = async () => {
   try {
-    await ElMessageBox.confirm(`确定要删除任务 "${task.value.task_no}" 吗？`, '确认删除', { type: 'warning' })
+    await ElMessageBox.confirm(`${t('taskDetailMsgDeleteConfirm')} "${task.value.task_no}" ?`, t('taskDetailMsgDeleteTitle'), { type: 'warning' })
     await deleteMaintenanceTask(task.value.id)
-    ElMessage.success('删除成功')
+    ElMessage.success(t('taskDetailMsgDeleteSuccess'))
     router.push('/planned-maintenance')
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    if (e !== 'cancel') ElMessage.error(t('taskDetailMsgDeleteFailed'))
   }
 }
 
@@ -464,7 +466,7 @@ const searchParts = async (query) => {
     const result = await getPartList({ search: query, limit: 20 })
     partOptions.value = result.items || []
   } catch (e) {
-    console.error('搜索备件失败:', e)
+    console.error(t('maintSearchFailed'), e)
   } finally {
     partsLoading.value = false
   }
@@ -477,7 +479,7 @@ const loadInitialParts = async () => {
     const result = await getPartList({ limit: 50 })
     partOptions.value = result.items || []
   } catch (e) {
-    console.error('加载备件失败:', e)
+    console.error(t('spareLoadFailed'), e)
   } finally {
     partsLoading.value = false
   }
@@ -524,7 +526,7 @@ const updatePartsCost = () => {
 // 添加返回件
 const addReturnPart = () => {
   if (!returnPartNumber.value && !selectedReturnPart.value) {
-    ElMessage.warning('请输入返回件型号或从备件库选择')
+    ElMessage.warning(t('taskDetailMsgReturnRequired'))
     return
   }
 
@@ -563,7 +565,7 @@ const removeReturnPart = (index) => {
 
 const openCompleteDialog = async () => {
   completeForm.value = {
-    description: `计划性运维任务 ${task.value.task_no} 完成`,
+    description: `${t('pmTitle')} ${task.value.task_no} ${t('pmStatsCompleted')}`,
     parts: [],
     parts_cost: 0,
     return_parts: [],
@@ -602,9 +604,9 @@ const completeTask = async () => {
         part_id: part.part_id,
         movement_type: 'out',
         quantity: part.quantity,
-        reason: `计划性运维 - ${task.value.task_no}`,
+        reason: `${t('pmTitle')} - ${task.value.task_no}`,
         operator: 'Web',
-        reference: task.value.device_name || '计划运维'
+        reference: task.value.device_name || t('pmTitle')
       })
     }
 
@@ -615,18 +617,18 @@ const completeTask = async () => {
           part_id: part.part_id,
           movement_type: 'scrap_in',
           quantity: part.quantity,
-          reason: `运维返回件入库 - 报废`,
+          reason: `${t('pmReturnPartsSection')} - ${t('scrapScrap')}`,
           operator: 'Web',
-          reference: task.value.device_name || '计划运维'
+          reference: task.value.device_name || t('pmTitle')
         })
       }
     }
 
-    ElMessage.success('任务已完成')
+    ElMessage.success(t('pmMsgTaskCompleteSuccess'))
     showCompleteDialog.value = false
     loadTask()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '完成失败')
+    ElMessage.error(e.response?.data?.detail || t('pmMsgTaskCompleteFailed'))
   }
 }
 

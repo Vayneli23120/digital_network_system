@@ -3,16 +3,16 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>系统日志</span>
+          <span>{{ t('logTitle') }}</span>
           <div class="actions">
             <el-button
               :type="isRealtime ? 'success' : 'primary'"
               @click="toggleRealtime"
               :icon="isRealtime ? VideoPause : VideoPlay"
             >
-              {{ isRealtime ? '停止实时刷新' : '实时刷新' }}
+              {{ isRealtime ? t('logStopRealtime') : t('logStartRealtime') }}
             </el-button>
-            <el-button @click="refreshLogs"><el-icon><Refresh /></el-icon> 刷新</el-button>
+            <el-button @click="refreshLogs"><el-icon><Refresh /></el-icon> {{ t('toolRefresh') }}</el-button>
           </div>
         </div>
       </template>
@@ -21,42 +21,42 @@
       <div class="filter-bar">
         <el-input
           v-model="searchKeyword"
-          placeholder="搜索日志内容..."
+          :placeholder="t('logSearchPlaceholder')"
           style="width: 250px"
           clearable
           @keyup.enter="searchLogs"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="logLevel" placeholder="日志级别" clearable style="width: 120px" @change="loadLogs">
+        <el-select v-model="logLevel" :placeholder="t('logLevelPlaceholder')" clearable style="width: 120px" @change="loadLogs">
           <el-option label="DEBUG" value="DEBUG" />
           <el-option label="INFO" value="INFO" />
           <el-option label="WARNING" value="WARNING" />
           <el-option label="ERROR" value="ERROR" />
         </el-select>
-        <el-select v-model="timeRange" placeholder="时间范围" style="width: 150px" @change="loadLogs">
-          <el-option label="最近 1 天" :value="1" />
-          <el-option label="最近 3 天" :value="3" />
-          <el-option label="最近 7 天" :value="7" />
-          <el-option label="最近 30 天" :value="30" />
+        <el-select v-model="timeRange" :placeholder="t('logTimeRangePlaceholder')" style="width: 150px" @change="loadLogs">
+          <el-option :label="t('logDays1')" :value="1" />
+          <el-option :label="t('logDays3')" :value="3" />
+          <el-option :label="t('logDays7')" :value="7" />
+          <el-option :label="t('logDays30')" :value="30" />
         </el-select>
         <el-input-number v-model="logLimit" :min="50" :max="500" :step="50" style="width: 150px" @change="loadLogs" />
-        <span class="limit-label">条</span>
+        <span class="limit-label">{{ t('logRecordsLabel') }}</span>
       </div>
 
       <!-- 日志表格 -->
       <el-table :data="logList" style="width: 100%" v-loading="loading" height="600px">
-        <el-table-column prop="timestamp" label="时间" width="180">
+        <el-table-column prop="timestamp" :label="t('logColTime')" width="180">
           <template #default="{ row }">{{ formatDateTime(row.timestamp) }}</template>
         </el-table-column>
-        <el-table-column prop="level" label="级别" width="90">
+        <el-table-column prop="level" :label="t('logColLevel')" width="90">
           <template #default="{ row }">
             <el-tag :type="getLevelType(row.level)" size="small">{{ row.level }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="module" label="模块" width="150" />
-        <el-table-column prop="function" label="函数" width="120" />
-        <el-table-column prop="message" label="日志内容" min-width="400" show-overflow-tooltip />
+        <el-table-column prop="module" :label="t('logColModule')" width="150" />
+        <el-table-column prop="function" :label="t('logColFunction')" width="120" />
+        <el-table-column prop="message" :label="t('logColMessage')" min-width="400" show-overflow-tooltip />
       </el-table>
 
       <!-- 分页 -->
@@ -74,28 +74,28 @@
     </el-card>
 
     <!-- 日志文件列表对话框 -->
-    <el-dialog v-model="showFilesDialog" title="日志文件列表" width="700px">
+    <el-dialog v-model="showFilesDialog" :title="t('logFilesDialogTitle')" width="700px">
       <el-table :data="logFiles" v-loading="filesLoading">
-        <el-table-column prop="filename" label="文件名" />
-        <el-table-column prop="size" label="文件大小">
+        <el-table-column prop="filename" :label="t('logColFilename')" />
+        <el-table-column prop="size" :label="t('logColFileSize')">
           <template #default="{ row }">{{ formatSize(row.size) }}</template>
         </el-table-column>
-        <el-table-column prop="modified" label="修改时间">
+        <el-table-column prop="modified" :label="t('logColModifiedTime')">
           <template #default="{ row }">{{ formatDateTime(row.modified) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="120">
+        <el-table-column :label="t('colOperation')" width="120">
           <template #default="{ row }">
-            <el-button size="small" @click="viewLogFile(row.filename)">查看</el-button>
+            <el-button size="small" @click="viewLogFile(row.filename)">{{ t('logView') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-dialog>
 
     <!-- 查看日志文件内容对话框 -->
-    <el-dialog v-model="showFileContentDialog" title="日志文件内容" width="900px">
+    <el-dialog v-model="showFileContentDialog" :title="t('logFileContentDialogTitle')" width="900px">
       <div class="log-content" v-loading="fileContentLoading">
         <pre v-if="currentFileContent" class="log-pre">{{ currentFileContent }}</pre>
-        <el-empty v-else description="暂无内容" />
+        <el-empty v-else :description="t('logNoContent')" />
       </div>
     </el-dialog>
   </div>
@@ -106,6 +106,9 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Search, Refresh, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { getLogs, getLogFiles, getLogFileContent, searchLogs, clearOldLogs } from '@/api'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 // 状态
 const loading = ref(false)
@@ -182,7 +185,7 @@ const loadLogs = async () => {
     logList.value = res.items || []
     total.value = res.total || 0
   } catch (error) {
-    ElMessage.error('加载日志失败：' + (error.response?.data?.detail || error.message))
+    ElMessage.error(t('logLoadFailed') + '：' + (error.response?.data?.detail || error.message))
   } finally {
     loading.value = false
   }
@@ -203,7 +206,7 @@ const searchLogsFunc = async () => {
     logList.value = res.items || []
     total.value = res.total || 0
   } catch (error) {
-    ElMessage.error('搜索日志失败：' + error.message)
+    ElMessage.error(t('logSearchFailed') + '：' + error.message)
   } finally {
     loading.value = false
   }
@@ -216,7 +219,7 @@ const loadLogFiles = async () => {
     const res = await getLogFiles({ days: timeRange.value })
     logFiles.value = res.items || []
   } catch (error) {
-    ElMessage.error('加载日志文件列表失败：' + error.message)
+    ElMessage.error(t('logFilesLoadFailed') + '：' + error.message)
   } finally {
     filesLoading.value = false
   }
@@ -233,7 +236,7 @@ const viewLogFile = async (filename) => {
       return `[${item.timestamp}] [${item.level}] ${item.message}`
     }).join('\n')
   } catch (error) {
-    ElMessage.error('加载日志文件内容失败：' + error.message)
+    ElMessage.error(t('logFileContentLoadFailed') + '：' + error.message)
   } finally {
     fileContentLoading.value = false
   }
@@ -253,14 +256,14 @@ const toggleRealtime = () => {
       realtimeTimer.value = null
     }
     isRealtime.value = false
-    ElMessage.success('实时刷新已停止')
+    ElMessage.success(t('logRealtimeStopped'))
   } else {
     // 开始实时刷新
     isRealtime.value = true
     realtimeTimer.value = setInterval(() => {
       loadLogs()
     }, 3000)
-    ElMessage.info('实时刷新已启动（每 3 秒自动刷新）')
+    ElMessage.info(t('logRealtimeStarted'))
   }
 }
 

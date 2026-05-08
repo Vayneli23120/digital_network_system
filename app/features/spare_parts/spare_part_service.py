@@ -13,6 +13,27 @@ from app.shared.models import SparePart, SparePartMovement, SparePartInstance
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
+# 分类映射：支持英文和中文双向兼容
+CATEGORY_MAP = {
+    # English -> Chinese (用于查询时转换，兼容现有中文数据)
+    "module": "模块",
+    "power": "电源",
+    "cable": "线缆",
+    "other": "其他",
+    # Chinese -> Chinese (直接映射)
+    "模块": "模块",
+    "电源": "电源",
+    "线缆": "线缆",
+    "其他": "其他",
+}
+
+def normalize_category(category: Optional[str]) -> Optional[str]:
+    """将分类值标准化为中文（兼容英文和中文输入）"""
+    if not category:
+        return None
+    return CATEGORY_MAP.get(category.lower(), category)
+
+
 def list_parts(
     db: Session,
     skip: int = 0,
@@ -28,7 +49,7 @@ def list_parts(
         db: 数据库会话
         skip: 偏移量
         limit: 最大返回数量
-        category: 按分类过滤
+        category: 按分类过滤（支持英文和中文）
         status: 按状态过滤
         low_stock: 仅显示库存不足
         search: 搜索名称或型号
@@ -39,7 +60,9 @@ def list_parts(
     query = db.query(SparePart)
 
     if category:
-        query = query.filter(SparePart.category == category)
+        # 标准化分类值（兼容英文输入）
+        normalized_cat = normalize_category(category)
+        query = query.filter(SparePart.category == normalized_cat)
     if status:
         query = query.filter(SparePart.status == status)
     if low_stock:
@@ -128,6 +151,10 @@ def create_part(db: Session, part_data: Dict[str, Any]) -> Dict[str, Any]:
     if existing:
         raise ConflictException(f"备件编号 '{part_number}' 已存在")
 
+    # 标准化分类值（兼容英文输入）
+    if part_data.get("category"):
+        part_data["category"] = normalize_category(part_data["category"])
+
     part = SparePart(**part_data)
     db.add(part)
     db.commit()
@@ -158,6 +185,10 @@ def update_part(db: Session, part_id: int, update_data: Dict[str, Any]) -> Dict[
     part = db.query(SparePart).filter(SparePart.id == part_id).first()
     if not part:
         raise ResourceNotFoundException("SparePart")
+
+    # 标准化分类值（兼容英文输入）
+    if "category" in update_data and update_data["category"]:
+        update_data["category"] = normalize_category(update_data["category"])
 
     for key, value in update_data.items():
         if hasattr(part, key):

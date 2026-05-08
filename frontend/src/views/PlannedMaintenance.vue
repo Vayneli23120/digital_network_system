@@ -6,7 +6,7 @@
         <el-card class="stat-card">
           <div class="stat-item">
             <div class="stat-value">{{ stats.tasks?.total || 0 }}</div>
-            <div class="stat-label">总任务</div>
+            <div class="stat-label">{{ t('pmStatsTotal') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -14,7 +14,7 @@
         <el-card class="stat-card">
           <div class="stat-item">
             <div class="stat-value success">{{ stats.tasks?.completed || 0 }}</div>
-            <div class="stat-label">已完成</div>
+            <div class="stat-label">{{ t('pmStatsCompleted') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -22,7 +22,7 @@
         <el-card class="stat-card">
           <div class="stat-item">
             <div class="stat-value warning">{{ stats.tasks?.pending || 0 }}</div>
-            <div class="stat-label">待执行</div>
+            <div class="stat-label">{{ t('pmStatsPending') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -30,7 +30,7 @@
         <el-card class="stat-card">
           <div class="stat-item">
             <div class="stat-value danger">{{ stats.tasks?.overdue || 0 }}</div>
-            <div class="stat-label">已超期</div>
+            <div class="stat-label">{{ t('pmStatsOverdue') }}</div>
           </div>
         </el-card>
       </el-col>
@@ -40,15 +40,15 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>运维任务</span>
+          <span>{{ t('pmTasks') }}</span>
           <div class="actions">
             <el-button type="primary" @click="showPlanDialog = true">
               <el-icon><Plus /></el-icon>
-              创建计划
+              {{ t('pmCreatePlan') }}
             </el-button>
             <el-button type="success" @click="generateTasks">
               <el-icon><Refresh /></el-icon>
-              自动生成任务
+              {{ t('pmAutoGenerate') }}
             </el-button>
           </div>
         </div>
@@ -56,22 +56,22 @@
 
       <!-- 筛选栏 -->
       <div class="filter-bar">
-        <el-select v-model="filterStatus" placeholder="任务状态" clearable style="width: 120px" @change="loadTasks">
-          <el-option label="待执行" value="pending" />
-          <el-option label="进行中" value="in_progress" />
-          <el-option label="已完成" value="completed" />
-          <el-option label="已超期" value="overdue" />
-          <el-option label="已跳过" value="skipped" />
+        <el-select v-model="filterStatus" :placeholder="t('pmFilterStatus')" clearable style="width: 120px" @change="loadTasks">
+          <el-option :label="t('pmStatsPending')" value="pending" />
+          <el-option :label="t('statusRunning')" value="in_progress" />
+          <el-option :label="t('pmStatsCompleted')" value="completed" />
+          <el-option :label="t('pmStatsOverdue')" value="overdue" />
+          <el-option :label="t('taskDetailTimelineSkipped')" value="skipped" />
         </el-select>
-        <el-select v-model="filterPlanId" placeholder="维护计划" clearable style="width: 200px" @change="loadTasks">
+        <el-select v-model="filterPlanId" :placeholder="t('pmFilterPlan')" clearable style="width: 200px" @change="loadTasks">
           <el-option v-for="p in plans" :key="p.id" :label="p.name" :value="p.id" />
         </el-select>
         <el-date-picker
           v-model="dateRange"
           type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          :range-separator="t('faultToDate')"
+          :start-placeholder="t('faultStartDate')"
+          :end-placeholder="t('faultEndDate')"
           value-format="YYYY-MM-DD"
           style="width: 240px"
           @change="loadTasks"
@@ -80,30 +80,30 @@
 
       <!-- 任务表格 -->
       <el-table :data="tasks" style="width: 100%" v-loading="loading">
-        <el-table-column prop="task_no" label="任务编号" width="180">
+        <el-table-column prop="task_no" :label="t('pmColTaskNo')" width="180">
           <template #default="{ row }">
             <el-link type="primary" @click="showTaskDetail(row)">{{ row.task_no }}</el-link>
           </template>
         </el-table-column>
-        <el-table-column prop="device_name" label="设备" width="160" />
-        <el-table-column prop="scheduled_date" label="计划日期" width="160">
+        <el-table-column prop="device_name" :label="t('pmColDevice')" width="160" />
+        <el-table-column prop="scheduled_date" :label="t('pmColScheduledDate')" width="160">
           <template #default="{ row }">{{ formatDate(row.scheduled_date) }}</template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" :label="t('pmColStatus')" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">{{ getStatusText(row.status) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="actual_date" label="实际执行" width="160">
+        <el-table-column prop="actual_date" :label="t('pmColActualDate')" width="160">
           <template #default="{ row }">{{ row.actual_date ? formatDate(row.actual_date) : '-' }}</template>
         </el-table-column>
-        <el-table-column prop="notes" label="备注" />
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column prop="notes" :label="t('pmColNotes')" />
+        <el-table-column :label="t('pmColAction')" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" type="primary" size="small" @click="startTask(row)">开始</el-button>
-            <el-button v-if="row.status === 'in_progress'" type="success" size="small" @click="showCompleteDialog(row)">完成</el-button>
-            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" type="warning" size="small" @click="skipTask(row)">跳过</el-button>
-            <el-button v-if="row.status === 'pending'" type="danger" size="small" @click="deleteTask(row)">删除</el-button>
+            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" type="primary" size="small" @click="startTask(row)">{{ t('pmBtnStart') }}</el-button>
+            <el-button v-if="row.status === 'in_progress'" type="success" size="small" @click="showCompleteDialog(row)">{{ t('pmBtnComplete') }}</el-button>
+            <el-button v-if="row.status === 'pending' || row.status === 'overdue'" type="warning" size="small" @click="skipTask(row)">{{ t('pmBtnSkip') }}</el-button>
+            <el-button v-if="row.status === 'pending'" type="danger" size="small" @click="deleteTask(row)">{{ t('pmBtnDelete') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -112,92 +112,92 @@
     <!-- 维护计划列表 -->
     <el-card style="margin-top: 20px">
       <template #header>
-        <span>维护计划</span>
+        <span>{{ t('pmPlans') }}</span>
       </template>
       <el-table :data="plans" style="width: 100%">
-        <el-table-column prop="name" label="计划名称" width="200" />
-        <el-table-column prop="device_name" label="设备" width="160" />
-        <el-table-column prop="plan_type" label="类型" width="120">
+        <el-table-column prop="name" :label="t('pmPlanName')" width="200" />
+        <el-table-column prop="device_name" :label="t('pmColDevice')" width="160" />
+        <el-table-column prop="plan_type" :label="t('pmPlanType')" width="120">
           <template #default="{ row }">
             <el-tag :type="getPlanTypeColor(row.plan_type)">{{ getPlanTypeText(row.plan_type) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="cycle_days" label="周期(天)" width="100" />
-        <el-table-column prop="next_date" label="下次执行" width="160">
+        <el-table-column prop="cycle_days" :label="t('pmPlanCycle')" width="100" />
+        <el-table-column prop="next_date" :label="t('pmPlanNextDate')" width="160">
           <template #default="{ row }">{{ formatDate(row.next_date) }}</template>
         </el-table-column>
-        <el-table-column prop="data_basis" label="数据依据" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="data_basis" :label="t('pmPlanDataBasis')" />
+        <el-table-column prop="status" :label="t('pmPlanStatus')" width="100">
           <template #default="{ row }">
-            <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? '活跃' : '暂停' }}</el-tag>
+            <el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === 'active' ? t('pmPlanStatusActive') : t('pmPlanStatusPaused') }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column :label="t('pmColAction')" width="150" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="editPlan(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="deletePlan(row)">删除</el-button>
+            <el-button type="primary" size="small" @click="editPlan(row)">{{ t('pmBtnEdit') }}</el-button>
+            <el-button type="danger" size="small" @click="deletePlan(row)">{{ t('pmBtnDelete') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
     <!-- 创建/编辑计划对话框 -->
-    <el-dialog v-model="showPlanDialog" :title="editMode ? '编辑计划' : '创建计划'" width="600px">
+    <el-dialog v-model="showPlanDialog" :title="editMode ? t('pmEditPlan') : t('pmCreatePlan')" width="600px">
       <el-form :model="planForm" label-width="120px">
-        <el-form-item label="计划名称" required>
-          <el-input v-model="planForm.name" placeholder="如：每月例行巡检" />
+        <el-form-item :label="t('pmPlanName')" required>
+          <el-input v-model="planForm.name" :placeholder="t('pmPlanPlaceholder')" />
         </el-form-item>
-        <el-form-item label="设备">
-          <el-select v-model="planForm.device_id" placeholder="选择设备（可选）" clearable filterable style="width: 100%">
+        <el-form-item :label="t('deviceName')">
+          <el-select v-model="planForm.device_id" :placeholder="t('pmPlanSelectDevice')" clearable filterable style="width: 100%">
             <el-option v-for="d in devices" :key="d.id" :label="d.name" :value="d.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="计划类型" required>
+        <el-form-item :label="t('pmPlanType')" required>
           <el-select v-model="planForm.plan_type">
-            <el-option label="例行巡检" value="routine_check" />
-            <el-option label="备件更换" value="parts_replace" />
-            <el-option label="原厂保养" value="vendor_service" />
+            <el-option :label="t('pmPlanTypeRoutine')" value="routine_check" />
+            <el-option :label="t('pmPlanTypeParts')" value="parts_replace" />
+            <el-option :label="t('pmPlanTypeVendor')" value="vendor_service" />
           </el-select>
         </el-form-item>
-        <el-form-item label="执行周期(天)" required>
+        <el-form-item :label="t('pmPlanCycle')" required>
           <el-input-number v-model="planForm.cycle_days" :min="1" :max="365" />
         </el-form-item>
-        <el-form-item label="下次执行日期" required>
+        <el-form-item :label="t('pmPlanNextDateLabel')" required>
           <el-date-picker v-model="planForm.next_date" type="date" value-format="YYYY-MM-DD" style="width: 100%" />
         </el-form-item>
-        <el-form-item label="数据依据">
-          <el-input v-model="planForm.data_basis" type="textarea" :rows="3" placeholder="为什么做这个计划？数据支撑是什么？" />
+        <el-form-item :label="t('pmPlanDataBasis')">
+          <el-input v-model="planForm.data_basis" type="textarea" :rows="3" :placeholder="t('pmPlanDataBasisPlaceholder')" />
         </el-form-item>
-        <el-form-item label="自动生成任务">
+        <el-form-item :label="t('pmPlanAutoGenerateLabel')">
           <el-switch v-model="planForm.auto_generate" />
         </el-form-item>
-        <el-form-item label="状态" v-if="editMode">
+        <el-form-item :label="t('pmPlanStatus')" v-if="editMode">
           <el-select v-model="planForm.status">
-            <el-option label="活跃" value="active" />
-            <el-option label="暂停" value="paused" />
+            <el-option :label="t('pmPlanStatusActive')" value="active" />
+            <el-option :label="t('pmPlanStatusPaused')" value="paused" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showPlanDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updatePlan() : createPlan()">确定</el-button>
+        <el-button @click="showPlanDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updatePlan() : createPlan()">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 完成任务对话框 -->
-    <el-dialog v-model="showCompleteDialogFlag" title="完成任务" width="700px">
+    <el-dialog v-model="showCompleteDialogFlag" :title="t('pmCompleteTitle')" width="700px">
       <el-form :model="completeForm" label-width="120px">
-        <el-form-item label="维修描述">
-          <el-input v-model="completeForm.description" type="textarea" :rows="3" placeholder="记录运维工作内容" />
+        <el-form-item :label="t('pmCompleteDesc')">
+          <el-input v-model="completeForm.description" type="textarea" :rows="3" :placeholder="t('pmCompleteDescPlaceholder')" />
         </el-form-item>
 
         <!-- 备件更换 -->
-        <el-divider content-position="left">更换备件（从库存扣除）</el-divider>
-        <el-form-item label="选择备件">
+        <el-divider content-position="left">{{ t('pmReplacePartsSection') }}</el-divider>
+        <el-form-item :label="t('pmSelectPart')">
           <div class="parts-section">
             <el-select
               v-model="selectedPart"
-              placeholder="搜索备件型号或名称"
+              :placeholder="t('pmSearchPartPlaceholder')"
               filterable
               remote
               :remote-method="searchParts"
@@ -217,7 +217,7 @@
                   <span class="part-number">{{ part.part_number }}</span>
                   <span class="part-name">{{ part.name }}</span>
                   <span class="part-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
-                    库存: {{ part.quantity_in_stock }}
+                    {{ t('pmStockLabel') }}: {{ part.quantity_in_stock }}
                   </span>
                 </div>
               </el-option>
@@ -226,38 +226,38 @@
             <!-- 已选备件列表 -->
             <div class="selected-parts" v-if="completeForm.parts.length > 0">
               <el-table :data="completeForm.parts" size="small" border>
-                <el-table-column prop="part_number" label="型号" width="120" />
-                <el-table-column prop="name" label="名称" width="120" />
-                <el-table-column prop="quantity" label="数量" width="80">
+                <el-table-column prop="part_number" :label="t('pmColModel')" width="120" />
+                <el-table-column prop="name" :label="t('pmColName')" width="120" />
+                <el-table-column prop="quantity" :label="t('pmColQty')" width="80">
                   <template #default="{ row, $index }">
                     <el-input-number v-model="row.quantity" :min="1" :max="row.max_qty" size="small" @change="updatePartsCost" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="unit_price" label="单价" width="80">
+                <el-table-column prop="unit_price" :label="t('pmColUnitPrice')" width="80">
                   <template #default="{ row }">¥{{ row.unit_price.toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column label="小计" width="80">
+                <el-table-column :label="t('pmColSubtotal')" width="80">
                   <template #default="{ row }">¥{{ (row.quantity * row.unit_price).toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="60">
+                <el-table-column :label="t('pmColOperation')" width="60">
                   <template #default="{ $index }">
-                    <el-button type="danger" size="small" link @click="removePart($index)">删除</el-button>
+                    <el-button type="danger" size="small" link @click="removePart($index)">{{ t('pmBtnDelete') }}</el-button>
                   </template>
                 </el-table-column>
               </el-table>
-              <div class="parts-summary">备件总成本: <span class="total-cost">¥{{ completeForm.parts_cost.toFixed(2) }}</span></div>
+              <div class="parts-summary">{{ t('pmPartsTotalCost') }}: <span class="total-cost">¥{{ completeForm.parts_cost.toFixed(2) }}</span></div>
             </div>
-            <el-tag v-else type="info">暂无更换备件</el-tag>
+            <el-tag v-else type="info">{{ t('pmNoReplaceParts') }}</el-tag>
           </div>
         </el-form-item>
 
         <!-- 返回件 -->
-        <el-divider content-position="left">返回件（入报废库存）</el-divider>
-        <el-form-item label="换下的坏件">
+        <el-divider content-position="left">{{ t('pmReturnPartsSection') }}</el-divider>
+        <el-form-item :label="t('pmReturnPartsLabel')">
           <div class="return-section">
             <el-select
               v-model="selectedReturnPart"
-              placeholder="从备件库选择（可选）"
+              :placeholder="t('pmReturnSelectPlaceholder')"
               filterable
               remote
               :remote-method="searchParts"
@@ -266,30 +266,30 @@
             >
               <el-option v-for="part in partOptions" :key="part.id" :label="`${part.part_number} - ${part.name}`" :value="part.id" />
             </el-select>
-            <el-input v-model="returnPartNumber" placeholder="型号（手动输入）" style="width: 120px" />
-            <el-input v-model="returnPartName" placeholder="名称" style="width: 120px" />
+            <el-input v-model="returnPartNumber" :placeholder="t('pmReturnModelPlaceholder')" style="width: 120px" />
+            <el-input v-model="returnPartName" :placeholder="t('pmReturnNamePlaceholder')" style="width: 120px" />
             <div style="display: flex; align-items: center; gap: 5px;">
-              <span>数量:</span>
+              <span>{{ t('pmReturnQtyLabel') }}:</span>
               <el-input-number v-model="returnPartQty" :min="1" style="width: 100px" controls-position="right" />
             </div>
-            <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
-            <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">添加</el-button>
+            <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">{{ t('pmReturnScrapLabel') }}</el-checkbox>
+            <el-button type="primary" size="small" :disabled="!returnPartNumber && !selectedReturnPart" @click="addReturnPart">{{ t('pmReturnBtnAdd') }}</el-button>
           </div>
 
           <div class="return-parts-table" v-if="completeForm.return_parts.length > 0">
             <el-table :data="completeForm.return_parts" size="small" border>
-              <el-table-column prop="part_number" label="型号" width="120" />
-              <el-table-column prop="name" label="名称" width="120" />
-              <el-table-column prop="quantity" label="数量" width="60" />
-              <el-table-column label="入报废库" width="100">
+              <el-table-column prop="part_number" :label="t('pmColModel')" width="120" />
+              <el-table-column prop="name" :label="t('pmColName')" width="120" />
+              <el-table-column prop="quantity" :label="t('pmColQty')" width="60" />
+              <el-table-column :label="t('pmReturnScrapLabel')" width="100">
                 <template #default="{ row }">
-                  <el-tag v-if="row.scrap_in" type="warning">入库</el-tag>
-                  <el-tag v-else type="info">不入库</el-tag>
+                  <el-tag v-if="row.scrap_in" type="warning">{{ t('pmReturnScrapTag') }}</el-tag>
+                  <el-tag v-else type="info">{{ t('pmReturnNoScrapTag') }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column label="操作" width="60">
+              <el-table-column :label="t('pmColOperation')" width="60">
                 <template #default="{ $index }">
-                  <el-button type="danger" size="small" link @click="removeReturnPart($index)">删除</el-button>
+                  <el-button type="danger" size="small" link @click="removeReturnPart($index)">{{ t('pmBtnDelete') }}</el-button>
                 </template>
               </el-table-column>
             </el-table>
@@ -297,16 +297,16 @@
         </el-form-item>
 
         <el-divider />
-        <el-form-item label="人工工时(小时)">
+        <el-form-item :label="t('pmLaborHoursLabel')">
           <el-input-number v-model="completeForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
-        <el-form-item label="人工成本">
+        <el-form-item :label="t('pmLaborCostLabel')">
           <el-input-number v-model="completeForm.labor_cost" :min="0" :precision="2" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showCompleteDialogFlag = false">取消</el-button>
-        <el-button type="success" @click="completeTask">确认完成</el-button>
+        <el-button @click="showCompleteDialogFlag = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="success" @click="completeTask">{{ t('pmBtnConfirmComplete') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -323,7 +323,9 @@ import {
   getPlannedMaintenanceStats, generateTasksForPlans, getDevices, getPartList, createMovement
 } from '@/api'
 import { formatDate } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
 
+const { t } = useI18n()
 const router = useRouter()
 const plans = ref([])
 const tasks = ref([])
@@ -376,7 +378,7 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { pending: '待执行', in_progress: '进行中', completed: '已完成', overdue: '已超期', skipped: '已跳过' }
+  const texts = { pending: t('pmStatsPending'), in_progress: t('statusRunning'), completed: t('pmStatsCompleted'), overdue: t('pmStatsOverdue'), skipped: t('taskDetailTimelineSkipped') }
   return texts[status] || status
 }
 
@@ -386,7 +388,7 @@ const getPlanTypeColor = (type) => {
 }
 
 const getPlanTypeText = (type) => {
-  const texts = { routine_check: '例行巡检', parts_replace: '备件更换', vendor_service: '原厂保养' }
+  const texts = { routine_check: t('pmPlanTypeRoutine'), parts_replace: t('pmPlanTypeParts'), vendor_service: t('pmPlanTypeVendor') }
   return texts[type] || type
 }
 
@@ -395,7 +397,7 @@ const loadStats = async () => {
     const data = await getPlannedMaintenanceStats()
     stats.value = data
   } catch (e) {
-    console.error('加载统计失败', e)
+    console.error(t('pmMsgLoadStatsFailed'), e)
   }
 }
 
@@ -404,7 +406,7 @@ const loadPlans = async () => {
     const data = await getMaintenancePlans()
     plans.value = data.items || []
   } catch (e) {
-    ElMessage.error('加载计划失败')
+    ElMessage.error(t('pmMsgLoadPlansFailed'))
   }
 }
 
@@ -422,7 +424,7 @@ const loadTasks = async () => {
     const data = await getMaintenanceTasks(params)
     tasks.value = data.items || []
   } catch (e) {
-    ElMessage.error('加载任务失败')
+    ElMessage.error(t('pmMsgLoadTasksFailed'))
   } finally {
     loading.value = false
   }
@@ -433,13 +435,13 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (e) {
-    ElMessage.error('加载设备失败')
+    ElMessage.error(t('pmMsgLoadDevicesFailed'))
   }
 }
 
 const createPlan = async () => {
   if (!planForm.value.name || !planForm.value.next_date) {
-    ElMessage.warning('请填写必要信息')
+    ElMessage.warning(t('pmMsgFillRequired'))
     return
   }
   try {
@@ -448,13 +450,13 @@ const createPlan = async () => {
       ...planForm.value,
       device_name: device?.name
     })
-    ElMessage.success('计划创建成功')
+    ElMessage.success(t('pmMsgPlanCreateSuccess'))
     showPlanDialog.value = false
     resetPlanForm()
     loadPlans()
     loadStats()
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error(t('pmMsgPlanCreateFailed') + ': ' + (e.response?.data?.detail || e.message))
   }
 }
 
@@ -477,25 +479,25 @@ const editPlan = (row) => {
 const updatePlan = async () => {
   try {
     await updateMaintenancePlan(planForm.value.id, planForm.value)
-    ElMessage.success('更新成功')
+    ElMessage.success(t('pmMsgPlanUpdateSuccess'))
     showPlanDialog.value = false
     editMode.value = false
     resetPlanForm()
     loadPlans()
   } catch (e) {
-    ElMessage.error('更新失败')
+    ElMessage.error(t('pmMsgPlanUpdateFailed'))
   }
 }
 
 const deletePlan = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要删除计划 "${row.name}" 吗？`, '确认删除', { type: 'warning' })
+    await ElMessageBox.confirm(`${t('pmMsgConfirmDeletePlan')} "${row.name}" ?`, t('pmMsgConfirmDelete'), { type: 'warning' })
     await deletePlanApi(row.id)
-    ElMessage.success('删除成功')
+    ElMessage.success(t('pmMsgPlanDeleteSuccess'))
     loadPlans()
     loadStats()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    if (e !== 'cancel') ElMessage.error(t('pmMsgPlanDeleteFailed'))
   }
 }
 
@@ -520,18 +522,18 @@ const generateTasks = async () => {
     loadTasks()
     loadStats()
   } catch (e) {
-    ElMessage.error('生成任务失败')
+    ElMessage.error(t('pmMsgGenerateFailed'))
   }
 }
 
 const startTask = async (row) => {
   try {
     await startMaintenanceTask(row.id)
-    ElMessage.success('任务已开始')
+    ElMessage.success(t('pmMsgTaskStartSuccess'))
     loadTasks()
     loadStats()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '开始失败')
+    ElMessage.error(e.response?.data?.detail || t('pmMsgTaskStartFailed'))
   }
 }
 
@@ -546,7 +548,7 @@ const searchParts = async (query) => {
     const result = await getPartList({ search: query, limit: 20 })
     partOptions.value = result.items || []
   } catch (e) {
-    console.error('搜索备件失败:', e)
+    console.error(t('maintSearchFailed'), e)
   } finally {
     partsLoading.value = false
   }
@@ -559,7 +561,7 @@ const loadInitialParts = async () => {
     const result = await getPartList({ limit: 50 })
     partOptions.value = result.items || []
   } catch (e) {
-    console.error('加载备件失败:', e)
+    console.error(t('spareLoadFailed'), e)
   } finally {
     partsLoading.value = false
   }
@@ -607,7 +609,7 @@ const updatePartsCost = () => {
 // 添加返回件
 const addReturnPart = () => {
   if (!returnPartNumber.value && !selectedReturnPart.value) {
-    ElMessage.warning('请输入返回件型号或从备件库选择')
+    ElMessage.warning(t('pmMsgReturnPartRequired'))
     return
   }
 
@@ -648,7 +650,7 @@ const removeReturnPart = (index) => {
 const showCompleteDialog = async (row) => {
   currentTask.value = row
   completeForm.value = {
-    description: `计划性运维任务 ${row.task_no} 完成`,
+    description: `${t('pmTitle')} ${row.task_no} ${t('pmStatsCompleted')}`,
     parts: [],
     parts_cost: 0,
     return_parts: [],
@@ -690,9 +692,9 @@ const completeTask = async () => {
         part_id: part.part_id,
         movement_type: 'out',
         quantity: part.quantity,
-        reason: `计划性运维 - ${currentTask.value.task_no}`,
+        reason: `${t('pmTitle')} - ${currentTask.value.task_no}`,
         operator: 'Web',
-        reference: currentTask.value.device_name || '计划运维'
+        reference: currentTask.value.device_name || t('pmTitle')
       })
     }
 
@@ -703,45 +705,45 @@ const completeTask = async () => {
           part_id: part.part_id,
           movement_type: 'scrap_in',
           quantity: part.quantity,
-          reason: `运维返回件入库 - 报废`,
+          reason: `${t('pmReturnPartsSection')} - ${t('scrapScrap')}`,
           operator: 'Web',
-          reference: currentTask.value.device_name || '计划运维'
+          reference: currentTask.value.device_name || t('pmTitle')
         })
       }
     }
 
-    ElMessage.success('任务已完成')
+    ElMessage.success(t('pmMsgTaskCompleteSuccess'))
     showCompleteDialogFlag.value = false
     loadTasks()
     loadStats()
   } catch (e) {
-    ElMessage.error(e.response?.data?.detail || '完成失败')
+    ElMessage.error(e.response?.data?.detail || t('pmMsgTaskCompleteFailed'))
   }
 }
 
 const skipTask = async (row) => {
   try {
-    const { value } = await ElMessageBox.prompt('请输入跳过原因', '跳过任务', {
-      inputPlaceholder: '跳过原因（可选）'
+    const { value } = await ElMessageBox.prompt(t('pmMsgSkipReasonPrompt'), t('pmMsgSkipTaskTitle'), {
+      inputPlaceholder: t('pmMsgSkipReasonPlaceholder')
     })
     await skipMaintenanceTask(row.id, value || '')
-    ElMessage.success('任务已跳过')
+    ElMessage.success(t('pmMsgTaskSkipSuccess'))
     loadTasks()
     loadStats()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('跳过失败')
+    if (e !== 'cancel') ElMessage.error(t('pmMsgTaskSkipFailed'))
   }
 }
 
 const deleteTask = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要删除任务 "${row.task_no}" 吗？`, '确认删除', { type: 'warning' })
+    await ElMessageBox.confirm(`${t('pmMsgConfirmDeleteTask')} "${row.task_no}" ?`, t('pmMsgConfirmDelete'), { type: 'warning' })
     await deleteTaskApi(row.id)
-    ElMessage.success('删除成功')
+    ElMessage.success(t('pmMsgTaskDeleteSuccess'))
     loadTasks()
     loadStats()
   } catch (e) {
-    if (e !== 'cancel') ElMessage.error('删除失败')
+    if (e !== 'cancel') ElMessage.error(t('pmMsgTaskDeleteFailed'))
   }
 }
 

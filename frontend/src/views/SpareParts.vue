@@ -2,7 +2,7 @@
   <div class="spare-parts">
     <el-tabs v-model="activeTab">
       <!-- 备件列表 Tab -->
-      <el-tab-pane label="备件列表" name="parts">
+      <el-tab-pane :label="t('sparePartsList')" name="parts">
         <PartsTable
           ref="partsTableRef"
           @scan-in="showScanDialog('in')"
@@ -13,7 +13,7 @@
       </el-tab-pane>
 
       <!-- 出入库历史 Tab -->
-      <el-tab-pane label="出入库历史" name="movements">
+      <el-tab-pane :label="t('spareMovementsHistory')" name="movements">
         <MovementsTable ref="movementsTableRef" @show-detail="showMovementDetail" />
       </el-tab-pane>
     </el-tabs>
@@ -25,10 +25,10 @@
     <MovementDetailDialog v-model="movementDetailVisible" :movement="currentMovement" />
 
     <!-- 选择备件和填PO号对话框 -->
-    <el-dialog v-model="selectPartDialogVisible" title="选择入库备件" width="500px">
+    <el-dialog v-model="selectPartDialogVisible" :title="t('spareSelectPart')" width="500px">
       <el-form :model="scanInForm" label-width="80px">
-        <el-form-item label="选择备件" required>
-          <el-select v-model="scanInForm.part_id" placeholder="选择要入库的备件型号" filterable>
+        <el-form-item :label="t('spareName')" required>
+          <el-select v-model="scanInForm.part_id" :placeholder="t('spareSelectPartPlaceholder')" filterable>
             <el-option
               v-for="part in partsList"
               :key="part.id"
@@ -37,27 +37,27 @@
             >
               <span>{{ part.name }}</span>
               <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ part.part_number }}</span>
-              <span style="color: var(--el-text-color-secondary); margin-left: 8px;">库存: {{ part.quantity_in_stock }}</span>
+              <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ t('spareQuantity') }}: {{ part.quantity_in_stock }}</span>
             </el-option>
           </el-select>
         </el-form-item>
-        <el-form-item label="PO号" required>
-          <el-input v-model="scanInForm.po_number" placeholder="采购订单号（同一批次）" />
+        <el-form-item :label="t('sparePoNumber')" required>
+          <el-input v-model="scanInForm.po_number" :placeholder="t('sparePoNumberPlaceholder')" />
         </el-form-item>
-        <el-form-item label="存放位置">
-          <el-input v-model="scanInForm.location" placeholder="存放位置" />
+        <el-form-item :label="t('spareLocation')">
+          <el-input v-model="scanInForm.location" :placeholder="t('spareLocation')" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="selectPartDialogVisible = false">取消</el-button>
+        <el-button @click="selectPartDialogVisible = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="startScanIn" :disabled="!scanInForm.part_id || !scanInForm.po_number">
-          开始扫码入库
+          {{ t('spareStartScanIn') }}
         </el-button>
       </template>
     </el-dialog>
 
     <!-- 扫码出入库对话框 -->
-    <el-dialog v-model="scanDialogVisible" :title="scanMode === 'in' ? '扫码入库' : '扫码出库'" width="700px">
+    <el-dialog v-model="scanDialogVisible" :title="scanMode === 'in' ? t('spareScanIn') : t('spareScanOut')" width="700px">
       <ScanSession
         ref="scanSessionRef"
         :default-type="scanMode"
@@ -80,7 +80,9 @@ import PartsTable from './spare-parts/PartsTable.vue'
 import MovementsTable from './spare-parts/MovementsTable.vue'
 import PartDetailDialog from './spare-parts/PartDetailDialog.vue'
 import MovementDetailDialog from './spare-parts/MovementDetailDialog.vue'
+import { useI18n } from '@/composables/useI18n'
 
+const { t } = useI18n()
 const activeTab = ref('parts')
 const partsTableRef = ref(null)
 const movementsTableRef = ref(null)
@@ -111,13 +113,11 @@ const scanInForm = reactive({
 const showScanDialog = (mode) => {
   scanMode.value = mode
   if (mode === 'in') {
-    // 入库：先显示选择备件对话框
     selectPartDialogVisible.value = true
     scanInForm.part_id = null
     scanInForm.po_number = ''
     scanInForm.location = ''
   } else {
-    // 出库：直接开始扫码会话
     scanDialogVisible.value = true
   }
 }
@@ -138,7 +138,7 @@ const onScanSessionComplete = async (result) => {
   if (message) {
     ElMessage.success(message)
   } else {
-    ElMessage.success(`成功处理 ${items?.length || 0} 项`)
+    ElMessage.success(`${t('msgSuccess')} ${items?.length || 0} ${t('dashAction')}`)
   }
 
   partsTableRef.value?.loadParts()

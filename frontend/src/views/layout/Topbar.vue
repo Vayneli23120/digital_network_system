@@ -46,7 +46,7 @@
 
         <!-- Language Toggle -->
         <button class="icon-btn lang-btn" :class="{ dark: darkMode }" @click="toggleLang" :title="langSwitchTitle">
-          <span class="lang-label">{{ currentLang === 'zh' ? 'Zhong' : 'EN' }}</span>
+          <span class="lang-label">{{ currentLang === 'zh' ? '中' : 'EN' }}</span>
         </button>
 
         <!-- Theme Toggle -->
@@ -93,6 +93,27 @@ const props = defineProps({
   hasNotifications: {
     type: Boolean,
     default: true
+  },
+  // Navigation Labels
+  dashboardLabel: {
+    type: String,
+    default: 'Dashboard'
+  },
+  devicesLabel: {
+    type: String,
+    default: 'Devices'
+  },
+  configLabel: {
+    type: String,
+    default: 'Config'
+  },
+  spareLabel: {
+    type: String,
+    default: 'Spare'
+  },
+  systemLabel: {
+    type: String,
+    default: 'System'
   },
   // Labels
   logoText: {

@@ -3,13 +3,13 @@
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-title">
-        <h1>Console 配置</h1>
-        <span class="page-subtitle">通过本地串口直接连接网络设备</span>
+        <h1>{{ t('consoleTitle') }}</h1>
+        <span class="page-subtitle">{{ t('consoleSubtitle') }}</span>
       </div>
       <div class="btn-row">
         <div class="connection-status" :class="connected ? 'connected' : 'disconnected'">
           <el-icon><Connection /></el-icon>
-          <span>{{ connected ? '已连接' : '未连接' }}</span>
+          <span>{{ connected ? t('consoleConnected') : t('consoleDisconnected') }}</span>
         </div>
       </div>
     </div>
@@ -18,28 +18,28 @@
     <div class="grid2">
       <div class="panel">
         <div class="panel-hd">
-          <span class="panel-title">串口连接</span>
+          <span class="panel-title">{{ t('consoleSerialConnection') }}</span>
         </div>
         <div class="panel-body">
           <div class="form-grid">
             <div class="form-row">
-              <label class="form-label">串口设备</label>
+              <label class="form-label">{{ t('consoleSerialDevice') }}</label>
               <div class="port-selector">
                 <select class="fselect" v-model="selectedPort" :disabled="connected">
-                  <option value="">-- 点击下方按钮选择串口 --</option>
+                  <option value="">{{ t('consoleSelectSerialPlaceholder') }}</option>
                   <option v-for="port in availablePorts" :key="port" :value="port">{{ port }}</option>
                 </select>
                 <button class="btn btn-primary" @click="requestPort" :disabled="connected">
                   <el-icon><Search /></el-icon>
-                  选择串口
+                  {{ t('consoleSelectSerial') }}
                 </button>
               </div>
             </div>
 
             <div class="form-row">
-              <label class="form-label">波特率</label>
+              <label class="form-label">{{ t('consoleBaudRate') }}</label>
               <select class="fselect" v-model="baudRate" :disabled="connected">
-                <option :value="9600">9600 (默认)</option>
+                <option :value="9600">9600 ({{ t('consoleBaudRateDefault') }})</option>
                 <option :value="19200">19200</option>
                 <option :value="38400">38400</option>
                 <option :value="57600">57600</option>
@@ -48,7 +48,7 @@
             </div>
 
             <div class="form-row">
-              <label class="form-label">数据位</label>
+              <label class="form-label">{{ t('consoleDataBits') }}</label>
               <select class="fselect" v-model="dataBits" :disabled="connected">
                 <option :value="8">8</option>
                 <option :value="7">7</option>
@@ -56,7 +56,7 @@
             </div>
 
             <div class="form-row">
-              <label class="form-label">停止位</label>
+              <label class="form-label">{{ t('consoleStopBits') }}</label>
               <select class="fselect" v-model="stopBits" :disabled="connected">
                 <option :value="1">1</option>
                 <option :value="2">2</option>
@@ -66,11 +66,11 @@
             <div class="form-row buttons">
               <button class="btn btn-success" @click="connectPort" :disabled="!selectedPort || connected">
                 <el-icon><Connection /></el-icon>
-                连接
+                {{ t('consoleConnect') }}
               </button>
               <button class="btn btn-danger" @click="disconnectPort" :disabled="!connected">
                 <el-icon><SwitchButton /></el-icon>
-                断开
+                {{ t('consoleDisconnect') }}
               </button>
             </div>
           </div>
@@ -78,7 +78,7 @@
           <!-- Web Serial Support Check -->
           <div class="serial-warning" v-if="!isSupported">
             <el-icon><WarningFilled /></el-icon>
-            <span>您的浏览器不支持 Web Serial API，请使用 Chrome 89+ 或 Edge 89+</span>
+            <span>{{ t('consoleSerialNotSupported') }}</span>
           </div>
         </div>
       </div>
@@ -86,14 +86,14 @@
       <!-- Device & Config Selection -->
       <div class="panel">
         <div class="panel-hd">
-          <span class="panel-title">配置部署</span>
+          <span class="panel-title">{{ t('consoleConfigDeploy') }}</span>
         </div>
         <div class="panel-body">
           <div class="form-grid">
             <div class="form-row">
-              <label class="form-label">目标设备</label>
+              <label class="form-label">{{ t('consoleTargetDevice') }}</label>
               <select class="fselect" v-model="selectedDevice">
-                <option value="">-- 选择设备 --</option>
+                <option value="">{{ t('consoleSelectDevice') }}</option>
                 <option v-for="device in devices" :key="device.id" :value="device.id">
                   {{ device.name }} ({{ device.ip || 'N/A' }})
                 </option>
@@ -101,9 +101,9 @@
             </div>
 
             <div class="form-row">
-              <label class="form-label">配置模板</label>
+              <label class="form-label">{{ t('consoleConfigTemplate') }}</label>
               <select class="fselect" v-model="selectedTemplate">
-                <option value="">-- 选择模板 --</option>
+                <option value="">{{ t('consoleSelectTemplate') }}</option>
                 <option v-for="template in templates" :key="template.id" :value="template.id">
                   {{ template.name }}
                 </option>
@@ -111,9 +111,9 @@
             </div>
 
             <div class="form-row">
-              <label class="form-label">配置文件</label>
+              <label class="form-label">{{ t('consoleConfigFile') }}</label>
               <select class="fselect" v-model="selectedBackup">
-                <option value="">-- 选择备份文件 --</option>
+                <option value="">{{ t('consoleSelectBackup') }}</option>
                 <option v-for="backup in backups" :key="backup.id" :value="backup.id">
                   {{ backup.device_name }} - {{ formatShortTime(backup.backup_time) }}
                 </option>
@@ -123,11 +123,11 @@
             <div class="form-row buttons">
               <button class="btn btn-primary" @click="deployConfig" :disabled="!connected || isDeploying">
                 <el-icon><Upload /></el-icon>
-                {{ isDeploying ? '部署中...' : '开始部署' }}
+                {{ isDeploying ? t('consoleDeploying') : t('consoleStartDeploy') }}
               </button>
               <button class="btn btn-ghost" @click="loadConfigPreview" :disabled="!selectedBackup">
                 <el-icon><View /></el-icon>
-                预览配置
+                {{ t('consolePreviewConfig') }}
               </button>
             </div>
           </div>
@@ -138,15 +138,15 @@
     <!-- Console Terminal -->
     <div class="panel terminal-panel">
       <div class="panel-hd">
-        <span class="panel-title">终端输出</span>
+        <span class="panel-title">{{ t('consoleTerminalOutput') }}</span>
         <div class="terminal-actions">
           <button class="btn btn-tiny btn-ghost" @click="clearTerminal">
             <el-icon><Delete /></el-icon>
-            清空
+            {{ t('consoleClear') }}
           </button>
           <button class="btn btn-tiny btn-ghost" @click="downloadLog">
             <el-icon><Download /></el-icon>
-            下载日志
+            {{ t('consoleDownloadLog') }}
           </button>
         </div>
       </div>
@@ -157,7 +157,7 @@
             <span class="terminal-text">{{ line.text }}</span>
           </div>
           <div class="terminal-empty" v-if="terminalLines.length === 0">
-            连接串口后开始终端会话...
+            {{ t('consoleTerminalEmpty') }}
           </div>
         </div>
 
@@ -175,11 +175,11 @@
             class="command-input"
             v-model="manualCommand"
             @keyup.enter="sendManualCommand"
-            placeholder="输入命令，按 Enter 发送..."
+            :placeholder="t('consoleCommandPlaceholder')"
             ref="commandInputRef"
           />
           <button class="btn btn-tiny btn-primary" @click="sendManualCommand">
-            发送
+            {{ t('consoleSend') }}
           </button>
         </div>
       </div>
@@ -189,16 +189,16 @@
     <div class="modal-overlay" v-if="showPreviewModal" @click="showPreviewModal = false">
       <div class="modal modal-lg" @click.stop>
         <div class="modal-hd">
-          <span class="modal-title">配置预览</span>
+          <span class="modal-title">{{ t('consoleConfigPreview') }}</span>
           <button class="modal-close" @click="showPreviewModal = false">×</button>
         </div>
         <div class="modal-body">
           <pre class="config-preview">{{ configPreview }}</pre>
         </div>
         <div class="modal-ft">
-          <button class="btn btn-ghost" @click="showPreviewModal = false">关闭</button>
+          <button class="btn btn-ghost" @click="showPreviewModal = false">{{ t('actionClose') }}</button>
           <button class="btn btn-primary" @click="deployConfig; showPreviewModal = false" :disabled="!connected">
-            直接部署
+            {{ t('consoleDirectDeploy') }}
           </button>
         </div>
       </div>
@@ -215,6 +215,9 @@ import {
 } from '@element-plus/icons-vue'
 import { getDevices, getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
 import { formatShortTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 // Web Serial API Support
 const isSupported = ref('serial' in navigator)
@@ -274,7 +277,7 @@ const addLine = (text, type = 'output') => {
 // Request port from user (Web Serial API requires user gesture)
 const requestPort = async () => {
   if (!isSupported.value) {
-    ElMessage.error('浏览器不支持 Web Serial API')
+    ElMessage.error(t('consoleBrowserNotSupported'))
     return
   }
 
@@ -284,12 +287,12 @@ const requestPort = async () => {
     selectedPort.value = `Serial Port (USB VID:${info.usbVendorId || 'N/A'} PID:${info.usbProductId || 'N/A'})`
     port.value = newPort
     availablePorts.value = [selectedPort.value]
-    addLine('串口已选择，请点击连接', 'info')
+    addLine(t('consoleSerialSelected'), 'info')
   } catch (err) {
     if (err.name === 'NotFoundError') {
-      ElMessage.warning('未找到可用的串口设备')
+      ElMessage.warning(t('consoleSerialNotFound'))
     } else {
-      ElMessage.error('选择串口失败：' + err.message)
+      ElMessage.error(t('consoleSelectSerialFailed') + ': ' + err.message)
     }
   }
 }
@@ -297,7 +300,7 @@ const requestPort = async () => {
 // Connect to port
 const connectPort = async () => {
   if (!port.value) {
-    ElMessage.warning('请先选择串口')
+    ElMessage.warning(t('consoleSelectSerialFirst'))
     return
   }
 
@@ -309,7 +312,7 @@ const connectPort = async () => {
     })
 
     connected.value = true
-    addLine(`已连接：${baudRate.value} baud, ${dataBits.value}N${stopBits.value}`, 'success')
+    addLine(`${t('consoleConnect')}: ${baudRate.value} baud, ${dataBits.value}N${stopBits.value}`, 'success')
 
     // Start reading loop
     startReadLoop()
@@ -318,11 +321,11 @@ const connectPort = async () => {
     await sendCommand('\r', 0.3)
     await sendCommand('\r', 0.5)
 
-    ElMessage.success('串口连接成功')
+    ElMessage.success(t('consoleConnectSuccess'))
 
   } catch (err) {
-    ElMessage.error('连接失败：' + err.message)
-    addLine('连接失败：' + err.message, 'error')
+    ElMessage.error(t('consoleConnectFailed') + ': ' + err.message)
+    addLine(t('consoleConnectFailed') + ': ' + err.message, 'error')
   }
 }
 
@@ -341,10 +344,10 @@ const disconnectPort = async () => {
       await port.value.close()
     }
     connected.value = false
-    addLine('已断开连接', 'warning')
-    ElMessage.info('已断开串口连接')
+    addLine(t('consoleDisconnectSuccess'), 'warning')
+    ElMessage.info(t('consoleDisconnectSuccess'))
   } catch (err) {
-    ElMessage.error('断开失败：' + err.message)
+    ElMessage.error(t('consoleDisconnectFailed') + ': ' + err.message)
   }
 }
 
@@ -373,7 +376,7 @@ const startReadLoop = () => {
       }
     } catch (err) {
       if (err.name !== 'AbortError') {
-        addLine('读取错误：' + err.message, 'error')
+        addLine(t('consoleReadError') + ': ' + err.message, 'error')
       }
     }
   })()
@@ -382,7 +385,7 @@ const startReadLoop = () => {
 // Send command to device
 const sendCommand = async (command, delay = 0.5) => {
   if (!connected.value || !port.value) {
-    ElMessage.warning('请先连接串口')
+    ElMessage.warning(t('consoleConnectSerialFirst'))
     return
   }
 
@@ -399,7 +402,7 @@ const sendCommand = async (command, delay = 0.5) => {
 
     await new Promise(r => setTimeout(r, delay * 1000))
   } catch (err) {
-    addLine('发送失败：' + err.message, 'error')
+    addLine(t('consoleSendFailed') + ': ' + err.message, 'error')
   }
 }
 
@@ -413,18 +416,18 @@ const sendManualCommand = async () => {
 // Deploy configuration
 const deployConfig = async () => {
   if (!connected.value) {
-    ElMessage.warning('请先连接串口')
+    ElMessage.warning(t('consoleConnectSerialFirst'))
     return
   }
 
   if (!selectedBackup.value && !selectedTemplate.value) {
-    ElMessage.warning('请选择配置文件或模板')
+    ElMessage.warning(t('consoleSelectConfigOrTemplate'))
     return
   }
 
   isDeploying.value = true
   deployProgress.value = 0
-  deployStep.value = '准备部署'
+  deployStep.value = t('consolePrepareDeploy')
 
   let configContent = ''
 
@@ -439,7 +442,7 @@ const deployConfig = async () => {
     }
 
     if (!configContent) {
-      throw new Error('无法获取配置内容')
+      throw new Error(t('consoleGetConfigFailed'))
     }
 
     // Parse commands (skip comments and empty lines)
@@ -450,46 +453,46 @@ const deployConfig = async () => {
     const totalSteps = commands.length + 5 // +5 for enter/exit/save
 
     // Step 1: Wake up
-    deployStep.value = '唤醒设备 CLI'
+    deployStep.value = t('consoleWakeDevice')
     deployProgress.value = 5
     await sendCommand('\r', 0.5)
     await sendCommand('\r', 0.5)
 
     // Step 2: Enter enable mode
-    deployStep.value = '进入 Enable 模式'
+    deployStep.value = t('consoleEnterEnableMode')
     deployProgress.value = 10
     await sendCommand('enable', 1)
 
     // Step 3: Enter config mode
-    deployStep.value = '进入配置模式'
+    deployStep.value = t('consoleEnterConfigMode')
     deployProgress.value = 15
     await sendCommand('configure terminal', 1)
 
     // Step 4: Send config commands
     for (let i = 0; i < commands.length; i++) {
-      deployStep.value = `执行命令 ${i + 1}/${commands.length}`
+      deployStep.value = `${t('consoleExecuteCommand')} ${i + 1}/${commands.length}`
       deployProgress.value = 15 + Math.floor((i / commands.length) * 70)
       await sendCommand(commands[i], 0.3)
     }
 
     // Step 5: Exit config mode
-    deployStep.value = '退出配置模式'
+    deployStep.value = t('consoleExitConfigMode')
     deployProgress.value = 90
     await sendCommand('end', 1)
 
     // Step 6: Save config
-    deployStep.value = '保存配置'
+    deployStep.value = t('consoleSaveConfig')
     deployProgress.value = 95
     await sendCommand('write memory', 2)
 
-    deployStep.value = '部署完成'
+    deployStep.value = t('consoleDeployComplete')
     deployProgress.value = 100
-    addLine('✓ 配置部署成功！', 'success')
-    ElMessage.success('配置部署成功')
+    addLine(t('consoleDeploySuccess'), 'success')
+    ElMessage.success(t('consoleDeploySuccess'))
 
   } catch (err) {
-    addLine('✗ 部署失败：' + err.message, 'error')
-    ElMessage.error('部署失败：' + err.message)
+    addLine(t('consoleDeployFailed') + ': ' + err.message, 'error')
+    ElMessage.error(t('consoleDeployFailed') + ': ' + err.message)
   }
 
   isDeploying.value = false
@@ -498,16 +501,16 @@ const deployConfig = async () => {
 // Load config preview
 const loadConfigPreview = async () => {
   if (!selectedBackup.value) {
-    ElMessage.warning('请选择备份文件')
+    ElMessage.warning(t('consoleSelectBackupFile'))
     return
   }
 
   try {
     const data = await getBackupContent(selectedBackup.value)
-    configPreview.value = data.content || '无法获取配置内容'
+    configPreview.value = data.content || t('consoleGetConfigFailed')
     showPreviewModal.value = true
   } catch (err) {
-    ElMessage.error('加载失败：' + err.message)
+    ElMessage.error(t('consoleLoadFailed') + ': ' + err.message)
   }
 }
 

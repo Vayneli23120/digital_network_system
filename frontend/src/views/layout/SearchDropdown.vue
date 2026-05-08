@@ -4,7 +4,7 @@
     <input
       ref="searchInputRef"
       class="search-input"
-      :placeholder="placeholder"
+      :placeholder="displayPlaceholder"
       v-model="searchQuery"
       @input="handleSearch"
       @focus="showSearchResults = true"
@@ -16,7 +16,7 @@
     <!-- Search Results Dropdown -->
     <div class="search-results" v-if="showSearchResults && hasResults">
       <div class="sr-section" v-if="searchResults.devices.length > 0">
-        <div class="sr-section-label">{{ devicesLabel }}</div>
+        <div class="sr-section-label">{{ displayDevicesLabel }}</div>
         <div
           class="sr-item"
           v-for="(device, idx) in searchResults.devices"
@@ -33,7 +33,7 @@
       </div>
 
       <div class="sr-section" v-if="searchResults.templates.length > 0">
-        <div class="sr-section-label">{{ templatesLabel }}</div>
+        <div class="sr-section-label">{{ displayTemplatesLabel }}</div>
         <div
           class="sr-item"
           v-for="(template, idx) in searchResults.templates"
@@ -44,13 +44,13 @@
           <el-icon class="sr-icon"><Document /></el-icon>
           <div class="sr-content">
             <span class="sr-title">{{ template.name }}</span>
-            <span class="sr-meta">{{ template.description || noRecordsLabel }}</span>
+            <span class="sr-meta">{{ template.description || displayNoRecordsLabel }}</span>
           </div>
         </div>
       </div>
 
       <div class="sr-section" v-if="searchResults.backups.length > 0">
-        <div class="sr-section-label">{{ backupsLabel }}</div>
+        <div class="sr-section-label">{{ displayBackupsLabel }}</div>
         <div
           class="sr-item"
           v-for="(backup, idx) in searchResults.backups.slice(0, 5)"
@@ -61,13 +61,13 @@
           <el-icon class="sr-icon"><Download /></el-icon>
           <div class="sr-content">
             <span class="sr-title">{{ backup.device_name }}</span>
-            <span class="sr-meta">{{ formatDate(backup.backup_time) }} - {{ backup.has_change ? modifiedLabel : cleanLabel }}</span>
+            <span class="sr-meta">{{ formatDate(backup.backup_time) }} - {{ backup.has_change ? displayModifiedLabel : displayCleanLabel }}</span>
           </div>
         </div>
       </div>
 
       <div class="sr-empty" v-if="searchQuery && !hasResults && !searchLoading">
-        {{ noResultsLabel }}
+        {{ displayNoResultsLabel }}
       </div>
     </div>
   </div>
@@ -79,41 +79,54 @@ import { useRouter } from 'vue-router'
 import { Search, Connection, Document, Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   placeholder: {
     type: String,
-    default: 'Search...'
+    default: ''
   },
   devicesLabel: {
     type: String,
-    default: 'Devices'
+    default: ''
   },
   templatesLabel: {
     type: String,
-    default: 'Templates'
+    default: ''
   },
   backupsLabel: {
     type: String,
-    default: 'Backups'
+    default: ''
   },
   noResultsLabel: {
     type: String,
-    default: 'No results found'
+    default: ''
   },
   noRecordsLabel: {
     type: String,
-    default: 'No records'
+    default: ''
   },
   modifiedLabel: {
     type: String,
-    default: 'Modified'
+    default: ''
   },
   cleanLabel: {
     type: String,
-    default: 'Clean'
+    default: ''
   }
 })
+
+// i18n computed values with fallback to translation keys
+const displayPlaceholder = computed(() => props.placeholder || t('searchPlaceholder'))
+const displayDevicesLabel = computed(() => props.devicesLabel || t('searchDevices'))
+const displayTemplatesLabel = computed(() => props.templatesLabel || t('searchTemplates'))
+const displayBackupsLabel = computed(() => props.backupsLabel || t('searchBackups'))
+const displayNoResultsLabel = computed(() => props.noResultsLabel || t('searchNoResults'))
+const displayNoRecordsLabel = computed(() => props.noRecordsLabel || t('dashNoRecords'))
+const displayModifiedLabel = computed(() => props.modifiedLabel || t('dashModified'))
+const displayCleanLabel = computed(() => props.cleanLabel || t('dashClean'))
 
 const emit = defineEmits(['close'])
 

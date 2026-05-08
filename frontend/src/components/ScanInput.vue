@@ -3,7 +3,7 @@
     <el-input
       ref="inputRef"
       v-model="inputValue"
-      :placeholder="placeholder"
+      :placeholder="computedPlaceholder"
       :class="['scan-input', { 'scanning': isScanning, 'found': foundPart }]"
       @keyup.enter="handleScan"
       @input="onInputChange"
@@ -22,9 +22,9 @@
           size="small"
           @click="handleScan"
           :loading="searching"
-        >查询</el-button>
+        >{{ t('scanQuery') }}</el-button>
         <el-tag v-if="foundPart" type="success" size="small">
-          已匹配
+          {{ t('scanMatched') }}
         </el-tag>
       </template>
     </el-input>
@@ -34,15 +34,15 @@
       <div class="part-info">
         <div class="part-header">
           <span class="part-name">{{ foundPart.name }}</span>
-          <el-tag :type="stockTagType" size="small">库存: {{ foundPart.quantity_in_stock }}</el-tag>
+          <el-tag :type="stockTagType" size="small">{{ t('scanStock') }} {{ foundPart.quantity_in_stock }}</el-tag>
         </div>
         <el-descriptions :column="2" size="small" border>
-          <el-descriptions-item label="型号">{{ foundPart.part_number }}</el-descriptions-item>
-          <el-descriptions-item label="序列号">{{ foundPart.serial_number || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="PO号">{{ foundPart.po_number || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="单价">¥{{ foundPart.unit_price || 0 }}</el-descriptions-item>
-          <el-descriptions-item label="位置">{{ foundPart.location || '-' }}</el-descriptions-item>
-          <el-descriptions-item label="状态">
+          <el-descriptions-item :label="t('sparePartNumber')">{{ foundPart.part_number }}</el-descriptions-item>
+          <el-descriptions-item :label="t('spareSerialNumber')">{{ foundPart.serial_number || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('sparePoNumber')">{{ foundPart.po_number || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('spareUnitPrice')">¥{{ foundPart.unit_price || 0 }}</el-descriptions-item>
+          <el-descriptions-item :label="t('spareLocation')">{{ foundPart.location || '-' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('scanStatus')">
             <el-tag :type="foundPart.status === 'active' ? 'success' : 'info'" size="small">
               {{ foundPart.status }}
             </el-tag>
@@ -54,15 +54,15 @@
       <div class="part-actions">
         <el-button type="primary" @click="addToSelection">
           <el-icon><Plus /></el-icon>
-          加入列表
+          {{ t('scanAddToList') }}
         </el-button>
         <el-button v-if="showOutButton" type="warning" @click="quickOut">
           <el-icon><Minus /></el-icon>
-          快速出库
+          {{ t('scanQuickOut') }}
         </el-button>
         <el-button v-if="showInButton" type="success" @click="quickIn">
           <el-icon><Plus /></el-icon>
-          快速入库
+          {{ t('scanQuickIn') }}
         </el-button>
       </div>
     </el-card>
@@ -70,57 +70,57 @@
     <!-- 未找到提示 -->
     <el-alert
       v-if="notFound && inputValue.length >= 4"
-      title="未找到该序列号的备件"
+      :title="t('spareNotFound')"
       type="warning"
       :closable="false"
       show-icon
       class="not-found-alert"
     >
       <template #default>
-        <p>序列号 "{{ inputValue }}" 未在库存中找到</p>
+        <p>{{ t('scanSerialNotFoundMsg', { serial: inputValue }) }}</p>
         <p style="margin-top: 8px">
-          <el-button type="primary" size="small" @click="showAddPartDialog">新增备件</el-button>
-          <el-button size="small" @click="manualInput">手动录入信息</el-button>
+          <el-button type="primary" size="small" @click="showAddPartDialog">{{ t('spareNew') }}</el-button>
+          <el-button size="small" @click="manualInput">{{ t('scanManualInput') }}</el-button>
         </p>
       </template>
     </el-alert>
 
     <!-- 新增备件对话框 -->
-    <el-dialog v-model="showAddDialog" title="新增备件（扫码入库）" width="500px">
+    <el-dialog v-model="showAddDialog" :title="t('scanNewPartScanIn')" width="500px">
       <el-form :model="addForm" label-width="100px">
-        <el-form-item label="序列号">
+        <el-form-item :label="t('spareSerialNumber')">
           <el-input v-model="addForm.serial_number" disabled />
         </el-form-item>
-        <el-form-item label="型号" required>
+        <el-form-item :label="t('sparePartNumber')" required>
           <el-input v-model="addForm.part_number" />
         </el-form-item>
-        <el-form-item label="名称" required>
+        <el-form-item :label="t('spareName')" required>
           <el-input v-model="addForm.name" />
         </el-form-item>
-        <el-form-item label="PO号">
+        <el-form-item :label="t('sparePoNumber')">
           <el-input v-model="addForm.po_number" />
         </el-form-item>
-        <el-form-item label="分类">
+        <el-form-item :label="t('spareCategory')">
           <el-select v-model="addForm.category">
-            <el-option label="模块" value="模块" />
-            <el-option label="电源" value="电源" />
-            <el-option label="线缆" value="线缆" />
-            <el-option label="其他" value="其他" />
+            <el-option :label="t('spareCategoryModule')" value="module" />
+            <el-option :label="t('spareCategoryPower')" value="power" />
+            <el-option :label="t('spareCategoryCable')" value="cable" />
+            <el-option :label="t('spareCategoryOther')" value="other" />
           </el-select>
         </el-form-item>
-        <el-form-item label="入库数量">
+        <el-form-item :label="t('scanStockInQuantity')">
           <el-input-number v-model="addForm.quantity_in_stock" :min="1" />
         </el-form-item>
-        <el-form-item label="单价">
+        <el-form-item :label="t('spareUnitPrice')">
           <el-input-number v-model="addForm.unit_price" :min="0" :precision="2" />
         </el-form-item>
-        <el-form-item label="存放位置">
+        <el-form-item :label="t('scanStorageLocation')">
           <el-input v-model="addForm.location" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitAddPart" :loading="adding">保存并入库</el-button>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="submitAddPart" :loading="adding">{{ t('scanSaveAndStockIn') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -131,14 +131,15 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, Plus, Minus } from '@element-plus/icons-vue'
 import { getPartBySerialNumber, getPartList, createPart, createMovement } from '@/api'
+import { useI18n } from '@/composables/useI18n'
 
-// 使用 Aim 图标代替 Scan（瞄准/扫描）
+const { t } = useI18n()
 
 // Props
 const props = defineProps({
   placeholder: {
     type: String,
-    default: '请用扫码枪扫描序列号，或手动输入'
+    default: ''
   },
   mode: {
     type: String,
@@ -152,6 +153,11 @@ const props = defineProps({
 
 // Emits
 const emit = defineEmits(['found', 'added', 'not-found', 'manual'])
+
+// 计算属性
+const computedPlaceholder = computed(() => {
+  return props.placeholder || t('scanScanPlaceholder')
+})
 
 // 状态
 const inputRef = ref(null)
@@ -169,11 +175,14 @@ const addForm = ref({
   part_number: '',
   name: '',
   po_number: '',
-  category: '其他',
+  category: '',
   quantity_in_stock: 1,
   unit_price: 0,
   location: ''
 })
+
+// 初始化默认分类
+const defaultCategory = computed(() => 'other')
 
 // 计算属性
 const stockTagType = computed(() => {
@@ -210,7 +219,7 @@ const onInputChange = () => {
 const handleScan = async () => {
   const serial = inputValue.value.trim()
   if (serial.length < 4) {
-    ElMessage.warning('请输入至少4个字符')
+    ElMessage.warning(t('scanMinLengthWarn'))
     return
   }
 
@@ -222,7 +231,7 @@ const handleScan = async () => {
     const part = await getPartBySerialNumber(serial)
     if (part) {
       foundPart.value = part
-      ElMessage.success('已找到备件信息')
+      ElMessage.success(t('scanFoundSuccess'))
       emit('found', part)
 
       if (props.autoAdd) {
@@ -245,7 +254,7 @@ const handleScan = async () => {
 const addToSelection = () => {
   if (foundPart.value) {
     emit('added', foundPart.value)
-    ElMessage.success(`已加入: ${foundPart.value.name}`)
+    ElMessage.success(t('scanAddedSuccess', { name: foundPart.value.name }))
     clearScan()
   }
 }
@@ -253,7 +262,7 @@ const addToSelection = () => {
 // 快速出库
 const quickOut = async () => {
   if (!foundPart.value || foundPart.value.quantity_in_stock <= 0) {
-    ElMessage.warning('库存不足')
+    ElMessage.warning(t('scanInsufficientStock'))
     return
   }
 
@@ -262,14 +271,14 @@ const quickOut = async () => {
       part_id: foundPart.value.id,
       movement_type: 'out',
       quantity: 1,
-      reason: '扫码快速出库',
-      operator: '扫码枪操作'
+      reason: t('scanQuickOutReason'),
+      operator: t('scanScannerOperator')
     })
-    ElMessage.success(`已出库: ${foundPart.value.name}`)
+    ElMessage.success(t('scanOutSuccess', { name: foundPart.value.name }))
     emit('added', { ...foundPart.value, action: 'out' })
     clearScan()
   } catch (e) {
-    ElMessage.error('出库失败')
+    ElMessage.error(t('scanOutFailed'))
   }
 }
 
@@ -282,14 +291,14 @@ const quickIn = async () => {
       part_id: foundPart.value.id,
       movement_type: 'in',
       quantity: 1,
-      reason: '扫码快速入库',
-      operator: '扫码枪操作'
+      reason: t('scanQuickInReason'),
+      operator: t('scanScannerOperator')
     })
-    ElMessage.success(`已入库: ${foundPart.value.name}`)
+    ElMessage.success(t('scanInSuccess', { name: foundPart.value.name }))
     emit('added', { ...foundPart.value, action: 'in' })
     clearScan()
   } catch (e) {
-    ElMessage.error('入库失败')
+    ElMessage.error(t('scanInFailed'))
   }
 }
 
@@ -308,7 +317,7 @@ const showAddPartDialog = () => {
     part_number: '',
     name: '',
     po_number: '',
-    category: '其他',
+    category: defaultCategory.value,
     quantity_in_stock: 1,
     unit_price: 0,
     location: ''
@@ -324,7 +333,7 @@ const manualInput = () => {
 // 提交新增备件
 const submitAddPart = async () => {
   if (!addForm.value.part_number || !addForm.value.name) {
-    ElMessage.warning('请填写型号和名称')
+    ElMessage.warning(t('scanFillModelName'))
     return
   }
 
@@ -337,19 +346,19 @@ const submitAddPart = async () => {
         part_id: result.id,
         movement_type: 'in',
         quantity: addForm.value.quantity_in_stock,
-        reason: '扫码新增入库',
-        operator: '扫码枪操作'
+        reason: t('scanNewPartCreatedIn'),
+        operator: t('scanScannerOperator')
       })
     }
 
-    ElMessage.success('备件创建成功')
+    ElMessage.success(t('scanPartCreatedSuccess'))
     showAddDialog.value = false
     clearScan()
 
     inputValue.value = addForm.value.serial_number
     handleScan()
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error(t('scanCreateFailedMsg', { msg: e.response?.data?.detail || e.message }))
   } finally {
     adding.value = false
   }

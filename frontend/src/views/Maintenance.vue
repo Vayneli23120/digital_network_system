@@ -3,10 +3,10 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>维修记录</span>
+          <span>{{ t('maintTitle') }}</span>
           <el-button type="primary" @click="openAddDialog">
             <el-icon><Plus /></el-icon>
-            添加维修记录
+            {{ t('maintAddRecord') }}
           </el-button>
         </div>
       </template>
@@ -15,72 +15,72 @@
       <div class="filter-bar">
         <el-input
           v-model="searchText"
-          placeholder="搜索设备名称或维修单号"
+          :placeholder="t('maintSearchPlaceholder')"
           style="width: 220px"
           clearable
           @input="filterMaintenances"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="filterMaintType" placeholder="维修类型" clearable style="width: 140px" @change="filterMaintenances">
-          <el-option label="预防性" value="preventive" />
-          <el-option label="修复性" value="corrective" />
-          <el-option label="升级" value="upgrade" />
-          <el-option label="紧急" value="emergency" />
+        <el-select v-model="filterMaintType" :placeholder="t('maintType')" clearable style="width: 140px" @change="filterMaintenances">
+          <el-option :label="t('maintTypePreventive')" value="preventive" />
+          <el-option :label="t('maintTypeCorrective')" value="corrective" />
+          <el-option :label="t('maintTypeUpgrade')" value="upgrade" />
+          <el-option :label="t('maintTypeEmergency')" value="emergency" />
         </el-select>
         <el-date-picker
           v-model="dateRange"
           type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          :range-separator="t('maintDateTo')"
+          :start-placeholder="t('maintDateStart')"
+          :end-placeholder="t('maintDateEnd')"
           value-format="YYYY-MM-DD"
           style="width: 240px"
           @change="filterMaintenances"
         />
-        <el-select v-model="sortBy" placeholder="排序" style="width: 150px" @change="filterMaintenances">
-          <el-option label="维修时间 ↓" value="maint_time_desc" />
-          <el-option label="维修时间 ↑" value="maint_time_asc" />
-          <el-option label="总成本 ↓" value="total_cost_desc" />
-          <el-option label="总成本 ↑" value="total_cost_asc" />
+        <el-select v-model="sortBy" :placeholder="t('maintSort')" style="width: 150px" @change="filterMaintenances">
+          <el-option :label="t('maintSortTimeDesc')" value="maint_time_desc" />
+          <el-option :label="t('maintSortTimeAsc')" value="maint_time_asc" />
+          <el-option :label="t('maintSortCostDesc')" value="total_cost_desc" />
+          <el-option :label="t('maintSortCostAsc')" value="total_cost_asc" />
         </el-select>
       </div>
 
       <el-table :data="filteredMaintenances" style="width: 100%" v-loading="loading">
-        <el-table-column prop="maint_no" label="维修单号" width="180">
+        <el-table-column prop="maint_no" :label="t('maintColNo')" width="180">
           <template #default="{ row }">
             <router-link :to="`/maintenance/${row.id}`" class="maint-link">
               {{ row.maint_no }}
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="device_name" label="设备名称" width="160" />
-        <el-table-column prop="maint_type" label="类型" width="100">
+        <el-table-column prop="device_name" :label="t('maintColDevice')" width="160" />
+        <el-table-column prop="maint_type" :label="t('maintColType')" width="100">
           <template #default="{ row }">
             <el-tag :type="getMaintTypeType(row.maint_type)">
               {{ getMaintTypeText(row.maint_type) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="parts_cost" label="备件成本" width="100">
+        <el-table-column prop="parts_cost" :label="t('maintColPartsCost')" width="100">
           <template #default="{ row }">¥{{ row.parts_cost?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
-        <el-table-column prop="labor_cost" label="人工成本" width="100">
+        <el-table-column prop="labor_cost" :label="t('maintColLaborCost')" width="100">
           <template #default="{ row }">¥{{ row.labor_cost?.toFixed(2) || '0.00' }}</template>
         </el-table-column>
-        <el-table-column prop="total_cost" label="总成本" width="100">
+        <el-table-column prop="total_cost" :label="t('maintColTotalCost')" width="100">
           <template #default="{ row }">
             ¥{{ ((row.parts_cost || 0) + (row.labor_cost || 0)).toFixed(2) }}
           </template>
         </el-table-column>
-        <el-table-column prop="maint_time" label="维修时间" width="160">
+        <el-table-column prop="maint_time" :label="t('maintColTime')" width="160">
           <template #default="{ row }">{{ formatDateTime(row.maint_time || row.created_at) }}</template>
         </el-table-column>
-        <el-table-column prop="description" label="维修描述" min-width="200" />
-        <el-table-column label="操作" width="150" fixed="right">
+        <el-table-column prop="description" :label="t('maintColDesc')" min-width="200" />
+        <el-table-column :label="t('colOperation')" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="editMaintenance(row)">编辑</el-button>
-            <el-button type="danger" size="small" @click="deleteMaintenance(row)">删除</el-button>
+            <el-button type="primary" size="small" @click="editMaintenance(row)">{{ t('actionEdit') }}</el-button>
+            <el-button type="danger" size="small" @click="deleteMaintenance(row)">{{ t('actionDelete') }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -90,10 +90,10 @@
     </el-card>
 
     <!-- 添加/编辑维修记录对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? '编辑维修记录' : '添加维修记录'" width="700px">
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="700px">
       <el-form :model="maintForm" label-width="120px">
-        <el-form-item label="设备" required>
-          <el-select v-model="maintForm.device_id" placeholder="选择设备" style="width: 100%" :disabled="editMode" filterable>
+        <el-form-item :label="t('faultDeviceLabel')" required>
+          <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
             <el-option
               v-for="device in devices"
               :key="device.id"
@@ -102,33 +102,33 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="维修类型" required>
+        <el-form-item :label="t('maintType')" required>
           <el-select v-model="maintForm.maint_type">
-            <el-option label="预防性维修" value="preventive" />
-            <el-option label="修复性维修" value="corrective" />
-            <el-option label="升级" value="upgrade" />
-            <el-option label="紧急维修" value="emergency" />
+            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
+            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
+            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
+            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
           </el-select>
         </el-form-item>
 
         <!-- 备件选择区域 -->
-        <el-divider content-position="left">备件更换</el-divider>
-        <el-form-item label="更换备件">
+        <el-divider content-position="left">{{ t('maintSparePartsSection') }}</el-divider>
+        <el-form-item :label="t('maintSparePartsLabel')">
           <div class="spare-parts-section">
             <!-- 扫码添加备件按钮 -->
             <div class="spare-scan-btn">
               <el-button type="primary" @click="openScanDialog">
                 <el-icon><Aim /></el-icon>
-                扫码添加备件
+                {{ t('maintScanAddSpare') }}
               </el-button>
-              <div class="spare-scan-tip">点击后用扫码枪扫描条形码建立连接，再扫描备件序列号</div>
+              <div class="spare-scan-tip">{{ t('maintScanTip') }}</div>
             </div>
 
             <!-- 手动搜索添加备件 -->
             <div class="spare-search">
               <el-select
                 v-model="selectedSparePart"
-                placeholder="输入型号或名称搜索，点击选择添加"
+                :placeholder="t('maintSpareSearchPlaceholder')"
                 filterable
                 remote
                 :remote-method="searchSpareParts"
@@ -148,60 +148,60 @@
                     <span class="spare-number">{{ part.part_number }}</span>
                     <span class="spare-name">{{ part.name }}</span>
                     <span class="spare-stock" :class="{ low: part.quantity_in_stock <= part.min_quantity }">
-                      库存: {{ part.quantity_in_stock }}
+                      {{ t('maintSpareStock') }}: {{ part.quantity_in_stock }}
                     </span>
                   </div>
                 </el-option>
               </el-select>
-              <div class="spare-tip">↓ 从上方下拉列表点击选择备件，自动添加到下方列表</div>
+              <div class="spare-tip">{{ t('maintSpareSelectTip') }}</div>
             </div>
 
             <!-- 已选备件列表 -->
             <div class="selected-parts" v-if="maintForm.spare_parts.length > 0">
               <el-table :data="maintForm.spare_parts" size="small" border>
-                <el-table-column prop="serial_number" label="序列号" width="150">
+                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="150">
                   <template #default="{ row }">{{ row.serial_number || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="part_number" label="型号" width="150" />
-                <el-table-column prop="name" label="名称" width="150" />
-                <el-table-column prop="quantity" label="数量" width="80">
+                <el-table-column prop="part_number" :label="t('maintColModel')" width="150" />
+                <el-table-column prop="name" :label="t('maintColName')" width="150" />
+                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="80">
                   <template #default="{ row, $index }">
                     <el-input-number v-model="row.quantity" :min="1" size="small" @change="updatePartsCost" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="unit_price" label="单价" width="80">
+                <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
                   <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column prop="total" label="小计" width="80">
+                <el-table-column prop="total" :label="t('maintColSubtotal')" width="80">
                   <template #default="{ row }">¥{{ (row.quantity * (row.unit_price || 0)).toFixed(2) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="60">
+                <el-table-column :label="t('colOperation')" width="60">
                   <template #default="{ row, $index }">
                     <el-button type="danger" size="small" link @click="removeSparePart($index)">
-                      删除
+                      {{ t('actionDelete') }}
                     </el-button>
                   </template>
                 </el-table-column>
               </el-table>
               <div class="parts-summary">
-                备件总成本: <span class="total-cost">¥{{ maintForm.parts_cost.toFixed(2) }}</span>
+                {{ t('maintSpareTotalCost') }}: <span class="total-cost">¥{{ maintForm.parts_cost.toFixed(2) }}</span>
               </div>
             </div>
             <div class="no-parts-tip" v-else>
               <el-icon><InfoFilled /></el-icon>
-              <span>暂无更换备件，如需添加请从上方搜索框选择</span>
+              <span>{{ t('maintNoSpareTip') }}</span>
             </div>
           </div>
         </el-form-item>
 
-        <el-divider content-position="left">返回件信息</el-divider>
-        <el-form-item label="返回件处理">
+        <el-divider content-position="left">{{ t('maintReturnPartsSection') }}</el-divider>
+        <el-form-item :label="t('maintReturnPartsLabel')">
           <div class="return-parts-section">
             <!-- 扫码查询返回件 -->
             <div class="return-scan-area">
               <el-input
                 v-model="returnScanInput"
-                placeholder="扫码或输入序列号查询"
+                :placeholder="t('maintReturnScanPlaceholder')"
                 style="width: 200px"
                 @keyup.enter="scanReturnPart"
                 clearable
@@ -209,35 +209,35 @@
                 <template #prefix><el-icon><Aim /></el-icon></template>
               </el-input>
               <el-button type="primary" size="small" @click="scanReturnPart" :loading="returnScanLoading">
-                查询
+                {{ t('spareQuery') }}
               </el-button>
-              <div class="return-scan-tip">扫描序列号自动识别设备信息，或手动输入查询</div>
+              <div class="return-scan-tip">{{ t('maintReturnScanTip') }}</div>
             </div>
 
             <!-- 扫码识别结果（如果找到历史记录） -->
             <div class="return-found-info" v-if="returnFoundInfo">
               <el-card size="small" shadow="never">
                 <div class="found-header">
-                  <el-tag type="success" size="small">已识别</el-tag>
+                  <el-tag type="success" size="small">{{ t('maintReturnFoundTag') }}</el-tag>
                   <span>{{ returnFoundInfo.serial_number }}</span>
                 </div>
                 <el-descriptions :column="3" size="small" border>
-                  <el-descriptions-item label="型号">{{ returnFoundInfo.part_number }}</el-descriptions-item>
-                  <el-descriptions-item label="名称">{{ returnFoundInfo.name }}</el-descriptions-item>
-                  <el-descriptions-item label="单价">¥{{ (returnFoundInfo.unit_price || 0).toFixed(2) }}</el-descriptions-item>
-                  <el-descriptions-item label="入库时间">{{ returnFoundInfo.in_stock_at ? formatDateTime(returnFoundInfo.in_stock_at) : '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="出库时间">{{ returnFoundInfo.out_at ? formatDateTime(returnFoundInfo.out_at) : '-' }}</el-descriptions-item>
-                  <el-descriptions-item label="状态">
+                  <el-descriptions-item :label="t('maintColModel')">{{ returnFoundInfo.part_number }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('maintColName')">{{ returnFoundInfo.name }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('maintColUnitPrice')">¥{{ (returnFoundInfo.unit_price || 0).toFixed(2) }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('maintReturnInStockAt')">{{ returnFoundInfo.in_stock_at ? formatDateTime(returnFoundInfo.in_stock_at) : '-' }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('maintReturnOutAt')">{{ returnFoundInfo.out_at ? formatDateTime(returnFoundInfo.out_at) : '-' }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('faultStatus')">
                     <el-tag :type="returnFoundInfo.status === 'out' ? 'warning' : 'success'" size="small">
-                      {{ returnFoundInfo.status === 'out' ? '已出库' : '在库' }}
+                      {{ returnFoundInfo.status === 'out' ? t('maintReturnStatusOut') : t('statusInStock') }}
                     </el-tag>
                   </el-descriptions-item>
                 </el-descriptions>
                 <div class="found-actions">
                   <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 90px" />
-                  <el-checkbox v-model="returnPartScrap">入报废库</el-checkbox>
-                  <el-button type="primary" size="small" @click="addFoundReturnPart">添加到列表</el-button>
-                  <el-button size="small" @click="clearReturnFound">清除</el-button>
+                  <el-checkbox v-model="returnPartScrap">{{ t('maintReturnScrapLabel') }}</el-checkbox>
+                  <el-button type="primary" size="small" @click="addFoundReturnPart">{{ t('maintReturnAddToList') }}</el-button>
+                  <el-button size="small" @click="clearReturnFound">{{ t('actionReset') }}</el-button>
                 </div>
               </el-card>
             </div>
@@ -247,7 +247,7 @@
               <div class="return-manual-row">
                 <el-select
                   v-model="selectedReturnPart"
-                  placeholder="从备件库选择型号"
+                  :placeholder="t('maintReturnSelectFromSpare')"
                   filterable
                   remote
                   :remote-method="searchReturnParts"
@@ -263,76 +263,76 @@
                     :value="part.id"
                   />
                 </el-select>
-                <el-input v-model="returnPartSerial" placeholder="序列号（必填）" style="width: 120px" />
-                <el-input v-model="returnPartNumber" placeholder="型号（手动）" style="width: 130px" />
-                <el-input v-model="returnPartName" placeholder="名称（默认=型号）" style="width: 130px" />
+                <el-input v-model="returnPartSerial" :placeholder="t('maintReturnSerialPlaceholder')" style="width: 120px" />
+                <el-input v-model="returnPartNumber" :placeholder="t('maintReturnModelManual')" style="width: 130px" />
+                <el-input v-model="returnPartName" :placeholder="t('maintReturnNameDefault')" style="width: 130px" />
               </div>
               <div class="return-manual-row">
                 <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 90px" />
-                <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">入报废库</el-checkbox>
-                <el-button type="primary" size="small" :disabled="!returnPartSerial" @click="addReturnPart">添加</el-button>
+                <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">{{ t('maintReturnScrapLabel') }}</el-checkbox>
+                <el-button type="primary" size="small" :disabled="!returnPartSerial" @click="addReturnPart">{{ t('actionAdd') }}</el-button>
               </div>
-              <div class="return-manual-tip">序列号未识别时：可选备件库型号自动填充，或手动输入型号/名称</div>
+              <div class="return-manual-tip">{{ t('maintReturnNotFoundTip') }}</div>
             </div>
 
             <div class="return-parts-table" v-if="maintForm.return_parts.length > 0">
               <el-table :data="maintForm.return_parts" size="small" border>
-                <el-table-column prop="serial_number" label="序列号" width="150">
+                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="150">
                   <template #default="{ row }">{{ row.serial_number || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="part_number" label="型号" width="150" />
-                <el-table-column prop="name" label="名称" width="150" />
-                <el-table-column prop="quantity" label="数量" width="80">
+                <el-table-column prop="part_number" :label="t('maintColModel')" width="150" />
+                <el-table-column prop="name" :label="t('maintColName')" width="150" />
+                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="80">
                   <template #default="{ row, $index }">
                     <el-input-number v-model="row.quantity" :min="1" size="small" />
                   </template>
                 </el-table-column>
-                <el-table-column label="入报废库" width="120">
+                <el-table-column :label="t('maintColScrapIn')" width="120">
                   <template #default="{ row }">
                     <el-checkbox v-model="row.scrap_in" :disabled="!row.part_id" />
-                    <span class="scrap-label" v-if="row.part_id && !row.scrap_in">不入库</span>
-                    <span class="scrap-label no-id" v-if="!row.part_id">无备件ID</span>
+                    <span class="scrap-label" v-if="row.part_id && !row.scrap_in">{{ t('maintReturnNoScrap') }}</span>
+                    <span class="scrap-label no-id" v-if="!row.part_id">{{ t('maintReturnNoPartId') }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="60">
+                <el-table-column :label="t('colOperation')" width="60">
                   <template #default="{ row, $index }">
                     <el-button type="danger" size="small" link @click="removeReturnPart($index)">
-                      删除
+                      {{ t('actionDelete') }}
                     </el-button>
                   </template>
                 </el-table-column>
               </el-table>
-              <div class="return-tip">注：需从备件库选择才能入报废库，无固定资产的返回件可不入库</div>
+              <div class="return-tip">{{ t('maintReturnScrapTip') }}</div>
             </div>
             <div class="no-return-tip" v-else>
-              <el-tag type="info">暂无返回件，请从上方手动录入换下来的坏件</el-tag>
+              <el-tag type="info">{{ t('maintReturnNoPartsTip') }}</el-tag>
             </div>
           </div>
         </el-form-item>
 
         <el-divider />
 
-        <el-form-item label="人工工时 (小时)">
+        <el-form-item :label="t('maintLaborHours')">
           <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
-        <el-form-item label="人工成本">
+        <el-form-item :label="t('maintLaborCost')">
           <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" />
         </el-form-item>
-        <el-form-item label="维修商">
+        <el-form-item :label="t('maintVendor')">
           <el-input v-model="maintForm.vendor" />
         </el-form-item>
-        <el-form-item label="维修描述" required>
+        <el-form-item :label="t('maintDesc')" required>
           <el-input v-model="maintForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updateMaintenance() : addMaintenance()">确定</el-button>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateMaintenance() : addMaintenance()">{{ t('maintConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 扫码添加备件对话框 -->
-    <el-dialog v-model="scanDialogVisible" title="扫码添加备件" width="700px">
+    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="700px">
       <ScanSession
         ref="scanSessionRef"
         default-type="out"
@@ -352,6 +352,9 @@ import { getMaintenances, getDevices, createMaintenance, updateMaintenance as up
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime } from '@/utils/time'
 import dayjs from 'dayjs'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const maintenances = ref([])
 const filteredMaintenances = ref([])
@@ -404,7 +407,7 @@ const loadInitialSpareParts = async () => {
     const result = await getPartList({ limit: 50 })
     sparePartOptions.value = result.items || []
   } catch (e) {
-    console.error('加载备件失败:', e)
+    console.error(t('spareLoadFailed'), e)
   } finally {
     spareLoading.value = false
   }
@@ -428,7 +431,12 @@ const getMaintTypeType = (type) => {
 }
 
 const getMaintTypeText = (type) => {
-  const texts = { preventive: '预防性', corrective: '修复性', upgrade: '升级', emergency: '紧急' }
+  const texts = {
+    preventive: t('maintTypePreventive'),
+    corrective: t('maintTypeCorrective'),
+    upgrade: t('maintTypeUpgrade'),
+    emergency: t('maintTypeEmergency')
+  }
   return texts[type] || type
 }
 
@@ -443,7 +451,7 @@ const searchSpareParts = async (query) => {
     const result = await getPartList({ search: query, limit: 20 })
     sparePartOptions.value = result.items || []
   } catch (e) {
-    ElMessage.error('搜索备件失败')
+    ElMessage.error(t('maintSearchFailed'))
   } finally {
     spareLoading.value = false
   }
@@ -466,7 +474,7 @@ const onScanPartAdded = (item) => {
   const existing = maintForm.value.spare_parts.find(p => p.part_id === item.id)
   if (existing) {
     existing.quantity += 1
-    ElMessage.info(`${item.name} 数量+1`)
+    ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`)
   } else {
     maintForm.value.spare_parts.push({
       part_id: item.id,
@@ -478,9 +486,9 @@ const onScanPartAdded = (item) => {
     })
     // 如果是出库操作，提示用户
     if (item.action === 'out') {
-      ElMessage.success(`已出库并加入: ${item.name}`)
+      ElMessage.success(`${t('maintAlreadyOut')}: ${item.name}`)
     } else {
-      ElMessage.success(`已添加: ${item.name}`)
+      ElMessage.success(`${t('maintPartAdded')}: ${item.name}`)
     }
   }
   updatePartsCost()
@@ -499,7 +507,7 @@ const onScanSessionComplete = async (result) => {
     const existing = maintForm.value.spare_parts.find(p => p.serial_number === item.serial_number)
     if (existing) {
       existing.quantity += 1
-      ElMessage.info(`${item.name} 数量+1`)
+      ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`)
     } else {
       maintForm.value.spare_parts.push({
         part_id: item.part_id,
@@ -510,12 +518,12 @@ const onScanSessionComplete = async (result) => {
         quantity: 1,
         is_from_scan: true  // 标记为扫码添加，已在扫码会话中出库
       })
-      ElMessage.success(`已添加: ${item.name}`)
+      ElMessage.success(`${t('maintPartAdded')}: ${item.name}`)
     }
   }
   updatePartsCost()
   scanDialogVisible.value = false
-  ElMessage.success(`已添加 ${result.items.length} 个备件到更换列表`)
+  ElMessage.success(`${t('maintAddedCount')} ${result.items.length} ${t('maintPartAdded')}`)
 }
 
 // 添加备件到表单
@@ -553,7 +561,7 @@ const removeSparePart = (index) => {
 const scanReturnPart = async () => {
   const serial = returnScanInput.value.trim()
   if (!serial || serial.length < 4) {
-    ElMessage.warning('请输入至少4个字符的序列号')
+    ElMessage.warning(t('maintSerialMinLength'))
     return
   }
 
@@ -561,7 +569,7 @@ const scanReturnPart = async () => {
   try {
     const info = await getPartBySerialNumber(serial)
     returnFoundInfo.value = info
-    ElMessage.success(`已识别: ${info.name || info.part_number}`)
+    ElMessage.success(`${t('maintIdentified')}: ${info.name || info.part_number}`)
     // 自动填充表单
     returnPartSerial.value = info.serial_number
     returnPartNumber.value = info.part_number
@@ -572,7 +580,7 @@ const scanReturnPart = async () => {
     // 未找到，提示手动输入
     returnFoundInfo.value = null
     returnPartSerial.value = serial
-    ElMessage.info('序列号未在系统中找到，请手动输入型号/名称或从备件库选择')
+    ElMessage.info(t('maintSerialNotFound'))
   } finally {
     returnScanLoading.value = false
   }
@@ -605,7 +613,7 @@ const addFoundReturnPart = () => {
     history: returnFoundInfo.value.history  // 保存历史记录
   })
 
-  ElMessage.success(`已添加返回件: ${returnFoundInfo.value.serial_number}`)
+  ElMessage.success(`${t('maintReturnAdded')}: ${returnFoundInfo.value.serial_number}`)
   clearReturnFound()
 }
 
@@ -623,14 +631,14 @@ const onReturnPartSelect = () => {
 // 手动添加返回件
 const addReturnPart = () => {
   if (!returnPartSerial.value) {
-    ElMessage.warning('请输入序列号')
+    ElMessage.warning(t('maintSerialPrompt'))
     return
   }
 
   // 检查是否已添加过该序列号
   const existing = maintForm.value.return_parts.find(p => p.serial_number === returnPartSerial.value)
   if (existing) {
-    ElMessage.warning(`序列号 ${returnPartSerial.value} 已在列表中`)
+    ElMessage.warning(`${t('maintSerialDuplicate')} ${returnPartSerial.value}`)
     return
   }
 
@@ -658,7 +666,7 @@ const addReturnPart = () => {
     is_from_scan: false
   })
 
-  ElMessage.success(`已添加返回件: ${returnPartSerial.value}`)
+  ElMessage.success(`${t('maintReturnAdded')}: ${returnPartSerial.value}`)
 
   // 清空输入
   returnScanInput.value = ''
@@ -735,7 +743,7 @@ const loadMaintenances = async () => {
     total.value = data.total || maintenances.value.length
     filterMaintenances()
   } catch (error) {
-    ElMessage.error('加载维修记录失败')
+    ElMessage.error(t('maintLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -746,17 +754,17 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载设备列表失败')
+    ElMessage.error(t('maintDeviceLoadFailed'))
   }
 }
 
 const addMaintenance = async () => {
   if (!maintForm.value.device_id) {
-    ElMessage.warning('请选择设备')
+    ElMessage.warning(t('maintSelectDevicePrompt'))
     return
   }
   if (!maintForm.value.description) {
-    ElMessage.warning('请填写维修描述')
+    ElMessage.warning(t('maintDescPrompt'))
     return
   }
 
@@ -782,7 +790,7 @@ const addMaintenance = async () => {
           movement_type: 'out',
           quantity: part.quantity,
           serial_number: part.serial_number,
-          reason: `维修更换 - ${maintForm.value.maint_type}`,
+          reason: `${t('spareReasonMaintenanceReplace')} - ${maintForm.value.maint_type}`,
           operator: 'Web',
           reference: device?.name
         })
@@ -797,19 +805,19 @@ const addMaintenance = async () => {
           movement_type: 'scrap_in',
           quantity: part.quantity,
           serial_number: part.serial_number,
-          reason: `维修返回件入库 - 报废`,
+          reason: t('spareReasonReturnPartScrap'),
           operator: 'Web',
           reference: device?.name
         })
       }
     }
 
-    ElMessage.success('维修记录添加成功')
+    ElMessage.success(t('maintAddSuccess'))
     showAddDialog.value = false
     resetForm()
     loadMaintenances()
   } catch (error) {
-    ElMessage.error('添加维修记录失败: ' + (error.response?.data?.detail || error.message))
+    ElMessage.error(`${t('maintAddFailed')}: ${error.response?.data?.detail || error.message}`)
   }
 }
 
@@ -832,7 +840,7 @@ const editMaintenance = (row) => {
 
 const updateMaintenance = async () => {
   if (!maintForm.value.description) {
-    ElMessage.warning('请填写维修描述')
+    ElMessage.warning(t('maintDescPrompt'))
     return
   }
 
@@ -843,30 +851,30 @@ const updateMaintenance = async () => {
       device_name: device?.name,
       parts_replaced: JSON.stringify(maintForm.value.spare_parts)
     })
-    ElMessage.success('维修记录更新成功')
+    ElMessage.success(t('maintUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     resetForm()
     loadMaintenances()
   } catch (error) {
-    ElMessage.error('更新维修记录失败')
+    ElMessage.error(t('maintUpdateFailed'))
   }
 }
 
 const deleteMaintenance = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要删除维修记录 "${row.maint_no}" 吗？`, '确认删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(`${t('maintConfirmDeletePrompt')} "${row.maint_no}"?`, t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await deleteMaintenanceApi(row.id)
-    ElMessage.success('维修记录删除成功')
+    ElMessage.success(t('maintDeleteSuccess'))
     loadMaintenances()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除维修记录失败')
+      ElMessage.error(t('maintDeleteFailed'))
     }
   }
 }

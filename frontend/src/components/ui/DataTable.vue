@@ -6,8 +6,8 @@
         <!-- Default filter slot -->
       </slot>
       <div class="filter-actions">
-        <el-button size="small" @click="resetFilters">重置</el-button>
-        <el-button size="small" type="primary" @click="applyFilters">搜索</el-button>
+        <el-button size="small" @click="resetFilters">{{ t('tableReset') }}</el-button>
+        <el-button size="small" type="primary" @click="applyFilters">{{ t('tableSearch') }}</el-button>
       </div>
     </div>
 
@@ -47,6 +47,9 @@
 
 <script setup>
 import { ref, computed, watch, onMounted } from 'vue'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   data: { type: Array, default: () => [] },

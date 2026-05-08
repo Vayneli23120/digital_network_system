@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAS 系统布局预览 - 组合版</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ===== CSS Variables ===== */
+    :root {
+      --layout-topbar-h: 56px;
+      --layout-sidebar-w: 220px;
+      --layout-page-pad: 20px;
+      --font-display: 'Geist Mono', 'JetBrains Mono', monospace;
+      --font-body: 'Geist', -apple-system, BlinkMacSystemFont, sans-serif;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --radius-xl: 16px;
+      --gap-xs: 4px;
+      --gap-sm: 8px;
+      --gap-md: 16px;
+      --gap-lg: 24px;
+      --gap-xl: 32px;
+      --bg-primary: #f0f4fa;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f7f9fc;
+      --bg-card: #ffffff;
+      --bg-hover: #e8eef5;
+      --bg-toolbar: #f1f5f9;
+      --text-primary: #0D1B2A;
+      --text-secondary: #3A4A5C;
+      --text-tertiary: #6B7A8D;
+      --text-muted: #9BAABB;
+      --border-default: #E2E8F2;
+      --border-subtle: #f1f5f9;
+      --accent-primary: #003087;
+      --accent-secondary: #0984e3;
+      --accent-success: #00b894;
+      --accent-warning: #e17055;
+      --accent-danger: #d63031;
+      --accent-yellow: #f6b93b;
+      --severity-critical: #ff4757;
+      --severity-major: #ffb800;
+      --severity-minor: #00a8ff;
+      --severity-warning: #6b7280;
+      --shadow-card: 0 1px 3px rgba(0, 48, 135, 0.06), 0 1px 2px rgba(0, 48, 135, 0.04);
+      --shadow-elevated: 0 4px 12px rgba(0, 48, 135, 0.08);
+      --glow-primary: rgba(0, 48, 135, 0.15);
+      --color-gb: #003087;
+      --color-gb-mid: #00419E;
+      --color-gb-deep: #001F5C;
+    }
+    .dark {
+      --bg-primary: #0a0e14;
+      --bg-secondary: #0d1117;
+      --bg-tertiary: #161b22;
+      --bg-card: #1a1f26;
+      --bg-hover: #21262d;
+      --bg-toolbar: #21262d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-tertiary: #6e7681;
+      --text-muted: #484f58;
+      --border-default: #30363d;
+      --border-subtle: #21262d;
+      --accent-primary: #00b894;
+      --accent-secondary: #0984e3;
+      --shadow-card: 0 0 0 1px #30363d, 0 4px 12px rgba(0, 0, 0, 0.3);
+      --glow-primary: rgba(0, 184, 148, 0.15);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.5; }
+    .app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+
+    /* ===== Topbar (V1) ===== */
+    .topbar {
+      height: var(--layout-topbar-h);
+      background: linear-gradient(135deg, #003087 0%, #001F5C 100%);
+      display: flex; align-items: center; padding: 0 var(--layout-page-pad);
+      position: sticky; top: 0; z-index: 100;
+      border-bottom: 3px solid var(--accent-yellow);
+    }
+    .dark .topbar { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); }
+    .topbar-logo { display: flex; align-items: center; gap: var(--gap-sm); }
+    .logo-icon { width: 32px; height: 32px; background: var(--accent-yellow); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #001F5C; font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+    .dark .logo-icon { background: var(--accent-success); color: #fff; }
+    .logo-text { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--accent-yellow); }
+    .dark .logo-text { color: var(--text-primary); }
+    .topbar-nav { display: flex; gap: var(--gap-xs); margin-left: var(--gap-xl); }
+    .nav-item { padding: 6px 12px; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.75); background: transparent; border: none; border-radius: var(--radius-sm); cursor: pointer; transition: all 0.2s; }
+    .nav-item:hover { background: rgba(255,255,255,0.1); color: #fff; }
+    .nav-item.active { background: var(--accent-yellow); color: #001F5C; }
+    .dark .nav-item { color: var(--text-tertiary); }
+    .dark .nav-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .dark .nav-item.active { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .topbar-right { flex: 1; display: flex; justify-content: flex-end; align-items: center; gap: var(--gap-sm); }
+    .icon-btn { width: 32px; height: 32px; background: rgba(255,255,255,0.1); border: none; border-radius: var(--radius-sm); color: rgba(255,255,255,0.75); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 14px; }
+    .dark .icon-btn { background: var(--bg-tertiary); color: var(--text-secondary); }
+    .lang-btn { width: auto; padding: 0 10px; font-family: var(--font-display); font-size: 12px; font-weight: 600; }
+
+    /* ===== Layout Body ===== */
+    .layout-body { display: flex; flex: 1; }
+
+    /* ===== Sidebar ===== */
+    .sidebar { width: var(--layout-sidebar-w); background: var(--bg-secondary); border-right: 1px solid var(--border-default); padding: var(--gap-md); position: sticky; top: var(--layout-topbar-h); height: calc(100vh - var(--layout-topbar-h)); overflow-y: auto; }
+    .sidebar-group { margin-bottom: var(--gap-lg); }
+    .sidebar-label { font-family: var(--font-display); font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: var(--gap-xs); }
+    .sidebar-item { display: flex; align-items: center; gap: var(--gap-sm); padding: 10px 12px; border-radius: var(--radius-md); color: var(--text-secondary); text-decoration: none; font-size: 14px; cursor: pointer; transition: all 0.2s; }
+    .sidebar-item:hover { background: var(--bg-hover); color: var(--text-primary); }
+    .sidebar-item.active { background: #FFF9D6; border-left: 3px solid var(--accent-yellow); color: var(--accent-primary); padding-left: 9px; }
+    .dark .sidebar-item.active { background: rgba(0, 184, 148, 0.1); border-left: 3px solid var(--accent-success); color: var(--accent-success); }
+    .sidebar-icon { font-size: 18px; width: 20px; text-align: center; }
+    .sidebar-badge { margin-left: auto; background: var(--accent-danger); color: #fff; font-size: 10px; font-family: var(--font-display); padding: 2px 8px; border-radius: var(--radius-sm); font-weight: 600; }
+
+    /* ===== Main Content ===== */
+    .main-content { flex: 1; padding: var(--layout-page-pad); min-width: 0; overflow-y: auto; }
+
+    /* ===== Buttons ===== */
+    .btn { display: inline-flex; align-items: center; gap: var(--gap-xs); padding: 8px 16px; font-size: 14px; font-weight: 500; border-radius: var(--radius-md); border: none; cursor: pointer; transition: all 0.2s; font-family: var(--font-body); }
+    .btn-primary { background: var(--accent-primary); color: #fff; }
+    .btn-primary:hover { background: var(--color-gb-mid); }
+    .dark .btn-primary { background: var(--accent-success); }
+    .dark .btn-primary:hover { background: #00a884; }
+    .btn-success { background: var(--accent-success); color: #fff; }
+    .btn-success:hover { background: #00a884; }
+    .btn-warning { background: var(--accent-warning); color: #fff; }
+    .btn-warning:hover { background: #cf6349; }
+    .btn-danger { background: var(--accent-danger); color: #fff; }
+    .btn-danger:hover { background: #c42a2a; }
+    .btn-default { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-default); }
+    .btn-default:hover { background: var(--bg-hover); border-color: var(--accent-primary); color: var(--accent-primary); }
+    .btn-small { padding: 5px 10px; font-size: 12px; }
+    .btn-link { background: transparent; color: var(--accent-secondary); padding: 0; font-weight: 500; }
+    .btn-link:hover { text-decoration: underline; }
+    .dark .btn-link { color: var(--accent-success); }
+
+    /* ===== V2 Dashboard Status Cards ===== */
+    .status-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-default);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+    .status-card:hover { border-color: var(--accent-primary); box-shadow: 0 0 20px var(--glow-primary); transform: translateY(-2px); }
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .card-icon { width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--bg-tertiary); }
+    .card-icon svg { width: 16px; height: 16px; }
+    .card-icon.devices { background: rgba(0, 168, 255, 0.15); color: var(--accent-secondary); }
+    .card-icon.faults { background: rgba(255, 71, 87, 0.15); color: var(--accent-danger); }
+    .card-icon.backups { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .card-icon.cost { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .card-icon.inventory { background: rgba(9, 132, 227, 0.15); color: var(--accent-secondary); }
+    .card-icon.maintenance { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .card-label { font-size: 12px; font-weight: 500; color: var(--text-tertiary); letter-spacing: 0.03em; }
+    .metric-main { display: flex; align-items: baseline; gap: 6px; margin-bottom: 12px; }
+    .metric-value { font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--text-primary); letter-spacing: -0.02em; }
+    .metric-value.success { color: var(--accent-success); }
+    .metric-value.danger { color: var(--accent-danger); }
+    .metric-value.warning { color: var(--accent-warning); }
+    .metric-unit { font-size: 12px; color: var(--text-tertiary); }
+    .metric-bars { display: flex; flex-direction: column; gap: 8px; }
+    .bar-item { display: flex; align-items: center; gap: 8px; }
+    .bar-label { font-size: 11px; color: var(--text-tertiary); width: 40px; }
+    .bar-track { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 2px; transition: width 0.3s; }
+    .bar-fill.online { background: var(--accent-success); }
+    .bar-fill.offline { background: var(--accent-danger); }
+    .bar-value { font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); width: 20px; text-align: right; }
+    .severity-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .severity-item { display: flex; align-items: center; gap: 6px; padding: 8px; background: var(--bg-tertiary); border-radius: 6px; }
+    .severity-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .severity-item.critical .severity-dot { background: var(--severity-critical); }
+    .severity-item.major .severity-dot { background: var(--severity-major); }
+    .severity-item.minor .severity-dot { background: var(--severity-minor); }
+    .severity-count { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--text-primary); }
+    .severity-label { font-size: 10px; color: var(--text-tertiary); }
+    .backup-status { display: flex; flex-direction: column; gap: 6px; }
+    .status-row { display: flex; align-items: center; gap: 8px; }
+    .status-indicator { width: 6px; height: 6px; border-radius: 50%; }
+    .status-indicator.success { background: var(--accent-success); }
+    .status-indicator.warn { background: var(--accent-warning); }
+    .status-text { font-size: 12px; color: var(--text-secondary); }
+    .cost-breakdown { display: flex; flex-direction: column; gap: 6px; }
+    .cost-item { display: flex; justify-content: space-between; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 4px; }
+    .cost-label { font-size: 11px; color: var(--text-tertiary); }
+    .cost-amount { font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); }
+    .inventory-stats { display: flex; flex-direction: column; gap: 6px; }
+    .inventory-row { display: flex; justify-content: space-between; align-items: center; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 4px; }
+    .inventory-label { font-size: 11px; color: var(--text-tertiary); }
+    .inventory-value { font-family: var(--font-display); font-size: 14px; color: var(--text-secondary); }
+    .inventory-value.warning { color: var(--accent-warning); font-weight: 600; }
+
+    /* ===== V1 Page Header ===== */
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--gap-lg); }
+    .page-title { font-size: 18px; font-weight: 600; color: var(--text-primary); }
+    .page-actions { display: flex; gap: var(--gap-sm); }
+
+    /* ===== V1 Toolbar ===== */
+    .toolbar { display: flex; justify-content: space-between; align-items: center; padding: var(--gap-md); background: var(--bg-toolbar); border-radius: var(--radius-md); margin-bottom: var(--gap-md); gap: var(--gap-md); flex-wrap: wrap; }
+    .toolbar-left { display: flex; gap: var(--gap-md); flex-wrap: wrap; }
+    .toolbar-right { display: flex; gap: var(--gap-sm); }
+    .search-input { width: 200px; height: 32px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); font-size: 13px; }
+    .select-input { height: 32px; padding: 0 12px; border: 1px solid var(--border-default); border-radius: var(--radius-md); background: var(--bg-card); color: var(--text-primary); font-size: 13px; min-width: 100px; }
+    .dark .search-input, .dark .select-input { background: var(--bg-tertiary); border-color: var(--border-default); color: var(--text-secondary); }
+
+    /* ===== V1 Table ===== */
+    .table-wrapper { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); overflow: hidden; box-shadow: var(--shadow-card); }
+    .data-table { width: 100%; border-collapse: collapse; }
+    .data-table th { background: var(--bg-tertiary); padding: 12px 16px; font-size: 13px; font-weight: 600; color: var(--text-primary); text-align: left; border-bottom: 1px solid var(--border-default); }
+    .data-table td { padding: 10px 16px; font-size: 14px; color: var(--text-primary); border-bottom: 1px solid var(--border-subtle); }
+    .data-table tr:nth-child(even) td { background: var(--bg-tertiary); }
+    .data-table tr:hover td { background: var(--bg-hover); }
+    .dark .data-table th { color: var(--text-secondary); }
+    .dark .data-table td { color: var(--text-secondary); }
+    .cell-name { color: var(--accent-secondary); font-weight: 500; cursor: pointer; }
+    .cell-name:hover { text-decoration: underline; }
+    .dark .cell-name { color: var(--accent-success); }
+    .cell-status { display: inline-flex; align-items: center; gap: var(--gap-xs); padding: 4px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; }
+    .status-online { background: rgba(0, 184, 148, 0.1); color: var(--accent-success); }
+    .status-offline { background: rgba(214, 48, 49, 0.1); color: var(--accent-danger); }
+    .status-warning { background: rgba(225, 112, 85, 0.1); color: var(--accent-warning); }
+    .status-info { background: rgba(9, 132, 227, 0.1); color: var(--accent-secondary); }
+    .cell-actions { display: flex; gap: var(--gap-xs); flex-wrap: nowrap; }
+
+    /* ===== V1 Pagination ===== */
+    .pagination { display: flex; justify-content: flex-end; align-items: center; gap: var(--gap-sm); padding: var(--gap-md); border-top: 1px solid var(--border-default); }
+    .pagination-info { font-size: 13px; color: var(--text-secondary); }
+    .pagination-btn { width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border: 1px solid var(--border-default); border-radius: var(--radius-sm); background: var(--bg-card); color: var(--text-secondary); cursor: pointer; font-size: 12px; }
+    .pagination-btn:hover { background: var(--bg-hover); color: var(--accent-primary); }
+    .pagination-btn.active { background: var(--accent-primary); color: #fff; border-color: var(--accent-primary); }
+
+    /* ===== V1 Stat Cards (for spare parts) ===== */
+    .stat-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--gap-md); text-align: center; box-shadow: var(--shadow-card); }
+    .stat-value { font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--accent-primary); }
+    .dark .stat-value { color: var(--accent-success); }
+    .stat-label { font-size: 13px; color: var(--text-secondary); margin-top: var(--gap-xs); }
+    .stat-change { font-size: 12px; color: var(--accent-success); margin-top: var(--gap-xs); }
+    .stat-change.negative { color: var(--accent-danger); }
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--gap-md); margin-bottom: var(--gap-lg); }
+
+    /* ===== Tabs ===== */
+    .tabs-wrapper { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); box-shadow: var(--shadow-card); }
+    .tabs-header { display: flex; border-bottom: 1px solid var(--border-default); padding: 0 var(--gap-md); }
+    .tab-item { padding: 12px 20px; font-size: 14px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab-item:hover { color: var(--text-primary); }
+    .tab-item.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+    .dark .tab-item.active { color: var(--accent-success); border-bottom-color: var(--accent-success); }
+    .tabs-content { padding: var(--gap-md); }
+
+    /* ===== V1 Device Detail Layout ===== */
+    .detail-header { display: flex; gap: var(--gap-lg); margin-bottom: var(--gap-lg); }
+    .detail-main-card { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--gap-lg); box-shadow: var(--shadow-card); }
+    .detail-side-card { width: 300px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--gap-md); box-shadow: var(--shadow-card); }
+    .detail-title { font-size: 20px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--gap-sm); }
+    .detail-meta { display: flex; gap: var(--gap-md); color: var(--text-secondary); font-size: 13px; margin-bottom: var(--gap-lg); flex-wrap: wrap; }
+    .card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--gap-md); padding-bottom: var(--gap-sm); border-bottom: 1px solid var(--border-subtle); }
+
+    /* ===== V1 Info List ===== */
+    .info-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-sm); }
+    .info-item { display: flex; padding: var(--gap-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm); }
+    .info-label { width: 100px; font-size: 13px; color: var(--text-muted); }
+    .info-value { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+
+    /* ===== V2 Maintenance Detail Layout ===== */
+    .maint-header { display: flex; gap: var(--gap-lg); }
+    .maint-info-card { flex: 1; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--gap-lg); }
+    .maint-title { font-size: 18px; font-weight: 600; color: var(--text-primary); margin-bottom: var(--gap-sm); }
+    .maint-meta { display: flex; gap: var(--gap-md); color: var(--text-secondary); font-size: 13px; margin-bottom: var(--gap-lg); flex-wrap: wrap; }
+    .maint-actions-card { width: 280px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: var(--gap-md); }
+
+    /* ===== V2 Workflow Steps ===== */
+    .workflow-steps { display: flex; align-items: center; gap: var(--gap-xs); margin-bottom: var(--gap-lg); padding: var(--gap-md); background: var(--bg-tertiary); border-radius: var(--radius-md); }
+    .workflow-step { display: flex; align-items: center; gap: var(--gap-sm); }
+    .step-dot { width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; }
+    .step-dot.completed { background: var(--accent-success); color: #fff; }
+    .step-dot.active { background: var(--accent-warning); color: #fff; }
+    .step-dot.pending { background: var(--bg-card); border: 2px solid var(--border-default); color: var(--text-muted); }
+    .step-label { font-size: 12px; color: var(--text-secondary); }
+    .step-label.active { color: var(--accent-warning); font-weight: 500; }
+    .step-connector { width: 40px; height: 2px; background: var(--border-default); }
+    .step-connector.completed { background: var(--accent-success); }
+
+    /* ===== V2 Detail Grid ===== */
+    .detail-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--gap-sm); }
+    .detail-item { display: flex; flex-direction: column; gap: 2px; padding: var(--gap-sm); background: var(--bg-tertiary); border-radius: var(--radius-sm); }
+    .detail-item-label { font-size: 11px; color: var(--text-muted); font-weight: 500; }
+    .detail-item-value { font-size: 14px; color: var(--text-primary); font-weight: 500; }
+
+    /* ===== Cell Tags ===== */
+    .cell-tag { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 500; }
+    .cell-tag.success { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .cell-tag.warning { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .cell-tag.danger { background: rgba(214, 48, 49, 0.15); color: var(--accent-danger); }
+    .cell-tag.info { background: rgba(9, 132, 227, 0.15); color: var(--accent-secondary); }
+    .cell-link { color: var(--accent-secondary); font-weight: 500; cursor: pointer; }
+    .cell-link:hover { text-decoration: underline; }
+    .dark .cell-link { color: var(--accent-success); }
+
+    /* ===== Empty State ===== */
+    .empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: var(--gap-xl); text-align: center; min-height: 200px; }
+    .empty-icon { font-size: 48px; color: var(--text-muted); margin-bottom: var(--gap-md); }
+    .empty-text { font-size: 14px; color: var(--text-secondary); margin-bottom: var(--gap-md); }
+
+    /* ===== Section Divider ===== */
+    .section-divider { margin: var(--gap-xl) 0; border: none; border-top: 1px solid var(--border-default); }
+    .section-title { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: var(--gap-md); }
+
+    /* ===== Theme Toggle ===== */
+    .theme-toggle { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+    .theme-toggle-btn { width: 48px; height: 48px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 20px; box-shadow: var(--shadow-elevated); color: var(--text-primary); }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 1200px) {
+      .overview-grid { grid-template-columns: repeat(3, 1fr); }
+      .maint-header { flex-direction: column; }
+      .maint-actions-card { width: 100%; }
+    }
+    @media (max-width: 1024px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .info-list { grid-template-columns: 1fr; }
+      .detail-header { flex-direction: column; }
+      .detail-side-card { width: 100%; }
+      .overview-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .overview-grid { grid-template-columns: 1fr; }
+      .toolbar { flex-direction: column; align-items: stretch; }
+      .toolbar-left, .toolbar-right { flex-wrap: wrap; }
+      .search-input { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell" id="app">
+    <!-- Topbar (V1) -->
+    <header class="topbar">
+      <div class="topbar-logo">
+        <div class="logo-icon">N</div>
+        <span class="logo-text">NAS</span>
+      </div>
+      <nav class="topbar-nav">
+        <button class="nav-item active">仪表板</button>
+        <button class="nav-item">设备管理</button>
+        <button class="nav-item">配置管理</button>
+        <button class="nav-item">资产管理</button>
+        <button class="nav-item">系统设置</button>
+      </nav>
+      <div class="topbar-right">
+        <button class="icon-btn">🔍</button>
+        <button class="icon-btn">🔔</button>
+        <button class="icon-btn lang-btn">中</button>
+        <button class="icon-btn">☀️</button>
+        <button class="icon-btn">👤</button>
+      </div>
+    </header>
+
+    <div class="layout-body">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-group">
+          <div class="sidebar-label">总览</div>
+          <a class="sidebar-item active"><span class="sidebar-icon">📊</span><span>仪表板</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">🖥️</span><span>监控大屏</span></a>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-label">设备管理</div>
+          <a class="sidebar-item"><span class="sidebar-icon">📡</span><span>设备列表</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">🔍</span><span>设备发现</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">📥</span><span>备份管理</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">⚠️</span><span>故障管理</span><span class="sidebar-badge">3</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">🔧</span><span>维修管理</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">📅</span><span>计划运维</span></a>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-label">资产管理</div>
+          <a class="sidebar-item"><span class="sidebar-icon">📦</span><span>备件库存</span></a>
+          <a class="sidebar-item"><span class="sidebar-icon">🗑️</span><span>报废库存</span></a>
+        </div>
+      </aside>
+
+      <main class="main-content">
+
+        <!-- ===== Section 1: Dashboard (V2 Status Overview) ===== -->
+        <div class="section-title">仪表板 - Status Overview (V2)</div>
+        <div class="overview-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 20px;">
+          <!-- Device Status -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon devices">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+              </div>
+              <span class="card-label">网络设备</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value">156</span>
+              <span class="metric-unit">台</span>
+            </div>
+            <div class="metric-bars">
+              <div class="bar-item">
+                <span class="bar-label">在线</span>
+                <div class="bar-track"><div class="bar-fill online" style="width: 91%"></div></div>
+                <span class="bar-value">142</span>
+              </div>
+              <div class="bar-item">
+                <span class="bar-label">离线</span>
+                <div class="bar-track"><div class="bar-fill offline" style="width: 9%"></div></div>
+                <span class="bar-value">14</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fault Status -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon faults">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.47a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+              </div>
+              <span class="card-label">故障事件</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value danger">3</span>
+              <span class="metric-unit">件</span>
+            </div>
+            <div class="severity-grid">
+              <div class="severity-item critical"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">紧急</span></div>
+              <div class="severity-item major"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">严重</span></div>
+              <div class="severity-item minor"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">轻微</span></div>
+            </div>
+          </div>
+
+          <!-- Backup Status -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon backups">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 3v12M12 15l4-4M12 15l-4-4"/><circle cx="12" cy="7" r="4"/></svg>
+              </div>
+              <span class="card-label">配置备份</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value success">12</span>
+              <span class="metric-unit">次</span>
+            </div>
+            <div class="backup-status">
+              <div class="status-row"><span class="status-indicator success"></span><span class="status-text">自动备份已启用</span></div>
+              <div class="status-row"><span class="status-indicator success"></span><span class="status-text">上次: 2小时前</span></div>
+            </div>
+          </div>
+
+          <!-- Maintenance Stats -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon maintenance">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+              </div>
+              <span class="card-label">维修任务</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value warning">2</span>
+              <span class="metric-unit">进行中</span>
+            </div>
+            <div class="inventory-stats">
+              <div class="inventory-row"><span class="inventory-label">待处理</span><span class="inventory-value">5</span></div>
+              <div class="inventory-row"><span class="inventory-label">已完成</span><span class="inventory-value">28</span></div>
+            </div>
+          </div>
+
+          <!-- Spare Parts Inventory -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon inventory">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              </div>
+              <span class="card-label">备件库存</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value">89</span>
+              <span class="metric-unit">型号</span>
+            </div>
+            <div class="inventory-stats">
+              <div class="inventory-row"><span class="inventory-label">总数量</span><span class="inventory-value">324</span></div>
+              <div class="inventory-row"><span class="inventory-label">库存不足</span><span class="inventory-value warning">5</span></div>
+            </div>
+          </div>
+
+          <!-- Cost Overview -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon cost">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+              </div>
+              <span class="card-label">月度成本</span>
+            </div>
+            <div class="metric-main">
+              <span class="metric-value">28.5K</span>
+            </div>
+            <div class="cost-breakdown">
+              <div class="cost-item"><span class="cost-label">硬件</span><span class="cost-amount">18.2K</span></div>
+              <div class="cost-item"><span class="cost-label">人工</span><span class="cost-amount">10.3K</span></div>
+            </div>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- ===== Section 2: 设备列表页 ===== -->
+        <div class="section-title">设备列表页</div>
+        <div class="page-header">
+          <h1 class="page-title">设备列表</h1>
+          <div class="page-actions">
+            <button class="btn btn-primary btn-small">+ 新增设备</button>
+            <button class="btn btn-default btn-small">📥 批量备份</button>
+            <button class="btn btn-default btn-small">📤 导出</button>
+          </div>
+        </div>
+
+        <div class="toolbar">
+          <div class="toolbar-left">
+            <input type="text" class="search-input" placeholder="搜索设备名称/IP...">
+            <select class="select-input">
+              <option>状态筛选</option>
+              <option>在线</option>
+              <option>离线</option>
+            </select>
+            <select class="select-input">
+              <option>角色筛选</option>
+              <option>接入层</option>
+              <option>汇聚层</option>
+            </select>
+          </div>
+          <div class="toolbar-right">
+            <button class="btn btn-default btn-small">重置</button>
+            <button class="btn btn-primary btn-small">查询</button>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>设备名称</th>
+                <th>IP 地址</th>
+                <th>型号</th>
+                <th>位置</th>
+                <th>状态</th>
+                <th>厂商</th>
+                <th style="width: 200px">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="cell-name">SW-AGG-01</span></td>
+                <td>192.168.1.1</td>
+                <td>Cisco 3850</td>
+                <td>机房A-机柜1</td>
+                <td><span class="cell-status status-online">在线</span></td>
+                <td>Cisco</td>
+                <td>
+                  <div class="cell-actions">
+                    <button class="btn btn-primary btn-small">详情</button>
+                    <button class="btn btn-success btn-small">备份</button>
+                    <button class="btn btn-warning btn-small">编辑</button>
+                  </div>
+                </td>
+              </tr>
+              <tr>
+                <td><span class="cell-name">SW-AGG-02</span></td>
+                <td>192.168.1.2</td>
+                <td>Cisco 3850</td>
+                <td>机房A-机柜2</td>
+                <td><span class="cell-status status-offline">离线</span></td>
+                <td>Cisco</td>
+                <td>
+                  <div class="cell-actions">
+                    <button class="btn btn-primary btn-small">详情</button>
+                    <button class="btn btn-success btn-small">备份</button>
+                    <button class="btn btn-warning btn-small">编辑</button>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="pagination">
+            <span class="pagination-info">共 156 条</span>
+            <button class="pagination-btn">◀</button>
+            <button class="pagination-btn active">1</button>
+            <button class="pagination-btn">2</button>
+            <button class="pagination-btn">3</button>
+            <button class="pagination-btn">▶</button>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- ===== Section 3: 备件管理页 (V1) ===== -->
+        <div class="section-title">备件管理页 (V1)</div>
+        <div class="page-header">
+          <h1 class="page-title">备件库存</h1>
+          <div class="page-actions">
+            <button class="btn btn-success btn-small">📱 扫码入库</button>
+            <button class="btn btn-warning btn-small">📤 扫码出库</button>
+            <button class="btn btn-primary btn-small">+ 新增备件</button>
+          </div>
+        </div>
+
+        <div class="stats-grid" style="grid-template-columns: repeat(4, 1fr);">
+          <div class="stat-card">
+            <div class="stat-value">89</div>
+            <div class="stat-label">备件型号</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">324</div>
+            <div class="stat-label">总库存量</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value" style="color: var(--accent-warning)">5</div>
+            <div class="stat-label">库存不足</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-value">¥45.8K</div>
+            <div class="stat-label">库存总值</div>
+          </div>
+        </div>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-header">
+            <span class="tab-item active">备件列表</span>
+            <span class="tab-item">出入库历史</span>
+          </div>
+          <div class="tabs-content">
+            <div class="toolbar">
+              <div class="toolbar-left">
+                <input type="text" class="search-input" placeholder="搜索名称/型号...">
+                <select class="select-input">
+                  <option>分类筛选</option>
+                  <option>模块</option>
+                  <option>电源</option>
+                  <option>线缆</option>
+                </select>
+              </div>
+              <div class="toolbar-right">
+                <button class="btn btn-default btn-small">重置</button>
+                <button class="btn btn-primary btn-small">查询</button>
+              </div>
+            </div>
+            <div class="table-wrapper" style="border: none; box-shadow: none;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>名称</th>
+                    <th>型号</th>
+                    <th>分类</th>
+                    <th>库存</th>
+                    <th>最低库存</th>
+                    <th>单价</th>
+                    <th style="width: 120px">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="cell-name">SFP-10G-SR</span></td>
+                    <td>GLC-SX-MM</td>
+                    <td><span class="cell-status status-info">模块</span></td>
+                    <td><span class="cell-status status-online">12</span></td>
+                    <td>5</td>
+                    <td>¥280.00</td>
+                    <td>
+                      <div class="cell-actions">
+                        <button class="btn btn-success btn-small">入库</button>
+                        <button class="btn btn-warning btn-small">出库</button>
+                      </div>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-name">电源模块-750W</span></td>
+                    <td>PWR-750W-A</td>
+                    <td><span class="cell-status status-warning">电源</span></td>
+                    <td><span class="cell-status status-offline">3</span></td>
+                    <td>5</td>
+                    <td>¥1,200.00</td>
+                    <td>
+                      <div class="cell-actions">
+                        <button class="btn btn-success btn-small">入库</button>
+                        <button class="btn btn-warning btn-small">出库</button>
+                      </div>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- ===== Section 4: 设备详情页 (V1 Layout) ===== -->
+        <div class="section-title">设备详情页 (V1 Layout)</div>
+        <div class="page-header">
+          <h1 class="page-title">SW-AGG-01</h1>
+          <div class="page-actions">
+            <button class="btn btn-success btn-small">📥 备份</button>
+            <button class="btn btn-warning btn-small">🔧 维修</button>
+            <button class="btn btn-danger btn-small">🗑️ 删除</button>
+          </div>
+        </div>
+
+        <div class="detail-header">
+          <div class="detail-main-card">
+            <div class="detail-title">基础信息</div>
+            <div class="detail-meta">
+              <span>IP: 192.168.1.1</span>
+              <span>型号: Cisco 3850</span>
+              <span>位置: 机房A-机柜1</span>
+              <span class="cell-status status-online">在线</span>
+            </div>
+            <div class="info-list">
+              <div class="info-item">
+                <span class="info-label">序列号</span>
+                <span class="info-value">FOC1234ABC</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">凭证组</span>
+                <span class="info-value">default</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">角色</span>
+                <span class="info-value">汇聚层</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">厂商</span>
+                <span class="info-value">Cisco</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">购买日期</span>
+                <span class="info-value">2023-05-15</span>
+              </div>
+              <div class="info-item">
+                <span class="info-label">使用寿命</span>
+                <span class="info-value">3年 2月</span>
+              </div>
+            </div>
+          </div>
+          <div class="detail-side-card">
+            <div class="card-title">快速操作</div>
+            <div style="display: flex; flex-direction: column; gap: var(--gap-sm);">
+              <button class="btn btn-primary">执行备份</button>
+              <button class="btn btn-default">查看配置</button>
+              <button class="btn btn-default">Console 连接</button>
+              <button class="btn btn-default">Ping 测试</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs-wrapper">
+          <div class="tabs-header">
+            <span class="tab-item active">设备资产</span>
+            <span class="tab-item">配置备份</span>
+            <span class="tab-item">维修记录</span>
+            <span class="tab-item">故障历史</span>
+          </div>
+          <div class="tabs-content">
+            <div class="empty-state">
+              <span class="empty-icon">📦</span>
+              <span class="empty-text">该设备暂无安装备件</span>
+              <button class="btn btn-primary btn-small">+ 添加备件</button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- ===== Section 5: 维修详情页 (V2 Layout) ===== -->
+        <div class="section-title">维修详情页 (V2 Layout)</div>
+
+        <div class="maint-header">
+          <div class="maint-info-card">
+            <div class="maint-title">维修单 MNT-2024-001</div>
+            <div class="maint-meta">
+              <span>设备: SW-AGG-01</span>
+              <span>类型: 故障维修</span>
+              <span class="cell-tag warning">进行中</span>
+              <span>创建: 2024-05-08 14:30</span>
+            </div>
+
+            <!-- Workflow Steps -->
+            <div class="workflow-steps">
+              <div class="workflow-step">
+                <span class="step-dot completed">1</span>
+                <span class="step-label">创建</span>
+              </div>
+              <div class="step-connector completed"></div>
+              <div class="workflow-step">
+                <span class="step-dot completed">2</span>
+                <span class="step-label">诊断</span>
+              </div>
+              <div class="step-connector completed"></div>
+              <div class="workflow-step">
+                <span class="step-dot active">3</span>
+                <span class="step-label active">维修</span>
+              </div>
+              <div class="step-connector"></div>
+              <div class="workflow-step">
+                <span class="step-dot pending">4</span>
+                <span class="step-label">验证</span>
+              </div>
+              <div class="step-connector"></div>
+              <div class="workflow-step">
+                <span class="step-dot pending">5</span>
+                <span class="step-label">完成</span>
+              </div>
+            </div>
+
+            <div class="detail-grid">
+              <div class="detail-item">
+                <span class="detail-item-label">故障描述</span>
+                <span class="detail-item-value">端口 G0/1 无法通信</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-item-label">维修人员</span>
+                <span class="detail-item-value">张工</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-item-label">备件成本</span>
+                <span class="detail-item-value" style="color: var(--accent-warning)">¥2,800.00</span>
+              </div>
+              <div class="detail-item">
+                <span class="detail-item-label">工时</span>
+                <span class="detail-item-value">4小时</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="maint-actions-card">
+            <div class="card-title">操作</div>
+            <div style="display: flex; flex-direction: column; gap: var(--gap-sm);">
+              <button class="btn btn-success">📱 扫码添加备件</button>
+              <button class="btn btn-warning">📱 扫码返回件</button>
+              <button class="btn btn-primary">✓ 完成维修</button>
+              <button class="btn btn-danger">关闭维修单</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="tabs-wrapper" style="margin-top: 16px;">
+          <div class="tabs-header">
+            <span class="tab-item active">更换备件</span>
+            <span class="tab-item">返回件</span>
+            <span class="tab-item">维修日志</span>
+          </div>
+          <div class="tabs-content">
+            <div class="table-wrapper" style="border: none; box-shadow: none;">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>备件名称</th>
+                    <th>序列号</th>
+                    <th>型号</th>
+                    <th>单价</th>
+                    <th>操作时间</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td><span class="cell-link">SFP-10G-SR</span></td>
+                    <td>SN2024001</td>
+                    <td>GLC-SX-MM</td>
+                    <td style="color: var(--accent-success)">¥280.00</td>
+                    <td>2024-05-08 15:00</td>
+                  </tr>
+                  <tr>
+                    <td><span class="cell-link">电源模块-750W</span></td>
+                    <td>SN2024002</td>
+                    <td>PWR-750W-A</td>
+                    <td style="color: var(--accent-success)">¥1,200.00</td>
+                    <td>2024-05-08 15:30</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle">
+      <button class="theme-toggle-btn" onclick="toggleTheme()">🌓</button>
+    </div>
+
+    <script>
+      function toggleTheme() {
+        document.getElementById('app').classList.toggle('dark');
+      }
+    </script>
+  </div>
+</body>
+</html>

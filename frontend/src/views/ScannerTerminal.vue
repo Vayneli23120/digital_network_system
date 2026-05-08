@@ -2,8 +2,8 @@
   <div class="scanner-page">
     <!-- 未加入会话时 -->
     <div v-if="!joined" class="join-phase">
-      <h1>扫码枪终端</h1>
-      <p class="tip">扫描PC端二维码，或手动输入会话码</p>
+      <h1>{{ t('scannerTerminalTitle') }}</h1>
+      <p class="tip">{{ t('scannerTerminalTip') }}</p>
 
       <div class="input-section">
         <!-- 扫码输入框（扫码枪会自动输入） -->
@@ -11,13 +11,13 @@
           ref="sessionInput"
           v-model="sessionCode"
           class="session-input"
-          placeholder="扫描二维码或输入会话码"
+          :placeholder="t('scannerSessionCodePlaceholder')"
           @keyup.enter="joinSession"
           autofocus
         />
 
         <button class="join-btn" @click="joinSession" :disabled="!sessionCode">
-          加入会话
+          {{ t('scannerJoinSession') }}
         </button>
       </div>
 
@@ -28,7 +28,7 @@
     <div v-else class="scan-phase">
       <div class="session-info">
         <h2>{{ sessionTypeText }}</h2>
-        <p>会话码: {{ sessionCode }}</p>
+        <p>{{ t('scannerSessionCodeLabel') }}{{ sessionCode }}</p>
       </div>
 
       <!-- 扫码输入 -->
@@ -37,34 +37,34 @@
           ref="serialInput"
           v-model="serialNumber"
           class="serial-input"
-          placeholder="扫描备件序列号"
+          :placeholder="t('scannerScanSerialPlaceholder')"
           @keyup.enter="scanSerial"
           autofocus
         />
         <button class="scan-btn" @click="scanSerial" :disabled="!serialNumber">
-          确认扫描
+          {{ t('scannerConfirmScan') }}
         </button>
       </div>
 
       <!-- 已扫描列表 -->
       <div class="scan-list">
-        <h3>已扫描 {{ scannedItems.length }} 项</h3>
+        <h3>{{ t('scannerScannedItems', { count: scannedItems.length }) }}</h3>
         <div v-if="scannedItems.length > 0" class="items">
           <div v-for="item in scannedItems" :key="item.serial_number" class="item-card">
             <div class="item-info">
               <span class="serial">{{ item.serial_number }}</span>
-              <span class="name">{{ item.name || '未匹配' }}</span>
-              <span class="qty">数量: {{ item.quantity }}</span>
+              <span class="name">{{ item.name || t('scannerUnmatched') }}</span>
+              <span class="qty">{{ t('scannerQuantityLabel') }}{{ item.quantity }}</span>
             </div>
             <button class="remove-btn" @click="removeItem(item.serial_number)">×</button>
           </div>
         </div>
-        <p v-else class="empty-tip">等待扫描...</p>
+        <p v-else class="empty-tip">{{ t('scannerWaitingScan') }}</p>
       </div>
 
       <!-- 操作按钮 -->
       <div class="actions">
-        <button class="exit-btn" @click="exitSession">退出会话</button>
+        <button class="exit-btn" @click="exitSession">{{ t('scannerExitSession') }}</button>
       </div>
 
       <p v-if="error" class="error">{{ error }}</p>
@@ -76,6 +76,9 @@
 <script setup>
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { joinScanSession, addScanItem, getScanSession } from '@/api'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const sessionCode = ref('')
 const joined = ref(false)
@@ -89,8 +92,13 @@ const sessionInput = ref(null)
 const serialInput = ref(null)
 
 const sessionTypeText = computed(() => {
-  const texts = { in: '入库扫描', out: '出库扫描', maintenance: '维修备件', task: '运维任务' }
-  return texts[sessionType.value] || '扫描'
+  const texts = {
+    in: t('scanStockIn') + t('scannerScanTitle'),
+    out: t('scanStockOut') + t('scannerScanTitle'),
+    maintenance: t('scanMaintenanceSpare'),
+    task: t('scanOpsTask')
+  }
+  return texts[sessionType.value] || t('scannerScanTitle')
 })
 
 // 解析扫码内容（可能是 NAS-SCAN:XXXXXX 格式）
@@ -108,7 +116,7 @@ const joinSession = async () => {
 
   const code = parseScanContent(sessionCode.value)
   if (!code) {
-    error.value = '请输入有效会话码'
+    error.value = t('scannerEnterValidCode')
     return
   }
 
@@ -117,7 +125,7 @@ const joinSession = async () => {
     sessionCode.value = code
     sessionType.value = result.session_type
     joined.value = true
-    successMsg.value = '已加入会话'
+    successMsg.value = t('scannerJoinedSession')
 
     // 获取已有项目
     const sessionData = await getScanSession(code)
@@ -128,7 +136,7 @@ const joinSession = async () => {
       serialInput.value?.focus()
     })
   } catch (e) {
-    error.value = e.response?.data?.detail || '加入失败'
+    error.value = e.response?.data?.detail || t('scannerJoinFailed')
   }
 }
 
@@ -158,7 +166,7 @@ const scanSerial = async () => {
       })
     }
 
-    successMsg.value = result.part_id ? `已添加: ${result.name}` : `序列号 ${sn} 已记录（未匹配库存）`
+    successMsg.value = result.part_id ? t('scannerAdded', { name: result.name }) : t('scannerSerialRecorded', { sn })
     serialNumber.value = ''
 
     // 保持聚焦
@@ -166,7 +174,7 @@ const scanSerial = async () => {
       serialInput.value?.focus()
     })
   } catch (e) {
-    error.value = e.response?.data?.detail || '扫描失败'
+    error.value = e.response?.data?.detail || t('scannerScanFailed')
   }
 }
 

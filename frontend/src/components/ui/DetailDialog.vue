@@ -38,7 +38,7 @@
 
     <!-- Empty State -->
     <div v-else-if="!loading" class="empty-state">
-      <span>{{ emptyText }}</span>
+      <span>{{ emptyText || t('detailNoData') }}</span>
     </div>
 
     <!-- Footer Summary -->
@@ -59,6 +59,9 @@
 
 <script setup>
 import { computed } from 'vue'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: { type: Boolean, default: false },
@@ -72,7 +75,7 @@ const props = defineProps({
   stripe: { type: Boolean, default: true },
   border: { type: Boolean, default: true },
   size: { type: String, default: 'small' },
-  emptyText: { type: String, default: '暂无数据' },
+  emptyText: { type: String, default: '' },
   closeOnClickModal: { type: Boolean, default: true },
   closeOnPressEscape: { type: Boolean, default: true },
 })

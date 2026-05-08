@@ -3,32 +3,32 @@
     <!-- 会话创建阶段 -->
     <div v-if="!sessionCode && !autoStart" class="create-session">
       <el-form :model="sessionForm" label-width="80px">
-        <el-form-item label="操作类型">
+        <el-form-item :label="t('scanOperationType')">
           <el-radio-group v-model="sessionForm.session_type">
-            <el-radio label="in">入库</el-radio>
-            <el-radio label="out">出库</el-radio>
-            <el-radio label="return">返回件</el-radio>
-            <el-radio label="scrap_out">报废出库</el-radio>
-            <el-radio label="maintenance">维修备件</el-radio>
-            <el-radio label="task">运维任务</el-radio>
+            <el-radio label="in">{{ t('scanStockIn') }}</el-radio>
+            <el-radio label="out">{{ t('scanStockOut') }}</el-radio>
+            <el-radio label="return">{{ t('scanReturn') }}</el-radio>
+            <el-radio label="scrap_out">{{ t('scanScrapOut') }}</el-radio>
+            <el-radio label="maintenance">{{ t('scanMaintenanceSpare') }}</el-radio>
+            <el-radio label="task">{{ t('scanOpsTask') }}</el-radio>
           </el-radio-group>
         </el-form-item>
-        <el-form-item v-if="sessionForm.session_type === 'maintenance'" label="维修工单">
-          <el-input v-model="sessionForm.reference" placeholder="维修单号" />
+        <el-form-item v-if="sessionForm.session_type === 'maintenance'" :label="t('scanWorkOrder')">
+          <el-input v-model="sessionForm.reference" :placeholder="t('scanWorkOrderPlaceholder')" />
         </el-form-item>
-        <el-form-item v-if="sessionForm.session_type === 'task'" label="任务编号">
-          <el-input v-model="sessionForm.reference" placeholder="任务编号" />
+        <el-form-item v-if="sessionForm.session_type === 'task'" :label="t('scanTaskNumber')">
+          <el-input v-model="sessionForm.reference" :placeholder="t('scanTaskNumberPlaceholder')" />
         </el-form-item>
       </el-form>
       <el-button type="primary" @click="createSession" :loading="creating">
-        创建扫码会话
+        {{ t('scanCreateSession') }}
       </el-button>
     </div>
 
     <!-- 等待自动创建会话 -->
     <div v-if="!sessionCode && autoStart" class="waiting-session">
       <el-icon class="loading-icon"><Loading /></el-icon>
-      <span>正在创建扫码会话...</span>
+      <span>{{ t('scanCreatingSession') }}</span>
     </div>
 
     <!-- 扫码阶段 -->
@@ -36,17 +36,17 @@
       <!-- 条形码显示 -->
       <div v-if="!joined" class="barcode-section">
         <div class="barcode-tip">
-          <h3>扫码枪扫描下方条形码</h3>
-          <p>扫描条形码即可加入会话，开始扫描备件序列号</p>
+          <h3>{{ t('scanBarcodeTipTitle') }}</h3>
+          <p>{{ t('scanBarcodeTipDesc') }}</p>
         </div>
         <div class="barcode-display">
           <svg id="barcodeSvg" class="barcode-svg"></svg>
           <div class="barcode-text">NAS-SCAN:{{ sessionCode }}</div>
         </div>
         <p class="session-info">
-          会话码：<strong>{{ sessionCode }}</strong>
+          {{ t('scanSessionCodeLabel') }}<strong>{{ sessionCode }}</strong>
           <br>
-          有效期：{{ expiresAt }}（30分钟）
+          {{ t('scanExpiresLabel') }}{{ expiresAt }}{{ t('scan30Minutes') }}
         </p>
       </div>
 
@@ -54,7 +54,7 @@
       <div v-else class="scan-active">
         <div class="scan-header">
           <el-tag type="success" size="large">
-            扫码枪已连接
+            {{ t('scanScannerConnected') }}
           </el-tag>
           <span class="scan-type">
             {{ sessionTypeText }} - {{ sessionForm.session_type }}
@@ -65,23 +65,23 @@
         <el-card class="scan-items-card">
           <template #header>
             <div class="items-header">
-              <span>已扫描备件（{{ scanItems.length }} 项）</span>
+              <span>{{ t('scanScannedParts') }}（{{ scanItems.length }} {{ t('scanItemCount') }}）</span>
               <el-button size="small" @click="refreshSession">
                 <el-icon><Aim /></el-icon>
-                刷新
+                {{ t('actionRefresh') }}
               </el-button>
             </div>
           </template>
 
           <el-table v-if="scanItems.length > 0" :data="scanItems" stripe border>
-            <el-table-column prop="serial_number" label="序列号" width="150" />
-            <el-table-column prop="part_number" label="型号" width="120">
-              <template #default="{ row }">{{ row.part_number || '未知' }}</template>
+            <el-table-column prop="serial_number" :label="t('scanColSerialNumber')" width="150" />
+            <el-table-column prop="part_number" :label="t('scanColModel')" width="120">
+              <template #default="{ row }">{{ row.part_number || t('scanUnknown') }}</template>
             </el-table-column>
-            <el-table-column prop="name" label="名称" width="120">
-              <template #default="{ row }">{{ row.name || '未找到' }}</template>
+            <el-table-column prop="name" :label="t('scanColName')" width="120">
+              <template #default="{ row }">{{ row.name || t('scanNotFoundInList') }}</template>
             </el-table-column>
-            <el-table-column prop="unit_price" label="单价" width="100">
+            <el-table-column prop="unit_price" :label="t('scanColUnitPrice')" width="100">
               <template #default="{ row }">
                 <el-input-number
                   v-model="row.unit_price"
@@ -89,71 +89,71 @@
                   :precision="2"
                   size="small"
                   controls-position="right"
-                  placeholder="单价"
+                  :placeholder="t('scanUnitPricePlaceholder')"
                 />
               </template>
             </el-table-column>
-            <el-table-column prop="notes" label="备注" width="120">
+            <el-table-column prop="notes" :label="t('scanColNotes')" width="120">
               <template #default="{ row }">
                 <el-input
                   v-model="row.notes"
                   size="small"
-                  placeholder="备注"
+                  :placeholder="t('scanNotesPlaceholder')"
                 />
               </template>
             </el-table-column>
-            <el-table-column prop="found_in_stock" label="状态" width="80">
+            <el-table-column prop="found_in_stock" :label="t('scanColStatus')" width="80">
               <template #default="{ row }">
                 <el-tag :type="row.part_id ? 'success' : 'warning'" size="small">
-                  {{ row.part_id ? '已匹配' : '未找到' }}
+                  {{ row.part_id ? t('scanMatched') : t('scanNotMatched') }}
                 </el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="60">
+            <el-table-column :label="t('scanColOperation')" width="60">
               <template #default="{ $index }">
                 <el-button type="danger" size="small" link @click="removeItem($index)">
-                  移除
+                  {{ t('scanRemove') }}
                 </el-button>
               </template>
             </el-table-column>
           </el-table>
 
-          <el-empty v-else description="等待扫码枪扫描备件序列号..." />
+          <el-empty v-else :description="t('scanWaitForScanner')" />
         </el-card>
 
         <!-- 操作信息 -->
         <el-form :model="submitForm" label-width="80px" style="margin-top: 16px">
-          <el-form-item label="操作人">
+          <el-form-item :label="t('scanOperator')">
             <el-input v-model="submitForm.operator" />
           </el-form-item>
-          <el-form-item label="原因/备注">
+          <el-form-item :label="t('scanReasonOrNotes')">
             <el-input v-model="submitForm.reason" type="textarea" />
           </el-form-item>
-          <el-form-item v-if="sessionForm.session_type === 'maintenance'" label="参考工单">
+          <el-form-item v-if="sessionForm.session_type === 'maintenance'" :label="t('scanRefOrder')">
             <el-input v-model="submitForm.reference" :value="sessionForm.reference" disabled />
           </el-form-item>
         </el-form>
 
         <!-- 提交按钮 -->
         <div class="submit-actions">
-          <el-button @click="cancelSession">取消会话</el-button>
+          <el-button @click="cancelSession">{{ t('scanCancelSessionBtn') }}</el-button>
           <el-button
             type="primary"
             @click="submitSession"
             :loading="submitting"
           >
-            确认提交
+            {{ t('scanConfirmSubmitBtn') }}
           </el-button>
         </div>
       </div>
     </div>
 
     <!-- 完成提示 -->
-    <el-dialog v-model="showCompleteDialog" title="扫码完成" width="400px">
-      <el-result icon="success" title="操作成功" :sub-title="completeMessage">
+    <el-dialog v-model="showCompleteDialog" :title="t('scanCompleteDialogTitle')" width="400px">
+      <el-result icon="success" :title="t('scanOpSuccessTitle')" :sub-title="completeMessage">
         <template #extra>
-          <el-button type="primary" @click="resetSession">继续扫码</el-button>
-          <el-button @click="showCompleteDialog = false">关闭</el-button>
+          <el-button type="primary" @click="resetSession">{{ t('scanContinueBtn') }}</el-button>
+          <el-button @click="showCompleteDialog = false">{{ t('actionClose') }}</el-button>
         </template>
       </el-result>
     </el-dialog>
@@ -173,6 +173,9 @@ import {
   removeScanItem
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 // Props
 const props = defineProps({
@@ -263,7 +266,14 @@ watch(
 
 // 计算属性
 const sessionTypeText = computed(() => {
-  const texts = { in: '入库', out: '出库', return: '返回件', scrap_out: '报废出库', maintenance: '维修备件', task: '运维任务' }
+  const texts = {
+    in: t('scanStockIn'),
+    out: t('scanStockOut'),
+    return: t('scanReturn'),
+    scrap_out: t('scanScrapOut'),
+    maintenance: t('scanMaintenanceSpare'),
+    task: t('scanOpsTask')
+  }
   return texts[sessionForm.value.session_type] || ''
 })
 
@@ -287,7 +297,7 @@ const generateBarcode = () => {
         svg.innerHTML = ''
       }
     } catch (e) {
-      console.error('条形码生成失败:', e)
+      console.error('Barcode generation failed:', e)
     }
   })
 }
@@ -316,9 +326,9 @@ const createSession = async () => {
 
     // 显示备件信息（如果有）
     if (result.part_info) {
-      ElMessage.success(`扫码会话已创建 - ${result.part_info.name}`)
+      ElMessage.success(t('scanSessionCreatedWithPart').replace('{name}', result.part_info.name))
     } else {
-      ElMessage.success('扫码会话已创建')
+      ElMessage.success(t('scanSessionCreated'))
     }
 
     // 生成条形码
@@ -327,7 +337,7 @@ const createSession = async () => {
     // 开始轮询检查状态
     startPolling()
   } catch (e) {
-    ElMessage.error('创建失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error(t('scanCreateFailed') + ': ' + (e.response?.data?.detail || e.message))
   } finally {
     creating.value = false
   }
@@ -362,16 +372,16 @@ const startPolling = () => {
 
       // 如果过期或完成，提示用户手动关闭
       if (result.status === 'expired') {
-        ElMessage.warning('会话已过期，请手动取消')
+        ElMessage.warning(t('scanSessionExpired'))
       }
       if (result.status === 'completed') {
-        ElMessage.success('会话已完成')
+        ElMessage.success(t('scanSessionCompleted'))
         stopPolling()
       }
     } catch (e) {
       // 不自动退出，让用户手动处理
       if (e.response?.status === 404) {
-        ElMessage.warning('会话不存在，请手动取消')
+        ElMessage.warning(t('scanSessionNotFound'))
       }
     }
   }, 2000)
@@ -384,7 +394,7 @@ const refreshSession = async () => {
     const result = await getScanSession(sessionCode.value)
     scanItems.value = result.items || []
   } catch (e) {
-    ElMessage.error('刷新失败')
+    ElMessage.error(t('scanRefreshFailed'))
   }
 }
 
@@ -403,9 +413,9 @@ const removeItem = async (index) => {
     await removeScanItem(sessionCode.value, item.serial_number)
     // 本地也移除
     scanItems.value.splice(index, 1)
-    ElMessage.success(`已移除: ${item.serial_number}`)
+    ElMessage.success(t('scanRemoved') + ': ' + item.serial_number)
   } catch (e) {
-    ElMessage.error('移除失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error(t('scanRemoveFailed') + ': ' + (e.response?.data?.detail || e.message))
   }
 }
 
@@ -440,7 +450,7 @@ const submitSession = async () => {
     // completeMessage.value = `成功处理 ${scanItems.value.length} 个备件`
     // showCompleteDialog.value = true
   } catch (e) {
-    ElMessage.error('提交失败: ' + (e.response?.data?.detail || e.message))
+    ElMessage.error(t('scanSubmitFailed') + ': ' + (e.response?.data?.detail || e.message))
   } finally {
     submitting.value = false
   }

@@ -5,26 +5,26 @@
         <el-card v-loading="loading">
           <template #header>
             <div class="card-header">
-              <span>配置部署</span>
+              <span>{{ t('deployTitle') }}</span>
               <el-button type="info" size="small" @click="showVariableHelp = true">
                 <el-icon><QuestionFilled /></el-icon>
-                变量说明
+                {{ t('deployVariableHelp') }}
               </el-button>
             </div>
           </template>
 
           <el-form :model="deployForm" label-width="120px">
-            <el-form-item label="部署方式">
+            <el-form-item :label="t('deployMode')">
               <el-radio-group v-model="deployForm.mode">
-                <el-radio label="backup">从备份恢复</el-radio>
-                <el-radio label="template">使用模板</el-radio>
+                <el-radio label="backup">{{ t('deployFromBackup') }}</el-radio>
+                <el-radio label="template">{{ t('deployUseTemplate') }}</el-radio>
               </el-radio-group>
             </el-form-item>
 
-            <el-form-item v-if="deployForm.mode === 'backup'" label="备份文件" required>
+            <el-form-item v-if="deployForm.mode === 'backup'" :label="t('deployBackupFile')" required>
               <el-select
                 v-model="deployForm.backup_file"
-                placeholder="选择备份文件"
+                :placeholder="t('deploySelectBackupFile')"
                 style="width: 100%"
                 filterable
               >
@@ -37,10 +37,10 @@
               </el-select>
             </el-form-item>
 
-            <el-form-item v-if="deployForm.mode === 'template'" label="配置模板" required>
+            <el-form-item v-if="deployForm.mode === 'template'" :label="t('deployConfigTemplate')" required>
               <el-select
                 v-model="deployForm.template_id"
-                placeholder="选择配置模板"
+                :placeholder="t('deploySelectTemplate')"
                 style="width: 100%"
                 @change="loadTemplateVariables"
               >
@@ -60,18 +60,18 @@
 
             <el-divider />
 
-            <el-form-item label="目标设备" required>
+            <el-form-item :label="t('deployTargetDevice')" required>
               <el-select
                 v-model="deployForm.target_devices"
                 multiple
-                placeholder="选择设备（可多选）"
+                :placeholder="t('deploySelectDeviceMultiple')"
                 style="width: 100%"
                 filterable
               >
                 <el-option
                   v-for="device in devices"
                   :key="device.id"
-                  :label="`${device.name} - ${device.ip} (${device.credential_group || 'default'}凭证)`"
+                  :label="`${device.name} - ${device.ip} (${device.credential_group || 'default'}${t('deployCredential')})`"
                   :value="device.id"
                   :disabled="device.status === 'offline'"
                 >
@@ -81,14 +81,14 @@
                   </div>
                 </el-option>
               </el-select>
-              <div class="form-tip">提示：只有在线状态的设备可选择，离线设备将被禁用</div>
+              <div class="form-tip">{{ t('deployDeviceTip') }}</div>
             </el-form-item>
 
-            <el-form-item v-if="deployForm.mode === 'template'" label="变量替换">
+            <el-form-item v-if="deployForm.mode === 'template'" :label="t('deployVariableReplace')">
               <el-table :data="deployForm.variables" style="width: 100%" border>
-                <el-table-column prop="key" label="变量名" width="180">
+                <el-table-column prop="key" :label="t('deployVariableName')" width="180">
                   <template #default="{ row }">
-                    <el-select v-model="row.key" placeholder="选择变量" style="width: 100%" filterable>
+                    <el-select v-model="row.key" :placeholder="t('deploySelectVariable')" style="width: 100%" filterable>
                       <el-option
                         v-for="v in availableVariables"
                         :key="v.key"
@@ -98,7 +98,7 @@
                     </el-select>
                   </template>
                 </el-table-column>
-                <el-table-column prop="value" label="替换值">
+                <el-table-column prop="value" :label="t('deployReplaceValue')">
                   <template #default="{ row }">
                     <el-input
                       v-model="row.value"
@@ -106,7 +106,7 @@
                     />
                   </template>
                 </el-table-column>
-                <el-table-column prop="description" label="说明" width="200">
+                <el-table-column prop="description" :label="t('deployDescription')" width="200">
                   <template #default="{ row }">
                     {{ getVariableDescription(row.key) }}
                   </template>
@@ -126,23 +126,23 @@
               <div class="form-tip" style="margin-top: 10px;">
                 <el-button size="small" @click="addVariable">
                   <el-icon><Plus /></el-icon>
-                  添加变量
+                  {{ t('deployAddVariable') }}
                 </el-button>
                 <el-button size="small" @click="autoFillVariables">
                   <el-icon><MagicStick /></el-icon>
-                  自动填充常用变量
+                  {{ t('deployAutoFillVariables') }}
                 </el-button>
               </div>
             </el-form-item>
 
-            <el-form-item label="Dry Run">
+            <el-form-item :label="t('deployDryRun')">
               <el-switch
                 v-model="deployForm.dry_run"
-                active-text="预览模式（不实际部署）"
-                inactive-text="实际部署"
+                :active-text="t('deployPreviewMode')"
+                :inactive-text="t('deployActualMode')"
               />
               <div class="form-tip">
-                预览模式下只展示配置变更，不会实际修改设备配置
+                {{ t('deployPreviewTip') }}
               </div>
             </el-form-item>
 
@@ -154,7 +154,7 @@
                 :loading="previewLoading"
               >
                 <el-icon><View /></el-icon>
-                预览变更
+                {{ t('deployPreviewChange') }}
               </el-button>
               <el-button
                 type="success"
@@ -163,7 +163,7 @@
                 :loading="deployLoading"
               >
                 <el-icon><Upload /></el-icon>
-                {{ deployForm.dry_run ? '确认部署' : '立即部署' }}
+                {{ deployForm.dry_run ? t('deployConfirmDeploy') : t('deployImmediateDeploy') }}
               </el-button>
             </el-form-item>
           </el-form>
@@ -173,11 +173,11 @@
       <el-col :span="10">
         <el-card v-loading="loading">
           <template #header>
-            <span>部署预览/结果</span>
+            <span>{{ t('deployPreviewResult') }}</span>
           </template>
 
           <div v-if="previewResult" class="preview-content">
-            <h4>部署结果摘要：</h4>
+            <h4>{{ t('deployResultSummary') }}</h4>
             <div class="result-summary">
               <el-alert
                 v-for="(result, index) in previewResult.results"
@@ -190,10 +190,10 @@
               />
             </div>
 
-            <h4 style="margin-top: 20px;">配置变更详情：</h4>
+            <h4 style="margin-top: 20px;">{{ t('deployConfigChangeDetail') }}</h4>
             <div v-for="(result, index) in previewResult.results" :key="index">
               <div class="device-result">
-                <h5>{{ result.device_name }} - {{ result.success ? '成功' : '失败' }}</h5>
+                <h5>{{ result.device_name }} - {{ result.success ? t('deploySuccess') : t('deployFailed') }}</h5>
                 <div v-if="result.changes && result.changes.length > 0" class="diff">
                   <div v-for="(change, cIndex) in result.changes" :key="cIndex" :class="['diff-line', change.type]">
                     <span class="diff-symbol">{{ change.type === 'add' ? '+' : '-' }}</span>
@@ -201,7 +201,7 @@
                   </div>
                 </div>
                 <div v-else-if="result.message" class="no-changes">
-                  <el-tag type="info">无变更</el-tag>
+                  <el-tag type="info">{{ t('deployNoChange') }}</el-tag>
                   <span>{{ result.message }}</span>
                 </div>
                 <div v-if="result.errors && result.errors.length > 0" class="errors">
@@ -213,15 +213,15 @@
               </div>
             </div>
 
-            <h4 style="margin-top: 20px;">配置预览（前 2000 字符）：</h4>
+            <h4 style="margin-top: 20px;">{{ t('deployConfigPreview') }}</h4>
             <pre class="config-preview">{{ previewResult.config_preview }}</pre>
           </div>
 
-          <el-empty v-else description="点击预览变更查看将要执行的变更" />
+          <el-empty v-else :description="t('deployClickPreview')" />
 
           <div v-if="deployResult && !deployForm.dry_run" class="deploy-result">
             <el-divider />
-            <h4>实际部署结果：</h4>
+            <h4>{{ t('deployActualResult') }}</h4>
             <div class="result-summary">
               <el-alert
                 v-for="(result, index) in deployResult.results"
@@ -235,9 +235,9 @@
               />
             </div>
             <div v-if="deployResult.summary" class="deploy-summary">
-              <el-statistic title="总设备数" :value="deployResult.summary.total" />
-              <el-statistic title="成功" :value="deployResult.summary.success" />
-              <el-statistic title="失败" :value="deployResult.summary.failed" />
+              <el-statistic :title="t('deployTotalDevices')" :value="deployResult.summary.total" />
+              <el-statistic :title="t('deploySuccess')" :value="deployResult.summary.success" />
+              <el-statistic :title="t('deployFailed')" :value="deployResult.summary.failed" />
             </div>
           </div>
         </el-card>
@@ -245,11 +245,11 @@
     </el-row>
 
     <!-- 变量说明对话框 -->
-    <el-dialog v-model="showVariableHelp" title="可用变量说明" width="800px">
+    <el-dialog v-model="showVariableHelp" :title="t('deployVariableDialog')" width="800px">
       <el-table :data="allVariables" style="width: 100%">
-        <el-table-column prop="key" label="变量名" width="200" />
-        <el-table-column prop="description" label="说明" />
-        <el-table-column prop="example" label="示例值" width="200" />
+        <el-table-column prop="key" :label="t('deployVariableName')" width="200" />
+        <el-table-column prop="description" :label="t('deployDescription')" />
+        <el-table-column prop="example" :label="t('deployExampleValue')" width="200" />
       </el-table>
     </el-dialog>
   </div>
@@ -277,6 +277,9 @@ import {
   getCompatibleVariables
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const devices = ref([])
 const backups = ref([])
@@ -314,7 +317,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载设备列表失败')
+    ElMessage.error(t('deployLoadDeviceFailed'))
   }
 }
 
@@ -323,7 +326,7 @@ const loadBackups = async () => {
     const data = await getBackups({ limit: 50 })
     backups.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载备份列表失败')
+    ElMessage.error(t('deployLoadBackupFailed'))
   }
 }
 
@@ -332,7 +335,7 @@ const loadTemplates = async () => {
     const data = await getTemplates()
     templates.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载模板列表失败')
+    ElMessage.error(t('deployLoadTemplateFailed'))
   }
 }
 
@@ -341,7 +344,7 @@ const loadCompatibleVariables = async () => {
     const data = await getCompatibleVariables()
     allVariables.value = data.variables || []
   } catch (error) {
-    ElMessage.error('加载变量列表失败')
+    ElMessage.error(t('deployLoadVariableFailed'))
   }
 }
 
@@ -367,13 +370,13 @@ const loadTemplateVariables = async (templateId) => {
       }
     }
   } catch (error) {
-    ElMessage.error('加载模板变量失败')
+    ElMessage.error(t('deployLoadTemplateVarFailed'))
   }
 }
 
 const getVariablePlaceholder = (key) => {
   const v = allVariables.value.find(v => v.key === key)
-  return v ? `例如：${v.example}` : ''
+  return v ? `${t('deployExample')}${v.example}` : ''
 }
 
 const getVariableDescription = (key) => {
@@ -407,7 +410,7 @@ const autoFillVariables = () => {
 
 const previewDeploy = async () => {
   if (!canDeploy.value) {
-    ElMessage.warning('请先选择部署方式和目标设备')
+    ElMessage.warning(t('deploySelectModeAndDevice'))
     return
   }
 
@@ -432,10 +435,10 @@ const previewDeploy = async () => {
 
     const result = await previewDeployApi(deployData)
     previewResult.value = result
-    ElMessage.success('预览生成成功')
+    ElMessage.success(t('deployPreviewSuccess'))
   } catch (error) {
-    ElMessage.error('预览失败')
-    ElMessage.error(`预览失败：${error.response?.data?.detail || error.message}`)
+    ElMessage.error(t('deployPreviewFailed'))
+    ElMessage.error(`${t('deployPreviewFailed')}: ${error.response?.data?.detail || error.message}`)
   } finally {
     previewLoading.value = false
   }
@@ -443,19 +446,19 @@ const previewDeploy = async () => {
 
 const confirmDeploy = async () => {
   if (!canDeploy.value) {
-    ElMessage.warning('请先选择部署方式和目标设备')
+    ElMessage.warning(t('deploySelectModeAndDevice'))
     return
   }
 
   try {
     await ElMessageBox.confirm(
       deployForm.value.dry_run
-        ? '确认要执行部署吗？这将把配置推送到选中的设备。'
-        : '警告：实际部署将直接修改设备配置，请确认已预览变更！',
-      '确认部署',
+        ? t('deployConfirmMessage')
+        : t('deployWarningMessage'),
+      t('deployConfirmTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('actionConfirm'),
+        cancelButtonText: t('actionCancel'),
         type: deployForm.value.dry_run ? 'warning' : 'error'
       }
     )
@@ -484,10 +487,10 @@ const confirmDeploy = async () => {
 
     const result = await executeDeployApi(deployData)
     deployResult.value = result
-    ElMessage.success(result.message || '部署完成')
+    ElMessage.success(result.message || t('deployComplete'))
   } catch (error) {
-    ElMessage.error('部署失败')
-    ElMessage.error(`部署失败：${error.response?.data?.detail || error.message}`)
+    ElMessage.error(t('deployFailed'))
+    ElMessage.error(`${t('deployFailed')}: ${error.response?.data?.detail || error.message}`)
   } finally {
     deployLoading.value = false
   }

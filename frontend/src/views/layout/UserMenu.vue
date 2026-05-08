@@ -5,22 +5,25 @@
       <div class="um-header">
         <div class="um-avatar">A</div>
         <div class="um-info">
-          <span class="um-name">{{ userName }}</span>
-          <span class="um-email">{{ userEmail }}</span>
+          <span class="um-name">{{ displayUserName }}</span>
+          <span class="um-email">{{ displayUserEmail }}</span>
         </div>
       </div>
       <div class="um-divider"></div>
-      <button class="um-item"><el-icon><User /></el-icon> {{ profileLabel }}</button>
-      <button class="um-item"><el-icon><Setting /></el-icon> {{ settingsLabel }}</button>
+      <button class="um-item"><el-icon><User /></el-icon> {{ displayProfileLabel }}</button>
+      <button class="um-item"><el-icon><Setting /></el-icon> {{ displaySettingsLabel }}</button>
       <div class="um-divider"></div>
-      <button class="um-item danger"><el-icon><SwitchButton /></el-icon> {{ logoutLabel }}</button>
+      <button class="um-item danger"><el-icon><SwitchButton /></el-icon> {{ displayLogoutLabel }}</button>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { User, Setting, SwitchButton } from '@element-plus/icons-vue'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   darkMode: {
@@ -29,25 +32,32 @@ const props = defineProps({
   },
   userName: {
     type: String,
-    default: 'Admin'
+    default: ''
   },
   userEmail: {
     type: String,
-    default: 'admin@nas.local'
+    default: ''
   },
   profileLabel: {
     type: String,
-    default: 'Profile'
+    default: ''
   },
   settingsLabel: {
     type: String,
-    default: 'Settings'
+    default: ''
   },
   logoutLabel: {
     type: String,
-    default: 'Logout'
+    default: ''
   }
 })
+
+// i18n computed values with fallback to translation keys
+const displayUserName = computed(() => props.userName || t('userAdmin'))
+const displayUserEmail = computed(() => props.userEmail || 'admin@nas.local')
+const displayProfileLabel = computed(() => props.profileLabel || t('userProfile'))
+const displaySettingsLabel = computed(() => props.settingsLabel || t('userSettings'))
+const displayLogoutLabel = computed(() => props.logoutLabel || t('userLogout'))
 
 const emit = defineEmits(['toggle'])
 

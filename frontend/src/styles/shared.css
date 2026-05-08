@@ -1,0 +1,553 @@
+/* ===== 全局共享组件样式 ===== */
+
+/* ===== Button System ===== */
+/* 覆盖 Element Plus 默认按钮颜色，与系统主题协调 */
+
+/* Primary 按钮 - 明亮模式使用 Goodyear 蓝，暗黑使用科技绿 */
+:root {
+  --btn-primary-bg: var(--color-gb);
+  --btn-primary-bg-hover: var(--color-gb-mid);
+  --btn-primary-bg-active: var(--color-gb-deep);
+  --btn-primary-border: var(--color-gb);
+  --btn-primary-text: #ffffff;
+
+  --btn-success-bg: var(--accent-primary);
+  --btn-success-bg-hover: #00a884;
+  --btn-success-bg-active: #009975;
+  --btn-success-border: var(--accent-primary);
+  --btn-success-text: #ffffff;
+
+  --btn-warning-bg: var(--accent-warning);
+  --btn-warning-bg-hover: #cf6349;
+  --btn-warning-bg-active: #bb5740;
+  --btn-warning-border: var(--accent-warning);
+  --btn-warning-text: #ffffff;
+
+  --btn-danger-bg: var(--accent-danger);
+  --btn-danger-bg-hover: #c42a2a;
+  --btn-danger-bg-active: #b02525;
+  --btn-danger-border: var(--accent-danger);
+  --btn-danger-text: #ffffff;
+
+  --btn-info-bg: #636e72;
+  --btn-info-bg-hover: #576162;
+  --btn-info-bg-active: #4a5455;
+  --btn-info-border: #636e72;
+  --btn-info-text: #ffffff;
+}
+
+.dark {
+  --btn-primary-bg: var(--accent-primary);
+  --btn-primary-bg-hover: #00a884;
+  --btn-primary-bg-active: #009975;
+  --btn-primary-border: var(--accent-primary);
+  --btn-primary-text: #ffffff;
+
+  --btn-success-bg: #27ae60;
+  --btn-success-bg-hover: #229d56;
+  --btn-success-bg-active: #1e8c4c;
+  --btn-success-border: #27ae60;
+  --btn-success-text: #ffffff;
+
+  --btn-warning-bg: #f39c12;
+  --btn-warning-bg-hover: #e08e0b;
+  --btn-warning-bg-active: #d68310;
+  --btn-warning-border: #f39c12;
+  --btn-warning-text: #ffffff;
+
+  --btn-danger-bg: #e74c3c;
+  --btn-danger-bg-hover: #d64536;
+  --btn-danger-bg-active: #c73e30;
+  --btn-danger-border: #e74c3c;
+  --btn-danger-text: #ffffff;
+}
+
+/* 应用按钮样式 */
+.el-button--primary {
+  background-color: var(--btn-primary-bg) !important;
+  border-color: var(--btn-primary-border) !important;
+  color: var(--btn-primary-text) !important;
+}
+.el-button--primary:hover,
+.el-button--primary:focus {
+  background-color: var(--btn-primary-bg-hover) !important;
+  border-color: var(--btn-primary-bg-hover) !important;
+}
+.el-button--primary:active {
+  background-color: var(--btn-primary-bg-active) !important;
+  border-color: var(--btn-primary-bg-active) !important;
+}
+.el-button--primary.is-disabled,
+.el-button--primary.is-disabled:hover {
+  background-color: var(--btn-primary-bg) !important;
+  border-color: var(--btn-primary-border) !important;
+  opacity: 0.5;
+}
+
+.el-button--success {
+  background-color: var(--btn-success-bg) !important;
+  border-color: var(--btn-success-border) !important;
+  color: var(--btn-success-text) !important;
+}
+.el-button--success:hover,
+.el-button--success:focus {
+  background-color: var(--btn-success-bg-hover) !important;
+  border-color: var(--btn-success-bg-hover) !important;
+}
+.el-button--success:active {
+  background-color: var(--btn-success-bg-active) !important;
+  border-color: var(--btn-success-bg-active) !important;
+}
+
+.el-button--warning {
+  background-color: var(--btn-warning-bg) !important;
+  border-color: var(--btn-warning-border) !important;
+  color: var(--btn-warning-text) !important;
+}
+.el-button--warning:hover,
+.el-button--warning:focus {
+  background-color: var(--btn-warning-bg-hover) !important;
+  border-color: var(--btn-warning-bg-hover) !important;
+}
+.el-button--warning:active {
+  background-color: var(--btn-warning-bg-active) !important;
+  border-color: var(--btn-warning-bg-active) !important;
+}
+
+.el-button--danger {
+  background-color: var(--btn-danger-bg) !important;
+  border-color: var(--btn-danger-border) !important;
+  color: var(--btn-danger-text) !important;
+}
+.el-button--danger:hover,
+.el-button--danger:focus {
+  background-color: var(--btn-danger-bg-hover) !important;
+  border-color: var(--btn-danger-bg-hover) !important;
+}
+.el-button--danger:active {
+  background-color: var(--btn-danger-bg-active) !important;
+  border-color: var(--btn-danger-bg-active) !important;
+}
+
+.el-button--info {
+  background-color: var(--btn-info-bg) !important;
+  border-color: var(--btn-info-border) !important;
+  color: var(--btn-info-text) !important;
+}
+.el-button--info:hover,
+.el-button--info:focus {
+  background-color: var(--btn-info-bg-hover) !important;
+  border-color: var(--btn-info-bg-hover) !important;
+}
+.el-button--info:active {
+  background-color: var(--btn-info-bg-active) !important;
+  border-color: var(--btn-info-bg-active) !important;
+}
+
+/* Plain 按钮（描边按钮） */
+.el-button--primary.is-plain {
+  background-color: transparent !important;
+  border-color: var(--btn-primary-border) !important;
+  color: var(--btn-primary-bg) !important;
+}
+.el-button--primary.is-plain:hover,
+.el-button--primary.is-plain:focus {
+  background-color: var(--btn-primary-bg) !important;
+  color: var(--btn-primary-text) !important;
+}
+
+.el-button--success.is-plain {
+  background-color: transparent !important;
+  border-color: var(--btn-success-border) !important;
+  color: var(--btn-success-bg) !important;
+}
+.el-button--success.is-plain:hover,
+.el-button--success.is-plain:focus {
+  background-color: var(--btn-success-bg) !important;
+  color: var(--btn-success-text) !important;
+}
+
+.el-button--warning.is-plain {
+  background-color: transparent !important;
+  border-color: var(--btn-warning-border) !important;
+  color: var(--btn-warning-bg) !important;
+}
+.el-button--warning.is-plain:hover,
+.el-button--warning.is-plain:focus {
+  background-color: var(--btn-warning-bg) !important;
+  color: var(--btn-warning-text) !important;
+}
+
+.el-button--danger.is-plain {
+  background-color: transparent !important;
+  border-color: var(--btn-danger-border) !important;
+  color: var(--btn-danger-bg) !important;
+}
+.el-button--danger.is-plain:hover,
+.el-button--danger.is-plain:focus {
+  background-color: var(--btn-danger-bg) !important;
+  color: var(--btn-danger-text) !important;
+}
+
+/* 默认按钮 */
+.el-button--default {
+  background-color: var(--bg-card) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-primary) !important;
+}
+.el-button--default:hover,
+.el-button--default:focus {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--btn-primary-border) !important;
+  color: var(--btn-primary-bg) !important;
+}
+
+.dark .el-button--default {
+  background-color: var(--bg-tertiary) !important;
+  border-color: var(--border-default) !important;
+  color: var(--text-secondary) !important;
+}
+.dark .el-button--default:hover,
+.dark .el-button--default:focus {
+  background-color: var(--bg-hover) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--accent-primary) !important;
+}
+
+/* Link 按钮 - 用于表格名称列等 */
+.el-button.is-link {
+  color: var(--accent-secondary) !important;
+  background-color: transparent !important;
+  padding: 0 !important;
+  border: none !important;
+  font-weight: 500 !important;
+}
+.el-button.is-link:hover,
+.el-button.is-link:focus {
+  color: var(--btn-primary-bg-hover) !important;
+  background-color: transparent !important;
+  text-decoration: underline !important;
+}
+
+.dark .el-button.is-link {
+  color: var(--accent-primary) !important; /* 暗黑模式用科技绿 */
+}
+.dark .el-button.is-link:hover,
+.dark .el-button.is-link:focus {
+  color: #2ecc71 !important; /* 暗黑模式 hover 更亮的绿 */
+}
+
+/* Primary 类型的 Link 按钮 */
+.el-button--primary.is-link {
+  color: var(--btn-primary-bg) !important;
+  background-color: transparent !important;
+}
+.el-button--primary.is-link:hover,
+.el-button--primary.is-link:focus {
+  color: var(--btn-primary-bg-hover) !important;
+  text-decoration: underline !important;
+}
+
+.dark .el-button--primary.is-link {
+  color: var(--accent-primary) !important;
+}
+.dark .el-button--primary.is-link:hover,
+.dark .el-button--primary.is-link:focus {
+  color: #2ecc71 !important;
+}
+
+/* Text 按钮 */
+.el-button.is-text {
+  color: var(--text-secondary) !important;
+}
+.el-button.is-text:hover,
+.el-button.is-text:focus {
+  background-color: var(--bg-hover) !important;
+  color: var(--btn-primary-bg) !important;
+}
+
+/* 按钮圆角统一 */
+.el-button {
+  border-radius: var(--radius-md) !important;
+  font-family: var(--font-body) !important;
+  font-weight: 500 !important;
+  transition: all 0.2s ease !important;
+}
+
+.el-button--small {
+  border-radius: var(--radius-sm) !important;
+  padding: 5px 12px !important;
+  font-size: 12px !important;
+}
+
+.el-button--large {
+  border-radius: var(--radius-lg) !important;
+  padding: 12px 24px !important;
+  font-size: 16px !important;
+}
+
+/* 按钮组内间距 */
+.el-button-group .el-button {
+  margin-left: -1px;
+}
+
+/* ===== Card Header ===== */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--gap-md);
+}
+
+.card-header-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.card-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  flex-wrap: wrap;
+}
+
+/* ===== Filter Toolbar ===== */
+.filter-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--gap-md);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--gap-md);
+  flex-wrap: wrap;
+  gap: var(--gap-md);
+}
+
+.filter-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-md);
+  flex-wrap: wrap;
+}
+
+.filter-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+/* ===== Pagination Bar ===== */
+.pagination-bar {
+  margin-top: var(--gap-md);
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ===== Page Header ===== */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--gap-lg);
+  padding-bottom: var(--gap-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.page-header h1 {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.page-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+/* ===== Table Actions ===== */
+.table-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--gap-xs);
+  justify-content: center;
+  align-items: center;
+}
+
+.table-actions .el-button {
+  padding: 5px 8px;
+  font-size: 12px;
+  min-width: auto;
+  white-space: nowrap;
+}
+
+/* ===== Table Styling ===== */
+/* 表格表头样式 */
+.el-table th.el-table__cell {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-primary) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+}
+
+.dark .el-table th.el-table__cell {
+  background-color: var(--bg-tertiary) !important;
+  color: var(--text-secondary) !important;
+}
+
+/* 表格行样式 */
+.el-table td.el-table__cell {
+  color: var(--text-primary) !important;
+}
+
+.dark .el-table td.el-table__cell {
+  color: var(--text-secondary) !important;
+}
+
+/* Stripe 行背景 */
+.el-table--striped .el-table__body tr.el-table__row--striped td.el-table__cell {
+  background-color: var(--bg-tertiary) !important;
+}
+
+/* 表格边框 */
+.el-table--border .el-table__cell,
+.el-table--border .el-table__cell:first-child .el-cell {
+  border-color: var(--border-default) !important;
+}
+
+/* 表格 hover 行 */
+.el-table__body tr:hover > td.el-table__cell {
+  background-color: var(--bg-hover) !important;
+}
+
+/* 表格内 link 文字清晰 */
+.el-table .el-button.is-link {
+  color: var(--accent-secondary) !important;
+  font-weight: 500 !important;
+}
+
+.dark .el-table .el-button.is-link {
+  color: var(--accent-primary) !important;
+}
+
+/* 按钮组 - 固定宽度适应英文 */
+.action-buttons {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: var(--gap-xs);
+}
+
+.action-buttons .el-button {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ===== Button Size Variants ===== */
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.btn-xs {
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* ===== Stats Card ===== */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--gap-md);
+  margin-bottom: var(--gap-lg);
+}
+
+.stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: var(--gap-md);
+  text-align: center;
+}
+
+.stats-value {
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.stats-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: var(--gap-xs);
+}
+
+/* ===== Empty State Wrapper ===== */
+.empty-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+  padding: var(--gap-xl);
+}
+
+/* ===== Dialog Footer ===== */
+.dialog-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--gap-sm);
+}
+
+/* ===== Responsive Breakpoints ===== */
+/* 平板 */
+@media (max-width: 1024px) {
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .filter-toolbar-left,
+  .filter-toolbar-right {
+    justify-content: flex-start;
+  }
+}
+
+/* 手机 */
+@media (max-width: 768px) {
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--gap-sm);
+  }
+  .page-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--gap-sm);
+  }
+  .filter-toolbar-left .el-input,
+  .filter-toolbar-left .el-select,
+  .filter-toolbar-left .el-date-picker {
+    width: 100% !important;
+  }
+  .table-actions {
+    flex-wrap: wrap;
+    justify-content: flex-start;
+  }
+  .pagination-bar {
+    justify-content: center;
+  }
+}
+
+/* 小屏手机 */
+@media (max-width: 576px) {
+  .stats-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .table-actions .el-button {
+    padding: 4px 6px;
+    font-size: 11px;
+  }
+}

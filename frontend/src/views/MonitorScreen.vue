@@ -23,15 +23,15 @@
       <div class="floor-plan-area">
         <!-- Floor Plan Selector -->
         <div class="plan-selector">
-          <el-select v-model="selectedPlanId" placeholder="选择平面图" @change="loadPlanNodes" style="width: 200px;">
+          <el-select v-model="selectedPlanId" :placeholder="t('monitorScreenSelectPlan')" @change="loadPlanNodes" style="width: 200px;">
             <el-option v-for="plan in floorPlans" :key="plan.id" :label="plan.name" :value="plan.id">
               <span>{{ plan.name }}</span>
-              <span class="node-count">{{ plan.node_count }} 个节点</span>
+              <span class="node-count">{{ t('monitorScreenNodeCount', { count: plan.node_count }) }}</span>
             </el-option>
           </el-select>
           <el-button type="danger" size="small" @click="deletePlan" v-if="selectedPlanId" :disabled="floorPlans.length <= 1">
             <el-icon><Delete /></el-icon>
-            删除
+            {{ t('actionDelete') }}
           </el-button>
           <button class="btn-add-plan" @click="showUploadDialog = true">
             <el-icon><Plus /></el-icon>
@@ -265,14 +265,14 @@
       <div class="upload-form">
         <div class="form-item">
           <label class="form-label">{{ t('monitorScreenPlanName') }}</label>
-          <el-input v-model="newPlanName" placeholder="如：一楼车间" />
+          <el-input v-model="newPlanName" :placeholder="t('monitorScreenPlanNamePlaceholder')" />
         </div>
         <div class="form-item">
           <label class="form-label">{{ t('monitorScreenPlanImage') }}</label>
           <div class="file-input-wrapper">
             <el-button @click="triggerFileInput">
               <el-icon><Upload /></el-icon>
-              选择图片
+              {{ t('monitorScreenSelectImage') }}
             </el-button>
             <input
               ref="fileInputRef"
@@ -288,7 +288,7 @@
       <template #footer>
         <el-button @click="closeUploadDialog">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="uploadFloorPlan" :disabled="!newPlanName || !selectedFile || uploading" :loading="uploading">
-          {{ uploading ? '上传中' : t('actionConfirm') }}
+          {{ uploading ? t('monitorScreenUploading') : t('actionConfirm') }}
         </el-button>
       </template>
     </el-dialog>
@@ -296,7 +296,7 @@
     <!-- Select Device Dialog -->
     <el-dialog v-model="showSelectDeviceDialog" :title="t('monitorScreenSelectDevice')" width="500px">
       <div class="device-search">
-        <el-input v-model="deviceSearchQuery" placeholder="搜索设备名称或IP" clearable />
+        <el-input v-model="deviceSearchQuery" :placeholder="t('deviceSearchPlaceholder')" clearable />
       </div>
       <div class="device-list">
         <div
@@ -443,11 +443,11 @@ const deletePlan = async () => {
   if (!selectedPlanId.value) return
 
   try {
-    await ElMessageBox.confirm('确定要删除该平面图吗？相关设备节点也会被删除。', '删除确认', { type: 'warning' })
+    await ElMessageBox.confirm(t('monitorScreenDeletePlanConfirm'), t('monitorScreenDeleteConfirmTitle'), { type: 'warning' })
 
     const res = await fetch(`/api/floor-plans/${selectedPlanId.value}`, { method: 'DELETE' })
     if (res.ok) {
-      ElMessage.success('平面图已删除')
+      ElMessage.success(t('monitorScreenPlanDeleted'))
       // 重新加载列表并选择第一个
       await loadFloorPlans()
       selectedPlanId.value = floorPlans.value[0]?.id || null
@@ -456,7 +456,7 @@ const deletePlan = async () => {
       }
     } else {
       const data = await res.json()
-      ElMessage.error(data.detail || '删除失败')
+      ElMessage.error(data.detail || t('msgOpFailed'))
     }
   } catch {
     // 用户取消
@@ -646,7 +646,7 @@ const uploadFloorPlan = async () => {
       closeUploadDialog()
       await loadFloorPlans()
     } else {
-      ElMessage.error(data.detail || '上传失败')
+      ElMessage.error(data.detail || t('monitorScreenUploadFailed'))
     }
   } catch (err) {
     console.error('Upload failed:', err)

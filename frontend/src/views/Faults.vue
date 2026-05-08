@@ -3,10 +3,10 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>故障记录</span>
+          <span>{{ t('faultTitle') }}</span>
           <el-button type="primary" @click="showAddDialog = true">
             <el-icon><Plus /></el-icon>
-            添加故障
+            {{ t('faultAdd') }}
           </el-button>
         </div>
       </template>
@@ -15,83 +15,83 @@
       <div class="filter-bar">
         <el-input
           v-model="searchText"
-          placeholder="搜索设备名称或故障单号"
+          :placeholder="t('faultSearchPlaceholder')"
           style="width: 220px"
           clearable
           @input="filterFaults"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="filterSeverity" placeholder="故障级别" clearable style="width: 140px" @change="filterFaults">
-          <el-option label="严重" value="critical" />
-          <el-option label="主要" value="major" />
-          <el-option label="次要" value="minor" />
-          <el-option label="警告" value="warning" />
+        <el-select v-model="filterSeverity" :placeholder="t('faultLevel')" clearable style="width: 140px" @change="filterFaults">
+          <el-option :label="t('dashCritical')" value="critical" />
+          <el-option :label="t('dashMajor')" value="major" />
+          <el-option :label="t('dashMinor')" value="minor" />
+          <el-option :label="t('dashWarning')" value="warning" />
         </el-select>
-        <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px" @change="filterFaults">
-          <el-option label="待处理" value="open" />
-          <el-option label="处理中" value="investigating" />
-          <el-option label="已解决" value="resolved" />
-          <el-option label="已关闭" value="closed" />
+        <el-select v-model="filterStatus" :placeholder="t('faultStatus')" clearable style="width: 120px" @change="filterFaults">
+          <el-option :label="t('faultStatusOpen')" value="open" />
+          <el-option :label="t('faultStatusInvestigating')" value="investigating" />
+          <el-option :label="t('faultStatusResolved')" value="resolved" />
+          <el-option :label="t('faultStatusClosed')" value="closed" />
         </el-select>
         <el-date-picker
           v-model="dateRange"
           type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          :range-separator="t('faultToDate')"
+          :start-placeholder="t('faultStartDate')"
+          :end-placeholder="t('faultEndDate')"
           value-format="YYYY-MM-DD"
           style="width: 240px"
           @change="filterFaults"
         />
-        <el-select v-model="sortBy" placeholder="排序" style="width: 150px" @change="filterFaults">
-          <el-option label="发生时间 ↓" value="created_at_desc" />
-          <el-option label="发生时间 ↑" value="created_at_asc" />
-          <el-option label="停机时长 ↓" value="downtime_desc" />
-          <el-option label="停机时长 ↑" value="downtime_asc" />
+        <el-select v-model="sortBy" :placeholder="t('faultSort')" style="width: 150px" @change="filterFaults">
+          <el-option :label="t('faultSortTimeDesc')" value="created_at_desc" />
+          <el-option :label="t('faultSortTimeAsc')" value="created_at_asc" />
+          <el-option :label="t('faultSortDowntimeDesc')" value="downtime_desc" />
+          <el-option :label="t('faultSortDowntimeAsc')" value="downtime_asc" />
         </el-select>
       </div>
 
       <el-table :data="filteredFaults" style="width: 100%" v-loading="loading">
-        <el-table-column prop="fault_no" label="故障单号" width="200">
+        <el-table-column prop="fault_no" :label="t('faultNo')" width="200">
           <template #default="{ row }">
             <router-link :to="`/faults/${row.id}`" class="fault-link">
               {{ row.fault_no }}
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="device_name" label="设备名称" width="180" />
-        <el-table-column prop="severity" label="级别" width="100">
+        <el-table-column prop="device_name" :label="t('faultDevice')" width="180" />
+        <el-table-column prop="severity" :label="t('faultSeverity')" width="100">
           <template #default="{ row }">
             <el-tag :type="getSeverityType(row.severity)">
               {{ getSeverityText(row.severity) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="status" :label="t('faultStatus')" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="downtime_minutes" label="停机时长" width="100">
-          <template #default="{ row }">{{ row.downtime_minutes }} 分钟</template>
+        <el-table-column prop="downtime_minutes" :label="t('faultDowntime')" width="100">
+          <template #default="{ row }">{{ row.downtime_minutes }} {{ t('faultMinutes') }}</template>
         </el-table-column>
-        <el-table-column prop="description" label="故障描述" />
-        <el-table-column prop="created_at" label="发生时间" width="180">
+        <el-table-column prop="description" :label="t('faultDescription')" />
+        <el-table-column prop="created_at" :label="t('faultOccurTime')" width="180">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column :label="t('faultAction')" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editFault(row)">编辑</el-button>
+            <el-button size="small" @click="editFault(row)">{{ t('actionEdit') }}</el-button>
             <el-button
               v-if="row.status === 'open'"
               size="small"
               type="warning"
               @click="changeStatus(row, 'investigating')"
             >
-              处理
+              {{ t('faultProcess') }}
             </el-button>
             <el-button
               v-if="row.status === 'investigating'"
@@ -99,7 +99,7 @@
               type="success"
               @click="changeStatus(row, 'resolved')"
             >
-              解决
+              {{ t('faultResolve') }}
             </el-button>
             <el-button
               v-if="row.status === 'resolved'"
@@ -107,7 +107,7 @@
               type="info"
               @click="changeStatus(row, 'closed')"
             >
-              关闭
+              {{ t('actionClose') }}
             </el-button>
             <el-button
               v-if="row.status === 'closed'"
@@ -116,10 +116,15 @@
               plain
               @click="changeStatus(row, 'open')"
             >
-              重开
+              {{ t('faultReopen') }}
             </el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="t('msgNoFaults')" :image-size="80">
+            <el-button type="primary" size="small" @click="showAddDialog = true">{{ t('faultAdd') }}</el-button>
+          </el-empty>
+        </template>
       </el-table>
       <div class="pagination-bar">
         <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadFaults" @current-change="loadFaults" />
@@ -127,10 +132,10 @@
     </el-card>
 
     <!-- 添加故障对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? '编辑故障记录' : '添加故障记录'" width="600px">
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="600px">
       <el-form :model="faultForm" label-width="120px">
-        <el-form-item label="设备" required>
-          <el-select v-model="faultForm.device_id" placeholder="选择设备" style="width: 100%" :disabled="editMode">
+        <el-form-item :label="t('faultDeviceLabel')" required>
+          <el-select v-model="faultForm.device_id" :placeholder="t('faultSelectDevice')" style="width: 100%" :disabled="editMode">
             <el-option
               v-for="device in devices"
               :key="device.id"
@@ -139,35 +144,35 @@
             />
           </el-select>
         </el-form-item>
-        <el-form-item label="故障级别" required>
+        <el-form-item :label="t('faultLevel')" required>
           <el-select v-model="faultForm.severity">
-            <el-option label="严重 (Critical)" value="critical" />
-            <el-option label="主要 (Major)" value="major" />
-            <el-option label="次要 (Minor)" value="minor" />
-            <el-option label="警告 (Warning)" value="warning" />
+            <el-option :label="`${t('dashCritical')} (Critical)`" value="critical" />
+            <el-option :label="`${t('dashMajor')} (Major)`" value="major" />
+            <el-option :label="`${t('dashMinor')} (Minor)`" value="minor" />
+            <el-option :label="`${t('dashWarning')} (Warning)`" value="warning" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态" v-if="editMode">
+        <el-form-item :label="t('faultStatus')" v-if="editMode">
           <el-select v-model="faultForm.status">
-            <el-option label="待处理" value="open" />
-            <el-option label="处理中" value="investigating" />
-            <el-option label="已解决" value="resolved" />
-            <el-option label="已关闭" value="closed" />
+            <el-option :label="t('faultStatusOpen')" value="open" />
+            <el-option :label="t('faultStatusInvestigating')" value="investigating" />
+            <el-option :label="t('faultStatusResolved')" value="resolved" />
+            <el-option :label="t('faultStatusClosed')" value="closed" />
           </el-select>
         </el-form-item>
-        <el-form-item label="停机时长 (分钟)">
+        <el-form-item :label="t('faultDowntimeMinutes')">
           <el-input-number v-model="faultForm.downtime_minutes" :min="0" />
         </el-form-item>
-        <el-form-item label="影响范围">
-          <el-input v-model="faultForm.impact" type="textarea" :rows="2" placeholder="描述影响的业务范围" />
+        <el-form-item :label="t('faultImpact')">
+          <el-input v-model="faultForm.impact" type="textarea" :rows="2" :placeholder="t('faultImpactPlaceholder')" />
         </el-form-item>
-        <el-form-item label="故障描述" required>
+        <el-form-item :label="t('faultDescription')" required>
           <el-input v-model="faultForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updateFault() : addFault()">确定</el-button>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateFault() : addFault()">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -179,6 +184,9 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
 import { Search } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const faults = ref([])
 const filteredFaults = ref([])
@@ -214,8 +222,8 @@ const getSeverityType = (severity) => {
 }
 
 const getSeverityText = (severity) => {
-  const texts = { critical: '严重', major: '主要', minor: '次要', warning: '警告' }
-  return texts[severity] || severity
+  const keys = { critical: 'dashCritical', major: 'dashMajor', minor: 'dashMinor', warning: 'dashWarning' }
+  return t(keys[severity]) || severity
 }
 
 const getStatusType = (status) => {
@@ -224,8 +232,8 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { open: '待处理', investigating: '处理中', resolved: '已解决', closed: '已关闭' }
-  return texts[status] || status
+  const keys = { open: 'faultStatusOpen', investigating: 'faultStatusInvestigating', resolved: 'faultStatusResolved', closed: 'faultStatusClosed' }
+  return t(keys[status]) || status
 }
 
 const filterFaults = () => {
@@ -289,7 +297,7 @@ const loadFaults = async () => {
     total.value = data.total || faults.value.length
     filterFaults()
   } catch (error) {
-    ElMessage.error('加载故障记录失败')
+    ElMessage.error(t('faultLoadFailed'))
   } finally {
     loading.value = false
   }
@@ -300,7 +308,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载设备列表失败')
+    ElMessage.error(t('faultDeviceLoadFailed'))
   }
 }
 
@@ -313,13 +321,12 @@ const addFault = async () => {
       reporter: 'Web',
       status: 'open'
     })
-    ElMessage.success('故障记录添加成功')
+    ElMessage.success(t('faultAddSuccess'))
     showAddDialog.value = false
     resetForm()
     loadFaults()
   } catch (error) {
-    ElMessage.error('添加故障记录失败')
-    ElMessage.error('添加故障记录失败')
+    ElMessage.error(t('faultAddFailed'))
   }
 }
 
@@ -345,7 +352,7 @@ const updateFault = async () => {
       ...faultForm.value,
       device_name: device?.name
     })
-    ElMessage.success('故障记录更新成功')
+    ElMessage.success(t('faultUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     resetForm()
@@ -353,59 +360,58 @@ const updateFault = async () => {
     // 触发事件更新导航栏badge
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
-    ElMessage.error('更新故障记录失败')
-    ElMessage.error('更新故障记录失败')
+    ElMessage.error(t('faultUpdateFailed'))
   }
 }
 
 const closeFault = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要关闭故障 "${row.fault_no}" 吗？`, '确认关闭', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(`${t('faultCloseConfirm')} "${row.fault_no}" ?`, t('faultCloseTitle'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await updateFaultApi(row.id, { status: 'closed' })
-    ElMessage.success('故障已关闭')
+    ElMessage.success(t('faultCloseSuccess'))
     loadFaults()
     // 触发事件更新导航栏badge
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('关闭故障失败')
-      ElMessage.error('关闭故障失败')
+      ElMessage.error(t('faultCloseFailed'))
     }
   }
 }
 
 const changeStatus = async (row, newStatus) => {
   try {
-    const statusLabels = {
-      open: '待处理',
-      investigating: '处理中',
-      resolved: '已解决',
-      closed: '已关闭'
+    const statusKeys = {
+      open: 'faultStatusOpen',
+      investigating: 'faultStatusInvestigating',
+      resolved: 'faultStatusResolved',
+      closed: 'faultStatusClosed'
     }
+    const statusText = t(statusKeys[newStatus])
 
     await ElMessageBox.confirm(
-      `确定要将故障 "${row.fault_no}" 的状态改为 "${statusLabels[newStatus]}" 吗？`,
-      '确认状态变更',
+      `${t('faultStatusChangeConfirm')} "${row.fault_no}" ${t('faultStatusChangeTo')} "${statusText}" ?`,
+      t('faultStatusChangeTitle'),
       {
-        confirmButtonText: '确定',
-        cancelButtonText: '取消',
+        confirmButtonText: t('actionConfirm'),
+        cancelButtonText: t('actionCancel'),
         type: 'info'
       }
     )
 
     await updateFaultApi(row.id, { status: newStatus })
-    ElMessage.success(`故障状态已更新为 ${statusLabels[newStatus]}`)
+    ElMessage.success(`${t('faultStatusUpdated')} ${statusText}`)
     loadFaults()
     // 触发事件更新导航栏badge
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('状态更新失败')
+      ElMessage.error(t('faultStatusUpdateFailed'))
     }
   }
 }
@@ -442,25 +448,18 @@ onMounted(() => {
 
 .filter-bar {
   display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: var(--gap-md);
+  margin-bottom: var(--gap-lg);
   flex-wrap: wrap;
 }
 
 .fault-link {
-  color: #409EFF;
+  color: var(--accent-secondary);
   text-decoration: none;
   font-weight: 500;
 }
 
 .fault-link:hover {
   text-decoration: underline;
-  color: #66b1ff;
-}
-.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
-@media (max-width: 768px) {
-  .filter-bar { flex-wrap: wrap; }
-  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
-  .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
 }
 </style>

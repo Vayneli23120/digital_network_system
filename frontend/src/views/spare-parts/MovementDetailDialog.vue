@@ -1,42 +1,42 @@
 <template>
-  <el-dialog :model-value="modelValue" title="出入库详情" width="750px" @update:model-value="$emit('update:modelValue', $event)">
-    <!-- 批次概览（紧凑） -->
+  <el-dialog :model-value="modelValue" :title="t('movementDetail')" width="750px" @update:model-value="$emit('update:modelValue', $event)">
+    <!-- 批次概览 -->
     <div v-if="movement" class="compact-header">
-      <span>时间: {{ formatDateTime(movement.created_at) }}</span>
+      <span>{{ t('movementTime') }}: {{ formatDateTime(movement.created_at) }}</span>
       <span>
         <el-tag :type="getMovementTypeTag(movement.movement_type)" size="small">
           {{ getMovementTypeText(movement.movement_type) }}
         </el-tag>
       </span>
-      <span>批次: <strong>{{ movement.batch_total || 1 }}</strong> 件</span>
-      <span v-if="movement.session_code">批次码: {{ movement.session_code }}</span>
-      <span v-if="movement.target_device_name">目标设备: {{ movement.target_device_name }}</span>
-      <span v-if="movement.source_device_name">来源设备: {{ movement.source_device_name }}</span>
-      <span v-if="movement.reason">原因: {{ movement.reason }}</span>
+      <span>{{ t('dashTotal') }}: <strong>{{ movement.batch_total || 1 }}</strong></span>
+      <span v-if="movement.session_code">Session: {{ movement.session_code }}</span>
+      <span v-if="movement.target_device_name">{{ t('monitorScreenTotalDevices') }}: {{ movement.target_device_name }}</span>
+      <span v-if="movement.source_device_name">{{ t('scrapSourceDevice') }}: {{ movement.source_device_name }}</span>
+      <span v-if="movement.reason">{{ t('spareReason') }}: {{ movement.reason }}</span>
     </div>
 
     <!-- 本批次备件清单表格 -->
     <el-table :data="batchAllItems" stripe border size="small" style="margin-top: 8px">
       <el-table-column label="" width="60">
         <template #default="{ row }">
-          <el-tag v-if="row.isCurrent" type="primary" size="small">当前</el-tag>
+          <el-tag v-if="row.isCurrent" type="primary" size="small">{{ t('labelCurrent') }}</el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="serial_number" label="序列号" width="150">
+      <el-table-column prop="serial_number" :label="t('spareSerialNumber')" width="150">
         <template #default="{ row }">
           <span class="text-primary">{{ row.serial_number || '-' }}</span>
         </template>
       </el-table-column>
-      <el-table-column prop="po_number" label="PO号" width="100">
+      <el-table-column prop="po_number" :label="t('sparePoNumber')" width="100">
         <template #default="{ row }">{{ row.po_number || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="part_number" label="型号" width="120">
+      <el-table-column prop="part_number" :label="t('sparePartNumber')" width="120">
         <template #default="{ row }">{{ row.part_number || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="name" label="名称" min-width="120">
+      <el-table-column prop="name" :label="t('spareName')" min-width="120">
         <template #default="{ row }">{{ row.name || '-' }}</template>
       </el-table-column>
-      <el-table-column prop="unit_price" label="单价" width="80">
+      <el-table-column prop="unit_price" :label="t('spareUnitPrice')" width="80">
         <template #default="{ row }">
           <span class="text-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
         </template>
@@ -48,6 +48,9 @@
 <script setup>
 import { computed } from 'vue'
 import { formatDateTime } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const props = defineProps({
   modelValue: {
@@ -69,11 +72,16 @@ const getMovementTypeTag = (type) => {
 }
 
 const getMovementTypeText = (type) => {
-  const texts = { in: '入库', out: '出库', scrap_in: '报废入库', scrap_out: '已报废' }
+  const texts = {
+    in: t('movementIn'),
+    out: t('movementOut'),
+    scrap_in: t('movementScrapIn'),
+    scrap_out: t('movementScrapped')
+  }
   return texts[type] || type
 }
 
-// 合并当前记录和batch_items用于表格显示
+// 合并当前记录和batch_items
 const batchAllItems = computed(() => {
   if (!props.movement) return []
   const current = {

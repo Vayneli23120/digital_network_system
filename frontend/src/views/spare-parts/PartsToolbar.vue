@@ -4,36 +4,40 @@
     <el-row :gutter="16" class="stats-row">
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <el-statistic title="备件种类" :value="stats.total_parts" />
+          <el-statistic :title="t('spareStatsTotal')" :value="stats.total_parts" />
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <el-statistic title="总库存" :value="stats.total_quantity" />
+          <el-statistic :title="t('spareStatsQuantity')" :value="stats.total_quantity" />
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <el-statistic title="库存不足" :value="stats.low_stock_count" value-style="color: #F56C6C" />
+          <el-statistic :title="t('spareStatsLowStock')" :value="stats.low_stock_count" value-style="color: #F56C6C" />
         </el-card>
       </el-col>
       <el-col :span="6">
         <el-card shadow="hover" class="stat-card">
-          <el-statistic title="总价值（元）" :value="stats.total_value" :precision="2" />
+          <el-statistic :title="t('spareStatsValue')" :value="stats.total_value" :precision="2" />
         </el-card>
       </el-col>
     </el-row>
 
     <!-- 操作按钮 -->
     <div class="action-buttons">
-      <el-button type="success" @click="$emit('scan-in')">扫码入库</el-button>
-      <el-button type="warning" @click="$emit('scan-out')">扫码出库</el-button>
-      <el-button type="primary" @click="$emit('add')">新增备件</el-button>
+      <el-button type="success" @click="$emit('scan-in')">{{ t('spareScanIn') }}</el-button>
+      <el-button type="warning" @click="$emit('scan-out')">{{ t('spareScanOut') }}</el-button>
+      <el-button type="primary" @click="$emit('add')">{{ t('spareNew') }}</el-button>
     </div>
   </div>
 </template>
 
 <script setup>
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
+
 defineProps({
   stats: {
     type: Object,
@@ -58,5 +62,10 @@ defineEmits(['scan-in', 'scan-out', 'add'])
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
+  flex-wrap: nowrap;
+}
+.action-buttons .el-button {
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 </style>

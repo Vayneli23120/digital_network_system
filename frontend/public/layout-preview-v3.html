@@ -1,0 +1,692 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NAS 系统布局预览 V3</title>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --font-display: 'Geist Mono', monospace;
+      --font-body: 'Geist', sans-serif;
+      --radius-sm: 6px;
+      --radius-md: 8px;
+      --radius-lg: 12px;
+      --gap-xs: 4px;
+      --gap-sm: 8px;
+      --gap-md: 16px;
+      --gap-lg: 24px;
+      --gap-xl: 32px;
+      --bg-primary: #f0f4fa;
+      --bg-secondary: #ffffff;
+      --bg-tertiary: #f7f9fc;
+      --bg-card: #ffffff;
+      --bg-hover: #e8eef5;
+      --text-primary: #0D1B2A;
+      --text-secondary: #3A4A5C;
+      --text-tertiary: #6B7A8D;
+      --text-muted: #9BAABB;
+      --border-default: #E2E8F2;
+      --border-subtle: #f1f5f9;
+      --accent-primary: #003087;
+      --accent-secondary: #0984e3;
+      --accent-success: #00b894;
+      --accent-warning: #e17055;
+      --accent-danger: #d63031;
+      --accent-yellow: #f6b93b;
+      --severity-critical: #ff4757;
+      --severity-major: #ffb800;
+      --severity-minor: #00a8ff;
+      --severity-warning: #6b7280;
+      --shadow-card: 0 1px 3px rgba(0, 48, 135, 0.06);
+      --color-gb: #003087;
+      --color-gb-mid: #00419E;
+      --color-gb-deep: #001F5C;
+    }
+    .dark {
+      --bg-primary: #0a0e14;
+      --bg-secondary: #0d1117;
+      --bg-tertiary: #161b22;
+      --bg-card: #1a1f26;
+      --bg-hover: #21262d;
+      --text-primary: #e6edf3;
+      --text-secondary: #8b949e;
+      --text-tertiary: #6e7681;
+      --text-muted: #484f58;
+      --border-default: #30363d;
+      --border-subtle: #21262d;
+      --accent-primary: #00b894;
+      --shadow-card: 0 0 0 1px #30363d;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--font-body); background: var(--bg-primary); color: var(--text-primary); min-height: 100vh; line-height: 1.5; }
+
+    /* ===== Topbar ===== */
+    .topbar { height: 56px; background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-deep) 100%); display: flex; align-items: center; padding: 0 20px; border-bottom: 3px solid var(--accent-yellow); }
+    .dark .topbar { background: var(--bg-secondary); border-bottom: 1px solid var(--border-default); }
+    .logo-icon { width: 32px; height: 32px; background: var(--accent-yellow); border-radius: 8px; display: flex; align-items: center; justify-content: center; color: var(--color-gb-deep); font-family: var(--font-display); font-weight: 600; font-size: 14px; }
+    .dark .logo-icon { background: var(--accent-success); color: #fff; }
+    .logo-text { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--accent-yellow); margin-left: 8px; }
+    .dark .logo-text { color: var(--text-primary); }
+    .topbar-right { flex: 1; display: flex; justify-content: flex-end; gap: 8px; }
+    .icon-btn { width: 32px; height: 32px; background: rgba(255,255,255,0.1); border: none; border-radius: 6px; color: rgba(255,255,255,0.75); cursor: pointer; }
+
+    /* ===== Layout ===== */
+    .layout-body { display: flex; }
+    .sidebar { width: 220px; background: var(--bg-secondary); border-right: 1px solid var(--border-default); padding: 16px; height: calc(100vh - 56px); overflow-y: auto; }
+    .sidebar-group { margin-bottom: 24px; }
+    .sidebar-label { font-family: var(--font-display); font-size: 11px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; padding: 8px 12px; border-bottom: 1px solid var(--border-subtle); margin-bottom: 4px; }
+    .sidebar-item { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 8px; color: var(--text-secondary); cursor: pointer; font-size: 14px; }
+    .sidebar-item:hover { background: var(--bg-hover); }
+    .sidebar-item.active { background: #FFF9D6; border-left: 3px solid var(--accent-yellow); color: var(--accent-primary); padding-left: 9px; }
+    .dark .sidebar-item.active { background: rgba(0, 184, 148, 0.1); border-left-color: var(--accent-success); color: var(--accent-success); }
+    .sidebar-badge { margin-left: auto; background: var(--accent-danger); color: #fff; font-size: 10px; padding: 2px 8px; border-radius: 6px; }
+
+    .main-content { flex: 1; padding: 20px; overflow-y: auto; }
+
+    /* ===== Section ===== */
+    .section-title { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; margin-bottom: 16px; }
+    .section-divider { margin: 32px 0; border: none; border-top: 1px solid var(--border-default); }
+
+    /* ===== Dashboard Status Cards ===== */
+    .status-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); padding: 16px; transition: all 0.2s; cursor: pointer; }
+    .status-card:hover { border-color: var(--accent-primary); box-shadow: 0 0 20px rgba(0, 48, 135, 0.15); transform: translateY(-2px); }
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+    .card-icon { width: 28px; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+    .card-icon.devices { background: rgba(0, 168, 255, 0.15); color: var(--accent-secondary); }
+    .card-icon.faults { background: rgba(255, 71, 87, 0.15); color: var(--accent-danger); }
+    .card-icon.backups { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .card-icon.cost { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .card-icon.inventory { background: rgba(9, 132, 227, 0.15); color: var(--accent-secondary); }
+    .card-icon.maintenance { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .card-label { font-size: 12px; font-weight: 500; color: var(--text-tertiary); }
+
+    .metric-main { display: flex; align-items: baseline; gap: 6px; margin-bottom: 12px; }
+    .metric-value { font-family: var(--font-display); font-size: 28px; font-weight: 600; color: var(--text-primary); }
+    .metric-value.success { color: var(--accent-success); }
+    .metric-value.danger { color: var(--accent-danger); }
+    .metric-value.warning { color: var(--accent-warning); }
+    .metric-unit { font-size: 12px; color: var(--text-tertiary); }
+
+    .metric-bars { display: flex; flex-direction: column; gap: 8px; }
+    .bar-item { display: flex; align-items: center; gap: 8px; }
+    .bar-label { font-size: 11px; color: var(--text-tertiary); width: 40px; }
+    .bar-track { flex: 1; height: 4px; background: var(--bg-tertiary); border-radius: 2px; overflow: hidden; }
+    .bar-fill { height: 100%; border-radius: 2px; }
+    .bar-fill.online { background: var(--accent-success); }
+    .bar-fill.offline { background: var(--accent-danger); }
+    .bar-value { font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); width: 20px; text-align: right; }
+
+    .severity-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .severity-item { display: flex; align-items: center; gap: 6px; padding: 8px; background: var(--bg-tertiary); border-radius: 6px; }
+    .severity-dot { width: 6px; height: 6px; border-radius: 50%; }
+    .severity-item.critical .severity-dot { background: var(--severity-critical); }
+    .severity-item.major .severity-dot { background: var(--severity-major); }
+    .severity-item.minor .severity-dot { background: var(--severity-minor); }
+    .severity-count { font-family: var(--font-display); font-size: 14px; font-weight: 600; }
+    .severity-label { font-size: 10px; color: var(--text-tertiary); }
+
+    .backup-status { display: flex; flex-direction: column; gap: 6px; }
+    .status-row { display: flex; align-items: center; gap: 8px; }
+    .status-indicator { width: 6px; height: 6px; border-radius: 50%; }
+    .status-indicator.success { background: var(--accent-success); }
+    .status-text { font-size: 12px; color: var(--text-secondary); }
+
+    .cost-breakdown { display: flex; flex-direction: column; gap: 6px; }
+    .cost-item { display: flex; justify-content: space-between; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 4px; }
+    .cost-label { font-size: 11px; color: var(--text-tertiary); }
+    .cost-amount { font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); }
+
+    .inventory-stats { display: flex; flex-direction: column; gap: 6px; }
+    .inventory-row { display: flex; justify-content: space-between; padding: 6px 8px; background: var(--bg-tertiary); border-radius: 4px; }
+    .inventory-value.warning { color: var(--accent-warning); font-weight: 600; }
+
+    /* ===== Chart Panel ===== */
+    .chart-panel { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); }
+    .panel-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .panel-title { font-size: 13px; font-weight: 600; }
+    .panel-controls { display: flex; align-items: center; gap: 10px; }
+    .link-btn { font-size: 12px; color: var(--accent-secondary); cursor: pointer; }
+    .total-badge { display: flex; align-items: center; gap: 4px; padding: 4px 8px; background: rgba(255, 71, 87, 0.1); border-radius: 4px; }
+    .badge-value { font-family: var(--font-display); font-size: 14px; font-weight: 600; color: var(--accent-danger); }
+    .badge-unit { font-size: 10px; color: var(--text-tertiary); }
+    .time-selector { padding: 4px 8px; font-size: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-default); border-radius: 4px; cursor: pointer; }
+    .panel-body { padding: 16px; }
+
+    /* ===== Pie Chart ===== */
+    .topology-chart { display: flex; align-items: center; gap: 32px; padding: 8px 0; }
+    .pie-container { width: 180px; height: 180px; display: flex; align-items: center; justify-content: center; }
+    .pie-mock { width: 160px; height: 160px; border-radius: 50%; background: conic-gradient(var(--accent-success) 0deg 280deg, var(--text-muted) 280deg 340deg, var(--accent-warning) 340deg 360deg); display: flex; align-items: center; justify-content: center; }
+    .pie-center { width: 80px; height: 80px; background: var(--bg-card); border-radius: 50%; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .pie-total { font-family: var(--font-display); font-size: 24px; font-weight: 600; }
+    .pie-label { font-size: 11px; color: var(--text-tertiary); }
+    .status-legend { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; flex: 1; }
+    .legend-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 14px; background: var(--bg-tertiary); border-radius: 8px; cursor: pointer; transition: all 0.2s; }
+    .legend-card:hover { background: var(--bg-hover); }
+    .legend-card.active { border: 1px solid var(--accent-primary); box-shadow: 0 0 8px rgba(0, 48, 135, 0.15); }
+    .legend-header { display: flex; align-items: center; gap: 8px; }
+    .legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+    .legend-dot.online { background: var(--accent-success); }
+    .legend-dot.offline { background: var(--text-muted); }
+    .legend-dot.maintenance { background: var(--accent-warning); }
+    .legend-name { font-size: 12px; color: var(--text-tertiary); }
+    .legend-stats { display: flex; align-items: baseline; gap: 8px; }
+    .legend-count { font-family: var(--font-display); font-size: 20px; font-weight: 600; }
+    .legend-rate { font-family: var(--font-display); font-size: 13px; color: var(--accent-primary); }
+
+    /* ===== Curve Chart (Fault Trend) ===== */
+    .curve-chart { height: 220px; position: relative; background: var(--bg-tertiary); border-radius: 8px; padding: 20px; }
+    .curve-svg { width: 100%; height: 180px; }
+    .curve-grid { stroke: var(--border-default); stroke-width: 1; fill: none; }
+    .curve-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+    .curve-line.critical { stroke: var(--severity-critical); }
+    .curve-line.major { stroke: var(--severity-major); }
+    .curve-line.minor { stroke: var(--severity-minor); }
+    .curve-line.total { stroke: var(--accent-secondary); stroke-width: 3; }
+    .curve-area { opacity: 0.1; }
+    .curve-area.critical { fill: var(--severity-critical); }
+    .curve-area.major { fill: var(--severity-major); }
+    .curve-area.minor { fill: var(--severity-minor); }
+    .curve-area.total { fill: var(--accent-secondary); opacity: 0.05; }
+    .curve-point { width: 6px; height: 6px; border-radius: 50%; position: absolute; }
+    .curve-point.critical { background: var(--severity-critical); }
+    .curve-point.major { background: var(--severity-major); }
+    .curve-point.minor { background: var(--severity-minor); }
+    .chart-x-axis { display: flex; justify-content: space-between; padding-top: 8px; }
+    .x-label { font-family: var(--font-display); font-size: 10px; color: var(--text-tertiary); }
+    .chart-legend { display: flex; justify-content: center; gap: 20px; padding-top: 12px; }
+    .chart-legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-tertiary); }
+    .chart-legend-line { width: 20px; height: 3px; border-radius: 2px; }
+    .chart-legend-line.critical { background: var(--severity-critical); }
+    .chart-legend-line.major { background: var(--severity-major); }
+    .chart-legend-line.minor { background: var(--severity-minor); }
+    .chart-legend-line.total { background: var(--accent-secondary); }
+
+    /* ===== Data Table ===== */
+    .data-panel { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); }
+    .data-table-header { display: flex; padding: 10px 16px; border-bottom: 1px solid var(--border-subtle); font-size: 11px; font-weight: 600; color: var(--text-tertiary); }
+    .data-table-row { display: flex; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); cursor: pointer; }
+    .data-table-row:hover { background: var(--bg-hover); }
+    .data-col { display: flex; align-items: center; }
+    .data-col.device { flex: 1; gap: 8px; }
+    .data-col.time { width: 100px; font-family: var(--font-display); font-size: 12px; color: var(--text-secondary); }
+    .data-col.change { width: 80px; }
+    .change-tag { padding: 4px 8px; font-size: 11px; border-radius: 4px; }
+    .change-tag.modified { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .change-tag.clean { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+
+    /* ===== Alert List ===== */
+    .alert-item { display: flex; align-items: flex-start; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .alert-marker { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; }
+    .alert-marker.danger { background: var(--severity-critical); }
+    .alert-marker.warn { background: var(--severity-major); }
+    .alert-marker.success { background: var(--accent-success); }
+    .alert-content { flex: 1; }
+    .alert-title { font-size: 13px; font-weight: 500; }
+    .alert-summary { font-size: 12px; color: var(--text-secondary); }
+    .alert-time { font-family: var(--font-display); font-size: 11px; color: var(--text-tertiary); }
+
+    /* ===== Footer ===== */
+    .dashboard-footer { padding: 12px 24px; background: var(--bg-secondary); border-top: 1px solid var(--border-default); margin-top: 20px; }
+    .footer-stats { display: flex; justify-content: space-between; }
+    .stat-item { display: flex; align-items: center; gap: 8px; }
+    .stat-label { font-size: 11px; color: var(--text-tertiary); }
+    .stat-value { font-family: var(--font-display); font-size: 13px; font-weight: 600; color: var(--accent-primary); }
+
+    /* ===== Device Detail V1 Layout ===== */
+    .detail-row { display: flex; gap: 20px; }
+    .detail-col-left { width: 33.33%; }
+    .detail-col-right { width: 66.67%; }
+
+    /* Info Card */
+    .info-card { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); }
+    .info-card-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .info-card-title { font-size: 14px; font-weight: 600; }
+
+    .device-avatar-section { text-align: center; padding: 20px; }
+    .device-avatar { width: 80px; height: 80px; margin: 0 auto 15px; background: linear-gradient(135deg, var(--accent-secondary), var(--accent-primary)); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; font-size: 32px; }
+    .device-avatar-name { font-size: 20px; font-weight: 600; margin: 15px 0 10px; }
+    .device-avatar-tags { display: flex; justify-content: center; gap: 8px; flex-wrap: wrap; }
+    .status-tag { padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+    .status-tag.online { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .status-tag.offline { background: rgba(214, 48, 49, 0.15); color: var(--accent-danger); }
+    .status-tag.info { background: rgba(9, 132, 227, 0.15); color: var(--accent-secondary); }
+
+    .device-actions { display: flex; justify-content: center; gap: 10px; padding: 20px; border-top: 1px solid var(--border-subtle); }
+
+    /* Photos Card */
+    .photos-card { margin-top: 20px; }
+    .photos-header { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--border-subtle); }
+    .photo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 15px; padding: 16px; }
+    .photo-item { border-radius: 8px; overflow: hidden; background: var(--bg-tertiary); }
+    .photo-image { width: 100%; height: 120px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 24px; }
+    .photo-meta { display: flex; justify-content: space-between; padding: 8px; font-size: 12px; }
+
+    /* Tabs */
+    .tabs-wrapper { background: var(--bg-card); border: 1px solid var(--border-default); border-radius: var(--radius-lg); }
+    .tabs-header { display: flex; border-bottom: 1px solid var(--border-default); padding: 0 16px; }
+    .tab-item { padding: 12px 20px; font-size: 14px; font-weight: 500; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; }
+    .tab-item:hover { color: var(--text-primary); }
+    .tab-item.active { color: var(--accent-primary); border-bottom-color: var(--accent-primary); }
+    .dark .tab-item.active { color: var(--accent-success); border-bottom-color: var(--accent-success); }
+    .tabs-content { padding: 16px; }
+
+    /* Table */
+    .detail-table { width: 100%; border-collapse: collapse; }
+    .detail-table th { background: var(--bg-tertiary); padding: 12px 16px; font-size: 13px; font-weight: 600; text-align: left; border-bottom: 1px solid var(--border-default); }
+    .detail-table td { padding: 10px 16px; font-size: 14px; border-bottom: 1px solid var(--border-subtle); }
+    .detail-table tr:nth-child(even) td { background: var(--bg-tertiary); }
+    .detail-table tr:hover td { background: var(--bg-hover); }
+    .cell-link { color: var(--accent-secondary); font-weight: 500; cursor: pointer; }
+    .cell-link:hover { text-decoration: underline; }
+    .dark .cell-link { color: var(--accent-success); }
+    .cell-tag { padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; }
+    .cell-tag.success { background: rgba(0, 184, 148, 0.15); color: var(--accent-success); }
+    .cell-tag.warning { background: rgba(255, 184, 0, 0.15); color: var(--accent-warning); }
+    .cell-tag.danger { background: rgba(214, 48, 49, 0.15); color: var(--accent-danger); }
+
+    /* Buttons */
+    .btn { display: inline-flex; align-items: center; gap: 4px; padding: 8px 16px; font-size: 14px; font-weight: 500; border-radius: 8px; border: none; cursor: pointer; transition: all 0.2s; }
+    .btn-small { padding: 5px 10px; font-size: 12px; }
+    .btn-primary { background: var(--accent-primary); color: #fff; }
+    .btn-primary:hover { background: var(--color-gb-mid); }
+    .dark .btn-primary { background: var(--accent-success); }
+    .btn-success { background: var(--accent-success); color: #fff; }
+    .btn-warning { background: var(--accent-warning); color: #fff; }
+    .btn-danger { background: var(--accent-danger); color: #fff; }
+    .btn-default { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-default); }
+    .btn-default:hover { background: var(--bg-hover); border-color: var(--accent-primary); }
+
+    /* Theme Toggle */
+    .theme-toggle { position: fixed; bottom: 20px; right: 20px; z-index: 1000; }
+    .theme-toggle-btn { width: 48px; height: 48px; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 12px; cursor: pointer; font-size: 20px; box-shadow: 0 4px 12px rgba(0, 48, 135, 0.08); }
+
+    /* Responsive */
+    @media (max-width: 1024px) {
+      .sidebar { display: none; }
+      .detail-row { flex-direction: column; }
+      .detail-col-left, .detail-col-right { width: 100%; }
+      .overview-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .topology-chart { flex-direction: column; }
+    }
+    @media (max-width: 768px) {
+      .overview-grid { grid-template-columns: 1fr; }
+      .status-legend { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <!-- Topbar -->
+    <header class="topbar">
+      <div class="logo-icon">N</div>
+      <span class="logo-text">NAS</span>
+      <div class="topbar-right">
+        <button class="icon-btn">Q</button>
+        <button class="icon-btn">!</button>
+        <button class="icon-btn" style="padding: 0 10px; font-family: var(--font-display); font-size: 12px;">EN</button>
+        <button class="icon-btn">S</button>
+        <button class="icon-btn">U</button>
+      </div>
+    </header>
+
+    <div class="layout-body">
+      <!-- Sidebar -->
+      <aside class="sidebar">
+        <div class="sidebar-group">
+          <div class="sidebar-label">OVERVIEW</div>
+          <div class="sidebar-item active"><span>D</span><span>Dashboard</span></div>
+          <div class="sidebar-item"><span>M</span><span>Monitor</span></div>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-label">DEVICE MGMT</div>
+          <div class="sidebar-item"><span>L</span><span>Devices</span></div>
+          <div class="sidebar-item"><span>F</span><span>Discovery</span></div>
+          <div class="sidebar-item"><span>B</span><span>Backups</span></div>
+          <div class="sidebar-item"><span>A</span><span>Faults</span><span class="sidebar-badge">3</span></div>
+          <div class="sidebar-item"><span>R</span><span>Maintenance</span></div>
+          <div class="sidebar-item"><span>P</span><span>Scheduled</span></div>
+        </div>
+        <div class="sidebar-group">
+          <div class="sidebar-label">ASSET MGMT</div>
+          <div class="sidebar-item"><span>S</span><span>Spare Parts</span></div>
+          <div class="sidebar-item"><span>X</span><span>Scrap Inventory</span></div>
+        </div>
+      </aside>
+
+      <main class="main-content">
+
+        <!-- ===== DASHBOARD ===== -->
+        <div class="section-title">DASHBOARD - Status Overview</div>
+
+        <!-- 6 Status Cards -->
+        <div class="overview-grid" style="display: grid; grid-template-columns: repeat(6, 1fr); gap: 16px; margin-bottom: 20px;">
+          <!-- Devices -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon devices">[]</div>
+              <span class="card-label">Network Devices</span>
+            </div>
+            <div class="metric-main"><span class="metric-value">156</span><span class="metric-unit">nodes</span></div>
+            <div class="metric-bars">
+              <div class="bar-item"><span class="bar-label">Online</span><div class="bar-track"><div class="bar-fill online" style="width:91%"></div></div><span class="bar-value">142</span></div>
+              <div class="bar-item"><span class="bar-label">Offline</span><div class="bar-track"><div class="bar-fill offline" style="width:9%"></div></div><span class="bar-value">14</span></div>
+            </div>
+          </div>
+
+          <!-- Faults -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon faults">!</div>
+              <span class="card-label">Fault Events</span>
+            </div>
+            <div class="metric-main"><span class="metric-value danger">3</span><span class="metric-unit">events</span></div>
+            <div class="severity-grid">
+              <div class="severity-item critical"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">Critical</span></div>
+              <div class="severity-item major"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">Major</span></div>
+              <div class="severity-item minor"><span class="severity-dot"></span><span class="severity-count">1</span><span class="severity-label">Minor</span></div>
+            </div>
+          </div>
+
+          <!-- Backups -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon backups">v</div>
+              <span class="card-label">Config Backups</span>
+            </div>
+            <div class="metric-main"><span class="metric-value success">12</span><span class="metric-unit">recent</span></div>
+            <div class="backup-status">
+              <div class="status-row"><span class="status-indicator success"></span><span class="status-text">Auto-backup active</span></div>
+              <div class="status-row"><span class="status-indicator success"></span><span class="status-text">Last run: 2h ago</span></div>
+            </div>
+          </div>
+
+          <!-- Maintenance -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon maintenance">W</div>
+              <span class="card-label">Maintenance</span>
+            </div>
+            <div class="metric-main"><span class="metric-value warning">2</span><span class="metric-unit">active</span></div>
+            <div class="inventory-stats">
+              <div class="inventory-row"><span>Pending</span><span>5</span></div>
+              <div class="inventory-row"><span>Completed</span><span>28</span></div>
+            </div>
+          </div>
+
+          <!-- Inventory -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon inventory">+</div>
+              <span class="card-label">Spare Inventory</span>
+            </div>
+            <div class="metric-main"><span class="metric-value">89</span><span class="metric-unit">models</span></div>
+            <div class="inventory-stats">
+              <div class="inventory-row"><span>Total Qty</span><span>324</span></div>
+              <div class="inventory-row"><span>Low Stock</span><span class="inventory-value warning">5</span></div>
+            </div>
+          </div>
+
+          <!-- Cost -->
+          <div class="status-card">
+            <div class="card-header">
+              <div class="card-icon cost">$</div>
+              <span class="card-label">Monthly OpEx</span>
+            </div>
+            <div class="metric-main"><span class="metric-value">28.5K</span></div>
+            <div class="cost-breakdown">
+              <div class="cost-item"><span class="cost-label">Hardware</span><span class="cost-amount">18.2K</span></div>
+              <div class="cost-item"><span class="cost-label">Labor</span><span class="cost-amount">10.3K</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="charts-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 20px;">
+          <!-- Topology Pie -->
+          <div class="chart-panel">
+            <div class="panel-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">*</span>
+                <span class="panel-title">Topology Status</span>
+              </div>
+              <span class="link-btn">View All ></span>
+            </div>
+            <div class="panel-body">
+              <div class="topology-chart">
+                <div class="pie-container">
+                  <div class="pie-mock">
+                    <div class="pie-center">
+                      <span class="pie-total">156</span>
+                      <span class="pie-label">devices</span>
+                    </div>
+                  </div>
+                </div>
+                <div class="status-legend">
+                  <div class="legend-card active">
+                    <div class="legend-header"><span class="legend-dot online"></span><span class="legend-name">Online</span></div>
+                    <div class="legend-stats"><span class="legend-count">142</span><span class="legend-rate">91%</span></div>
+                  </div>
+                  <div class="legend-card">
+                    <div class="legend-header"><span class="legend-dot offline"></span><span class="legend-name">Offline</span></div>
+                    <div class="legend-stats"><span class="legend-count">14</span><span class="legend-rate">9%</span></div>
+                  </div>
+                  <div class="legend-card">
+                    <div class="legend-header"><span class="legend-dot maintenance"></span><span class="legend-name">Maintenance</span></div>
+                    <div class="legend-stats"><span class="legend-count">0</span><span class="legend-rate">0%</span></div>
+                  </div>
+                  <div class="legend-card">
+                    <div class="legend-header"><span class="legend-dot offline"></span><span class="legend-name">Retired</span></div>
+                    <div class="legend-stats"><span class="legend-count">0</span><span class="legend-rate">0%</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Fault Trend Curve Chart -->
+          <div class="chart-panel">
+            <div class="panel-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px;">~</span>
+                <span class="panel-title">Fault Rate Trend</span>
+              </div>
+              <div class="panel-controls">
+                <div class="total-badge"><span class="badge-value">3</span><span class="badge-unit">total</span></div>
+                <select class="time-selector"><option>7 Days</option><option selected>30 Days</option><option>90 Days</option></select>
+              </div>
+            </div>
+            <div class="panel-body">
+              <div class="curve-chart">
+                <!-- SVG Curve Chart -->
+                <svg class="curve-svg" viewBox="0 0 400 160" preserveAspectRatio="none">
+                  <!-- Grid lines -->
+                  <line x1="0" y1="40" x2="400" y2="40" class="curve-grid" stroke-dasharray="4"/>
+                  <line x1="0" y1="80" x2="400" y2="80" class="curve-grid" stroke-dasharray="4"/>
+                  <line x1="0" y1="120" x2="400" y2="120" class="curve-grid" stroke-dasharray="4"/>
+                  <!-- Total trend (smooth curve) -->
+                  <path d="M0,140 Q50,130 100,120 T150,100 T200,110 T250,90 T300,85 T350,100 T400,140" class="curve-area total"/>
+                  <path d="M0,140 Q50,130 100,120 T150,100 T200,110 T250,90 T300,85 T350,100 T400,140" class="curve-line total"/>
+                  <!-- Critical trend -->
+                  <path d="M0,155 C50,150 100,145 150,140 S200,135 250,138 S300,155 400,155" class="curve-area critical"/>
+                  <path d="M0,155 C50,150 100,145 150,140 S200,135 250,138 S300,155 400,155" class="curve-line critical"/>
+                  <!-- Major trend -->
+                  <path d="M0,148 Q100,145 150,138 T200,130 T300,142 T400,148" class="curve-area major"/>
+                  <path d="M0,148 Q100,145 150,138 T200,130 T300,142 T400,148" class="curve-line major"/>
+                  <!-- Minor trend -->
+                  <path d="M0,145 Q80,140 150,135 T220,128 T300,130 T400,145" class="curve-area minor"/>
+                  <path d="M0,145 Q80,140 150,135 T220,128 T300,130 T400,145" class="curve-line minor"/>
+                </svg>
+                <div class="chart-x-axis">
+                  <span class="x-label">04-08</span>
+                  <span class="x-label">04-15</span>
+                  <span class="x-label">04-22</span>
+                  <span class="x-label">04-29</span>
+                  <span class="x-label">05-06</span>
+                  <span class="x-label">05-08</span>
+                </div>
+              </div>
+              <div class="chart-legend">
+                <div class="chart-legend-item"><span class="chart-legend-line total"></span>Total</div>
+                <div class="chart-legend-item"><span class="chart-legend-line critical"></span>Critical</div>
+                <div class="chart-legend-item"><span class="chart-legend-line major"></span>Major</div>
+                <div class="chart-legend-item"><span class="chart-legend-line minor"></span>Minor</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Data Panels -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+          <!-- Recent Backups -->
+          <div class="data-panel">
+            <div class="panel-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px; color: var(--accent-success);">O</span>
+                <span class="panel-title">Recent Backups</span>
+              </div>
+              <span class="link-btn">View All ></span>
+            </div>
+            <div class="panel-body">
+              <div class="data-table-header"><span class="data-col device">Device</span><span class="data-col time">Timestamp</span><span class="data-col change">Change</span></div>
+              <div class="data-table-row"><span class="data-col device"><span>[]</span><span style="font-family: var(--font-display); font-size: 13px;">SW-AGG-01</span></span><span class="data-col time">05-08 14:30</span><span class="data-col change"><span class="change-tag modified">Modified</span></span></div>
+              <div class="data-table-row"><span class="data-col device"><span>[]</span><span style="font-family: var(--font-display); font-size: 13px;">SW-AGG-02</span></span><span class="data-col time">05-08 12:00</span><span class="data-col change"><span class="change-tag clean">Clean</span></span></div>
+              <div class="data-table-row"><span class="data-col device"><span>[]</span><span style="font-family: var(--font-display); font-size: 13px;">AP-FLOOR-01</span></span><span class="data-col time">05-07 18:00</span><span class="data-col change"><span class="change-tag clean">Clean</span></span></div>
+            </div>
+          </div>
+
+          <!-- System Alerts -->
+          <div class="data-panel">
+            <div class="panel-header">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 16px; color: var(--accent-warning);">!</span>
+                <span class="panel-title">System Alerts</span>
+              </div>
+              <span style="background: var(--accent-danger); color: #fff; padding: 2px 8px; border-radius: 6px; font-size: 11px;">2</span>
+            </div>
+            <div class="panel-body">
+              <div class="alert-item"><span class="alert-marker warn"></span><div class="alert-content"><span class="alert-title">Backup schedule missed</span><span class="alert-summary">SW-CORE-01 backup failed</span></div><span class="alert-time">10m</span></div>
+              <div class="alert-item"><span class="alert-marker danger"></span><div class="alert-content"><span class="alert-title">Device offline detected</span><span class="alert-summary">SW-AGG-02 unreachable</span></div><span class="alert-time">2h</span></div>
+              <div class="alert-item"><span class="alert-marker success"></span><div class="alert-content"><span class="alert-title">System healthy</span><span class="alert-summary">All services running</span></div><span class="alert-time">1d</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Footer -->
+        <div class="dashboard-footer">
+          <div class="footer-stats">
+            <div class="stat-item"><span class="stat-label">Uptime</span><span class="stat-value">99.97%</span></div>
+            <div class="stat-item"><span class="stat-label">API Response</span><span class="stat-value">42ms</span></div>
+            <div class="stat-item"><span class="stat-label">Active Sessions</span><span class="stat-value">3</span></div>
+            <div class="stat-item"><span class="stat-label">Last Sync</span><span class="stat-value">14:35:22</span></div>
+          </div>
+        </div>
+
+        <hr class="section-divider">
+
+        <!-- ===== DEVICE DETAIL (V1 Layout) ===== -->
+        <div class="section-title">DEVICE DETAIL PAGE (V1 Layout Optimized)</div>
+
+        <div class="detail-row">
+          <!-- Left: Device Info (33%) -->
+          <div class="detail-col-left">
+            <!-- Device Info Card -->
+            <div class="info-card">
+              <div class="info-card-header">
+                <span class="info-card-title">Device Info</span>
+                <button class="btn btn-primary btn-small">Test Connection</button>
+              </div>
+
+              <div class="device-avatar-section">
+                <div class="device-avatar">[]</div>
+                <h2 class="device-avatar-name">SW-AGG-01</h2>
+                <div class="device-avatar-tags">
+                  <span class="status-tag online">Online</span>
+                  <span class="status-tag info">Cisco</span>
+                </div>
+              </div>
+
+              <!-- Info List -->
+              <div style="padding: 0 16px 16px;">
+                <table style="width: 100%; border-collapse: collapse;">
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px; width: 100px;">Vendor</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px;"><span class="status-tag info">Cisco</span></td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">IP Address</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; font-family: var(--font-display);">192.168.1.1</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Model</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px;">Cisco 3850</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Serial No.</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; font-family: var(--font-display);">FOC1234ABC</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Location</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px;">Room A - Rack 1</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Role</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px;">Distribution</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Purchase Date</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px;">2023-05-15</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Purchase Cost</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; color: var(--accent-success);">12,500</td></tr>
+                  <tr><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); color: var(--text-tertiary); font-size: 13px;">Last Backup</td><td style="padding: 8px; border-bottom: 1px solid var(--border-subtle); font-size: 14px; font-family: var(--font-display);">05-08 14:30</td></tr>
+                </table>
+              </div>
+
+              <div class="device-actions">
+                <button class="btn btn-primary">v Backup Now</button>
+                <button class="btn btn-warning">] Console</button>
+                <button class="btn btn-success">Edit</button>
+              </div>
+            </div>
+
+            <!-- Photos Card -->
+            <div class="info-card photos-card">
+              <div class="photos-header">
+                <span class="info-card-title">Device Photos</span>
+                <button class="btn btn-primary btn-small">+ Upload</button>
+              </div>
+              <div class="photo-grid">
+                <div class="photo-item"><div class="photo-image">[]</div><div class="photo-meta"><span>Front</span><span style="color: var(--accent-danger);">X</span></div></div>
+                <div class="photo-item"><div class="photo-image">[]</div><div class="photo-meta"><span>Label</span><span style="color: var(--accent-danger);">X</span></div></div>
+                <div class="photo-item"><div class="photo-image">[]</div><div class="photo-meta"><span>Rack</span><span style="color: var(--accent-danger);">X</span></div></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right: Tabs (66%) -->
+          <div class="detail-col-right">
+            <div class="tabs-wrapper">
+              <div class="tabs-header">
+                <span class="tab-item active">Backup Records</span>
+                <span class="tab-item">Fault Records</span>
+                <span class="tab-item">Maintenance</span>
+                <span class="tab-item">Device Inventory</span>
+                <span class="tab-item">Cost Stats</span>
+              </div>
+              <div class="tabs-content">
+                <table class="detail-table">
+                  <thead><tr><th>Timestamp</th><th>Config Change</th><th>Trigger</th><th>Action</th></tr></thead>
+                  <tbody>
+                    <tr><td style="font-family: var(--font-display);">2024-05-08 14:30</td><td><span class="cell-tag warning">Modified</span></td><td>Auto</td><td><span class="cell-link">View Config</span></td></tr>
+                    <tr><td style="font-family: var(--font-display);">2024-05-08 12:00</td><td><span class="cell-tag success">Clean</span></td><td>Manual</td><td><span class="cell-link">View Config</span></td></tr>
+                    <tr><td style="font-family: var(--font-display);">2024-05-07 18:00</td><td><span class="cell-tag success">Clean</span></td><td>Auto</td><td><span class="cell-link">View Config</span></td></tr>
+                    <tr><td style="font-family: var(--font-display);">2024-05-06 10:00</td><td><span class="cell-tag warning">Modified</span></td><td>Scheduled</td><td><span class="cell-link">View Config</span></td></tr>
+                    <tr><td style="font-family: var(--font-display);">2024-05-05 08:00</td><td><span class="cell-tag success">Clean</span></td><td>Auto</td><td><span class="cell-link">View Config</span></td></tr>
+                  </tbody>
+                </table>
+                <div style="margin-top: 12px; display: flex; justify-content: flex-end;">
+                  <button class="btn btn-default btn-small">Previous</button>
+                  <span style="padding: 5px 10px; font-size: 13px; color: var(--text-secondary);">1 / 3</span>
+                  <button class="btn btn-default btn-small">Next</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </main>
+    </div>
+
+    <!-- Theme Toggle -->
+    <div class="theme-toggle">
+      <button class="theme-toggle-btn" onclick="toggleTheme()">T</button>
+    </div>
+
+    <script>
+      function toggleTheme() {
+        document.getElementById('app').classList.toggle('dark');
+      }
+    </script>
+  </div>
+</body>
+</html>

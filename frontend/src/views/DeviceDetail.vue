@@ -6,9 +6,9 @@
         <el-card class="info-card" v-loading="loading">
           <template #header>
             <div style="display: flex; justify-content: space-between; align-items: center">
-              <span>设备信息</span>
+              <span>{{ t('deviceInfo') }}</span>
               <el-button type="primary" size="small" @click="testConnection" :disabled="!device">
-                <el-icon><Connection /></el-icon> 连接测试
+                <el-icon><Connection /></el-icon> {{ t('deviceConnectTest') }}
               </el-button>
             </div>
           </template>
@@ -26,36 +26,36 @@
             </div>
 
             <el-descriptions :column="1" border>
-              <el-descriptions-item label="厂商">
+              <el-descriptions-item :label="t('deviceVendor')">
                 <el-tag size="small" :type="getVendorTagType(device.vendor)">{{ getVendorText(device.vendor) }}</el-tag>
               </el-descriptions-item>
-              <el-descriptions-item label="IP 地址">{{ device.ip || 'N/A' }}</el-descriptions-item>
-              <el-descriptions-item label="设备型号">{{ device.model || 'N/A' }}</el-descriptions-item>
-              <el-descriptions-item label="序列号">{{ device.serial_number || 'N/A' }}</el-descriptions-item>
-              <el-descriptions-item label="位置">{{ device.location || 'N/A' }}</el-descriptions-item>
-              <el-descriptions-item label="角色">{{ getRoleText(device.role) }}</el-descriptions-item>
-              <el-descriptions-item label="供应商">{{ device.vendor || 'N/A' }}</el-descriptions-item>
-              <el-descriptions-item label="采购日期">
+              <el-descriptions-item :label="t('deviceIp')">{{ device.ip || 'N/A' }}</el-descriptions-item>
+              <el-descriptions-item :label="t('deviceModel')">{{ device.model || 'N/A' }}</el-descriptions-item>
+              <el-descriptions-item :label="t('deviceSerialNumber')">{{ device.serial_number || 'N/A' }}</el-descriptions-item>
+              <el-descriptions-item :label="t('deviceLocation')">{{ device.location || 'N/A' }}</el-descriptions-item>
+              <el-descriptions-item :label="t('deviceRole')">{{ getRoleText(device.role) }}</el-descriptions-item>
+              <el-descriptions-item :label="t('deviceSupplier')">{{ device.vendor || 'N/A' }}</el-descriptions-item>
+              <el-descriptions-item :label="t('devicePurchaseDate')">
                 {{ device.purchase_date ? formatDate(device.purchase_date) : 'N/A' }}
               </el-descriptions-item>
-              <el-descriptions-item label="采购成本">
+              <el-descriptions-item :label="t('devicePurchaseCost')">
                 {{ device.purchase_cost ? '¥' + device.purchase_cost.toLocaleString() : 'N/A' }}
               </el-descriptions-item>
-              <el-descriptions-item label="最后备份">
-                {{ device.last_backup_time ? formatDateTime(device.last_backup_time) : '从未备份' }}
+              <el-descriptions-item :label="t('deviceLastBackup')">
+                {{ device.last_backup_time ? formatDateTime(device.last_backup_time) : t('deviceNeverBackup') }}
               </el-descriptions-item>
             </el-descriptions>
 
             <div class="actions">
               <el-button type="primary" @click="backupNow">
                 <el-icon><Download /></el-icon>
-                立即备份
+                {{ t('deviceBackupNow') }}
               </el-button>
               <el-button type="warning" @click="openConsoleDeploy">
                 <el-icon><Connection /></el-icon>
-                Console 部署
+                {{ t('deviceConsoleDeploy') }}
               </el-button>
-              <el-button type="success" @click="showEditDialog = true">编辑</el-button>
+              <el-button type="success" @click="showEditDialog = true">{{ t('deviceEdit') }}</el-button>
             </div>
           </div>
         </el-card>
@@ -64,7 +64,7 @@
         <el-card class="photos-card" style="margin-top: 20px">
           <template #header>
             <div class="card-header">
-              <span>设备照片</span>
+              <span>{{ t('devicePhotos') }}</span>
               <el-upload
                 :action="uploadUrl"
                 :headers="uploadHeaders"
@@ -75,7 +75,7 @@
               >
                 <el-button type="primary" size="small">
                   <el-icon><Upload /></el-icon>
-                  上传照片
+                  {{ t('deviceUploadPhoto') }}
                 </el-button>
               </el-upload>
             </div>
@@ -97,11 +97,11 @@
               </el-image>
               <div class="photo-actions">
                 <span class="photo-type">{{ getPhotoTypeText(photo.photo_type) }}</span>
-                <el-button type="danger" size="small" @click="deletePhoto(photo.id)">删除</el-button>
+                <el-button type="danger" size="small" @click="deletePhoto(photo.id)">{{ t('deviceDelete') }}</el-button>
               </div>
             </div>
           </div>
-          <el-empty v-else description="暂无照片" />
+          <el-empty v-else :description="t('deviceNoPhotos')" />
         </el-card>
       </el-col>
 
@@ -109,62 +109,62 @@
       <el-col :span="16">
         <el-card>
           <el-tabs v-model="activeTab">
-            <el-tab-pane label="备份记录" name="backups">
+            <el-tab-pane :label="t('tabBackupRecords')" name="backups">
               <el-table :data="device?.recent_backups || []" style="width: 100%">
-                <el-table-column prop="backup_time" label="备份时间" width="180">
+                <el-table-column prop="backup_time" :label="t('backupTime')" width="180">
                   <template #default="{ row }">{{ formatDateTime(row.backup_time) }}</template>
                 </el-table-column>
-                <el-table-column prop="has_change" label="配置变更" width="100">
+                <el-table-column prop="has_change" :label="t('backupConfigChange')" width="100">
                   <template #default="{ row }">
                     <el-tag :type="row.has_change ? 'warning' : 'success'" size="small">
-                      {{ row.has_change ? '是' : '否' }}
+                      {{ row.has_change ? t('statusYes') : t('statusNo') }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column label="操作" width="150">
+                <el-table-column :label="t('deviceAction')" width="150">
                   <template #default="{ row }">
-                    <el-button size="small" @click="viewConfig(row.id)">查看配置</el-button>
+                    <el-button size="small" @click="viewConfig(row.id)">{{ t('backupViewConfig') }}</el-button>
                   </template>
                 </el-table-column>
               </el-table>
             </el-tab-pane>
 
-            <el-tab-pane label="故障记录" name="faults">
+            <el-tab-pane :label="t('tabFaultRecords')" name="faults">
               <el-table :data="device?.recent_faults || []" style="width: 100%">
-                <el-table-column prop="fault_no" label="故障单号" width="180">
+                <el-table-column prop="fault_no" :label="t('faultNo')" width="180">
                   <template #default="{ row }">
                     <router-link :to="`/faults/${row.id}`" class="fault-link">
                       {{ row.fault_no }}
                     </router-link>
                   </template>
                 </el-table-column>
-                <el-table-column prop="severity" label="级别" width="80">
+                <el-table-column prop="severity" :label="t('faultLevel')" width="80">
                   <template #default="{ row }">
                     <el-tag :type="getSeverityType(row.severity)" size="small">
                       {{ getSeverityText(row.severity) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="status" label="状态" width="80">
+                <el-table-column prop="status" :label="t('faultStatus')" width="80">
                   <template #default="{ row }">
                     <el-tag :type="getFaultStatusType(row.status)" size="small">
                       {{ getFaultStatusText(row.status) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="created_at" label="发生时间" width="160">
+                <el-table-column prop="created_at" :label="t('faultOccurTime')" width="160">
                   <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
                 </el-table-column>
-                <el-table-column label="操作" width="150" fixed="right">
+                <el-table-column :label="t('deviceAction')" width="150" fixed="right">
                   <template #default="{ row }">
-                    <el-button size="small" @click="editFaultInDetail(row)">编辑</el-button>
+                    <el-button size="small" @click="editFaultInDetail(row)">{{ t('deviceEdit') }}</el-button>
                     <el-button
                       v-if="row.status !== 'closed'"
                       size="small"
                       type="success"
                       @click="closeFaultInDetail(row)"
                     >
-                      关闭
+                      {{ t('faultClose') }}
                     </el-button>
                     <el-button
                       v-else
@@ -173,88 +173,88 @@
                       plain
                       disabled
                     >
-                      已关闭
+                      {{ t('faultClosed') }}
                     </el-button>
                   </template>
                 </el-table-column>
               </el-table>
               <el-button type="primary" size="small" style="margin-top: 10px" @click="openFaultDialog">
-                添加故障记录
+                {{ t('faultAddRecord') }}
               </el-button>
             </el-tab-pane>
 
-            <el-tab-pane label="维修记录" name="maintenance">
+            <el-tab-pane :label="t('tabMaintenanceRecords')" name="maintenance">
               <el-table :data="device?.recent_maintenances || []" style="width: 100%">
-                <el-table-column prop="maint_no" label="维修单号" width="180">
+                <el-table-column prop="maint_no" :label="t('maintNo')" width="180">
                   <template #default="{ row }">
                     <router-link :to="`/maintenance/${row.id}`" class="maint-link">
                       {{ row.maint_no }}
                     </router-link>
                   </template>
                 </el-table-column>
-                <el-table-column prop="maint_type" label="类型" width="100">
+                <el-table-column prop="maint_type" :label="t('maintType')" width="100">
                   <template #default="{ row }">
                     <el-tag :type="getMaintTypeType(row.maint_type)" size="small">
                       {{ getMaintTypeText(row.maint_type) }}
                     </el-tag>
                   </template>
                 </el-table-column>
-                <el-table-column prop="maint_time" label="维修时间" width="160">
+                <el-table-column prop="maint_time" :label="t('maintTime')" width="160">
                   <template #default="{ row }">{{ formatDateTime(row.maint_time || row.created_at) }}</template>
                 </el-table-column>
-                <el-table-column prop="description" label="维修描述" min-width="200" />
-                <el-table-column label="操作" width="150" fixed="right">
+                <el-table-column prop="description" :label="t('maintDescription')" min-width="200" />
+                <el-table-column :label="t('deviceAction')" width="150" fixed="right">
                   <template #default="{ row }">
-                    <el-button type="primary" size="small" @click="editMaintInDetail(row)">编辑</el-button>
-                    <el-button type="danger" size="small" @click="deleteMaintInDetail(row.id)">删除</el-button>
+                    <el-button type="primary" size="small" @click="editMaintInDetail(row)">{{ t('deviceEdit') }}</el-button>
+                    <el-button type="danger" size="small" @click="deleteMaintInDetail(row.id)">{{ t('deviceDelete') }}</el-button>
                   </template>
                 </el-table-column>
               </el-table>
               <el-button type="primary" size="small" style="margin-top: 10px" @click="openMaintDialog">
-                添加维修记录
+                {{ t('maintAddRecord') }}
               </el-button>
             </el-tab-pane>
 
-            <el-tab-pane label="成本统计" name="costs">
+            <el-tab-pane :label="t('tabCostStats')" name="costs">
               <div class="cost-summary">
-                <el-statistic title="采购成本" :value="device?.purchase_cost || 0" prefix="¥" />
-                <el-statistic title="维护成本" :value="calculateMaintCost()" :precision="2" prefix="¥" />
-                <el-statistic title="总拥有成本 (TCO)" :value="(device?.purchase_cost || 0) + calculateMaintCost()" :precision="2" prefix="¥" />
+                <el-statistic :title="t('purchaseCost')" :value="device?.purchase_cost || 0" prefix="¥" />
+                <el-statistic :title="t('maintCost')" :value="calculateMaintCost()" :precision="2" prefix="¥" />
+                <el-statistic :title="t('maintTotalCost')" :value="(device?.purchase_cost || 0) + calculateMaintCost()" :precision="2" prefix="¥" />
               </div>
             </el-tab-pane>
-            <el-tab-pane label="设备资产" name="inventory">
+            <el-tab-pane :label="t('tabDeviceInventory')" name="inventory">
               <!-- 概览（紧凑） -->
               <div v-if="deviceInventory.length > 0" class="compact-header">
-                <span>安装备件: <strong class="text-success">{{ deviceInventory.length }}</strong> 件</span>
-                <span>总价值: <strong class="text-success">¥{{ inventoryTotalValue.toFixed(2) }}</strong></span>
+                <span>{{ t('inventoryInstalledParts') }}: <strong class="text-success">{{ deviceInventory.length }}</strong> {{ t('inventoryParts') }}</span>
+                <span>{{ t('inventoryTotalValue') }}: <strong class="text-success">¥{{ inventoryTotalValue.toFixed(2) }}</strong></span>
               </div>
 
               <!-- 备件清单表格 -->
               <el-table :data="deviceInventory" v-loading="inventoryLoading" stripe border size="small" style="margin-top: 8px">
-                <el-table-column prop="serial_number" label="序列号" width="120">
+                <el-table-column prop="serial_number" :label="t('spareSerialNumber')" width="120">
                   <template #default="{ row }">
                     <span class="text-primary">{{ row.serial_number || '-' }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="po_number" label="PO号" width="80">
+                <el-table-column prop="po_number" :label="t('inventoryPoNumber')" width="80">
                   <template #default="{ row }">{{ row.po_number || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="part_number" label="型号" width="120" />
-                <el-table-column prop="part_name" label="名称" width="150" />
-                <el-table-column prop="category" label="分类" width="80" />
-                <el-table-column prop="unit_price" label="单价" width="80">
+                <el-table-column prop="part_number" :label="t('sparePartNumber')" width="120" />
+                <el-table-column prop="part_name" :label="t('spareName')" width="150" />
+                <el-table-column prop="category" :label="t('spareCategory')" width="80" />
+                <el-table-column prop="unit_price" :label="t('spareUnitPrice')" width="80">
                   <template #default="{ row }">
                     <span class="text-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column prop="installed_at" label="安装时间" width="160">
+                <el-table-column prop="installed_at" :label="t('inventoryInstalledAt')" width="160">
                   <template #default="{ row }">{{ formatDateTime(row.installed_at) }}</template>
                 </el-table-column>
-                <el-table-column prop="installed_by" label="安装人" width="80" />
-                <el-table-column prop="notes" label="备注" min-width="100" show-overflow-tooltip />
+                <el-table-column prop="installed_by" :label="t('inventoryInstalledBy')" width="80" />
+                <el-table-column prop="notes" :label="t('spareNotes')" min-width="100" show-overflow-tooltip />
               </el-table>
 
-              <el-empty v-if="deviceInventory.length === 0 && !inventoryLoading" description="当前无安装备件" :image-size="60" />
+              <el-empty v-if="deviceInventory.length === 0 && !inventoryLoading" :description="t('inventoryNoParts')" :image-size="60" />
             </el-tab-pane>
           </el-tabs>
         </el-card>
@@ -262,110 +262,110 @@
     </el-row>
 
     <!-- 编辑设备对话框 -->
-    <el-dialog v-model="showEditDialog" title="编辑设备" width="600px">
+    <el-dialog v-model="showEditDialog" :title="t('editDeviceTitle')" width="600px">
       <el-form :model="editForm" label-width="100px">
-        <el-form-item label="设备名称">
+        <el-form-item :label="t('deviceName')">
           <el-input v-model="editForm.name" :disabled="true" />
         </el-form-item>
-        <el-form-item label="IP 地址">
+        <el-form-item :label="t('deviceIp')">
           <el-input v-model="editForm.ip" />
         </el-form-item>
-        <el-form-item label="设备型号">
+        <el-form-item :label="t('deviceModel')">
           <el-input v-model="editForm.model" />
         </el-form-item>
-        <el-form-item label="序列号">
+        <el-form-item :label="t('deviceSerialNumber')">
           <el-input v-model="editForm.serial_number" />
         </el-form-item>
-        <el-form-item label="位置">
+        <el-form-item :label="t('deviceLocation')">
           <el-input v-model="editForm.location" />
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item :label="t('deviceRole')">
           <el-select v-model="editForm.role">
-            <el-option label="接入层" value="access" />
-            <el-option label="汇聚层" value="distribution" />
-            <el-option label="核心层" value="core" />
+            <el-option :label="t('deviceRoleAccess')" value="access" />
+            <el-option :label="t('deviceRoleDistribution')" value="distribution" />
+            <el-option :label="t('deviceRoleCore')" value="core" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item :label="t('deviceStatus')">
           <el-select v-model="editForm.status">
-            <el-option label="在线" value="online" />
-            <el-option label="离线" value="offline" />
-            <el-option label="维护中" value="maintenance" />
-            <el-option label="已退役" value="retired" />
+            <el-option :label="t('statusOnline')" value="online" />
+            <el-option :label="t('statusOffline')" value="offline" />
+            <el-option :label="t('statusMaintenance')" value="maintenance" />
+            <el-option :label="t('statusRetired')" value="retired" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showEditDialog = false">取消</el-button>
-        <el-button type="primary" @click="updateDevice">确定</el-button>
+        <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="updateDevice">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 查看配置对话框 -->
-    <el-dialog v-model="showConfigDialog" title="配置内容" width="800px">
+    <el-dialog v-model="showConfigDialog" :title="t('backupConfigContent')" width="800px">
       <el-card v-if="configContent">
         <pre class="config-content">{{ configContent }}</pre>
       </el-card>
-      <el-empty v-else description="暂无配置内容" />
+      <el-empty v-else :description="t('backupNoConfig')" />
     </el-dialog>
 
     <!-- 添加故障记录对话框 -->
-    <el-dialog v-model="showFaultDialog" :title="editMode ? '编辑故障记录' : '添加故障记录'" width="500px">
+    <el-dialog v-model="showFaultDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="500px">
       <el-form :model="faultForm" label-width="100px">
-        <el-form-item label="故障级别" required>
+        <el-form-item :label="t('faultSeverity')" required>
           <el-select v-model="faultForm.severity">
-            <el-option label="严重 (Critical)" value="critical" />
-            <el-option label="主要 (Major)" value="major" />
-            <el-option label="次要 (Minor)" value="minor" />
-            <el-option label="警告 (Warning)" value="warning" />
+            <el-option :label="t('faultSeverityCritical')" value="critical" />
+            <el-option :label="t('faultSeverityMajor')" value="major" />
+            <el-option :label="t('faultSeverityMinor')" value="minor" />
+            <el-option :label="t('faultSeverityWarning')" value="warning" />
           </el-select>
         </el-form-item>
-        <el-form-item label="停机时长 (分钟)">
+        <el-form-item :label="t('faultDowntimeMinutes')">
           <el-input-number v-model="faultForm.downtime_minutes" :min="0" />
         </el-form-item>
-        <el-form-item label="故障描述" required>
+        <el-form-item :label="t('faultDescription')" required>
           <el-input v-model="faultForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showFaultDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updateFaultInDetail() : addFault()">确定</el-button>
+        <el-button @click="showFaultDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateFaultInDetail() : addFault()">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 添加维修记录对话框 -->
-    <el-dialog v-model="showMaintDialog" :title="editMode ? '编辑维修记录' : '添加维修记录'" width="600px">
+    <el-dialog v-model="showMaintDialog" :title="editMode ? t('maintEditRecord') : t('maintAddRecord')" width="600px">
       <el-form :model="maintForm" label-width="120px">
-        <el-form-item label="维修类型" required>
+        <el-form-item :label="t('maintType')" required>
           <el-select v-model="maintForm.maint_type">
-            <el-option label="预防性维修" value="preventive" />
-            <el-option label="修复性维修" value="corrective" />
-            <el-option label="升级" value="upgrade" />
-            <el-option label="紧急维修" value="emergency" />
+            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
+            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
+            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
+            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
           </el-select>
         </el-form-item>
-        <el-form-item label="更换备件">
+        <el-form-item :label="t('maintReplaceParts')">
           <el-input v-model="maintForm.parts_replaced" type="textarea" :rows="2" />
         </el-form-item>
-        <el-form-item label="备件成本">
+        <el-form-item :label="t('maintPartsCost')">
           <el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" />
         </el-form-item>
-        <el-form-item label="人工工时 (小时)">
+        <el-form-item :label="t('maintLaborHours')">
           <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
-        <el-form-item label="人工成本">
+        <el-form-item :label="t('maintLaborCost')">
           <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" />
         </el-form-item>
-        <el-form-item label="维修商">
+        <el-form-item :label="t('maintVendor')">
           <el-input v-model="maintForm.vendor" />
         </el-form-item>
-        <el-form-item label="维修描述" required>
+        <el-form-item :label="t('maintDescription')" required>
           <el-input v-model="maintForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showMaintDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updateMaintInDetail() : addMaintenance()">确定</el-button>
+        <el-button @click="showMaintDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateMaintInDetail() : addMaintenance()">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -378,8 +378,10 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Download, Upload, Picture } from '@element-plus/icons-vue'
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
 import axios from 'axios'
 
+const { t } = useI18n()
 const route = useRoute()
 const device = ref(null)
 const loading = ref(false)
@@ -428,7 +430,7 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { online: '在线', offline: '离线', maintenance: '维护中', retired: '已退役' }
+  const texts = { online: t('statusOnline'), offline: t('statusOffline'), maintenance: t('statusMaintenance'), retired: t('statusRetired') }
   return texts[status] || status
 }
 
@@ -438,17 +440,17 @@ const getFaultStatusType = (status) => {
 }
 
 const getFaultStatusText = (status) => {
-  const texts = { open: '待处理', investigating: '处理中', resolved: '已解决', closed: '已关闭' }
+  const texts = { open: t('faultStatusOpen'), investigating: t('faultStatusInvestigating'), resolved: t('faultStatusResolved'), closed: t('faultStatusClosed') }
   return texts[status] || status
 }
 
 const getRoleText = (role) => {
-  const texts = { access: '接入层', distribution: '汇聚层', core: '核心层' }
+  const texts = { access: t('deviceRoleAccess'), distribution: t('deviceRoleDistribution'), core: t('deviceRoleCore') }
   return texts[role] || role
 }
 
 const getVendorText = (vendor) => {
-  const map = { cisco: 'Cisco', huawei: '华为', '华为': '华为', h3c: 'H3C', '新华三': 'H3C', hp: 'H3C', juniper: 'Juniper', arista: 'Arista' }
+  const map = { cisco: 'Cisco', huawei: t('vendorHuawei'), '华为': t('vendorHuawei'), h3c: 'H3C', '新华三': 'H3C', hp: 'H3C', juniper: 'Juniper', arista: 'Arista' }
   return map[vendor?.toLowerCase()] || vendor || 'Cisco'
 }
 
@@ -459,11 +461,11 @@ const getVendorTagType = (vendor) => {
 
 const testConnection = async () => {
   try {
-    ElMessage.info('正在测试连接...')
+    ElMessage.info(t('msgTestConnecting'))
     // TODO: 实现连接测试 API
-    ElMessage.success('连接测试功能待后端 API 实现')
+    ElMessage.success(t('msgTestWaitApi'))
   } catch (e) {
-    ElMessage.error('连接测试失败')
+    ElMessage.error(t('msgTestFailed'))
   }
 }
 
@@ -473,17 +475,17 @@ const getSeverityType = (severity) => {
 }
 
 const getSeverityText = (severity) => {
-  const texts = { critical: '严重', major: '主要', minor: '次要', warning: '警告' }
+  const texts = { critical: t('dashCritical'), major: t('dashMajor'), minor: t('dashMinor'), warning: t('dashWarning') }
   return texts[severity] || severity
 }
 
 const getPhotoTypeText = (type) => {
-  const texts = { front: '正面', back: '背面', label: '标签', rack: '机柜', other: '其他' }
+  const texts = { front: t('devicePhotoFront'), back: t('devicePhotoBack'), label: t('devicePhotoLabel'), rack: t('devicePhotoRack'), other: t('devicePhotoOther') }
   return texts[type] || type
 }
 
 const getMaintTypeText = (type) => {
-  const texts = { preventive: '预防性', corrective: '修复性', upgrade: '升级', emergency: '紧急' }
+  const texts = { preventive: t('maintTypePreventive'), corrective: t('maintTypeCorrective'), upgrade: t('maintTypeUpgrade'), emergency: t('maintTypeEmergency') }
   return texts[type] || type
 }
 
@@ -506,7 +508,7 @@ const loadDevice = async () => {
     device.value = data
     editForm.value = { ...data }
   } catch (error) {
-    ElMessage.error('加载设备详情失败')
+    ElMessage.error(t('msgDeviceDetailFailed'))
   } finally {
     loading.value = false
   }
@@ -520,7 +522,7 @@ const loadDeviceInventory = async () => {
     const data = await getDeviceInventory(route.params.id)
     deviceInventory.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载设备资产失败')
+    ElMessage.error(t('msgDeviceInventoryFailed'))
   } finally {
     inventoryLoading.value = false
   }
@@ -537,42 +539,41 @@ const backupNow = async () => {
   try {
     const { backupDevice } = await import('@/api')
     await backupDevice(route.params.id, 'Web')
-    ElMessage.success('备份成功')
+    ElMessage.success(t('msgBackupSuccessShort'))
     loadDevice()
   } catch (error) {
-    ElMessage.error('备份失败')
+    ElMessage.error(t('msgBackupFailed'))
   }
 }
 
 const openConsoleDeploy = () => {
-  ElMessage.info('Console 部署功能开发中')
+  ElMessage.info(t('msgConsoleDev'))
 }
 
 const handlePhotoUploadSuccess = (response) => {
-  ElMessage.success('照片上传成功')
+  ElMessage.success(t('msgPhotoUploadSuccess'))
   loadDevice()
 }
 
 const handlePhotoUploadError = (error) => {
-  ElMessage.error('照片上传失败')
-  ElMessage.error('照片上传失败')
+  ElMessage.error(t('msgPhotoUploadFailed'))
 }
 
 const deletePhoto = async (photoId) => {
   try {
-    await ElMessageBox.confirm('确定要删除这张照片吗？', '确认删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('confirmDeletePhoto'), t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     const api = await import('@/api')
     await api.deletePhoto(route.params.id, photoId)
-    ElMessage.success('照片删除成功')
+    ElMessage.success(t('msgPhotoDeleteSuccess'))
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除照片失败')
+      ElMessage.error(t('msgPhotoDeleteFailed'))
     }
   }
 }
@@ -584,20 +585,18 @@ const viewConfig = async (backupId) => {
     configContent.value = data.content
     showConfigDialog.value = true
   } catch (error) {
-    ElMessage.error('获取配置失败')
-    ElMessage.error('获取配置失败')
+    ElMessage.error(t('msgConfigLoadFailed'))
   }
 }
 
 const updateDevice = async () => {
   try {
     await updateDeviceApi(route.params.id, editForm.value)
-    ElMessage.success('设备更新成功')
+    ElMessage.success(t('msgDeviceUpdateSuccess'))
     showEditDialog.value = false
     loadDevice()
   } catch (error) {
-    ElMessage.error('更新设备失败')
-    ElMessage.error('更新设备失败')
+    ElMessage.error(t('msgDeviceUpdateFailed'))
   }
 }
 
@@ -610,13 +609,13 @@ const addFault = async () => {
       ...faultForm.value,
       status: 'open'
     })
-    ElMessage.success('故障记录添加成功')
+    ElMessage.success(t('msgFaultAddSuccess'))
     showFaultDialog.value = false
     resetFaultForm()
     loadDevice()
   } catch (error) {
-    ElMessage.error('添加故障记录失败')
-    ElMessage.error(error.response?.data?.detail || '添加故障记录失败')
+    ElMessage.error(t('msgFaultAddFailed'))
+    ElMessage.error(error.response?.data?.detail || t('msgFaultAddFailed'))
   }
 }
 
@@ -643,33 +642,31 @@ const editFaultInDetail = (row) => {
 const updateFaultInDetail = async () => {
   try {
     await updateFault(faultForm.value.id, faultForm.value)
-    ElMessage.success('故障记录更新成功')
+    ElMessage.success(t('msgFaultUpdateSuccess'))
     showFaultDialog.value = false
     editMode.value = false
     resetFaultForm()
     loadDevice()
   } catch (error) {
-    ElMessage.error('更新故障记录失败')
-    ElMessage.error('更新故障记录失败')
+    ElMessage.error(t('msgFaultUpdateFailed'))
   }
 }
 
 const closeFaultInDetail = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要关闭故障 "${row.fault_no}" 吗？`, '确认关闭', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('faultCloseConfirm', { id: row.fault_no }), t('faultCloseTitle'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await updateFault(row.id, { status: 'closed' })
     console.log('API 调用成功，row:', row)
-    ElMessage.success('故障已关闭')
+    ElMessage.success(t('msgFaultCloseSuccess'))
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('关闭故障失败')
-      ElMessage.error('关闭故障失败')
+      ElMessage.error(t('msgFaultCloseFailed'))
     }
   }
 }
@@ -697,13 +694,13 @@ const addMaintenance = async () => {
       device_name: device.value.name,
       ...maintForm.value
     })
-    ElMessage.success('维修记录添加成功')
+    ElMessage.success(t('msgMaintAddSuccess'))
     showMaintDialog.value = false
     resetMaintForm()
     loadDevice()
   } catch (error) {
-    ElMessage.error('添加维修记录失败')
-    ElMessage.error(error.response?.data?.detail || '添加维修记录失败')
+    ElMessage.error(t('msgMaintAddFailed'))
+    ElMessage.error(error.response?.data?.detail || t('msgMaintAddFailed'))
   }
 }
 
@@ -726,32 +723,30 @@ const editMaintInDetail = (row) => {
 const updateMaintInDetail = async () => {
   try {
     await updateMaintenance(maintForm.value.id, maintForm.value)
-    ElMessage.success('维修记录更新成功')
+    ElMessage.success(t('msgMaintUpdateSuccess'))
     showMaintDialog.value = false
     editMode.value = false
     resetMaintForm()
     loadDevice()
   } catch (error) {
-    ElMessage.error('更新维修记录失败')
-    ElMessage.error('更新维修记录失败')
+    ElMessage.error(t('msgMaintUpdateFailed'))
   }
 }
 
 const deleteMaintInDetail = async (maintId) => {
   try {
-    await ElMessageBox.confirm('确定要删除此维修记录吗？', '确认删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('confirmDeleteMaint'), t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await deleteMaintenance(maintId)
-    ElMessage.success('维修记录删除成功')
+    ElMessage.success(t('msgMaintDeleteSuccess'))
     loadDevice()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除维修记录失败')
-      ElMessage.error('删除维修记录失败')
+      ElMessage.error(t('msgMaintDeleteFailed'))
     }
   }
 }

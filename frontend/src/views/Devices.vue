@@ -3,24 +3,24 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>设备列表</span>
+          <span>{{ t('deviceList') }}</span>
           <div class="actions">
-            <el-checkbox v-model="selectMode" style="margin-right: 10px">批量选择</el-checkbox>
+            <el-checkbox v-model="selectMode" style="margin-right: 10px">{{ t('deviceBatchSelect') }}</el-checkbox>
             <el-button type="success" @click="batchBackup" :disabled="selectedDevices.length === 0">
               <el-icon><Download /></el-icon>
-              批量备份 ({{ selectedDevices.length }})
+              {{ t('deviceBatchBackup') }} ({{ selectedDevices.length }})
             </el-button>
             <el-button type="primary" @click="showAddDialog = true">
               <el-icon><Plus /></el-icon>
-              添加设备
+              {{ t('deviceAdd') }}
             </el-button>
             <el-dropdown split-button @click="exportDevices">
               <el-icon><Upload /></el-icon>
-              导出
+              {{ t('actionExport') }}
               <template #dropdown>
                 <el-dropdown-menu>
-                  <el-dropdown-item @click="exportDevices">Excel 导出</el-dropdown-item>
-                  <el-dropdown-item @click="showImportDialog = true">Excel 导入</el-dropdown-item>
+                  <el-dropdown-item @click="exportDevices">{{ t('deviceExcelExport') }}</el-dropdown-item>
+                  <el-dropdown-item @click="showImportDialog = true">{{ t('deviceExcelImport') }}</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -32,20 +32,20 @@
       <div class="filter-bar">
         <el-input
           v-model="searchText"
-          placeholder="搜索设备名称或 IP"
+          :placeholder="t('deviceSearchPlaceholder')"
           style="width: 250px"
           clearable
         />
-        <el-select v-model="filterStatus" placeholder="状态" clearable style="width: 120px">
-          <el-option label="在线" value="online" />
-          <el-option label="离线" value="offline" />
-          <el-option label="维护中" value="maintenance" />
-          <el-option label="已退役" value="retired" />
+        <el-select v-model="filterStatus" :placeholder="t('deviceFilterStatus')" clearable style="width: 120px">
+          <el-option :label="t('statusOnline')" value="online" />
+          <el-option :label="t('statusOffline')" value="offline" />
+          <el-option :label="t('statusMaintenance')" value="maintenance" />
+          <el-option :label="t('statusRetired')" value="retired" />
         </el-select>
-        <el-select v-model="filterRole" placeholder="角色" clearable style="width: 120px">
-          <el-option label="接入层" value="access" />
-          <el-option label="汇聚层" value="distribution" />
-          <el-option label="核心层" value="core" />
+        <el-select v-model="filterRole" :placeholder="t('deviceFilterRole')" clearable style="width: 120px">
+          <el-option :label="t('deviceRoleAccess')" value="access" />
+          <el-option :label="t('deviceRoleDistribution')" value="distribution" />
+          <el-option :label="t('deviceRoleCore')" value="core" />
         </el-select>
       </div>
 
@@ -57,41 +57,46 @@
         @selection-change="handleSelectionChange"
       >
         <el-table-column v-if="selectMode" type="selection" width="55" />
-        <el-table-column prop="name" label="设备名称" width="180" />
-        <el-table-column prop="ip" label="IP 地址" width="140" />
-        <el-table-column prop="model" label="型号" width="200" />
-        <el-table-column prop="serial_number" label="序列号" width="160" />
-        <el-table-column prop="location" label="位置" />
-        <el-table-column prop="credential_group" label="账号组" width="120" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="name" :label="t('deviceName')" width="180" />
+        <el-table-column prop="ip" :label="t('deviceIp')" width="140" />
+        <el-table-column prop="model" :label="t('deviceModel')" width="200" />
+        <el-table-column prop="serial_number" :label="t('deviceSerialNumber')" width="160" />
+        <el-table-column prop="location" :label="t('deviceLocation')" />
+        <el-table-column prop="credential_group" :label="t('deviceCredentialGroup')" width="120" />
+        <el-table-column prop="status" :label="t('deviceStatus')" width="100">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="vendor" label="厂商" width="100">
+        <el-table-column prop="vendor" :label="t('deviceVendor')" width="100">
           <template #default="{ row }">
             <el-tag size="small">{{ row.vendor || 'Cisco' }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="role" label="角色" width="100">
+        <el-table-column prop="role" :label="t('deviceRole')" width="100">
           <template #default="{ row }">
             <el-tag :type="getRoleType(row.role)" size="small">
               {{ getRoleText(row.role) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="280" fixed="right" align="center">
+        <el-table-column :label="t('deviceAction')" width="280" fixed="right" align="center">
           <template #default="{ row }">
-            <div class="action-buttons">
-              <el-button type="primary" size="small" @click="viewDevice(row.id)">详情</el-button>
-              <el-button type="success" size="small" @click="backupDevice(row)">备份</el-button>
-              <el-button type="warning" size="small" @click="editDevice(row)">编辑</el-button>
-              <el-button type="danger" size="small" @click="deleteDevice(row)">删除</el-button>
+            <div class="table-actions">
+              <el-button type="primary" size="small" @click="viewDevice(row.id)">{{ t('deviceDetail') }}</el-button>
+              <el-button type="success" size="small" @click="backupDevice(row)">{{ t('deviceBackup') }}</el-button>
+              <el-button type="warning" size="small" @click="editDevice(row)">{{ t('deviceEdit') }}</el-button>
+              <el-button type="danger" size="small" @click="deleteDevice(row)">{{ t('deviceDelete') }}</el-button>
             </div>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="t('msgNoDevices')" :image-size="80">
+            <el-button type="primary" size="small" @click="showAddDialog = true">{{ t('deviceAdd') }}</el-button>
+          </el-empty>
+        </template>
       </el-table>
       <div class="pagination-bar">
         <el-pagination
@@ -107,74 +112,74 @@
     </el-card>
 
     <!-- 添加/编辑设备对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? '编辑设备' : '添加设备'" width="600px">
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('editDeviceTitle') : t('addDeviceTitle')" width="600px">
       <el-form :model="newDevice" label-width="100px">
-        <el-form-item label="设备名称" required>
-          <el-input v-model="newDevice.name" placeholder="如 SW-ACCESS-01" :disabled="editMode" />
+        <el-form-item :label="t('deviceName')" required>
+          <el-input v-model="newDevice.name" :placeholder="t('editDeviceNamePlaceholder')" :disabled="editMode" />
         </el-form-item>
-        <el-form-item label="IP 地址" required>
-          <el-input v-model="newDevice.ip" placeholder="192.168.x.x" />
+        <el-form-item :label="t('deviceIp')" required>
+          <el-input v-model="newDevice.ip" :placeholder="t('editDeviceIpPlaceholder')" />
         </el-form-item>
-        <el-form-item label="设备型号">
-          <el-input v-model="newDevice.model" placeholder="如 WS-C2960X-24TS-L" />
+        <el-form-item :label="t('deviceModel')">
+          <el-input v-model="newDevice.model" :placeholder="t('editDeviceModelPlaceholder')" />
         </el-form-item>
-        <el-form-item label="序列号">
+        <el-form-item :label="t('deviceSerialNumber')">
           <el-input v-model="newDevice.serial_number" />
         </el-form-item>
-        <el-form-item label="位置">
-          <el-input v-model="newDevice.location" placeholder="如 Building-A / Floor1 / Rack-03" />
+        <el-form-item :label="t('deviceLocation')">
+          <el-input v-model="newDevice.location" :placeholder="t('editDeviceLocationPlaceholder')" />
         </el-form-item>
-        <el-form-item label="厂商">
+        <el-form-item :label="t('deviceVendor')">
           <el-select v-model="newDevice.vendor">
             <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
           </el-select>
         </el-form-item>
-        <el-form-item label="角色">
+        <el-form-item :label="t('deviceRole')">
           <el-select v-model="newDevice.role">
-            <el-option label="接入层" value="access" />
-            <el-option label="汇聚层" value="distribution" />
-            <el-option label="核心层" value="core" />
+            <el-option :label="t('deviceRoleAccess')" value="access" />
+            <el-option :label="t('deviceRoleDistribution')" value="distribution" />
+            <el-option :label="t('deviceRoleCore')" value="core" />
           </el-select>
         </el-form-item>
-        <el-form-item label="状态">
+        <el-form-item :label="t('deviceStatus')">
           <el-select v-model="newDevice.status">
-            <el-option label="在线" value="online" />
-            <el-option label="离线" value="offline" />
-            <el-option label="维护中" value="maintenance" />
-            <el-option label="已退役" value="retired" />
+            <el-option :label="t('statusOnline')" value="online" />
+            <el-option :label="t('statusOffline')" value="offline" />
+            <el-option :label="t('statusMaintenance')" value="maintenance" />
+            <el-option :label="t('statusRetired')" value="retired" />
           </el-select>
         </el-form-item>
-        <el-form-item label="账号组">
-          <el-select v-model="newDevice.credential_group" placeholder="选择 SSH 账号组">
+        <el-form-item :label="t('deviceCredentialGroup')">
+          <el-select v-model="newDevice.credential_group" :placeholder="t('deviceSelectCredential')">
             <el-option label="default" value="default" />
             <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="editMode ? updateDevice() : addDevice()">确定</el-button>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateDevice() : addDevice()">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- 导入设备对话框 -->
-    <el-dialog v-model="showImportDialog" title="导入设备信息" width="600px">
+    <el-dialog v-model="showImportDialog" :title="t('deviceImportTitle')" width="600px">
       <el-alert
-        title="导入说明"
+        :title="t('deviceImportDesc')"
         type="info"
         :closable="false"
         style="margin-bottom: 15px"
       >
-        <p>请上传 Excel (.xlsx) 或 CSV 格式的设备文件，文件应包含以下列：</p>
+        <p>{{ t('deviceImportTip') }}</p>
         <ul style="margin: 10px 0; padding-left: 20px">
-          <li>name (设备名称，必填)</li>
-          <li>ip (IP 地址，必填)</li>
-          <li>model (设备型号)</li>
-          <li>serial_number (序列号)</li>
-          <li>location (位置)</li>
-          <li>role (角色：access/distribution/core)</li>
-          <li>status (状态：online/offline/maintenance/retired)</li>
-          <li>credential_group (账号组名称)</li>
+          <li>{{ t('deviceImportName') }}</li>
+          <li>{{ t('deviceImportIp') }}</li>
+          <li>{{ t('deviceImportModel') }}</li>
+          <li>{{ t('deviceImportSerial') }}</li>
+          <li>{{ t('deviceImportLocation') }}</li>
+          <li>{{ t('deviceImportRole') }}</li>
+          <li>{{ t('deviceImportStatus') }}</li>
+          <li>{{ t('deviceImportCredGroup') }}</li>
         </ul>
       </el-alert>
       <el-upload
@@ -187,17 +192,17 @@
       >
         <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
         <div class="el-upload__text">
-          将文件拖到此处，或<em>点击上传</em>
+          {{ t('deviceUploadDrag') }}
         </div>
         <template #tip>
           <div class="el-upload__tip">
-            只能上传 xlsx / csv 文件
+            {{ t('deviceUploadTip') }}
           </div>
         </template>
       </el-upload>
       <template #footer>
-        <el-button @click="showImportDialog = false">取消</el-button>
-        <el-button type="primary" @click="importDevices" :disabled="!selectedFile">确定导入</el-button>
+        <el-button @click="showImportDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="importDevices" :disabled="!selectedFile">{{ t('deviceConfirmImport') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -209,7 +214,9 @@ import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Plus, Upload, UploadFilled } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
+import { useI18n } from '@/composables/useI18n'
 
+const { t } = useI18n()
 const router = useRouter()
 
 const loading = ref(false)
@@ -260,7 +267,7 @@ const getStatusType = (status) => {
 }
 
 const getStatusText = (status) => {
-  const texts = { online: '在线', offline: '离线', maintenance: '维护中', retired: '已退役' }
+  const texts = { online: t('statusOnline'), offline: t('statusOffline'), maintenance: t('statusMaintenance'), retired: t('statusRetired') }
   return texts[status] || status
 }
 
@@ -270,7 +277,7 @@ const getRoleType = (role) => {
 }
 
 const getRoleText = (role) => {
-  const texts = { access: '接入层', distribution: '汇聚层', core: '核心层' }
+  const texts = { access: t('deviceRoleAccess'), distribution: t('deviceRoleDistribution'), core: t('deviceRoleCore') }
   return texts[role] || role
 }
 
@@ -286,7 +293,7 @@ const loadDevices = async () => {
     devices.value = data.items || []
     total.value = data.total || 0
   } catch (error) {
-    ElMessage.error('加载设备列表失败')
+    ElMessage.error(t('msgDeviceListFailed'))
   } finally {
     loading.value = false
   }
@@ -297,7 +304,7 @@ const loadCredentialGroups = async () => {
     const data = await getCredentials()
     credentialGroups.value = data.items || data || []
   } catch (error) {
-    ElMessage.error('加载账号组列表失败')
+    ElMessage.error(t('msgCredentialListFailed'))
   }
 }
 
@@ -308,11 +315,10 @@ const viewDevice = (id) => {
 const backupDevice = async (row) => {
   try {
     await backupDeviceApi(row.id, 'Web')
-    ElMessage.success(`设备 ${row.name} 备份成功`)
+    ElMessage.success(t('msgBackupSuccess', { name: row.name }))
     loadDevices()
   } catch (error) {
-    ElMessage.error('备份失败')
-    ElMessage.error('备份失败')
+    ElMessage.error(t('msgBackupFailed'))
   }
 }
 
@@ -320,19 +326,18 @@ const batchBackup = async () => {
   if (selectedDevices.value.length === 0) return
 
   try {
-    await ElMessageBox.confirm(`确定要备份选中的 ${selectedDevices.value.length} 台设备吗？`, '确认批量备份', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('confirmBackupSelected', { count: selectedDevices.value.length }), t('confirmBatchBackup'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await batchBackupApi(selectedDevices.value, 'Web')
-    ElMessage.success('批量备份完成')
+    ElMessage.success(t('msgBatchBackupSuccess'))
     loadDevices()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('批量备份失败')
-      ElMessage.error('批量备份失败')
+      ElMessage.error(t('msgBatchBackupFailed'))
     }
   }
 }
@@ -358,31 +363,30 @@ const updateDevice = async () => {
       credential_group: newDevice.value.credential_group
     }
     await updateDeviceApi(newDevice.value.id, updateData)
-    ElMessage.success('设备更新成功')
+    ElMessage.success(t('msgDeviceUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     loadDevices()
   } catch (error) {
-    ElMessage.error('更新设备失败')
-    ElMessage.error(error.response?.data?.detail || '更新设备失败')
+    ElMessage.error(t('msgDeviceUpdateFailed'))
+    ElMessage.error(error.response?.data?.detail || t('msgDeviceUpdateFailed'))
   }
 }
 
 const deleteDevice = async (row) => {
   try {
-    await ElMessageBox.confirm(`确定要删除设备 "${row.name}" 吗？`, '确认删除', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
+    await ElMessageBox.confirm(t('confirmDeleteDevice', { name: row.name }), t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
       type: 'warning'
     })
 
     await deleteDeviceApi(row.id)
-    ElMessage.success('设备删除成功')
+    ElMessage.success(t('msgDeviceDeleteSuccess'))
     loadDevices()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('删除设备失败')
-      ElMessage.error('删除设备失败')
+      ElMessage.error(t('msgDeviceDeleteFailed'))
     }
   }
 }
@@ -390,12 +394,11 @@ const deleteDevice = async (row) => {
 const addDevice = async () => {
   try {
     await createDevice(newDevice.value)
-    ElMessage.success('设备添加成功')
+    ElMessage.success(t('msgDeviceAddSuccess'))
     showAddDialog.value = false
     loadDevices()
   } catch (error) {
-    ElMessage.error('添加设备失败')
-    ElMessage.error('添加设备失败')
+    ElMessage.error(t('msgDeviceAddFailed'))
   }
 }
 
@@ -410,10 +413,9 @@ const exportDevices = async () => {
     link.click()
     document.body.removeChild(link)
     window.URL.revokeObjectURL(url)
-    ElMessage.success('导出成功')
+    ElMessage.success(t('msgExportSuccess'))
   } catch (error) {
-    ElMessage.error('导出失败')
-    ElMessage.error('导出失败')
+    ElMessage.error(t('msgExportFailed'))
   }
 }
 
@@ -423,7 +425,7 @@ const handleFileChange = (file) => {
 
 const importDevices = async () => {
   if (!selectedFile.value) {
-    ElMessage.warning('请选择要导入的文件')
+    ElMessage.warning(t('msgImportSelectFile'))
     return
   }
 
@@ -432,14 +434,14 @@ const importDevices = async () => {
     formData.append('file', selectedFile.value)
 
     const result = await importDevicesApi(formData)
-    ElMessage.success(`导入成功：${result.success}台设备，失败：${result.failed}台`)
+    ElMessage.success(t('msgImportSuccess', { success: result.success, failed: result.failed }))
     showImportDialog.value = false
     selectedFile.value = null
     loadDevices()
     loadCredentialGroups()
   } catch (error) {
-    ElMessage.error('导入失败')
-    ElMessage.error(error.response?.data?.detail || '导入失败')
+    ElMessage.error(t('msgImportFailed'))
+    ElMessage.error(error.response?.data?.detail || t('msgImportFailed'))
   }
 }
 
@@ -448,7 +450,7 @@ const loadVendors = async () => {
     const res = await getVendors()
     vendors.value = res.vendors || []
   } catch (e) {
-    console.error('加载厂商列表失败', e)
+    console.error(t('msgVendorListFailed'), e)
   }
 }
 
@@ -464,41 +466,18 @@ onMounted(() => {
   padding: 0;
 }
 
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
 .filter-bar {
   display: flex;
-  gap: 15px;
-  margin-bottom: 20px;
+  gap: var(--gap-md);
+  margin-bottom: var(--gap-lg);
+  flex-wrap: wrap;
 }
 
-.actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.filter-bar .el-input {
+  width: 250px;
 }
 
-.action-buttons {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 4px;
-  justify-content: center;
-  align-items: center;
-}
-
-.action-buttons .el-button {
-  padding: 5px 8px;
-  font-size: 12px;
-  min-width: auto;
-}
-.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
-@media (max-width: 768px) {
-  .filter-bar { flex-wrap: wrap; }
-  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
-  .action-buttons .el-button { margin-bottom: 4px; }
+.filter-bar .el-select {
+  width: 120px;
 }
 </style>

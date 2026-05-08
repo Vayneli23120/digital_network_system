@@ -426,7 +426,7 @@ const faultChartInstance = ref(null)
 const deviceChartInstance = ref(null)
 const faultTotal = ref(0)
 const faultData = ref({ labels: [], by_severity: {} })
-const selectedLegends = ref(['严重', '主要', '次要', '警告'])
+const selectedLegends = ref([t('dashCritical'), t('dashMajor'), t('dashMinor'), t('dashWarning')])
 const selectedStatus = ref(null)
 
 const currentTime = computed(() => dayjs().format('HH:mm:ss'))
@@ -462,9 +462,9 @@ const retiredPercent = computed(() => {
 })
 
 const alerts = computed(() => [
-  { severity: 'warn', title: 'Backup Alert', summary: '3 devices > 30 days without backup', time: '10m' },
-  { severity: 'info', title: 'Maintenance Notice', summary: 'SW-AGG-02 under maintenance', time: '2h' },
-  { severity: 'success', title: 'System Healthy', summary: 'All core services operational', time: '1d' }
+  { severity: 'warn', title: t('dashAlertBackupTitle'), summary: t('dashAlertBackupSummary'), time: '10m' },
+  { severity: 'info', title: t('dashAlertMaintenanceTitle'), summary: t('dashAlertMaintenanceSummary'), time: '2h' },
+  { severity: 'success', title: t('dashAlertHealthyTitle'), summary: t('dashAlertHealthySummary'), time: '1d' }
 ])
 
 const alertCount = computed(() => alerts.value.filter(a => a.severity === 'warn' || a.severity === 'danger').length)
@@ -478,7 +478,7 @@ const refreshData = async () => {
   loading.value = true
   await loadDashboardData()
   loading.value = false
-  ElMessage.success('Data refreshed')
+  ElMessage.success(t('msgDataRefreshed'))
 }
 
 const loadDashboardData = async () => {
@@ -493,7 +493,7 @@ const loadDashboardData = async () => {
       updateFaultChart()
     })
   } catch (error) {
-    ElMessage.error('Failed to load dashboard data')
+    ElMessage.error(t('dashLoadFailed'))
   }
 }
 
@@ -518,7 +518,7 @@ const initDevicePieChart = (devices) => {
       backgroundColor: bgColor,
       borderColor: borderColor,
       textStyle: { color: textColor, fontFamily: 'JetBrains Mono' },
-      formatter: (params) => `${params.name}: ${params.value}台 (${total > 0 ? Math.round(params.value / total * 100) : 0}%)`
+      formatter: (params) => `${params.name}: ${params.value} ${t('dashDevices')} (${total > 0 ? Math.round(params.value / total * 100) : 0}%)`
     },
     series: [{
       type: 'pie',
@@ -543,10 +543,10 @@ const initDevicePieChart = (devices) => {
         }
       },
       data: [
-        { value: devices?.online || 0, name: 'Online', itemStyle: { color: colors[0] } },
-        { value: devices?.offline || 0, name: 'Offline', itemStyle: { color: colors[1] } },
-        { value: devices?.maintenance || 0, name: 'Maintenance', itemStyle: { color: colors[2] } },
-        { value: devices?.retired || 0, name: 'Retired', itemStyle: { color: colors[3] } }
+        { value: devices?.online || 0, name: t('statusOnline'), itemStyle: { color: colors[0] } },
+        { value: devices?.offline || 0, name: t('statusOffline'), itemStyle: { color: colors[1] } },
+        { value: devices?.maintenance || 0, name: t('statusMaintenance'), itemStyle: { color: colors[2] } },
+        { value: devices?.retired || 0, name: t('statusRetired'), itemStyle: { color: colors[3] } }
       ]
     }],
     // 添加中心文字图形
@@ -574,7 +574,7 @@ const initDevicePieChart = (devices) => {
           top: '15',
           style: {
             fill: isDark ? '#8b949e' : '#6B7A8D',
-            text: '设备',
+            text: t('dashDevices'),
             font: '13px Geist',
             textAlign: 'center'
           }
@@ -587,12 +587,12 @@ const initDevicePieChart = (devices) => {
 const highlightPieSegment = (status) => {
   if (!deviceChartInstance.value) return
 
-  // 状态名称映射
+  // 状态名称映射（使用翻译后的名称）
   const nameMap = {
-    'online': 'Online',
-    'offline': 'Offline',
-    'maintenance': 'Maintenance',
-    'retired': 'Retired'
+    'online': t('statusOnline'),
+    'offline': t('statusOffline'),
+    'maintenance': t('statusMaintenance'),
+    'retired': t('statusRetired')
   }
 
   // 如果点击同一个状态，取消高亮
@@ -645,7 +645,7 @@ const initFaultLineChart = () => {
       }
     },
     legend: {
-      data: ['Critical', 'Major', 'Minor', 'Info'],
+      data: [t('dashCritical'), t('dashMajor'), t('dashMinor'), t('dashWarning')],
       bottom: 0,
       itemWidth: 12,
       itemHeight: 12,
@@ -677,7 +677,7 @@ const initFaultLineChart = () => {
     },
     series: [
       {
-        name: 'Critical',
+        name: t('dashCritical'),
         type: 'line',
         stack: 'Total',
         smooth: true,
@@ -690,7 +690,7 @@ const initFaultLineChart = () => {
         data: []
       },
       {
-        name: 'Major',
+        name: t('dashMajor'),
         type: 'line',
         stack: 'Total',
         smooth: true,
@@ -703,7 +703,7 @@ const initFaultLineChart = () => {
         data: []
       },
       {
-        name: 'Minor',
+        name: t('dashMinor'),
         type: 'line',
         stack: 'Total',
         smooth: true,
@@ -716,7 +716,7 @@ const initFaultLineChart = () => {
         data: []
       },
       {
-        name: 'Info',
+        name: t('dashWarning'),
         type: 'line',
         stack: 'Total',
         smooth: true,
@@ -776,7 +776,7 @@ const updateFaultChart = async () => {
     })
     faultTotal.value = total
   } catch (error) {
-    ElMessage.error('Failed to load fault trend data')
+    ElMessage.error(t('dashFaultTrendFailed'))
   }
 }
 

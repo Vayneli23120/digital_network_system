@@ -3,11 +3,11 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>备份记录</span>
+          <span>{{ t('backupTitle') }}</span>
           <div class="actions">
             <el-button type="primary" @click="showBatchBackupDialog = true">
               <el-icon><Download /></el-icon>
-              批量备份
+              {{ t('backupBatchBackup') }}
             </el-button>
           </div>
         </div>
@@ -17,7 +17,7 @@
       <div class="filter-bar">
         <el-input
           v-model="searchText"
-          placeholder="搜索设备名称或文件名"
+          :placeholder="t('backupSearchPlaceholder')"
           style="width: 220px"
           clearable
           @input="filterBackups"
@@ -27,49 +27,54 @@
         <el-date-picker
           v-model="dateRange"
           type="daterange"
-          range-separator="至"
-          start-placeholder="开始日期"
-          end-placeholder="结束日期"
+          :range-separator="t('backupDateSeparator')"
+          :start-placeholder="t('backupDateFrom')"
+          :end-placeholder="t('backupDateTo')"
           value-format="YYYY-MM-DD"
           style="width: 240px"
           @change="filterBackups"
         />
-        <el-select v-model="filterHasChange" placeholder="配置变更" clearable style="width: 120px" @change="filterBackups">
-          <el-option label="有变更" value="true" />
-          <el-option label="无变更" value="false" />
+        <el-select v-model="filterHasChange" :placeholder="t('backupConfigChange')" clearable style="width: 120px" @change="filterBackups">
+          <el-option :label="t('backupHasChange')" value="true" />
+          <el-option :label="t('backupNoChange')" value="false" />
         </el-select>
-        <el-select v-model="sortBy" placeholder="排序" style="width: 150px" @change="filterBackups">
-          <el-option label="备份时间 ↓" value="backup_time_desc" />
-          <el-option label="备份时间 ↑" value="backup_time_asc" />
-          <el-option label="文件大小 ↓" value="file_size_desc" />
-          <el-option label="文件大小 ↑" value="file_size_asc" />
+        <el-select v-model="sortBy" :placeholder="t('backupSort')" style="width: 150px" @change="filterBackups">
+          <el-option :label="t('backupSortTimeDesc')" value="backup_time_desc" />
+          <el-option :label="t('backupSortTimeAsc')" value="backup_time_asc" />
+          <el-option :label="t('backupSortSizeDesc')" value="file_size_desc" />
+          <el-option :label="t('backupSortSizeAsc')" value="file_size_asc" />
         </el-select>
       </div>
 
       <el-table :data="filteredBackups" style="width: 100%" v-loading="loading">
-        <el-table-column prop="device_name" label="设备名称" width="180" />
-        <el-table-column prop="backup_file" label="备份文件" />
-        <el-table-column prop="file_size" label="文件大小" width="120">
+        <el-table-column prop="device_name" :label="t('backupColDevice')" width="180" />
+        <el-table-column prop="backup_file" :label="t('backupColFile')" />
+        <el-table-column prop="file_size" :label="t('backupColSize')" width="120">
           <template #default="{ row }">{{ formatSize(row.file_size) }}</template>
         </el-table-column>
-        <el-table-column prop="has_change" label="配置变更" width="100">
+        <el-table-column prop="has_change" :label="t('backupConfigChange')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.has_change ? 'warning' : 'success'" size="small">
-              {{ row.has_change ? '是' : '否' }}
+              {{ row.has_change ? t('statusYes') : t('statusNo') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="backup_time" label="备份时间" width="180">
+        <el-table-column prop="backup_time" :label="t('backupColTime')" width="180">
           <template #default="{ row }">{{ formatDateTime(row.backup_time) }}</template>
         </el-table-column>
-        <el-table-column prop="operator" label="操作员" width="100" />
-        <el-table-column label="操作" width="220" fixed="right">
+        <el-table-column prop="operator" :label="t('backupColOperator')" width="100" />
+        <el-table-column :label="t('backupColAction')" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="viewConfig(row.id)">查看配置</el-button>
-            <el-button size="small" @click="viewDiff(row.id)">对比差异</el-button>
-            <el-button size="small" @click="downloadBackup(row)">下载</el-button>
+            <el-button size="small" @click="viewConfig(row.id)">{{ t('backupViewConfig') }}</el-button>
+            <el-button size="small" @click="viewDiff(row.id)">{{ t('backupViewDiff') }}</el-button>
+            <el-button size="small" @click="downloadBackup(row)">{{ t('backupDownload') }}</el-button>
           </template>
         </el-table-column>
+        <template #empty>
+          <el-empty :description="t('msgNoBackups')" :image-size="80">
+            <el-button type="primary" size="small" @click="showBatchBackupDialog = true">{{ t('backupBatchBackup') }}</el-button>
+          </el-empty>
+        </template>
       </el-table>
       <div class="pagination-bar">
         <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadBackups" @current-change="loadBackups" />
@@ -77,30 +82,30 @@
     </el-card>
 
     <!-- 查看配置对话框 -->
-    <el-dialog v-model="showConfigDialog" title="配置内容" width="900px">
+    <el-dialog v-model="showConfigDialog" :title="t('backupConfigContent')" width="900px">
       <div v-if="configContent">
         <div class="config-header">
-          <strong>设备:</strong> {{ configDeviceName }}
-          <strong style="margin-left: 20px;">时间:</strong> {{ configBackupTime }}
+          <strong>{{ t('backupDevice') }}:</strong> {{ configDeviceName }}
+          <strong style="margin-left: 20px;">{{ t('backupTime') }}:</strong> {{ configBackupTime }}
         </div>
         <pre class="config-content">{{ configContent }}</pre>
       </div>
-      <el-empty v-else description="暂无配置内容" />
+      <el-empty v-else :description="t('backupNoConfig')" />
     </el-dialog>
 
     <!-- 差异对比对话框 -->
-    <el-dialog v-model="showDiffDialog" title="配置差异对比" width="900px">
+    <el-dialog v-model="showDiffDialog" :title="t('backupDiffTitle')" width="900px">
       <div v-if="diffContent">
         <pre class="diff-content">{{ diffContent }}</pre>
       </div>
-      <el-empty v-else description="暂无差异内容" />
+      <el-empty v-else :description="t('backupNoDiff')" />
     </el-dialog>
 
     <!-- 批量备份对话框 -->
-    <el-dialog v-model="showBatchBackupDialog" title="批量备份" width="500px">
+    <el-dialog v-model="showBatchBackupDialog" :title="t('backupBatchBackup')" width="500px">
       <el-form label-width="100px">
-        <el-form-item label="选择设备">
-          <el-select v-model="selectedDeviceIds" multiple placeholder="选择设备" style="width: 100%">
+        <el-form-item :label="t('backupSelectDevice')">
+          <el-select v-model="selectedDeviceIds" multiple :placeholder="t('backupSelectDevice')" style="width: 100%">
             <el-option
               v-for="device in devices"
               :key="device.id"
@@ -111,8 +116,8 @@
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="showBatchBackupDialog = false">取消</el-button>
-        <el-button type="primary" @click="doBatchBackup">确定</el-button>
+        <el-button @click="showBatchBackupDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="doBatchBackup">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -122,8 +127,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getBackups, getBackupContent, getBackupDiff, batchBackup, getDevices } from '@/api'
-import { Search } from '@element-plus/icons-vue'
+import { Search, Download } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const backups = ref([])
 const filteredBackups = ref([])
@@ -212,7 +220,7 @@ const loadBackups = async () => {
     backups.value = data.items || []
     filterBackups()
   } catch (error) {
-    ElMessage.error('加载备份记录失败')
+    ElMessage.error(t('backupLoadRecordsFailed'))
   } finally {
     loading.value = false
   }
@@ -223,7 +231,7 @@ const loadDevices = async () => {
     const data = await getDevices()
     devices.value = data.items || []
   } catch (error) {
-    ElMessage.error('加载设备列表失败')
+    ElMessage.error(t('backupLoadDevicesFailed'))
   }
 }
 
@@ -235,19 +243,17 @@ const viewConfig = async (backupId) => {
     configBackupTime.value = formatDateTime(data.backup_time)
     showConfigDialog.value = true
   } catch (error) {
-    ElMessage.error('获取配置失败')
-    ElMessage.error('获取配置失败')
+    ElMessage.error(t('backupGetConfigFailed'))
   }
 }
 
 const viewDiff = async (backupId) => {
   try {
     const data = await getBackupDiff(backupId)
-    diffContent.value = data.diff || '没有差异内容'
+    diffContent.value = data.diff || t('backupNoDiffContent')
     showDiffDialog.value = true
   } catch (error) {
-    ElMessage.error('获取差异失败')
-    ElMessage.error('获取差异失败')
+    ElMessage.error(t('backupGetDiffFailed'))
   }
 }
 
@@ -257,23 +263,22 @@ const downloadBackup = (row) => {
   link.href = `/api/backups/${row.id}/download`
   link.download = `${row.device_name}_${row.backup_time}.cfg`
   link.click()
-  ElMessage.info(`下载备份：${row.backup_file}`)
+  ElMessage.info(`${t('backupDownloadMsg')}: ${row.backup_file}`)
 }
 
 const doBatchBackup = async () => {
   if (selectedDeviceIds.value.length === 0) {
-    ElMessage.warning('请选择至少一台设备')
+    ElMessage.warning(t('backupSelectAtLeastOne'))
     return
   }
 
   try {
     await batchBackup(selectedDeviceIds.value, 'Web')
-    ElMessage.success('批量备份完成')
+    ElMessage.success(t('backupBatchComplete'))
     showBatchBackupDialog.value = false
     loadBackups()
   } catch (error) {
-    ElMessage.error('批量备份失败')
-    ElMessage.error('批量备份失败')
+    ElMessage.error(t('backupBatchFailed'))
   }
 }
 
@@ -340,11 +345,5 @@ onMounted(() => {
 
 .diff-content :deep(.-) {
   color: #cb2431;
-}
-.pagination-bar { margin-top: 16px; display: flex; justify-content: flex-end; }
-@media (max-width: 768px) {
-  .filter-bar { flex-wrap: wrap; }
-  .filter-bar .el-input, .filter-bar .el-select { width: 100% !important; }
-  .card-header { flex-direction: column; gap: 8px; align-items: flex-start; }
 }
 </style>

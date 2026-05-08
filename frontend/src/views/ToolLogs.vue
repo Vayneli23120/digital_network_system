@@ -3,17 +3,17 @@
     <!-- Page Header -->
     <div class="page-header">
       <div class="page-title">
-        <h1>工具执行日志</h1>
-        <span class="page-subtitle">Netmiko / NAPALM / JIRA 执行记录</span>
+        <h1>{{ t('toolTitle') }}</h1>
+        <span class="page-subtitle">{{ t('toolSubtitle') }}</span>
       </div>
       <div class="btn-row">
         <button class="btn btn-ghost" @click="loadLogs">
           <el-icon><Refresh /></el-icon>
-          刷新
+          {{ t('toolRefresh') }}
         </button>
         <button class="btn btn-danger" @click="cleanupLogs">
           <el-icon><Delete /></el-icon>
-          清理旧日志
+          {{ t('toolCleanup') }}
         </button>
       </div>
     </div>
@@ -24,28 +24,28 @@
         <div class="kpi-top"></div>
         <div class="kpi-body">
           <div class="kpi-value">{{ stats.total }}</div>
-          <div class="kpi-label">总执行次数</div>
+          <div class="kpi-label">{{ t('toolTotalRuns') }}</div>
         </div>
       </div>
       <div class="kpi kpi-green">
         <div class="kpi-top"></div>
         <div class="kpi-body">
           <div class="kpi-value">{{ stats.success }}</div>
-          <div class="kpi-label">成功</div>
+          <div class="kpi-label">{{ t('toolSuccess') }}</div>
         </div>
       </div>
       <div class="kpi kpi-red">
         <div class="kpi-top"></div>
         <div class="kpi-body">
           <div class="kpi-value">{{ stats.failed }}</div>
-          <div class="kpi-label">失败</div>
+          <div class="kpi-label">{{ t('toolFailed') }}</div>
         </div>
       </div>
       <div class="kpi kpi-yellow">
         <div class="kpi-top"></div>
         <div class="kpi-body">
           <div class="kpi-value">{{ stats.avgDuration || 0 }}</div>
-          <div class="kpi-label">平均耗时 (ms)</div>
+          <div class="kpi-label">{{ t('toolAvgTime') }}</div>
         </div>
       </div>
     </div>
@@ -55,26 +55,26 @@
       <div class="panel-body">
         <div class="filter-bar">
           <select class="fselect" v-model="filterToolType" @change="loadLogs">
-            <option value="">全部工具</option>
+            <option value="">{{ t('toolAllTools') }}</option>
             <option value="netmiko">Netmiko</option>
             <option value="napalm">NAPALM</option>
             <option value="jira">JIRA</option>
           </select>
           <select class="fselect" v-model="filterStatus" @change="loadLogs">
-            <option value="">全部状态</option>
-            <option value="success">成功</option>
-            <option value="failed">失败</option>
-            <option value="running">运行中</option>
+            <option value="">{{ t('toolAllStatus') }}</option>
+            <option value="success">{{ t('toolSuccess') }}</option>
+            <option value="failed">{{ t('toolFailed') }}</option>
+            <option value="running">{{ t('toolStatusRunning') }}</option>
           </select>
           <input
             class="finput"
             v-model="searchKeyword"
-            placeholder="搜索操作/目标..."
+            :placeholder="t('toolSearchPlaceholder')"
             @keyup.enter="loadLogs"
           />
           <button class="btn btn-primary btn-sm" @click="loadLogs">
             <el-icon><Search /></el-icon>
-            搜索
+            {{ t('actionSearch') }}
           </button>
         </div>
       </div>
@@ -83,21 +83,21 @@
     <!-- Logs Table -->
     <div class="panel">
       <div class="panel-hd">
-        <span class="panel-title">执行记录</span>
-        <span class="panel-meta">共 {{ total }} 条</span>
+        <span class="panel-title">{{ t('toolRecords') }}</span>
+        <span class="panel-meta">{{ t('dashTotal') }} {{ total }} {{ t('dashAction') }}</span>
       </div>
       <div class="panel-body">
         <table class="tbl" v-loading="loading">
           <thead>
             <tr>
-              <th>时间</th>
-              <th>工具</th>
-              <th>操作</th>
-              <th>目标</th>
-              <th>状态</th>
-              <th>耗时</th>
-              <th>操作人</th>
-              <th>详情</th>
+              <th>{{ t('toolColTime') }}</th>
+              <th>{{ t('toolColTool') }}</th>
+              <th>{{ t('toolColAction') }}</th>
+              <th>{{ t('toolColTarget') }}</th>
+              <th>{{ t('toolColStatus') }}</th>
+              <th>{{ t('toolColDuration') }}</th>
+              <th>{{ t('toolColOperator') }}</th>
+              <th>{{ t('toolColDetail') }}</th>
             </tr>
           </thead>
           <tbody>
@@ -111,17 +111,17 @@
               </td>
               <td class="td-mono">{{ log.duration_ms ? log.duration_ms + 'ms' : '-' }}</td>
               <td>{{ log.created_by || '-' }}</td>
-              <td><a class="td-action">查看</a></td>
+              <td><a class="td-action">{{ t('actionView') }}</a></td>
             </tr>
           </tbody>
         </table>
 
         <!-- Pagination -->
         <div class="pagination-bar">
-          <span class="page-info">第 {{ currentPage }} 页，每页 {{ pageSize }} 条</span>
+          <span class="page-info">{{ t('toolPageInfo', { page: currentPage, size: pageSize }) }}</span>
           <div class="page-btns">
-            <button class="btn btn-tiny btn-ghost" @click="currentPage--; loadLogs()" :disabled="currentPage <= 1">上一页</button>
-            <button class="btn btn-tiny btn-ghost" @click="currentPage++; loadLogs()" :disabled="currentPage * pageSize >= total">下一页</button>
+            <button class="btn btn-tiny btn-ghost" @click="currentPage--; loadLogs()" :disabled="currentPage <= 1">{{ t('toolPrevPage') }}</button>
+            <button class="btn btn-tiny btn-ghost" @click="currentPage++; loadLogs()" :disabled="currentPage * pageSize >= total">{{ t('toolNextPage') }}</button>
           </div>
         </div>
       </div>
@@ -131,37 +131,37 @@
     <div class="modal-overlay" v-if="showDetailDialog" @click="showDetailDialog = false">
       <div class="modal modal-lg" @click.stop>
         <div class="modal-hd">
-          <span class="modal-title">日志详情</span>
+          <span class="modal-title">{{ t('toolDetailTitle') }}</span>
           <button class="modal-close" @click="showDetailDialog = false">×</button>
         </div>
         <div class="modal-body" v-loading="detailLoading">
           <div class="detail-grid">
             <div class="detail-row">
-              <label>工具类型</label>
+              <label>{{ t('toolDetailToolType') }}</label>
               <span class="tag tag-blue">{{ selectedLog?.tool_type }}</span>
             </div>
             <div class="detail-row">
-              <label>状态</label>
+              <label>{{ t('toolDetailStatus') }}</label>
               <span :class="['tag', getStatusTag(selectedLog?.status)]">{{ selectedLog?.status }}</span>
             </div>
             <div class="detail-row">
-              <label>执行时间</label>
+              <label>{{ t('toolDetailTime') }}</label>
               <span class="mono">{{ formatDateTime(selectedLog?.timestamp) }}</span>
             </div>
             <div class="detail-row">
-              <label>耗时</label>
+              <label>{{ t('toolDetailDuration') }}</label>
               <span class="mono">{{ selectedLog?.duration_ms ? selectedLog.duration_ms + 'ms' : '-' }}</span>
             </div>
             <div class="detail-row full">
-              <label>操作描述</label>
+              <label>{{ t('toolDetailAction') }}</label>
               <span>{{ selectedLog?.operation }}</span>
             </div>
             <div class="detail-row">
-              <label>目标</label>
+              <label>{{ t('toolDetailTarget') }}</label>
               <span class="mono">{{ selectedLog?.target || '-' }}</span>
             </div>
             <div class="detail-row">
-              <label>操作人</label>
+              <label>{{ t('toolDetailOperator') }}</label>
               <span>{{ selectedLog?.created_by || '-' }}</span>
             </div>
           </div>
@@ -169,21 +169,21 @@
           <!-- Log Content -->
           <div class="section-title" v-if="selectedLog?.log_content">
             <span class="section-marker"></span>
-            执行日志内容
+            {{ t('toolDetailContent') }}
           </div>
           <div class="log-content" v-if="selectedLog?.log_content">
             <pre>{{ selectedLog.log_content }}</pre>
           </div>
           <div class="log-empty" v-else>
             <el-icon><Document /></el-icon>
-            <span>无详细日志内容</span>
+            <span>{{ t('toolNoContent') }}</span>
           </div>
         </div>
         <div class="modal-ft">
-          <button class="btn btn-ghost" @click="showDetailDialog = false">关闭</button>
+          <button class="btn btn-ghost" @click="showDetailDialog = false">{{ t('actionClose') }}</button>
           <button class="btn btn-primary" @click="copyLogContent" v-if="selectedLog?.log_content">
             <el-icon><CopyDocument /></el-icon>
-            复制日志
+            {{ t('toolCopyLog') }}
           </button>
         </div>
       </div>
@@ -196,6 +196,9 @@ import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Delete, Search, Document, CopyDocument } from '@element-plus/icons-vue'
 import { getToolLogs, getToolLogStats, cleanupToolLogs, getToolLogDetail } from '@/api'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const detailLoading = ref(false)
@@ -235,7 +238,7 @@ const loadLogs = async () => {
     logList.value = res.items || res || []
     total.value = res.total || logList.value.length
   } catch (error) {
-    ElMessage.error('加载日志失败：' + (error.response?.data?.detail || error.message))
+    ElMessage.error(t('msgLoadFailed') + '：' + (error.response?.data?.detail || error.message))
   } finally {
     loading.value = false
   }
@@ -244,14 +247,13 @@ const loadLogs = async () => {
 const showDetail = async (row) => {
   showDetailDialog.value = true
   detailLoading.value = true
-  selectedLog.value = row // 先显示基本信息
+  selectedLog.value = row
 
   try {
-    // 获取完整日志详情（包含 log_content）
     const detail = await getToolLogDetail(row.id)
     selectedLog.value = detail
   } catch (error) {
-    ElMessage.warning('无法加载详细内容')
+    ElMessage.warning(t('msgLoadDetailFailed'))
   } finally {
     detailLoading.value = false
   }
@@ -271,14 +273,14 @@ const formatDateTime = (datetimeStr) => {
 
 const cleanupLogs = async () => {
   try {
-    await ElMessageBox.confirm('确认清理 30 天前的旧日志？', '清理确认', { type: 'warning' })
+    await ElMessageBox.confirm(t('msgCleanupConfirm'), t('msgConfirmDelete'), { type: 'warning' })
     await cleanupToolLogs(30)
-    ElMessage.success('清理完成')
+    ElMessage.success(t('msgCleanupComplete'))
     loadLogs()
     loadStats()
   } catch (error) {
     if (error !== 'cancel') {
-      ElMessage.error('清理失败：' + error.message)
+      ElMessage.error(t('msgCleanupFailed') + '：' + error.message)
     }
   }
 }
@@ -287,9 +289,9 @@ const copyLogContent = async () => {
   if (!selectedLog.value?.log_content) return
   try {
     await navigator.clipboard.writeText(selectedLog.value.log_content)
-    ElMessage.success('已复制到剪贴板')
+    ElMessage.success(t('msgCopied'))
   } catch {
-    ElMessage.error('复制失败')
+    ElMessage.error(t('msgOpFailed'))
   }
 }
 
