@@ -115,6 +115,21 @@ export function deleteMaintenance(id) {
   return api.delete(`/maintenance/${id}`)
 }
 
+// 维修状态流转
+export function transitionMaintenanceStatus(id, data) {
+  return api.post(`/maintenance/${id}/transition`, data)
+}
+
+// 获取维修事件时间线
+export function getMaintenanceEvents(id) {
+  return api.get(`/maintenance/${id}/events`)
+}
+
+// 分配维修负责人
+export function assignMaintenance(id, data) {
+  return api.put(`/maintenance/${id}/assign`, data)
+}
+
 // Console 相关
 export function getConsolePorts() {
   return api.get('/console/ports')

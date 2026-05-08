@@ -118,12 +118,58 @@ class MaintenanceRecord(Base):
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     device_name = Column(String(100))
 
+    # ===== 状态流转系统字段 =====
+    # 维修状态
+    status = Column(String(20), default="created", index=True)  # created, diagnosing, repairing, verifying, completed, cancelled
+    # 状态时间戳
+    diagnosing_at = Column(DateTime)
+    repairing_at = Column(DateTime)
+    verifying_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    cancelled_at = Column(DateTime)
+    # 流程信息
+    current_owner = Column(String(100))  # 当前负责人
+    priority = Column(String(10), default="P3", index=True)  # P1/P2/P3/P4 优先级
+    sla_deadline = Column(DateTime)  # SLA截止时间
+
     # 关系
     device = relationship("Device", back_populates="maintenances")
     fault = relationship("FaultRecord", foreign_keys=[fault_id])
+    events = relationship("MaintenanceEvent", back_populates="maintenance", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<MaintenanceRecord(maint_no='{self.maint_no}', device='{self.device_name}')>"
+        return f"<MaintenanceRecord(maint_no='{self.maint_no}', status='{self.status}')>"
+
+    def get_progress_percent(self):
+        """计算进度百分比"""
+        status_percent = {
+            'created': 20,
+            'diagnosing': 40,
+            'repairing': 60,
+            'verifying': 80,
+            'completed': 100,
+            'cancelled': 0
+        }
+        return status_percent.get(self.status, 20)
+
+
+class MaintenanceEvent(Base):
+    """维修事件时间线表 - 记录维修过程中的每个事件"""
+    __tablename__ = "maintenance_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = Column(String(20), nullable=False)  # created, diagnosing, repairing, verifying, completed, cancelled
+    event_time = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    operator = Column(String(100))  # 操作人
+    notes = Column(String(500))  # 事件备注
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    maintenance = relationship("MaintenanceRecord", back_populates="events")
+
+    def __repr__(self):
+        return f"<MaintenanceEvent(maint_id={self.maintenance_id}, type={self.event_type})>"
 
 
 class DevicePhoto(Base):

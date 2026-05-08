@@ -6,91 +6,267 @@
       </template>
     </el-page-header>
 
-    <el-row :gutter="20" style="margin-top: 20px">
-      <!-- 左侧：维修信息 -->
-      <el-col :span="16">
-        <el-card class="maintenance-info-card">
-          <template #header>
-            <span>{{ t('maintDetailInfo') }}</span>
-          </template>
-
-          <el-descriptions :column="2" border v-if="maintenance.id">
-            <el-descriptions-item :label="t('maintNo')">{{ maintenance.maint_no }}</el-descriptions-item>
-            <el-descriptions-item :label="t('maintDetailDeviceName')">
-              <router-link :to="`/devices/${maintenance.device_id}`">{{ maintenance.device_name }}</router-link>
-            </el-descriptions-item>
-            <el-descriptions-item :label="t('maintType')">
-              <el-tag :type="getMaintTypeType(maintenance.maint_type)">
-                {{ getMaintTypeText(maintenance.maint_type) }}
-              </el-tag>
-            </el-descriptions-item>
-            <el-descriptions-item :label="t('maintDetailTime')">{{ formatDateTime(maintenance.maint_time || maintenance.created_at) }}</el-descriptions-item>
-            <el-descriptions-item :label="t('maintDetailVendor')">{{ maintenance.vendor || t('maintDetailVendorNone') }}</el-descriptions-item>
-            <el-descriptions-item :label="t('maintDetailHours')">{{ maintenance.labor_hours }} {{ t('maintDetailHoursUnit') }}</el-descriptions-item>
-          </el-descriptions>
-
-          <el-divider>{{ t('maintDetailSpareInfo') }}</el-divider>
-
-          <!-- 备件列表显示（标准表格） -->
-          <div class="spare-parts-display" v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
-            <el-table :data="maintenance.spare_parts_list" border size="small">
-              <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
-                <template #default="{ row }">
-                  <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
-              <el-table-column prop="name" :label="t('maintColName')" width="150" />
-              <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
-              <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
-                <template #default="{ row }">
-                  <span class="cell-success">¥{{ (row.unit_price || 0).toFixed(2) }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column :label="t('maintColSubtotal')" width="80">
-                <template #default="{ row }">
-                  <span class="cell-success">¥{{ ((row.quantity || 1) * (row.unit_price || 0)).toFixed(2) }}</span>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div class="parts-total">
-              {{ t('maintSpareTotalCost') }}: <span class="cost">¥{{ (maintenance.parts_cost || 0).toFixed(2) }}</span>
+    <!-- V2 左右布局 -->
+    <div class="maint-header">
+      <!-- 左侧：维修信息卡片 -->
+      <div class="maint-info-card">
+        <!-- 任务头部信息区 -->
+        <div class="task-header-section">
+          <div class="task-title-row">
+            <span class="maint-title">{{ maintenance.maint_no || t('maintDetailTitle') }}</span>
+            <el-tag :type="getStatusTagClass(statusInfo.status)" size="default" class="status-tag">
+              {{ statusInfo.status_label }}
+            </el-tag>
+            <el-tag :type="getPriorityTagClass(statusInfo.priority)" size="small" class="priority-tag">
+              {{ statusInfo.priority }}
+            </el-tag>
+          </div>
+          <div class="task-meta-row">
+            <div class="meta-item">
+              <el-icon><Clock /></el-icon>
+              <span>{{ formatDateTime(maintenance.created_at) }}</span>
+            </div>
+            <div class="meta-item owner">
+              <el-icon><User /></el-icon>
+              <span>{{ statusInfo.current_owner || t('maintOwnerUnassigned') }}</span>
+            </div>
+            <div class="meta-item sla" :class="{ overdue: statusInfo.sla_remaining === t('maintSlaOverdue') }">
+              <el-icon><Timer /></el-icon>
+              <span>{{ statusInfo.sla_remaining || t('maintSlaNotSet') }}</span>
             </div>
           </div>
-          <el-empty :description="t('maintDetailNoSpare')" v-else :image-size="60" />
-
-          <el-divider>{{ t('maintDetailReturnInfo') }}</el-divider>
-
-          <!-- 返回件列表显示（标准表格） -->
-          <div class="return-parts-display" v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
-            <el-table :data="maintenance.return_parts_list" border size="small">
-              <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
-                <template #default="{ row }">
-                  <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-                </template>
-              </el-table-column>
-              <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
-              <el-table-column prop="name" :label="t('maintColName')" width="150" />
-              <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
-              <el-table-column :label="t('maintDetailReturnScrapIn')" width="80">
-                <template #default="{ row }">
-                  <el-tag :type="row.scrap_in ? 'success' : 'info'" size="small">
-                    {{ row.scrap_in ? t('maintDetailReturnScrapped') : t('maintDetailReturnNoScrap') }}
-                  </el-tag>
-                </template>
-              </el-table-column>
-            </el-table>
-            <div class="return-tip">{{ t('maintDetailReturnTip') }}</div>
+          <div class="task-device-row">
+            <span>{{ t('maintDetailDeviceName') }}: <router-link :to="`/devices/${maintenance.device_id}`" class="cell-link">{{ maintenance.device_name }}</router-link></span>
+            <span>{{ t('maintType') }}: <span class="cell-tag" :class="getMaintTypeTagClass(maintenance.maint_type)">{{ getMaintTypeText(maintenance.maint_type) }}</span></span>
           </div>
-          <el-empty :description="t('maintDetailNoReturn')" v-else :image-size="60" />
+        </div>
 
-          <el-divider>{{ t('maintDetailLaborInfo') }}</el-divider>
-          <p class="description">{{ maintenance.description || t('maintDetailNoDesc') }}</p>
-        </el-card>
+        <!-- Workflow 步骤流程（增强版） -->
+        <div class="workflow-steps-enhanced">
+          <div class="workflow-step-item" :class="getStepClass(1)">
+            <div class="step-icon">
+              <el-icon><Document /></el-icon>
+            </div>
+            <div class="step-info">
+              <span class="step-label">{{ t('workflowStepCreate') }}</span>
+              <span class="step-time" v-if="maintenance.created_at">{{ formatDateTime(maintenance.created_at) }}</span>
+            </div>
+            <div class="step-dot" :class="getStepClass(1)">{{ workflowStep >= 1 ? '✓' : '1' }}</div>
+          </div>
+          <div class="step-connector" :class="{ completed: workflowStep >= 2 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(2)">
+            <div class="step-icon">
+              <el-icon><Search /></el-icon>
+            </div>
+            <div class="step-info">
+              <span class="step-label">{{ t('workflowStepDiagnose') }}</span>
+              <span class="step-time" v-if="statusInfo.diagnosing_at">{{ formatDateTime(statusInfo.diagnosing_at) }}</span>
+            </div>
+            <div class="step-dot" :class="getStepClass(2)">{{ workflowStep >= 2 ? '✓' : '2' }}</div>
+          </div>
+          <div class="step-connector" :class="{ completed: workflowStep >= 3 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(3)">
+            <div class="step-icon">
+              <el-icon><Setting /></el-icon>
+            </div>
+            <div class="step-info">
+              <span class="step-label">{{ t('workflowStepRepair') }}</span>
+              <span class="step-time" v-if="statusInfo.repairing_at">{{ formatDateTime(statusInfo.repairing_at) }}</span>
+            </div>
+            <div class="step-dot" :class="getStepClass(3)">{{ workflowStep >= 3 ? '✓' : '3' }}</div>
+          </div>
+          <div class="step-connector" :class="{ completed: workflowStep >= 4 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(4)">
+            <div class="step-icon">
+              <el-icon><CircleCheck /></el-icon>
+            </div>
+            <div class="step-info">
+              <span class="step-label">{{ t('workflowStepVerify') }}</span>
+              <span class="step-time" v-if="statusInfo.verifying_at">{{ formatDateTime(statusInfo.verifying_at) }}</span>
+            </div>
+            <div class="step-dot" :class="getStepClass(4)">{{ workflowStep >= 4 ? '✓' : '4' }}</div>
+          </div>
+          <div class="step-connector" :class="{ completed: workflowStep >= 5 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(5)">
+            <div class="step-icon">
+              <el-icon><CircleCheck /></el-icon>
+            </div>
+            <div class="step-info">
+              <span class="step-label">{{ t('workflowStepComplete') }}</span>
+              <span class="step-time" v-if="statusInfo.completed_at">{{ formatDateTime(statusInfo.completed_at) }}</span>
+            </div>
+            <div class="step-dot" :class="getStepClass(5)">{{ workflowStep >= 5 ? '✓' : '5' }}</div>
+          </div>
+        </div>
 
-        <!-- 操作按钮 -->
-        <el-card style="margin-top: 20px">
-          <el-space>
+        <!-- 进度条显示 -->
+        <div class="progress-bar-section">
+          <el-progress
+            :percentage="statusInfo.progress_percent"
+            :status="statusInfo.status === 'cancelled' ? 'exception' : (statusInfo.status === 'completed' ? 'success' : '')"
+            :stroke-width="8"
+          />
+          <span class="progress-label">{{ t('maintProgress') }}: {{ statusInfo.progress_percent }}%</span>
+        </div>
+
+        <!-- 详情网格 -->
+        <div class="detail-grid">
+          <div class="detail-item">
+            <span class="detail-item-label">{{ t('maintDetailVendor') }}</span>
+            <span class="detail-item-value">{{ maintenance.vendor || t('maintDetailVendorNone') }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-item-label">{{ t('maintDetailHours') }}</span>
+            <span class="detail-item-value">{{ maintenance.labor_hours }} {{ t('maintDetailHoursUnit') }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-item-label">{{ t('maintDetailPartsCost') }}</span>
+            <span class="detail-item-value" style="color: var(--accent-warning)">{{ formatCurrency(maintenance.parts_cost) }}</span>
+          </div>
+          <div class="detail-item">
+            <span class="detail-item-label">{{ t('maintDetailLaborCost') }}</span>
+            <span class="detail-item-value">{{ formatCurrency(maintenance.labor_cost) }}</span>
+          </div>
+        </div>
+
+        <!-- Tabs: 备件列表和返回件列表 -->
+        <div class="tabs-wrapper" style="margin-top: 16px">
+          <div class="tabs-header">
+            <span class="tab-item" :class="{ active: activeTab === 'spare' }" @click="activeTab = 'spare'">{{ t('maintDetailSpareInfo') }}</span>
+            <span class="tab-item" :class="{ active: activeTab === 'return' }" @click="activeTab = 'return'">{{ t('maintDetailReturnInfo') }}</span>
+            <span class="tab-item" :class="{ active: activeTab === 'desc' }" @click="activeTab = 'desc'">{{ t('maintDetailLaborInfo') }}</span>
+          </div>
+          <div class="tabs-content">
+            <!-- 备件列表 -->
+            <div v-show="activeTab === 'spare'">
+              <div class="spare-parts-display" v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
+                <el-table :data="maintenance.spare_parts_list" border size="small">
+                  <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
+                    <template #default="{ row }">
+                      <span class="cell-primary">{{ row.serial_number || '-' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
+                  <el-table-column prop="name" :label="t('maintColName')" width="150" />
+                  <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
+                  <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
+                    <template #default="{ row }">
+                      <span class="cell-success">{{ formatCurrency(row.unit_price) }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column :label="t('maintColSubtotal')" width="80">
+                    <template #default="{ row }">
+                      <span class="cell-success">{{ formatCurrency((row.quantity || 1) * (row.unit_price || 0)) }}</span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div class="parts-total">
+                  {{ t('maintSpareTotalCost') }}: <span class="cost">{{ formatCurrency(maintenance.parts_cost) }}</span>
+                </div>
+              </div>
+              <div class="empty-state" v-else>
+                <span class="empty-icon">📦</span>
+                <span class="empty-text">{{ t('maintDetailNoSpare') }}</span>
+              </div>
+            </div>
+
+            <!-- 返回件列表 -->
+            <div v-show="activeTab === 'return'">
+              <div class="return-parts-display" v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
+                <el-table :data="maintenance.return_parts_list" border size="small">
+                  <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
+                    <template #default="{ row }">
+                      <span class="cell-primary">{{ row.serial_number || '-' }}</span>
+                    </template>
+                  </el-table-column>
+                  <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
+                  <el-table-column prop="name" :label="t('maintColName')" width="150" />
+                  <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
+                  <el-table-column :label="t('maintDetailReturnScrapIn')" width="80">
+                    <template #default="{ row }">
+                      <span class="cell-tag" :class="row.scrap_in ? 'success' : 'info'">
+                        {{ row.scrap_in ? t('maintDetailReturnScrapped') : t('maintDetailReturnNoScrap') }}
+                      </span>
+                    </template>
+                  </el-table-column>
+                </el-table>
+                <div class="return-tip">{{ t('maintDetailReturnTip') }}</div>
+              </div>
+              <div class="empty-state" v-else>
+                <span class="empty-icon">🔄</span>
+                <span class="empty-text">{{ t('maintDetailNoReturn') }}</span>
+              </div>
+            </div>
+
+            <!-- 维修描述 -->
+            <div v-show="activeTab === 'desc'">
+              <p class="description">{{ maintenance.description || t('maintDetailNoDesc') }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：操作卡片 -->
+      <div class="maint-actions-card">
+        <!-- 状态流转操作区 -->
+        <div class="status-transition-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+          <div class="actions-card-header">
+            <el-icon><Operation /></el-icon>
+            {{ t('maintTransitionBtn') }}
+          </div>
+          <div class="transition-buttons">
+            <el-button
+              v-for="option in nextStatusOptions"
+              :key="option.status"
+              :type="getStatusTagClass(option.status)"
+              size="default"
+              @click="handleStatusTransition(option.status)"
+              class="transition-btn"
+            >
+              <el-icon v-if="option.status === 'diagnosing'"><Search /></el-icon>
+              <el-icon v-else-if="option.status === 'repairing'"><Setting /></el-icon>
+              <el-icon v-else-if="option.status === 'verifying'"><CircleCheck /></el-icon>
+              <el-icon v-else-if="option.status === 'completed'"><CircleCheck /></el-icon>
+              {{ option.label }}
+            </el-button>
+            <el-button
+              v-if="canCancel"
+              type="danger"
+              size="default"
+              @click="handleCancel"
+              class="transition-btn"
+            >
+              <el-icon><CircleClose /></el-icon>
+              {{ t('maintTransitionToCancelled') }}
+            </el-button>
+          </div>
+        </div>
+
+        <!-- 分配负责人 -->
+        <div class="assign-card" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+          <div class="actions-card-header">
+            <el-icon><User /></el-icon>
+            {{ t('maintAssignBtn') }}
+          </div>
+          <el-input
+            v-model="assignForm.owner"
+            :placeholder="t('maintOwnerPlaceholder')"
+            style="margin-top: 12px"
+          >
+            <template #prefix><el-icon><User /></el-icon></template>
+          </el-input>
+          <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
+            {{ t('maintAssignBtn') }}
+          </el-button>
+        </div>
+
+        <!-- 操作区独立 Card -->
+        <div class="actions-card">
+          <div class="actions-card-header">
+            <el-icon><Operation /></el-icon>
+            {{ t('maintDetailActions') }}
+          </div>
+          <div class="action-btn-group">
             <el-button type="primary" @click="openEditDialog">
               <el-icon><Edit /></el-icon>
               {{ t('actionEdit') }}
@@ -99,79 +275,126 @@
               <el-icon><Delete /></el-icon>
               {{ t('actionDelete') }}
             </el-button>
-          </el-space>
-        </el-card>
-      </el-col>
+          </div>
+        </div>
 
-      <!-- 右侧：成本统计 -->
-      <el-col :span="8">
-        <el-card class="cost-card">
-          <template #header>
-            <span>{{ t('maintDetailCostStats') }}</span>
-          </template>
-
-          <div class="cost-items">
-            <div class="cost-item">
-              <span class="cost-label">{{ t('maintDetailPartsCost') }}</span>
-              <span class="cost-value">¥{{ (maintenance.parts_cost || 0).toFixed(2) }}</span>
-            </div>
-            <div class="cost-item">
-              <span class="cost-label">{{ t('maintDetailLaborCost') }}</span>
-              <span class="cost-value">¥{{ (maintenance.labor_cost || 0).toFixed(2) }}</span>
-            </div>
-            <el-divider />
-            <div class="cost-item total">
-              <span class="cost-label">{{ t('maintDetailTotalCost') }}</span>
-              <span class="cost-value highlight">
-                ¥{{ ((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)).toFixed(2) }}
-              </span>
+        <!-- 事件时间线 -->
+        <div class="events-timeline-card" v-if="events.length > 0">
+          <div class="actions-card-header">
+            <el-icon><Clock /></el-icon>
+            {{ t('maintTimeline') }}
+          </div>
+          <div class="timeline-list">
+            <div class="timeline-item" v-for="(event, index) in events" :key="index" :class="event.event_type">
+              <div class="timeline-marker">
+                <el-icon v-if="event.event_type === 'created'"><Document /></el-icon>
+                <el-icon v-else-if="event.event_type === 'diagnosing'"><Search /></el-icon>
+                <el-icon v-else-if="event.event_type === 'repairing'"><Setting /></el-icon>
+                <el-icon v-else-if="event.event_type === 'verifying'"><CircleCheck /></el-icon>
+                <el-icon v-else-if="event.event_type === 'completed'"><CircleCheck /></el-icon>
+                <el-icon v-else-if="event.event_type === 'cancelled'"><CircleClose /></el-icon>
+                <el-icon v-else-if="event.event_type === 'assigned'"><User /></el-icon>
+                <el-icon v-else><MoreFilled /></el-icon>
+              </div>
+              <div class="timeline-content">
+                <div class="timeline-header">
+                  <span class="timeline-type">{{ event.notes || t('maintTimelineEvent') }}</span>
+                  <span class="timeline-time">{{ event.event_time ? formatDateTime(event.event_time) : '' }}</span>
+                </div>
+                <div class="timeline-operator" v-if="event.operator">
+                  <el-icon><User /></el-icon>
+                  {{ event.operator }}
+                </div>
+              </div>
             </div>
           </div>
-        </el-card>
+        </div>
 
-        <!-- 设备快速信息 -->
-        <el-card class="device-quick-info" style="margin-top: 20px" v-if="device">
-          <template #header>
-            <span>{{ t('maintDetailDeviceInfo') }}</span>
-          </template>
-          <div class="device-summary">
-            <el-avatar :size="60" icon="Switch" />
-            <div class="device-info">
-              <h4>{{ device.name }}</h4>
-              <p>{{ device.ip }}</p>
+        <!-- 成本统计数据卡片化 -->
+        <div class="cost-stats-card">
+          <div class="actions-card-header">
+            <el-icon><Coin /></el-icon>
+            {{ t('maintDetailCostStats') }}
+          </div>
+          <div class="cost-stats-grid">
+            <div class="cost-stat-item">
+              <div class="cost-stat-label">{{ t('maintDetailPartsCost') }}</div>
+              <div class="cost-stat-value">{{ formatCurrency(maintenance.parts_cost) }}</div>
+            </div>
+            <div class="cost-stat-item">
+              <div class="cost-stat-label">{{ t('maintDetailLaborCost') }}</div>
+              <div class="cost-stat-value">{{ formatCurrency(maintenance.labor_cost) }}</div>
+            </div>
+            <div class="cost-stat-item total">
+              <div class="cost-stat-label">{{ t('maintDetailTotalCost') }}</div>
+              <div class="cost-stat-value">{{ formatCurrency((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)) }}</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设备信息区增强 -->
+        <div class="device-info-card" v-if="device">
+          <div class="actions-card-header">
+            <el-icon><Monitor /></el-icon>
+            {{ t('maintDetailDeviceInfo') }}
+          </div>
+          <div class="device-header">
+            <el-avatar :size="48" class="device-avatar">
+              <el-icon><Switch /></el-icon>
+            </el-avatar>
+            <div class="device-meta">
+              <h4 class="device-name">{{ device.name }}</h4>
+              <span class="device-ip">{{ device.ip }}</span>
               <el-tag :type="device.status === 'online' ? 'success' : 'info'" size="small">
                 {{ device.status }}
               </el-tag>
             </div>
           </div>
-        </el-card>
-      </el-col>
-    </el-row>
+        </div>
+      </div>
+    </div>
 
     <!-- 编辑维修对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('maintDetailEdit')" width="700px">
-      <el-form :model="editForm" label-width="120px">
-        <el-form-item :label="t('maintType')" required>
-          <el-select v-model="editForm.maint_type">
-            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
-            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
-            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
-            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
-          </el-select>
-        </el-form-item>
+    <el-dialog v-model="showEditDialog" :title="t('maintDetailEdit')" width="1100px" class="edit-maint-dialog">
+      <div class="edit-dialog-content">
+        <!-- 基础信息 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Setting /></el-icon>
+            {{ t('maintBasicInfo') || '基础信息' }}
+          </div>
+          <el-form :model="editForm" label-width="80px">
+            <el-form-item :label="t('maintType')" required>
+              <el-select v-model="editForm.maint_type" style="width: 200px">
+                <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
+                <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
+                <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
+                <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
 
-        <!-- 备件选择区域 -->
-        <el-divider content-position="left">{{ t('maintSparePartsSection') }}</el-divider>
-        <el-form-item :label="t('maintSparePartsLabel')">
-          <div class="spare-parts-section">
-            <!-- 扫码添加按钮 -->
-            <div class="spare-scan-btn">
-              <el-button type="primary" @click="openScanDialog">
-                <el-icon><Aim /></el-icon>
-                {{ t('maintScanAddSpare') }}
-              </el-button>
-              <div class="spare-scan-tip">{{ t('maintScanTip') }}</div>
-            </div>
+        <!-- 备件更换 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Box /></el-icon>
+            {{ t('maintSparePartsSection') }}
+          </div>
+          <el-form :model="editForm" label-width="80px">
+            <el-form-item :label="t('maintSparePartsLabel')">
+              <div class="spare-parts-section">
+                <!-- 扫码功能条 -->
+                <div class="scan-action-bar">
+                  <el-button type="default" class="scan-btn" @click="openScanDialog">
+                    <el-icon><Aim /></el-icon>
+                    {{ t('maintScanAddSpare') }}
+                  </el-button>
+                  <div class="scan-tip-badge">
+                    <el-icon><InfoFilled /></el-icon>
+                    {{ t('maintScanTip') }}
+                  </div>
+                </div>
 
             <!-- 手动搜索添加备件 -->
             <div class="spare-search">
@@ -219,33 +442,44 @@
                   </template>
                 </el-table-column>
                 <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
-                  <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
+                  <template #default="{ row }">{{ formatCurrency(row.unit_price) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('colOperation')" width="60">
+                <el-table-column :label="t('colOperation')" width="50">
                   <template #default="{ row, $index }">
-                    <el-button type="danger" size="small" link @click="removeEditSparePart($index)">
-                      {{ t('actionDelete') }}
+                    <el-button type="danger" size="small" link class="delete-btn-icon" @click="removeEditSparePart($index)">
+                      <el-icon><Delete /></el-icon>
                     </el-button>
                   </template>
                 </el-table-column>
               </el-table>
               <div class="parts-summary">
-                {{ t('maintSpareTotalCost') }}: <span class="total-cost">¥{{ editForm.parts_cost.toFixed(2) }}</span>
+                {{ t('maintSpareTotalCost') }}: <span class="total-cost">{{ formatCurrency(editForm.parts_cost) }}</span>
               </div>
             </div>
           </div>
         </el-form-item>
+      </el-form>
+    </div>
 
-        <el-divider content-position="left">{{ t('maintReturnPartsSection') }}</el-divider>
+    <!-- 返回件 Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <el-icon><RefreshRight /></el-icon>
+        {{ t('maintReturnPartsSection') }}
+      </div>
+      <el-form :model="editForm" label-width="80px">
         <el-form-item :label="t('maintReturnPartsLabel')">
           <div class="return-parts-section">
-            <!-- 扫码查询返回件 -->
-            <div class="return-scan-area">
-              <el-button type="primary" @click="openReturnScanDialog">
+            <!-- 扫码功能条 -->
+            <div class="scan-action-bar return">
+              <el-button type="default" class="scan-btn" @click="openReturnScanDialog">
                 <el-icon><Aim /></el-icon>
                 {{ t('maintDetailScanAddReturn') }}
               </el-button>
-              <div class="return-scan-tip">{{ t('maintDetailReturnScanTip') }}</div>
+              <div class="scan-tip-badge">
+                <el-icon><InfoFilled /></el-icon>
+                {{ t('maintDetailReturnScanTip') }}
+              </div>
             </div>
 
             <!-- 手动输入查询 -->
@@ -274,13 +508,13 @@
                 <el-descriptions :column="3" size="small" border>
                   <el-descriptions-item :label="t('maintColModel')">{{ returnFoundInfo.part_number }}</el-descriptions-item>
                   <el-descriptions-item :label="t('maintColName')">{{ returnFoundInfo.name }}</el-descriptions-item>
-                  <el-descriptions-item :label="t('maintColUnitPrice')">¥{{ (returnFoundInfo.unit_price || 0).toFixed(2) }}</el-descriptions-item>
+                  <el-descriptions-item :label="t('maintColUnitPrice')">{{ formatCurrency(returnFoundInfo.unit_price) }}</el-descriptions-item>
                   <el-descriptions-item :label="t('maintReturnInStockAt')">{{ returnFoundInfo.in_stock_at ? formatDateTime(returnFoundInfo.in_stock_at) : '-' }}</el-descriptions-item>
                   <el-descriptions-item :label="t('maintReturnOutAt')">{{ returnFoundInfo.out_at ? formatDateTime(returnFoundInfo.out_at) : '-' }}</el-descriptions-item>
                   <el-descriptions-item :label="t('statusOnline')">
-                    <el-tag :type="returnFoundInfo.status === 'out' ? 'warning' : 'success'" size="small">
+                    <span class="cell-tag" :class="returnFoundInfo.status === 'out' ? 'warning' : 'success'">
                       {{ returnFoundInfo.status === 'out' ? t('maintReturnStatusOut') : t('statusInStock') }}
-                    </el-tag>
+                    </span>
                   </el-descriptions-item>
                 </el-descriptions>
                 <div class="found-actions">
@@ -344,10 +578,10 @@
                     <span class="scrap-label no-id" v-if="!row.part_id">{{ t('maintReturnNoPartId') }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('colOperation')" width="60">
+                <el-table-column :label="t('colOperation')" width="50">
                   <template #default="{ row, $index }">
-                    <el-button type="danger" size="small" link @click="removeReturnPart($index)">
-                      {{ t('actionDelete') }}
+                    <el-button type="danger" size="small" link class="delete-btn-icon" @click="removeReturnPart($index)">
+                      <el-icon><Delete /></el-icon>
                     </el-button>
                   </template>
                 </el-table-column>
@@ -359,9 +593,16 @@
             </div>
           </div>
         </el-form-item>
+      </el-form>
+    </div>
 
-        <el-divider />
-
+    <!-- 成本与描述 Section -->
+    <div class="form-section">
+      <div class="form-section-title">
+        <el-icon><Document /></el-icon>
+        {{ t('maintCostDescSection') || '成本与描述' }}
+      </div>
+      <el-form :model="editForm" label-width="80px">
         <el-form-item :label="t('maintLaborHours')">
           <el-input-number v-model="editForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
@@ -375,14 +616,16 @@
           <el-input v-model="editForm.description" type="textarea" :rows="4" />
         </el-form-item>
       </el-form>
-      <template #footer>
-        <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="updateMaintenanceRecord">{{ t('maintConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    </div>
+  </div>
+  <template #footer>
+    <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
+    <el-button type="primary" @click="updateMaintenanceRecord">{{ t('maintConfirm') }}</el-button>
+  </template>
+</el-dialog>
 
     <!-- 扫码添加备件对话框 -->
-    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="700px">
+    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="900px">
       <ScanSession
         ref="scanSessionRef"
         default-type="out"
@@ -395,7 +638,7 @@
     </el-dialog>
 
     <!-- 扫码添加返回件对话框 -->
-    <el-dialog v-model="returnScanDialogVisible" :title="t('maintDetailScanReturnDialog')" width="700px">
+    <el-dialog v-model="returnScanDialogVisible" :title="t('maintDetailScanReturnDialog')" width="900px">
       <ScanSession
         ref="returnScanSessionRef"
         default-type="return"
@@ -413,11 +656,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete } from '@element-plus/icons-vue'
-import { getMaintenances, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts } from '@/api'
+import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search } from '@element-plus/icons-vue'
+import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
@@ -431,6 +674,22 @@ const maintenance = ref({})
 const device = ref(null)
 const loading = ref(false)
 const showEditDialog = ref(false)
+const activeTab = ref('spare')
+
+// 状态系统
+const statusInfo = ref({
+  status: 'created',
+  status_label: '创建',
+  progress_percent: 20,
+  priority: 'P3',
+  current_owner: null,
+  sla_deadline: null,
+  sla_remaining: null,
+  events: []
+})
+const events = ref([])
+const showAssignDialog = ref(false)
+const assignForm = ref({ owner: '' })
 
 // 备件相关
 const sparePartOptions = ref([])
@@ -468,9 +727,88 @@ const editForm = ref({
   description: ''
 })
 
+// 状态常量映射
+const STATUS_STEPS = {
+  'created': 1,
+  'diagnosing': 2,
+  'repairing': 3,
+  'verifying': 4,
+  'completed': 5,
+  'cancelled': 0
+}
+
+const STATUS_ICONS = {
+  'created': 'Document',
+  'diagnosing': 'Search',
+  'repairing': 'Setting',
+  'verifying': 'CircleCheck',
+  'completed': 'CircleCheck',
+  'cancelled': 'CircleClose'
+}
+
+const STATUS_COLORS = {
+  'created': 'info',
+  'diagnosing': 'warning',
+  'repairing': 'primary',
+  'verifying': 'success',
+  'completed': 'success',
+  'cancelled': 'danger'
+}
+
+const PRIORITY_COLORS = {
+  'P1': 'danger',
+  'P2': 'warning',
+  'P3': 'info',
+  'P4': 'success'
+}
+
+// 计算当前 workflow 步骤（基于后端状态）
+const workflowStep = computed(() => {
+  return STATUS_STEPS[statusInfo.value.status] || 1
+})
+
+// 获取下一步可转换的状态
+const nextStatusOptions = computed(() => {
+  const currentStatus = statusInfo.value.status
+  const transitions = {
+    'created': [{ status: 'diagnosing', label: t('maintTransitionToDiagnosing') }],
+    'diagnosing': [{ status: 'repairing', label: t('maintTransitionToRepairing') }],
+    'repairing': [{ status: 'verifying', label: t('maintTransitionToVerifying') }],
+    'verifying': [{ status: 'completed', label: t('maintTransitionToCompleted') }],
+    'completed': [],
+    'cancelled': []
+  }
+  return transitions[currentStatus] || []
+})
+
+// 是否可以取消
+const canCancel = computed(() => {
+  const cancellableStates = ['created', 'diagnosing', 'repairing', 'verifying']
+  return cancellableStates.includes(statusInfo.value.status)
+})
+
+const getStepClass = (step) => {
+  if (workflowStep.value > step) return 'completed'
+  if (workflowStep.value === step) return 'active'
+  return 'pending'
+}
+
+const getStatusTagClass = (status) => {
+  return STATUS_COLORS[status] || 'info'
+}
+
+const getPriorityTagClass = (priority) => {
+  return PRIORITY_COLORS[priority] || 'info'
+}
+
 const getMaintTypeType = (type) => {
   const types = { preventive: 'success', corrective: 'warning', upgrade: 'info', emergency: 'danger' }
   return types[type] || ''
+}
+
+const getMaintTypeTagClass = (type) => {
+  const classes = { preventive: 'success', corrective: 'warning', upgrade: 'info', emergency: 'danger' }
+  return classes[type] || 'info'
 }
 
 const getMaintTypeText = (type) => {
@@ -479,6 +817,63 @@ const getMaintTypeText = (type) => {
 }
 
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
+
+const formatCurrency = (value) => {
+  const num = value || 0
+  return `¥${num.toFixed(2)}`
+}
+
+// 状态流转
+const handleStatusTransition = async (targetStatus) => {
+  try {
+    const result = await transitionMaintenanceStatus(maintenance.value.id, {
+      status: targetStatus,
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintTransitionSuccess', { status: result.status_label }))
+    loadMaintenance()
+  } catch (e) {
+    const detail = e.response?.data?.detail || e.message
+    ElMessage.error(t('maintTransitionFailed') + ': ' + detail)
+  }
+}
+
+// 取消维修
+const handleCancel = async () => {
+  try {
+    await ElMessageBox.confirm(t('maintTransitionToCancelled') + '?', t('msgConfirmDelete'), {
+      confirmButtonText: t('actionConfirm'),
+      cancelButtonText: t('actionCancel'),
+      type: 'warning'
+    })
+    await transitionMaintenanceStatus(maintenance.value.id, {
+      status: 'cancelled',
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintTransitionSuccess', { status: t('maintStatusLabelCancelled') }))
+    loadMaintenance()
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(t('maintTransitionFailed'))
+    }
+  }
+}
+
+// 分配负责人
+const handleAssign = async () => {
+  if (!assignForm.value.owner) {
+    ElMessage.warning(t('maintOwnerPlaceholder'))
+    return
+  }
+  try {
+    await assignMaintenance(maintenance.value.id, { owner: assignForm.value.owner })
+    ElMessage.success(t('maintAssignSuccess', { owner: assignForm.value.owner }))
+    showAssignDialog.value = false
+    loadMaintenance()
+  } catch (e) {
+    ElMessage.error(t('maintAssignFailed'))
+  }
+}
 
 // 搜索备件（只搜索库存中 in_stock 状态的备件）
 const searchSpareParts = async (query) => {
@@ -789,73 +1184,89 @@ const loadMaintenance = async () => {
   loading.value = true
   try {
     const maintId = route.params.id
-    const data = await getMaintenances()
-    const found = (data.items || []).find(m => m.id === parseInt(maintId))
-    if (found) {
-      maintenance.value = found
+    // 使用新的 getMaintenanceDetail API 获取详情
+    const data = await getMaintenanceDetail(maintId)
+    maintenance.value = data
 
-      // 解析 parts_replaced 字段获取备件列表
-      if (found.parts_replaced) {
-        try {
-          // 尝试JSON解析（新格式）
-          const parsed = JSON.parse(found.parts_replaced)
-          if (Array.isArray(parsed)) {
-            // 分离备件和返回件
-            maintenance.value.spare_parts_list = parsed.filter(p => !p.is_return).map(p => ({
+    // 设置状态信息
+    statusInfo.value = {
+      status: data.status || 'created',
+      status_label: data.status_label || t('maintStatusLabelCreated'),
+      progress_percent: data.progress_percent || 20,
+      priority: data.priority || 'P3',
+      current_owner: data.current_owner,
+      sla_deadline: data.sla_deadline,
+      sla_remaining: data.sla_remaining,
+      diagnosing_at: data.diagnosing_at,
+      repairing_at: data.repairing_at,
+      verifying_at: data.verifying_at,
+      completed_at: data.completed_at,
+      cancelled_at: data.cancelled_at,
+      events: data.events || []
+    }
+    events.value = data.events || []
+
+    // 解析 parts_replaced 字段获取备件列表
+    if (data.parts_replaced) {
+      try {
+        // 尝试JSON解析（新格式）
+        const parsed = JSON.parse(data.parts_replaced)
+        if (Array.isArray(parsed)) {
+          // 分离备件和返回件
+          maintenance.value.spare_parts_list = parsed.filter(p => !p.is_return).map(p => ({
+            part_number: p.part_number || '',
+            name: p.name || p.part_number || '',
+            serial_number: p.serial_number || '',
+            quantity: p.quantity || 1,
+            unit_price: p.unit_price || 0
+          }))
+          maintenance.value.return_parts_list = parsed.filter(p => p.is_return).map(p => ({
+            part_number: p.part_number || '',
+            name: p.name || p.part_number || '',
+            serial_number: p.serial_number || '',
+            quantity: p.quantity || 1,
+            scrap_in: p.scrap_in || false
+          }))
+          // 如果没有分离标记，尝试使用旧的 scrap_in 字段作为返回件
+          if (maintenance.value.return_parts_list.length === 0 && parsed.some(p => p.scrap_in !== undefined)) {
+            maintenance.value.return_parts_list = parsed.map(p => ({
               part_number: p.part_number || '',
               name: p.name || p.part_number || '',
-              serial_number: p.serial_number || '',
-              quantity: p.quantity || 1,
-              unit_price: p.unit_price || 0
-            }))
-            maintenance.value.return_parts_list = parsed.filter(p => p.is_return).map(p => ({
-              part_number: p.part_number || '',
-              name: p.name || p.part_number || '',
-              serial_number: p.serial_number || '',
               quantity: p.quantity || 1,
               scrap_in: p.scrap_in || false
             }))
-            // 如果没有分离标记，尝试使用旧的 scrap_in 字段作为返回件
-            if (maintenance.value.return_parts_list.length === 0 && parsed.some(p => p.scrap_in !== undefined)) {
-              maintenance.value.return_parts_list = parsed.map(p => ({
-                part_number: p.part_number || '',
-                name: p.name || p.part_number || '',
-                quantity: p.quantity || 1,
-                scrap_in: p.scrap_in || false
-              }))
-            }
-          } else {
-            maintenance.value.spare_parts_list = []
-            maintenance.value.return_parts_list = []
           }
-        } catch (e) {
-          // 兼容旧格式：解析 "型号(数量), 型号(数量)" 格式
-          const partsList = found.parts_replaced.split(',').map(p => {
-            const match = p.trim().match(/(.+)\((\d+)\)/)
-            if (match) {
-              return {
-                part_number: match[1],
-                name: match[1],
-                quantity: parseInt(match[2]),
-                unit_price: 0,
-                scrap_in: false
-              }
-            }
-            return { part_number: p.trim(), name: p.trim(), quantity: 1, unit_price: 0, scrap_in: false }
-          })
-          maintenance.value.spare_parts_list = partsList
-          maintenance.value.return_parts_list = partsList.map(p => ({ ...p, unit_price: undefined }))
+        } else {
+          maintenance.value.spare_parts_list = []
+          maintenance.value.return_parts_list = []
         }
-      } else {
-        maintenance.value.spare_parts_list = []
-        maintenance.value.return_parts_list = []
+      } catch (e) {
+        // 兼容旧格式：解析 "型号(数量), 型号(数量)" 格式
+        const partsList = data.parts_replaced.split(',').map(p => {
+          const match = p.trim().match(/(.+)\((\d+)\)/)
+          if (match) {
+            return {
+              part_number: match[1],
+              name: match[1],
+              quantity: parseInt(match[2]),
+              unit_price: 0,
+              scrap_in: false
+            }
+          }
+          return { part_number: p.trim(), name: p.trim(), quantity: 1, unit_price: 0, scrap_in: false }
+        })
+        maintenance.value.spare_parts_list = partsList
+        maintenance.value.return_parts_list = partsList.map(p => ({ ...p, unit_price: undefined }))
       }
+    } else {
+      maintenance.value.spare_parts_list = []
+      maintenance.value.return_parts_list = []
+    }
 
-      // 加载设备信息
-      if (found.device_id) {
-        const devices = await getDevices()
-        device.value = (devices.items || []).find(d => d.id === found.device_id)
-      }
+    // 加载设备信息
+    if (data.device_id) {
+      const devices = await getDevices()
+      device.value = (devices.items || []).find(d => d.id === data.device_id)
     }
   } catch (error) {
     ElMessage.error(t('maintLoadDetailFailed'))
@@ -972,8 +1383,16 @@ onMounted(() => {
 
 <style scoped>
 .maintenance-detail-page {
-  max-width: 1400px;
-  margin: 0 auto;
+  width: 100%;
+  padding: 0;
+}
+
+.maintenance-detail-page .el-page-header {
+  margin-bottom: 16px;
+}
+
+.maintenance-detail-page :deep(.el-page-header) {
+  margin-right: 0;
 }
 
 .page-title {
@@ -981,74 +1400,697 @@ onMounted(() => {
   font-weight: bold;
 }
 
-.maintenance-info-card {
-  min-height: 400px;
+/* V2 左右布局 */
+.maint-header {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  width: 100%;
 }
 
-.description {
-  line-height: 1.8;
-  color: #606266;
+.maint-info-card {
+  flex: 1;
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-default, #E2E8F2);
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 48, 135, 0.06), 0 1px 2px rgba(0, 48, 135, 0.04);
+}
+
+/* 任务头部信息区 */
+.task-header-section {
+  margin-bottom: 20px;
+}
+
+.task-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.maint-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary, #0D1B2A);
+}
+
+.status-tag {
+  font-weight: 500;
+}
+
+.priority-tag {
+  margin-left: 0;
+}
+
+.task-meta-row {
+  display: flex;
+  gap: 20px;
+  color: var(--text-secondary, #3A4A5C);
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.meta-item .el-icon {
+  color: var(--text-tertiary, #9BAABB);
+}
+
+.meta-item.sla.overdue {
+  color: var(--accent-danger, #d63031);
+  font-weight: 500;
+}
+
+.meta-item.sla.overdue .el-icon {
+  color: var(--accent-danger, #d63031);
+}
+
+.task-device-row {
+  display: flex;
+  gap: 16px;
+  color: var(--text-secondary, #3A4A5C);
+  font-size: 13px;
+}
+
+/* Workflow 步骤增强版 */
+.workflow-steps-enhanced {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 16px;
+  background: var(--bg-tertiary, #f7f9fc);
+  border-radius: 10px;
+  margin-bottom: 16px;
+  overflow-x: auto;
+}
+
+.workflow-step-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--bg-card, #ffffff);
+  transition: all 0.2s;
+}
+
+.workflow-step-item.completed {
+  background: rgba(0, 184, 148, 0.1);
+}
+
+.workflow-step-item.active {
+  background: rgba(225, 112, 85, 0.15);
+  box-shadow: 0 0 0 2px var(--accent-warning, #e17055);
+}
+
+.workflow-step-item.pending {
+  opacity: 0.6;
+}
+
+.step-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-tertiary);
+}
+
+.workflow-step-item.completed .step-icon {
+  background: var(--accent-success, #00b894);
+  color: #fff;
+}
+
+.workflow-step-item.active .step-icon {
+  background: var(--accent-warning, #e17055);
+  color: #fff;
+}
+
+.workflow-step-item.pending .step-icon {
+  background: var(--bg-tertiary);
+  color: var(--text-muted, #9BAABB);
+}
+
+.step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.step-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.workflow-step-item.completed .step-label {
+  color: var(--accent-success);
+}
+
+.workflow-step-item.active .step-label {
+  color: var(--accent-warning);
+  font-weight: 600;
+}
+
+.step-time {
+  font-size: 11px;
+  color: var(--text-muted, #9BAABB);
+  font-family: var(--font-display);
+}
+
+.step-dot {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.step-dot.completed {
+  background: var(--accent-success, #00b894);
+  color: #fff;
+}
+
+.step-dot.active {
+  background: var(--accent-warning, #e17055);
+  color: #fff;
+}
+
+.step-dot.pending {
+  background: var(--bg-card, #ffffff);
+  border: 2px solid var(--border-default, #E2E8F2);
+  color: var(--text-muted, #9BAABB);
+}
+
+.step-connector {
+  width: 20px;
+  height: 2px;
+  background: var(--border-default, #E2E8F2);
+  flex-shrink: 0;
+}
+
+.step-connector.completed {
+  background: var(--accent-success, #00b894);
+}
+
+/* 进度条 */
+.progress-bar-section {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.progress-bar-section .el-progress {
+  flex: 1;
+}
+
+.progress-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.maint-actions-card {
+  width: 300px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* 状态流转操作区 */
+.status-transition-card,
+.assign-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.transition-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.transition-btn {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  height: 44px !important;
+  min-height: 44px;
+  max-height: 44px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  padding: 0 16px !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
+.transition-btn .el-icon {
+  margin: 0 !important;
+}
+
+.transition-btn span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transition-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 事件时间线 */
+.events-timeline-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.timeline-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.timeline-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
   padding: 10px;
-  background: #f5f7fa;
-  border-radius: 4px;
+  border-radius: 8px;
+  background: var(--bg-tertiary);
+  transition: all 0.2s;
 }
 
-.cost {
-  color: #f56c6c;
-  font-weight: bold;
+.timeline-item:hover {
+  background: var(--bg-hover);
 }
 
-.cost-card {
-  min-height: 200px;
+.timeline-item.created {
+  background: rgba(9, 132, 227, 0.08);
 }
 
-.cost-items {
-  padding: 10px 0;
+.timeline-item.completed {
+  background: rgba(0, 184, 148, 0.1);
 }
 
-.cost-item {
+.timeline-item.cancelled {
+  background: rgba(214, 48, 49, 0.1);
+}
+
+.timeline-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--color-gb);
+  color: #fff;
+}
+
+.timeline-item.completed .timeline-marker {
+  background: var(--accent-success);
+}
+
+.timeline-item.cancelled .timeline-marker {
+  background: var(--accent-danger);
+}
+
+.timeline-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.timeline-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 0;
 }
 
-.cost-label {
+.timeline-type {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.timeline-time {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: var(--font-display);
+}
+
+.timeline-operator {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.timeline-operator .el-icon {
   font-size: 14px;
-  color: #909399;
 }
 
-.cost-value {
+/* 操作区独立 Card */
+.actions-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.actions-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.actions-card-header .el-icon {
+  color: var(--color-gb);
+}
+
+.action-btn-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.action-btn-group .el-button {
+  width: 100%;
+  min-width: 100%;
+  max-width: 100%;
+  height: 44px !important;
+  min-height: 44px;
+  max-height: 44px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+  padding: 0 16px !important;
+  margin: 0 !important;
+  box-sizing: border-box;
+}
+
+.action-btn-group .el-button .el-icon {
+  margin: 0 !important;
+}
+
+.action-btn-group .el-button span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.action-btn-group .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+/* 成本统计数据卡片化 */
+.cost-stats-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.cost-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cost-stat-item {
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  text-align: center;
+}
+
+.cost-stat-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-bottom: 4px;
+}
+
+.cost-stat-value {
+  font-family: var(--font-display);
   font-size: 16px;
-  font-weight: bold;
-  color: #303133;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.cost-value.highlight {
-  color: #f56c6c;
+.cost-stat-item.total {
+  grid-column: 1 / -1;
+  background: rgba(214, 48, 49, 0.1);
+}
+
+.cost-stat-item.total .cost-stat-value {
+  color: var(--accent-danger);
   font-size: 20px;
 }
 
-.total {
-  border-top: 2px solid #eee;
-  padding-top: 15px;
+/* 设备信息区增强 */
+.device-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
 }
 
-.device-summary {
+.device-header {
   display: flex;
   align-items: center;
-  gap: 15px;
+  gap: 12px;
+  margin-top: 12px;
 }
 
-.device-info h4 {
-  margin: 0 0 5px 0;
-  font-size: 16px;
+.device-avatar {
+  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
+  color: #fff;
 }
 
-.device-info p {
-  margin: 0 0 5px 0;
-  color: #909399;
+.device-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.device-name {
+  margin: 0;
   font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.device-ip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: var(--font-display);
+}
+
+/* 暗色模式适配 */
+.dark .actions-card-header .el-icon {
+  color: var(--accent-primary);
+}
+
+.dark .cost-stat-item.total {
+  background: rgba(214, 48, 49, 0.15);
+}
+
+.dark .device-avatar {
+  background: linear-gradient(135deg, var(--accent-primary) 0%, #00a884 100%);
+}
+
+.dark .workflow-step-item.completed {
+  background: rgba(0, 184, 148, 0.15);
+}
+
+.dark .workflow-step-item.active {
+  background: rgba(225, 112, 85, 0.2);
+}
+
+.dark .timeline-item.created {
+  background: rgba(9, 132, 227, 0.12);
+}
+
+.dark .timeline-item.completed {
+  background: rgba(0, 184, 148, 0.15);
+}
+
+.dark .timeline-item.cancelled {
+  background: rgba(214, 48, 49, 0.15);
+}
+
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #0D1B2A);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle, #f1f5f9);
+}
+
+/* 详情网格 */
+.detail-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px;
+  background: var(--bg-tertiary, #f7f9fc);
+  border-radius: 6px;
+}
+
+.detail-item-label {
+  font-size: 11px;
+  color: var(--text-muted, #9BAABB);
+  font-weight: 500;
+}
+
+.detail-item-value {
+  font-size: 14px;
+  color: var(--text-primary, #0D1B2A);
+  font-weight: 500;
+}
+
+/* Tabs 样式 */
+.tabs-wrapper {
+  background: var(--bg-card, #ffffff);
+  border: 1px solid var(--border-default, #E2E8F2);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tabs-header {
+  display: flex;
+  border-bottom: 1px solid var(--border-default, #E2E8F2);
+  padding: 0 16px;
+}
+
+.tab-item {
+  padding: 12px 20px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary, #3A4A5C);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.tab-item:hover {
+  color: var(--text-primary, #0D1B2A);
+}
+
+.tab-item.active {
+  color: var(--accent-primary, #003087);
+  border-bottom-color: var(--accent-primary, #003087);
+}
+
+.tabs-content {
+  padding: 16px;
+}
+
+/* Cell 样式 */
+.cell-link {
+  color: var(--accent-secondary, #0984e3);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.cell-link:hover {
+  text-decoration: underline;
+}
+
+.cell-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.cell-tag.success {
+  background: rgba(0, 184, 148, 0.15);
+  color: var(--accent-success, #00b894);
+}
+
+.cell-tag.warning {
+  background: rgba(255, 184, 0, 0.15);
+  color: var(--accent-warning, #e17055);
+}
+
+.cell-tag.danger {
+  background: rgba(214, 48, 49, 0.15);
+  color: var(--accent-danger, #d63031);
+}
+
+.cell-tag.info {
+  background: rgba(9, 132, 227, 0.15);
+  color: var(--accent-secondary, #0984e3);
+}
+
+/* 空状态 */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  text-align: center;
+  min-height: 200px;
+}
+
+.empty-icon {
+  font-size: 48px;
+  color: var(--text-muted, #9BAABB);
+  margin-bottom: 16px;
+}
+
+.empty-text {
+  font-size: 14px;
+  color: var(--text-secondary, #3A4A5C);
 }
 
 /* 备件显示样式 */
@@ -1059,9 +2101,14 @@ onMounted(() => {
 .parts-total {
   margin-top: 10px;
   padding: 8px 12px;
-  background: #f5f7fa;
+  background: var(--bg-tertiary, #f7f9fc);
   border-radius: 4px;
   text-align: right;
+}
+
+.cost {
+  color: var(--accent-warning, #e17055);
+  font-weight: bold;
 }
 
 /* 备件选择区域 */
@@ -1238,7 +2285,225 @@ onMounted(() => {
 }
 
 .cell-success {
-  color: var(--el-color-success);
+  color: var(--accent-success, #00b894);
   font-weight: 500;
+}
+
+/* 成本统计 */
+.cost-section {
+  margin-top: 16px;
+}
+
+.cost-items {
+  padding: 8px 0;
+}
+
+.cost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+}
+
+.cost-label {
+  font-size: 13px;
+  color: var(--text-muted, #9BAABB);
+}
+
+.cost-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary, #0D1B2A);
+}
+
+.cost-value.highlight {
+  color: var(--accent-warning, #e17055);
+  font-size: 16px;
+}
+
+.cost-item.total {
+  border-top: 2px solid var(--border-default, #E2E8F2);
+  padding-top: 12px;
+}
+
+/* 设备信息 */
+.device-section {
+  margin-top: 16px;
+}
+
+.device-summary {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.device-info h4 {
+  margin: 0 0 4px 0;
+  font-size: 14px;
+  color: var(--text-primary, #0D1B2A);
+}
+
+.device-info p {
+  margin: 0 0 4px 0;
+  color: var(--text-secondary, #3A4A5C);
+  font-size: 13px;
+}
+
+/* 维修描述 */
+.description {
+  line-height: 1.8;
+  color: var(--text-secondary, #3A4A5C);
+  padding: 12px;
+  background: var(--bg-tertiary, #f7f9fc);
+  border-radius: 6px;
+}
+
+/* 响应式 */
+@media (max-width: 1200px) {
+  .maint-header {
+    flex-direction: column;
+  }
+  .maint-actions-card {
+    width: 100%;
+  }
+}
+
+/* ===== 编辑对话框样式 ===== */
+.edit-dialog-content {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+/* Section 卡片化 */
+.form-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 20px;
+  transition: all 0.2s;
+}
+
+.form-section:hover {
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.08);
+}
+
+.form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.form-section-title .el-icon {
+  color: var(--color-gb);
+}
+
+/* 扫码功能条 */
+.scan-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
+  border-radius: var(--radius-md);
+  margin-bottom: 16px;
+}
+
+.scan-action-bar.return {
+  background: linear-gradient(135deg, #636e72 0%, #4a5455 100%);
+}
+
+.scan-action-bar .scan-btn {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+  font-weight: 600;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.scan-action-bar .scan-btn:hover {
+  background: rgba(255,255,255,0.25);
+  transform: translateY(-1px);
+}
+
+.scan-tip-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+}
+
+/* 暗色模式适配 */
+.dark .form-section {
+  background: var(--bg-card);
+  border-color: var(--border-default);
+}
+
+.dark .form-section:hover {
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.1);
+}
+
+.dark .form-section-title .el-icon {
+  color: var(--accent-primary);
+}
+
+/* ===== 表格样式优化 ===== */
+.selected-parts .el-table,
+.return-parts-table .el-table {
+  border-radius: var(--radius-md);
+}
+
+.selected-parts .el-table__cell,
+.return-parts-table .el-table__cell {
+  padding: 12px 14px;
+}
+
+.selected-parts .el-table__body tr:hover > td.el-table__cell,
+.return-parts-table .el-table__body tr:hover > td.el-table__cell {
+  background: rgba(0, 48, 135, 0.05) !important;
+}
+
+.dark .selected-parts .el-table__body tr:hover > td.el-table__cell,
+.dark .return-parts-table .el-table__body tr:hover > td.el-table__cell {
+  background: rgba(0, 184, 148, 0.08) !important;
+}
+
+/* 数量输入优化 */
+.selected-parts .el-input-number,
+.return-parts-table .el-input-number {
+  width: 80px;
+}
+
+.selected-parts .el-input-number .el-input__inner,
+.return-parts-table .el-input-number .el-input__inner {
+  text-align: center;
+  font-family: var(--font-display);
+}
+
+/* 删除按钮图标化 */
+.delete-btn-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.delete-btn-icon:hover {
+  background: var(--danger-bg);
 }
 </style>
