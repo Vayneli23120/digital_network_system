@@ -122,6 +122,7 @@ async def list_faults(
             "impact": f.impact,
             "reporter": f.reporter,
             "maintenance_id": f.maintenance_id,
+            "auto_created_maintenance": f.auto_created_maintenance or False,
             "has_ai_analysis": f.ai_analysis_result is not None,
             "ai_recommendation": f.ai_recommendation,
             "ai_confidence": float(f.ai_confidence) if f.ai_confidence else None,

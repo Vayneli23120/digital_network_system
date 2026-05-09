@@ -76,7 +76,7 @@ class FaultCreatedTrigger(BaseTrigger):
 
         return {
             'fault_id': fault.id,
-            'fault_title': fault.title,
+            'fault_title': fault.description[:50] if fault.description else fault.fault_no,
             'fault_severity': fault.severity,
             'fault_status': fault.status,
             'device_id': fault.device_id,

@@ -64,6 +64,8 @@ class CreateMaintenanceAction(BaseAction):
         db: Session
     ) -> Dict[str, Any]:
         """创建维修单"""
+        import uuid
+
         device_id = context.get('device_id')
 
         if not device_id:
@@ -84,22 +86,34 @@ class CreateMaintenanceAction(BaseAction):
         # 如果是故障触发的，关联故障记录
         fault_id = context.get('fault_id')
 
+        # 生成维修单号
+        maint_no = f"WF-MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
         # 创建维修单
         maintenance = MaintenanceRecord(
+            maint_no=maint_no,
             device_id=device.id,
+            device_name=device.name,
             title=title,
             problem_description=config.get('description', f"健康评分触发: {context.get('health_score', 'N/A')}"),
             maint_type=maint_type,
             status='pending',
             priority=priority,
             fault_id=fault_id,
-            auto_created=True,
-            workflow_rule_id=config.get('rule_id')
+            auto_created=True
         )
 
         db.add(maintenance)
         db.commit()
         db.refresh(maintenance)
+
+        # 更新故障记录的maintenance_id
+        if fault_id:
+            fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+            if fault:
+                fault.maintenance_id = maintenance.id
+                fault.auto_created_maintenance = True
+                db.commit()
 
         logger.info(f"Created maintenance record {maintenance.id} for device {device_id}")
 
