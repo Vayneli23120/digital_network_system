@@ -600,11 +600,11 @@ const stats = computed(() => {
   const verifyingCount = list.filter(m => m.status === 'verifying').length
   const completedCount = list.filter(m => m.status === 'completed').length
   const overdueCount = list.filter(m => {
-    if (m.sla_remaining && m.sla_remaining === '已超期') return true
-    if (m.sla_remaining && m.sla_remaining === 'Overdue') return true
+    // 已完成或已取消的工单不算超期
+    if (m.status === 'completed' || m.status === 'cancelled') return false
+    if (m.sla_remaining && (m.sla_remaining === '已超期' || m.sla_remaining === 'Overdue')) return true
     if (m.sla_deadline) {
-      const deadline = new Date(m.sla_deadline)
-      return deadline < new Date()
+      return new Date(m.sla_deadline) < new Date()
     }
     return false
   }).length
@@ -658,7 +658,13 @@ const getPriorityColor = (priority) => {
 }
 
 const isOverdue = (row) => {
+  // 已完成或已取消的工单不算超期
+  if (row.status === 'completed' || row.status === 'cancelled') return false
+
+  // 后端已标记为超期
   if (row.sla_remaining && (row.sla_remaining === '已超期' || row.sla_remaining === 'Overdue')) return true
+
+  // 直接比较截止时间
   if (row.sla_deadline) {
     return new Date(row.sla_deadline) < new Date()
   }

@@ -40,6 +40,25 @@ STATUS_PERCENT = {
 }
 
 
+def calculate_sla_remaining(maintenance):
+    """计算 SLA 剩余时间"""
+    sla_remaining = None
+    sla_deadline = maintenance.sla_deadline
+
+    # 如果没有设置 sla_deadline，使用 created_at + 24h 作为默认
+    if not sla_deadline and maintenance.created_at:
+        sla_deadline = maintenance.created_at + timedelta(hours=24)
+
+    if sla_deadline:
+        remaining = sla_deadline - datetime.utcnow()
+        if remaining.total_seconds() > 0:
+            sla_remaining = f"{int(remaining.total_seconds() // 3600)}h {int((remaining.total_seconds() % 3600) // 60)}m"
+        else:
+            sla_remaining = "已超期"
+
+    return sla_remaining, sla_deadline
+
+
 def build_events_from_record(maintenance):
     """从维修记录构建事件时间线"""
     events = []
@@ -361,7 +380,9 @@ async def list_maintenances(
                     "status": m.status or "created",
                     "status_label": STATUS_LABELS.get(m.status, "创建"),
                     "priority": m.priority or "P3",
-                    "current_owner": m.current_owner
+                    "current_owner": m.current_owner,
+                    "sla_deadline": (m.sla_deadline or (m.created_at + timedelta(hours=24) if m.created_at else None)).isoformat() if (m.sla_deadline or m.created_at) else None,
+                    "sla_remaining": calculate_sla_remaining(m)[0]
                 }
                 for m in maintenances
             ]
