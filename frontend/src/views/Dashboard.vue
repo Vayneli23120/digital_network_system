@@ -485,7 +485,7 @@ const faultData = ref({ labels: [], by_severity: {} })
 const selectedLegends = ref([t('dashCritical'), t('dashMajor'), t('dashMinor'), t('dashWarning')])
 const selectedStatus = ref(null)
 
-const currentTime = computed(() => dayjs().format('HH:mm:ss'))
+const currentTime = ref(dayjs().format('HH:mm:ss'))
 const lastBackupTime = computed(() => {
   if (recentBackups.value.length > 0) {
     return formatDate(recentBackups.value[0].backup_time)
