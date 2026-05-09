@@ -1884,8 +1884,9 @@ export const languages = {
     userDeleteSuccess: 'User deleted successfully',
     userDeleteFailed: 'Failed to delete user',
     userDeleteConfirmTitle: 'Delete Confirmation',
-    userDeleteConfirmMsg: 'Confirm to delete user "{username
-// Device Health
+    userDeleteConfirmMsg: 'Confirm to delete user "{username}"? This action cannot be undone.',
+
+    // Device Health
     healthTitle: 'Device Health Score',
     healthCalculateAll: 'Calculate All',
     healthTotalDevices: 'Total Devices',
@@ -1960,7 +1961,7 @@ export const languages = {
     workflowTestResult: 'Test Result',
     workflowActionsExecuted: 'Actions Executed',
     workflowRulesMatched: 'Rules Matched',
-  }? This action cannot be undone.',
+
     userResetPassword: 'Reset Password',
     userResetPasswordSuccess: 'Password reset successfully',
     userResetPasswordFailed: 'Failed to reset password',
