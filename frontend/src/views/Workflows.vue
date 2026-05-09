@@ -2,7 +2,7 @@
   <div class="workflows-page">
     <!-- Header -->
     <div class="page-header">
-      <h2>{{ $t('workflow.title') || '自动化工作流' }}</h2>
+      <h2>{{ t('workflow.title') || '自动化工作流' }}</h2>
       <div class="header-actions">
         <el-button type="primary" @click="createRuleDialog">
           <el-icon><Plus /></el-icon>
@@ -203,6 +203,9 @@ import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getWorkflowRules, getWorkflowStats, getWorkflowTriggers, getWorkflowActions, initWorkflowDefaults, toggleWorkflowRule, createWorkflowRule, updateWorkflowRule, deleteWorkflowRule, testWorkflowTrigger } from '@/api'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 // Data
 const loading = ref(false)
