@@ -146,10 +146,9 @@
         v-loading="loading"
         @selection-change="handleSelectionChange"
         :row-class-name="tableRowClassName"
-        :table-layout="'auto'"
       >
         <el-table-column v-if="selectMode" type="selection" width="48" />
-        <el-table-column prop="name" :label="t('deviceName')" width="150">
+        <el-table-column prop="name" :label="t('deviceName')" min-width="150">
           <template #default="{ row }">
             <router-link :to="`/devices/${row.id}`" class="device-link">
               <span class="device-name">{{ row.name }}</span>
@@ -158,15 +157,15 @@
           </template>
         </el-table-column>
         <el-table-column prop="ip" :label="t('deviceIp')" width="140" />
-        <el-table-column prop="status" :label="t('deviceStatus')" width="110" align="center">
+        <el-table-column prop="status" :label="t('deviceStatus')" width="100" align="center">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small" effect="light" class="status-tag">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="location" :label="t('deviceLocation')" width="130" show-overflow-tooltip />
-        <el-table-column prop="model" :label="t('deviceModel')" width="140" show-overflow-tooltip />
+        <el-table-column prop="location" :label="t('deviceLocation')" min-width="120" show-overflow-tooltip />
+        <el-table-column prop="model" :label="t('deviceModel')" min-width="120" show-overflow-tooltip />
         <el-table-column :label="t('deviceAction')" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-bar">
