@@ -1490,7 +1490,7 @@ watch(
     if (statusInfo.value.status === 'completed' || statusInfo.value.status === 'cancelled') return
 
     try {
-      const result = await api.post(`/api/maintenance/${maintenance.value.id}/suggest-status`, {
+      const result = await api.post(`/maintenance/${maintenance.value.id}/suggest-status`, {
         diagnosis_text: editForm.value.diagnosis_text,
         spare_parts_count: editForm.value.spare_parts.length,
         verification_result: editForm.value.verification_result,
@@ -1513,7 +1513,7 @@ watch(
 // 确认状态变更
 const confirmSuggestTransition = async () => {
   try {
-    const result = await api.post(`/api/maintenance/${maintenance.value.id}/auto-transition`, {
+    const result = await api.post(`/maintenance/${maintenance.value.id}/auto-transition`, {
       status: suggestInfo.value.suggested_status,
       operator: 'Web'
     })

@@ -1,10 +1,11 @@
 """Maintenance management router"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime, timedelta
 import uuid
+import json
 
 from app.shared.database import get_db
 from app.shared.models import MaintenanceRecord, MaintenanceEvent, FaultRecord
@@ -648,7 +649,7 @@ async def create_maintenance(maint_data: dict):
 
 
 @router.put("/{maint_id}")
-async def update_maintenance(maint_id: int, maint_data: dict):
+async def update_maintenance(maint_id: int, maint_data: dict = Body(...)):
     """更新维修记录"""
     db: Session = next(get_db())
 

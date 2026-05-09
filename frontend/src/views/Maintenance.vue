@@ -741,7 +741,7 @@ const handleStatusAction = async (row) => {
 
   try {
     // 先获取状态建议
-    const suggestResult = await api.post(`/api/maintenance/${row.id}/suggest-status`, {})
+    const suggestResult = await api.post(`/maintenance/${row.id}/suggest-status`, {})
 
     // 弹出确认对话框
     await ElMessageBox.confirm(
@@ -755,7 +755,7 @@ const handleStatusAction = async (row) => {
     )
 
     // 调用自动状态推进 API
-    const result = await api.post(`/api/maintenance/${row.id}/auto-transition`, {
+    const result = await api.post(`/maintenance/${row.id}/auto-transition`, {
       status: nextAction,
       operator: 'Web'
     })
