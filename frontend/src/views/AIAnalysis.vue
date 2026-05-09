@@ -282,8 +282,8 @@ const filteredHistory = computed(() => {
 const refreshDashboard = async () => {
   try {
     const res = await api.get('/ai/dashboard')
-    dashboard.value = res.data
-    providers.value = res.data.providers_available || []
+    dashboard.value = res
+    providers.value = res.providers_available || []
   } catch (error) {
     console.error('Failed to fetch dashboard:', error)
   }
@@ -293,7 +293,7 @@ const fetchHistory = async () => {
   try {
     historyLoading.value = true
     const res = await api.get('/ai/history', { params: { limit: 50 } })
-    history.value = res.data.history || []
+    history.value = res.history || []
   } catch (error) {
     console.error('Failed to fetch history:', error)
   } finally {
@@ -306,7 +306,7 @@ const fetchActiveFaults = async () => {
     const res = await api.get('/faults', {
       params: { status: 'open,investigating', limit: 50 }
     })
-    activeFaults.value = res.data.items || []
+    activeFaults.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch faults:', error)
   }
@@ -315,7 +315,7 @@ const fetchActiveFaults = async () => {
 const fetchDevices = async () => {
   try {
     const res = await api.get('/devices', { params: { limit: 100 } })
-    devices.value = res.data.items || []
+    devices.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch devices:', error)
   }
@@ -351,14 +351,13 @@ const analyzeFault = async () => {
       auto_create_maintenance: faultForm.value.auto_create_maintenance
     })
 
-    analysisResult.value = res.data
-    resultDialogVisible.value = true
+    analysisResult.value = res
     faultDialogVisible.value = false
 
-    if (res.data.success) {
+    if (res.success) {
       ElMessage.success('AI分析完成')
     } else {
-      ElMessage.error(res.data.error || '分析失败')
+      ElMessage.error(res.error || '分析失败')
     }
 
     await fetchHistory()
@@ -383,11 +382,10 @@ const analyzeHealth = async () => {
       update_health_score: healthForm.value.update_health_score
     })
 
-    analysisResult.value = res.data
-    resultDialogVisible.value = true
+    analysisResult.value = res
     healthDialogVisible.value = false
 
-    if (res.data.success) {
+    if (res.success) {
       ElMessage.success('AI健康分析完成')
     }
 

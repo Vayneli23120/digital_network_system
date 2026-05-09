@@ -241,7 +241,7 @@ const fetchRules = async () => {
   try {
     loading.value = true
     const res = await api.get('/workflows/rules')
-    rules.value = res.data.rules || []
+    rules.value = res.rules || []
   } catch (error) {
     console.error('Failed to fetch rules:', error)
   } finally {
@@ -252,9 +252,9 @@ const fetchRules = async () => {
 const fetchStats = async () => {
   try {
     const res = await api.get('/workflows/stats')
-    stats.value = res.data.rules || {}
-    triggerTypes.value = { triggers: res.data.triggers_available || [], trigger_info: {} }
-    actionTypes.value = { actions: res.data.actions_available || [], action_info: {} }
+    stats.value = res.rules || {}
+    triggerTypes.value = { triggers: res.triggers_available || [], trigger_info: {} }
+    actionTypes.value = { actions: res.actions_available || [], action_info: {} }
   } catch (error) {
     console.error('Failed to fetch stats:', error)
   }
@@ -263,7 +263,7 @@ const fetchStats = async () => {
 const fetchTriggerTypes = async () => {
   try {
     const res = await api.get('/workflows/triggers')
-    triggerTypes.value = res.data
+    triggerTypes.value = res
   } catch (error) {
     console.error('Failed to fetch trigger types:', error)
   }
@@ -272,7 +272,7 @@ const fetchTriggerTypes = async () => {
 const fetchActionTypes = async () => {
   try {
     const res = await api.get('/workflows/actions')
-    actionTypes.value = res.data
+    actionTypes.value = res
   } catch (error) {
     console.error('Failed to fetch action types:', error)
   }
@@ -282,7 +282,7 @@ const initDefaultRules = async () => {
   try {
     initing.value = true
     const res = await api.post('/workflows/init-defaults')
-    ElMessage.success(`初始化完成: ${res.data.created_count} 条规则`)
+    ElMessage.success(`初始化完成: ${res.created_count} 条规则`)
     await fetchRules()
     await fetchStats()
   } catch (error) {
@@ -296,8 +296,8 @@ const initDefaultRules = async () => {
 const toggleRule = async (rule) => {
   try {
     const res = await api.patch(`/workflows/rules/${rule.id}/toggle`)
-    rule.is_active = res.data.is_active
-    ElMessage.success(res.data.is_active ? '规则已启用' : '规则已禁用')
+    rule.is_active = res.is_active
+    ElMessage.success(res.is_active ? '规则已启用' : '规则已禁用')
   } catch (error) {
     ElMessage.error('操作失败')
     console.error(error)
@@ -429,7 +429,7 @@ const testRule = async (rule) => {
       event_data: eventData
     })
 
-    testResult.value = res.data
+    testResult.value = res
     testDialogVisible.value = true
   } catch (error) {
     ElMessage.error('测试失败')

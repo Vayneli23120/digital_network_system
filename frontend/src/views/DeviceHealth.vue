@@ -233,7 +233,7 @@ const filteredDevices = computed(() => {
 const fetchDashboard = async () => {
   try {
     const res = await api.get('/health/dashboard')
-    dashboard.value = res.data
+    dashboard.value = res
 
     // Initialize charts after data loaded
     await nextTick()
@@ -250,7 +250,7 @@ const fetchRiskDevices = async () => {
     const res = await api.get('/devices', {
       params: { limit: 100 }
     })
-    devices.value = res.data.items || []
+    devices.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch devices:', error)
   } finally {
@@ -263,7 +263,7 @@ const calculateAllHealth = async () => {
     calculating.value = true
     const res = await api.post('/health/calculate-all')
 
-    ElMessage.success(`计算完成: ${res.data.total} 个设备`)
+    ElMessage.success(`计算完成: ${res.total} 个设备`)
 
     // Refresh data
     await fetchDashboard()
@@ -279,7 +279,7 @@ const calculateAllHealth = async () => {
 const calculateDeviceHealth = async (deviceId) => {
   try {
     const res = await api.post(`/health/devices/${deviceId}/calculate`)
-    ElMessage.success(`健康评分: ${res.data.health_score}, 风险等级: ${res.data.risk_level}`)
+    ElMessage.success(`健康评分: ${res.health_score}, 风险等级: ${res.risk_level}`)
 
     // Refresh list
     await fetchRiskDevices()
@@ -292,7 +292,7 @@ const calculateDeviceHealth = async (deviceId) => {
 const viewDeviceHealth = async (deviceId) => {
   try {
     const res = await api.get(`/health/devices/${deviceId}/history`)
-    selectedDeviceHistory.value = res.data.history || []
+    selectedDeviceHistory.value = res.history || []
     historyDialogVisible.value = true
   } catch (error) {
     ElMessage.error('获取历史失败')
