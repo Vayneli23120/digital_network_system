@@ -2,11 +2,11 @@
   <div class="device-health-page">
     <!-- Header -->
     <div class="page-header">
-      <h2>{{ t('health.title') || '设备健康评分' }}</h2>
+      <h2>{{ t('healthTitle') || '设备健康评分' }}</h2>
       <div class="header-actions">
         <el-button type="primary" @click="calculateAllHealth" :loading="calculating">
           <el-icon><Refresh /></el-icon>
-          {{ t('health.calculateAll') || '批量计算' }}
+          {{ t('healthCalculateAll') || '批量计算' }}
         </el-button>
       </div>
     </div>
@@ -17,25 +17,25 @@
         <el-col :span="6">
           <div class="stat-card">
             <div class="stat-value">{{ dashboard.total_devices }}</div>
-            <div class="stat-label">{{ t('health.totalDevices') || '总设备数' }}</div>
+            <div class="stat-label">{{ t('healthTotalDevices') || '总设备数' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card health-score">
             <div class="stat-value">{{ dashboard.average_health_score }}</div>
-            <div class="stat-label">{{ t('health.avgScore') || '平均健康评分' }}</div>
+            <div class="stat-label">{{ t('healthAvgScore') || '平均健康评分' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card risk-low">
             <div class="stat-value">{{ dashboard.risk_distribution?.low || 0 }}</div>
-            <div class="stat-label">{{ t('health.lowRisk') || '低风险' }}</div>
+            <div class="stat-label">{{ t('healthLowRisk') || '低风险' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card risk-critical">
             <div class="stat-value">{{ (dashboard.risk_distribution?.high || 0) + (dashboard.risk_distribution?.critical || 0) }}</div>
-            <div class="stat-label">{{ t('health.highRisk') || '高风险' }}</div>
+            <div class="stat-label">{{ t('healthHighRisk') || '高风险' }}</div>
           </div>
         </el-col>
       </el-row>
@@ -46,19 +46,19 @@
       <el-row :gutter="20">
         <el-col :span="8">
           <div class="chart-card">
-            <div class="chart-title">{{ t('health.riskDistribution') || '风险等级分布' }}</div>
+            <div class="chart-title">{{ t('healthRiskDistribution') || '风险等级分布' }}</div>
             <div ref="riskChartRef" class="chart-container"></div>
           </div>
         </el-col>
         <el-col :span="8">
           <div class="chart-card">
-            <div class="chart-title">{{ t('health.scoreDistribution') || '评分分布' }}</div>
+            <div class="chart-title">{{ t('healthScoreDistribution') || '评分分布' }}</div>
             <div ref="scoreChartRef" class="chart-container"></div>
           </div>
         </el-col>
         <el-col :span="8">
           <div class="chart-card">
-            <div class="chart-title">{{ t('health.healthTrend') || '健康趋势' }}</div>
+            <div class="chart-title">{{ t('healthHealthTrend') || '健康趋势' }}</div>
             <div ref="trendChartRef" class="chart-container"></div>
           </div>
         </el-col>
@@ -68,7 +68,7 @@
     <!-- Device Health List -->
     <div class="device-list-section">
       <div class="section-header">
-        <h3>{{ t('health.deviceList') || '设备健康列表' }}</h3>
+        <h3>{{ t('healthDeviceList') || '设备健康列表' }}</h3>
         <div class="filters">
           <el-select v-model="filters.risk_level" placeholder="风险等级" clearable style="width: 150px">
             <el-option label="低风险" value="low" />
@@ -127,10 +127,10 @@
         <el-table-column label="操作" width="180" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" @click="calculateDeviceHealth(row.id)">
-              {{ t('health.calculate') || '计算' }}
+              {{ t('healthCalculate') || '计算' }}
             </el-button>
             <el-button type="info" size="small" @click="viewDeviceHealth(row.id)">
-              {{ t('health.viewHistory') || '历史' }}
+              {{ t('healthViewHistory') || '历史' }}
             </el-button>
           </template>
         </el-table-column>

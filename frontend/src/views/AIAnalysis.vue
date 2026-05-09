@@ -2,11 +2,11 @@
   <div class="ai-analysis-page">
     <!-- Header -->
     <div class="page-header">
-      <h2>{{ t('ai.title') || 'AI分析中心' }}</h2>
+      <h2>{{ t('aiTitle') || 'AI分析中心' }}</h2>
       <div class="header-actions">
         <el-button @click="refreshDashboard">
           <el-icon><Refresh /></el-icon>
-          {{ t('common.refresh') || '刷新' }}
+          {{ t('commonRefresh') || '刷新' }}
         </el-button>
       </div>
     </div>
@@ -17,25 +17,25 @@
         <el-col :span="6">
           <div class="stat-card">
             <div class="stat-value">{{ dashboard.total_calls || 0 }}</div>
-            <div class="stat-label">{{ t('ai.totalCalls') || '总分析次数' }}</div>
+            <div class="stat-label">{{ t('aiTotalCalls') || '总分析次数' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card success">
             <div class="stat-value">{{ dashboard.success_rate || 0 }}%</div>
-            <div class="stat-label">{{ t('ai.successRate') || '成功率' }}</div>
+            <div class="stat-label">{{ t('aiSuccessRate') || '成功率' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card info">
             <div class="stat-value">{{ dashboard.total_tokens || 0 }}</div>
-            <div class="stat-label">{{ t('ai.totalTokens') || 'Token使用' }}</div>
+            <div class="stat-label">{{ t('aiTotalTokens') || 'Token使用' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card warning">
             <div class="stat-value">¥{{ dashboard.total_cost || 0 }}</div>
-            <div class="stat-label">{{ t('ai.totalCost') || '总成本' }}</div>
+            <div class="stat-label">{{ t('aiTotalCost') || '总成本' }}</div>
           </div>
         </el-col>
       </el-row>
@@ -43,7 +43,7 @@
 
     <!-- Providers Status -->
     <div class="providers-section">
-      <div class="section-title">{{ t('ai.providers') || 'AI Provider状态' }}</div>
+      <div class="section-title">{{ t('aiProviders') || 'AI Provider状态' }}</div>
       <el-row :gutter="20">
         <el-col :span="12" v-for="provider in providers" :key="provider.provider">
           <div class="provider-card" :class="{ available: provider.available }">
@@ -59,33 +59,33 @@
 
     <!-- Quick Actions -->
     <div class="quick-actions">
-      <div class="section-title">{{ t('ai.quickActions') || '快速分析' }}</div>
+      <div class="section-title">{{ t('aiQuickActions') || '快速分析' }}</div>
       <el-row :gutter="20">
         <el-col :span="6">
           <div class="action-card" @click="openFaultAnalysisDialog">
             <el-icon size="32"><Warning /></el-icon>
-            <div class="action-title">{{ t('ai.analyzeFault') || '故障分析' }}</div>
+            <div class="action-title">{{ t('aiAnalyzeFault') || '故障分析' }}</div>
             <div class="action-desc">AI辅助故障根因分析</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openHealthAnalysisDialog">
             <el-icon size="32"><Monitor /></el-icon>
-            <div class="action-title">{{ t('ai.analyzeHealth') || '健康分析' }}</div>
+            <div class="action-title">{{ t('aiAnalyzeHealth') || '健康分析' }}</div>
             <div class="action-desc">AI辅助健康评分</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openPMDialog">
             <el-icon size="32"><Calendar /></el-icon>
-            <div class="action-title">{{ t('ai.predictive') || '预测性维护' }}</div>
+            <div class="action-title">{{ t('aiPredictive') || '预测性维护' }}</div>
             <div class="action-desc">预测维护需求</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openSummaryDialog">
             <el-icon size="32"><Document /></el-icon>
-            <div class="action-title">{{ t('ai.summary') || '维修总结' }}</div>
+            <div class="action-title">{{ t('aiSummary') || '维修总结' }}</div>
             <div class="action-desc">生成维修报告</div>
           </div>
         </el-col>
@@ -95,7 +95,7 @@
     <!-- Analysis History -->
     <div class="history-section">
       <div class="section-header">
-        <h3>{{ t('ai.history') || '分析历史' }}</h3>
+        <h3>{{ t('aiHistory') || '分析历史' }}</h3>
         <el-select v-model="historyFilter" placeholder="类型筛选" clearable style="width: 150px">
           <el-option label="故障分析" value="fault" />
           <el-option label="健康分析" value="health" />

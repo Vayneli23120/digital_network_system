@@ -2,14 +2,14 @@
   <div class="workflows-page">
     <!-- Header -->
     <div class="page-header">
-      <h2>{{ t('workflow.title') || '自动化工作流' }}</h2>
+      <h2>{{ t('workflowTitle') || '自动化工作流' }}</h2>
       <div class="header-actions">
         <el-button type="primary" @click="createRuleDialog">
           <el-icon><Plus /></el-icon>
-          {{ t('workflow.createRule') || '创建规则' }}
+          {{ t('workflowCreateRule') || '创建规则' }}
         </el-button>
         <el-button @click="initDefaultRules" :loading="initing">
-          {{ t('workflow.initDefaults') || '初始化默认规则' }}
+          {{ t('workflowInitDefaults') || '初始化默认规则' }}
         </el-button>
       </div>
     </div>
@@ -20,25 +20,25 @@
         <el-col :span="6">
           <div class="stat-card">
             <div class="stat-value">{{ stats.total_rules || 0 }}</div>
-            <div class="stat-label">{{ t('workflow.totalRules') || '总规则数' }}</div>
+            <div class="stat-label">{{ t('workflowTotalRules') || '总规则数' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card success">
             <div class="stat-value">{{ stats.active_rules || 0 }}</div>
-            <div class="stat-label">{{ t('workflow.activeRules') || '活跃规则' }}</div>
+            <div class="stat-label">{{ t('workflowActiveRules') || '活跃规则' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card info">
             <div class="stat-value">{{ stats.total_executions || 0 }}</div>
-            <div class="stat-label">{{ t('workflow.totalExecutions') || '总执行次数' }}</div>
+            <div class="stat-label">{{ t('workflowTotalExecutions') || '总执行次数' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="stat-card warning">
             <div class="stat-value">{{ Object.keys(stats.by_trigger_type || {}).length }}</div>
-            <div class="stat-label">{{ t('workflow.triggerTypes') || '触发类型' }}</div>
+            <div class="stat-label">{{ t('workflowTriggerTypes') || '触发类型' }}</div>
           </div>
         </el-col>
       </el-row>
@@ -49,7 +49,7 @@
       <el-row :gutter="20">
         <el-col :span="12">
           <div class="types-card">
-            <div class="card-title">{{ t('workflow.availableTriggers') || '可用触发类型' }}</div>
+            <div class="card-title">{{ t('workflowAvailableTriggers') || '可用触发类型' }}</div>
             <div class="types-list">
               <div v-for="(desc, type) in triggerTypes.trigger_info" :key="type" class="type-item">
                 <el-tag type="info" size="small">{{ type }}</el-tag>
@@ -60,7 +60,7 @@
         </el-col>
         <el-col :span="12">
           <div class="types-card">
-            <div class="card-title">{{ t('workflow.availableActions') || '可用动作类型' }}</div>
+            <div class="card-title">{{ t('workflowAvailableActions') || '可用动作类型' }}</div>
             <div class="types-list">
               <div v-for="(desc, type) in actionTypes.action_info" :key="type" class="type-item">
                 <el-tag type="success" size="small">{{ type }}</el-tag>
@@ -75,7 +75,7 @@
     <!-- Rules Table -->
     <div class="rules-section">
       <div class="section-header">
-        <h3>{{ t('workflow.rulesList') || '规则列表' }}</h3>
+        <h3>{{ t('workflowRulesList') || '规则列表' }}</h3>
         <el-select v-model="triggerFilter" placeholder="触发类型筛选" clearable style="width: 180px">
           <el-option v-for="t in triggerTypes.triggers" :key="t" :label="t" :value="t" />
         </el-select>
