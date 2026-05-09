@@ -47,6 +47,7 @@ from .routers import (
     monitor_screen_router,
 )
 from .features.health.router import router as health_router
+from .features.ai.router import router as ai_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter import RateLimitMiddleware
 
@@ -154,6 +155,7 @@ app.include_router(planned_maintenance_router)
 app.include_router(scan_router)
 app.include_router(monitor_screen_router)
 app.include_router(health_router)  # 健康评分路由
+app.include_router(ai_router)      # AI分析路由
 
 
 # ============ 健康检查 ============
