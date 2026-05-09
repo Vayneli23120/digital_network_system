@@ -101,7 +101,16 @@ class FaultRecord(Base):
     status = Column(String(20), default="open", index=True)  # open, investigating, resolved, closed
     maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联的维修单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     device_name = Column(String(100))
+
+    # ===== AI分析增强字段 =====
+    ai_analysis_result = Column(Text)  # JSON格式AI分析结果
+    ai_root_cause = Column(Text)  # AI分析根因
+    ai_recommendation = Column(String(50))  # AI建议：repair/watch/ignore
+    ai_confidence = Column(DECIMAL(3, 2))  # AI置信度 0.00-1.00
+    incident_type = Column(String(20))  # 故障类型：hardware/software/config/network
+    auto_created_maintenance = Column(Boolean, default=False)  # 是否自动创建了维修单
 
     # 关系
     device = relationship("Device", back_populates="faults")
@@ -109,6 +118,16 @@ class FaultRecord(Base):
 
     def __repr__(self):
         return f"<FaultRecord(fault_no='{self.fault_no}', device='{self.device_name}')>"
+
+    def get_ai_analysis_dict(self):
+        """解析AI分析结果JSON"""
+        if self.ai_analysis_result:
+            try:
+                import json
+                return json.loads(self.ai_analysis_result)
+            except:
+                return {}
+        return {}
 
 
 class MaintenanceRecord(Base):
@@ -120,6 +139,10 @@ class MaintenanceRecord(Base):
     maint_no = Column(String(50), unique=True, nullable=False)
     maint_type = Column(String(20), index=True)  # preventive, corrective, upgrade, emergency
     maint_time = Column(DateTime, index=True)
+    title = Column(String(200))  # 维修单标题
+    problem_description = Column(Text)  # 问题描述
+    solution = Column(Text)  # 解决方案/维修过程
+    technician = Column(String(100))  # 维修人员
     parts_replaced = Column(Text)
     parts_cost = Column(DECIMAL(10, 2), default=0)
     labor_hours = Column(DECIMAL(5, 2), default=0)
@@ -130,7 +153,12 @@ class MaintenanceRecord(Base):
     operator = Column(String(100))
     fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True)  # 关联的故障单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     device_name = Column(String(100))
+
+    # ===== 自动化/AI增强字段 =====
+    auto_created = Column(Boolean, default=False)  # 是否由工作流自动创建
+    ai_recommended = Column(Boolean, default=False)  # 是否由AI推荐创建
 
     # ===== 状态流转系统字段 =====
     # 维修状态
