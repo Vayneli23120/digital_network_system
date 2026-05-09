@@ -188,7 +188,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import api from '@/api/request'
+import { getHealthDashboard, getHealthDevices, calculateAllHealth as calcAllHealth, calculateDeviceHealth as calcDeviceHealth, getDeviceHealthHistory } from '@/api'
 
 // Data
 const loading = ref(false)
@@ -232,8 +232,7 @@ const filteredDevices = computed(() => {
 // Methods
 const fetchDashboard = async () => {
   try {
-    const res = await api.get('/health/dashboard')
-    dashboard.value = res
+    dashboard.value = await getHealthDashboard()
 
     // Initialize charts after data loaded
     await nextTick()
@@ -246,10 +245,7 @@ const fetchDashboard = async () => {
 const fetchRiskDevices = async () => {
   try {
     loading.value = true
-    // Get all devices with health info
-    const res = await api.get('/devices', {
-      params: { limit: 100 }
-    })
+    const res = await getHealthDevices({ limit: 100 })
     devices.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch devices:', error)
@@ -261,7 +257,7 @@ const fetchRiskDevices = async () => {
 const calculateAllHealth = async () => {
   try {
     calculating.value = true
-    const res = await api.post('/health/calculate-all')
+    const res = await calcAllHealth()
 
     ElMessage.success(`计算完成: ${res.total} 个设备`)
 
@@ -278,7 +274,7 @@ const calculateAllHealth = async () => {
 
 const calculateDeviceHealth = async (deviceId) => {
   try {
-    const res = await api.post(`/health/devices/${deviceId}/calculate`)
+    const res = await calcDeviceHealth(deviceId)
     ElMessage.success(`健康评分: ${res.health_score}, 风险等级: ${res.risk_level}`)
 
     // Refresh list
@@ -291,7 +287,7 @@ const calculateDeviceHealth = async (deviceId) => {
 
 const viewDeviceHealth = async (deviceId) => {
   try {
-    const res = await api.get(`/health/devices/${deviceId}/history`)
+    const res = await getDeviceHealthHistory(deviceId)
     selectedDeviceHistory.value = res.history || []
     historyDialogVisible.value = true
   } catch (error) {

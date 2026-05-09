@@ -535,3 +535,82 @@ export function getOfflineAlerts() {
 export function getMonitorStats() {
   return api.get('/monitor-screen/stats')
 }
+
+// ============ 设备健康评分 API ============
+export function getHealthDashboard() {
+  return api.get('/health/dashboard')
+}
+
+export function getHealthDevices(params) {
+  return api.get('/devices', { params })
+}
+
+export function calculateAllHealth() {
+  return api.post('/health/calculate-all')
+}
+
+export function calculateDeviceHealth(deviceId) {
+  return api.post(`/health/devices/${deviceId}/calculate`)
+}
+
+export function getDeviceHealthHistory(deviceId) {
+  return api.get(`/health/devices/${deviceId}/history`)
+}
+
+// ============ AI 分析 API ============
+export function getAIDashboard() {
+  return api.get('/ai/dashboard')
+}
+
+export function getAIHistory(params) {
+  return api.get('/ai/history', { params })
+}
+
+export function analyzeFaultAI(faultId, data) {
+  return api.post(`/faults/${faultId}/analyze`, data)
+}
+
+export function analyzeHealthAI(data) {
+  return api.post('/ai/analyze-health', data)
+}
+
+// ============ 工作流 API ============
+export function getWorkflowRules() {
+  return api.get('/workflows/rules')
+}
+
+export function getWorkflowStats() {
+  return api.get('/workflows/stats')
+}
+
+export function getWorkflowTriggers() {
+  return api.get('/workflows/triggers')
+}
+
+export function getWorkflowActions() {
+  return api.get('/workflows/actions')
+}
+
+export function initWorkflowDefaults() {
+  return api.post('/workflows/init-defaults')
+}
+
+export function toggleWorkflowRule(ruleId) {
+  return api.patch(`/workflows/rules/${ruleId}/toggle`)
+}
+
+export function createWorkflowRule(data) {
+  return api.post('/workflows/rules', data)
+}
+
+export function updateWorkflowRule(ruleId, data) {
+  return api.put(`/workflows/rules/${ruleId}`, data)
+}
+
+export function deleteWorkflowRule(ruleId) {
+  return api.delete(`/workflows/rules/${ruleId}`)
+}
+
+export function testWorkflowTrigger(data) {
+  return api.post('/workflows/trigger', data)
+}

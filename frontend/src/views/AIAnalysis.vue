@@ -243,7 +243,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Warning, Monitor, Calendar, Document } from '@element-plus/icons-vue'
-import api from '@/api/request'
+import { getAIDashboard, getAIHistory, getFaults, getDevices, analyzeFaultAI, analyzeHealthAI } from '@/api'
 
 // Data
 const dashboard = ref({})
@@ -281,9 +281,8 @@ const filteredHistory = computed(() => {
 // Methods
 const refreshDashboard = async () => {
   try {
-    const res = await api.get('/ai/dashboard')
-    dashboard.value = res
-    providers.value = res.providers_available || []
+    dashboard.value = await getAIDashboard()
+    providers.value = dashboard.value.providers_available || []
   } catch (error) {
     console.error('Failed to fetch dashboard:', error)
   }
@@ -292,7 +291,7 @@ const refreshDashboard = async () => {
 const fetchHistory = async () => {
   try {
     historyLoading.value = true
-    const res = await api.get('/ai/history', { params: { limit: 50 } })
+    const res = await getAIHistory({ limit: 50 })
     history.value = res.history || []
   } catch (error) {
     console.error('Failed to fetch history:', error)
@@ -303,9 +302,7 @@ const fetchHistory = async () => {
 
 const fetchActiveFaults = async () => {
   try {
-    const res = await api.get('/faults', {
-      params: { status: 'open,investigating', limit: 50 }
-    })
+    const res = await getFaults({ status: 'open,investigating', limit: 50 })
     activeFaults.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch faults:', error)
@@ -314,7 +311,7 @@ const fetchActiveFaults = async () => {
 
 const fetchDevices = async () => {
   try {
-    const res = await api.get('/devices', { params: { limit: 100 } })
+    const res = await getDevices({ limit: 100 })
     devices.value = res.items || []
   } catch (error) {
     console.error('Failed to fetch devices:', error)
@@ -347,11 +344,12 @@ const analyzeFault = async () => {
 
   try {
     analyzing.value = true
-    const res = await api.post(`/faults/${faultForm.value.fault_id}/analyze`, {
+    const res = await analyzeFaultAI(faultForm.value.fault_id, {
       auto_create_maintenance: faultForm.value.auto_create_maintenance
     })
 
     analysisResult.value = res
+    resultDialogVisible.value = true
     faultDialogVisible.value = false
 
     if (res.success) {
@@ -377,12 +375,13 @@ const analyzeHealth = async () => {
 
   try {
     analyzing.value = true
-    const res = await api.post('/ai/analyze-health', {
+    const res = await analyzeHealthAI({
       device_id: healthForm.value.device_id,
       update_health_score: healthForm.value.update_health_score
     })
 
     analysisResult.value = res
+    resultDialogVisible.value = true
     healthDialogVisible.value = false
 
     if (res.success) {
