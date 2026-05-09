@@ -59,6 +59,82 @@ def calculate_sla_remaining(maintenance):
     return sla_remaining, sla_deadline
 
 
+def suggest_next_status(maintenance, data=None):
+    """根据内容变化建议下一步状态
+
+    返回: (建议状态, 建议原因, 是否需要用户确认)
+    """
+    current_status = maintenance.status or "created"
+    data = data or {}
+
+    # 规则1: created -> diagnosing (填写诊断内容)
+    if current_status == 'created':
+        # 检查是否有诊断内容
+        diagnosis_text = data.get('diagnosis_text') or maintenance.diagnosis_text
+        if diagnosis_text and len(diagnosis_text.strip()) > 0:
+            return ('diagnosing', '检测到已填写诊断内容', True)
+
+    # 规则2: diagnosing -> repairing (添加维修动作或更换备件)
+    if current_status == 'diagnosing':
+        # 检查是否有维修动作
+        repair_actions = data.get('repair_actions') or maintenance.repair_actions
+        parts_replaced = data.get('parts_replaced') or maintenance.parts_replaced
+
+        has_repair_actions = False
+        if repair_actions:
+            try:
+                actions = json.loads(repair_actions) if isinstance(repair_actions, str) else repair_actions
+                if isinstance(actions, list) and len(actions) > 0:
+                    has_repair_actions = True
+            except:
+                pass
+
+        has_parts = False
+        if parts_replaced:
+            try:
+                parts = json.loads(parts_replaced) if isinstance(parts_replaced, str) else parts_replaced
+                if isinstance(parts, list) and len(parts) > 0:
+                    has_parts = True
+            except:
+                # 旧格式 "型号(数量)" 也算有备件
+                if len(parts_replaced.strip()) > 0:
+                    has_parts = True
+
+        if has_repair_actions or has_parts:
+            return ('repairing', '检测到已添加维修动作或更换备件', True)
+
+    # 规则3: repairing -> verifying (提交验证结果)
+    if current_status == 'repairing':
+        verification_result = data.get('verification_result') or maintenance.verification_result
+        if verification_result:
+            return ('verifying', '检测到已提交验证结果', True)
+
+    # 规则4: verifying -> completed (验证通过)
+    if current_status == 'verifying':
+        verify_passed = data.get('verify_passed') or maintenance.verify_passed
+        if verify_passed:
+            return ('completed', '验证已通过', True)
+
+    # 无建议
+    return (None, None, False)
+
+
+def get_next_action_button(current_status):
+    """根据当前状态返回下一步操作按钮文案"""
+    ACTION_BUTTONS = {
+        'created': {'action': 'diagnosing', 'label': '开始诊断', 'icon': 'Search'},
+        'diagnosing': {'action': 'repairing', 'label': '开始维修', 'icon': 'Setting'},
+        'repairing': {'action': 'verifying', 'label': '提交验证', 'icon': 'CircleCheck'},
+        'verifying': {'action': 'completed', 'label': '完成维修', 'icon': 'SuccessFilled'},
+        'completed': {'action': None, 'label': '查看详情', 'icon': 'View'},
+        'cancelled': {'action': None, 'label': '查看详情', 'icon': 'View'}
+    }
+    return ACTION_BUTTONS.get(current_status, {'action': None, 'label': '查看详情', 'icon': 'View'})
+
+
+import json
+
+
 def build_events_from_record(maintenance):
     """从维修记录构建事件时间线"""
     events = []
@@ -312,6 +388,125 @@ async def assign_maintenance(maint_id: int, data: dict):
         db.commit()
 
         return {"id": maint_id, "owner": owner, "message": f"已分配给 {owner}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{maint_id}/suggest-status")
+async def suggest_status(maint_id: int, data: dict = None):
+    """根据当前内容建议下一步状态
+
+    返回建议的状态变更，用于前端智能提示弹窗
+    """
+    db: Session = next(get_db())
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
+
+        # 获取建议
+        suggested_status, reason, need_confirm = suggest_next_status(maintenance, data)
+
+        # 获取下一步操作按钮
+        next_action = get_next_action_button(maintenance.status)
+
+        return {
+            "id": maint_id,
+            "current_status": maintenance.status,
+            "current_status_label": STATUS_LABELS.get(maintenance.status, "创建"),
+            "suggested_status": suggested_status,
+            "suggested_status_label": STATUS_LABELS.get(suggested_status, "") if suggested_status else None,
+            "reason": reason,
+            "need_confirm": need_confirm,
+            "next_action": next_action,
+            "valid_transitions": VALID_TRANSITIONS.get(maintenance.status, [])
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{maint_id}/auto-transition")
+async def auto_transition_status(maint_id: int, data: dict):
+    """自动状态推进（用户确认后调用）
+
+    检查内容是否满足条件，然后自动推进状态
+    """
+    db: Session = next(get_db())
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
+
+        suggested_status, reason, need_confirm = suggest_next_status(maintenance, data)
+
+        if not suggested_status:
+            return {"id": maint_id, "message": "无需推进状态", "status": maintenance.status}
+
+        # 验证状态流转是否合法
+        current_status = maintenance.status
+        if suggested_status not in VALID_TRANSITIONS.get(current_status, []):
+            return {"id": maint_id, "message": f"不能从 {current_status} 转换到 {suggested_status}", "status": maintenance.status}
+
+        # 更新状态和时间戳
+        maintenance.status = suggested_status
+
+        if suggested_status == "diagnosing":
+            maintenance.diagnosing_at = datetime.utcnow()
+            # 更新诊断内容
+            if data.get('diagnosis_text'):
+                maintenance.diagnosis_text = data['diagnosis_text']
+            if data.get('diagnosis_result'):
+                maintenance.diagnosis_result = data['diagnosis_result']
+        elif suggested_status == "repairing":
+            maintenance.repairing_at = datetime.utcnow()
+            # 更新维修动作
+            if data.get('repair_actions'):
+                maintenance.repair_actions = data['repair_actions']
+            if data.get('parts_replaced'):
+                maintenance.parts_replaced = data['parts_replaced']
+        elif suggested_status == "verifying":
+            maintenance.verifying_at = datetime.utcnow()
+            # 更新验证结果
+            if data.get('verification_result'):
+                maintenance.verification_result = data['verification_result']
+            if data.get('verification_notes'):
+                maintenance.verification_notes = data['verification_notes']
+        elif suggested_status == "completed":
+            maintenance.completed_at = datetime.utcnow()
+            if data.get('verify_passed'):
+                maintenance.verify_passed = data['verify_passed']
+
+        # 创建事件记录
+        event = MaintenanceEvent(
+            maintenance_id=maint_id,
+            event_type=suggested_status,
+            event_time=datetime.utcnow(),
+            operator=data.get("operator", "System"),
+            notes=f"自动推进: {STATUS_LABELS.get(current_status)} → {STATUS_LABELS.get(suggested_status)}"
+        )
+        db.add(event)
+
+        db.commit()
+
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
+        return {
+            "id": maint_id,
+            "status": suggested_status,
+            "status_label": STATUS_LABELS.get(suggested_status),
+            "progress_percent": STATUS_PERCENT.get(suggested_status),
+            "reason": reason,
+            "message": f"状态已自动推进为 {STATUS_LABELS.get(suggested_status)}"
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

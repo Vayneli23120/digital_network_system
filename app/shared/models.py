@@ -132,6 +132,19 @@ class MaintenanceRecord(Base):
     priority = Column(String(10), default="P3", index=True)  # P1/P2/P3/P4 优先级
     sla_deadline = Column(DateTime)  # SLA截止时间
 
+    # ===== 半自动状态机字段 =====
+    # 诊断信息
+    diagnosis_text = Column(Text)  # 诊断描述内容
+    diagnosis_result = Column(String(50))  # 诊断结论: fault_found, no_fault, need_replace, need_upgrade
+
+    # 维修动作 (JSON数组)
+    repair_actions = Column(Text)  # [{"action": "更换SFP模块", "parts": "SFP-001", "operator": "Vayne", "time": "..."}]
+
+    # 验证信息
+    verification_result = Column(String(20))  # passed, failed, partial
+    verification_notes = Column(Text)  # 验证备注
+    verify_passed = Column(Boolean, default=False)  # 是否通过验证
+
     # 关系
     device = relationship("Device", back_populates="maintenances")
     fault = relationship("FaultRecord", foreign_keys=[fault_id])
