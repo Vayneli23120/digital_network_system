@@ -1649,10 +1649,6 @@ export const languages = {
     healthHistoryTitle: '健康评分历史',
     healthNoHistory: '暂无历史记录',
 
-
-  },
-
-
     // AI Analysis
     aiTitle: 'AI分析中心',
     aiTotalCalls: '总分析次数',
@@ -1712,6 +1708,7 @@ export const languages = {
     workflowTestResult: '测试结果',
     workflowActionsExecuted: '执行动作数',
     workflowRulesMatched: '匹配规则数',
+  },
 
   en: {
     // 品牌名称
