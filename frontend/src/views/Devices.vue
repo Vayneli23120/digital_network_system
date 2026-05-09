@@ -167,7 +167,7 @@
         </el-table-column>
         <el-table-column prop="location" :label="t('deviceLocation')" width="130" show-overflow-tooltip />
         <el-table-column prop="model" :label="t('deviceModel')" width="140" show-overflow-tooltip />
-        <el-table-column :label="t('deviceAction')" width="110" fixed="right" align="center">
+        <el-table-column :label="t('deviceAction')" width="160" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-bar">
               <el-tooltip :content="t('deviceTooltipView')" placement="top">
@@ -180,22 +180,16 @@
                   <el-icon><Download /></el-icon>
                 </span>
               </el-tooltip>
-              <el-dropdown trigger="click" @command="(cmd) => handleAction(cmd, row)">
-                <span class="action-item">
-                  <el-icon><MoreFilled /></el-icon>
+              <el-tooltip :content="t('deviceActionEdit')" placement="top">
+                <span class="action-item edit" @click="editDevice(row)">
+                  <el-icon><Edit /></el-icon>
                 </span>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item command="edit">
-                      <el-icon><Edit /></el-icon> {{ t('deviceActionEdit') }}
-                    </el-dropdown-item>
-                    <el-dropdown-item command="delete" divided>
-                      <el-icon style="color:#d63031"><Delete /></el-icon>
-                      <span style="color:#d63031">{{ t('deviceActionDelete') }}</span>
-                    </el-dropdown-item>
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
+              </el-tooltip>
+              <el-tooltip :content="t('deviceActionDelete')" placement="top">
+                <span class="action-item delete" @click="deleteDevice(row)">
+                  <el-icon><Delete /></el-icon>
+                </span>
+              </el-tooltip>
             </div>
           </template>
         </el-table-column>
@@ -321,7 +315,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, MoreFilled } from '@element-plus/icons-vue'
+import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -476,14 +470,6 @@ const loadCredentialGroups = async () => {
 
 const viewDevice = (id) => {
   router.push(`/devices/${id}`)
-}
-
-const handleAction = (command, row) => {
-  if (command === 'edit') {
-    editDevice(row)
-  } else if (command === 'delete') {
-    deleteDevice(row)
-  }
 }
 
 const backupDevice = async (row) => {
@@ -921,8 +907,8 @@ onMounted(() => {
 .action-bar {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 4px 6px;
+  gap: 4px;
+  padding: 4px 8px;
   background: var(--bg-card);
   border-radius: 6px;
 }
@@ -931,8 +917,8 @@ onMounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   cursor: pointer;
   color: var(--text-tertiary);
   border-radius: 4px;
@@ -941,12 +927,12 @@ onMounted(() => {
 
 .action-item:hover {
   background: var(--bg-tertiary);
-  color: var(--accent-primary);
 }
 
 .action-item:nth-child(1):hover { color: #0984e3; }
 .action-item:nth-child(2):hover { color: #00b894; }
-.action-item:nth-child(3):hover { color: #636e72; }
+.action-item.edit:hover { color: #e17055; }
+.action-item.delete:hover { color: #d63031; }
 
 /* 分页 */
 .pagination-bar {
