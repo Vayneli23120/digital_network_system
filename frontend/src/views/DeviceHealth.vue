@@ -557,4 +557,15 @@ onMounted(() => {
 .empty-history {
   padding: 40px 0;
 }
+
+/* Operations column buttons alignment */
+.el-table .el-button + .el-button {
+  margin-left: 8px;
+}
+
+.el-table-column--fixed-right .cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 </style>
