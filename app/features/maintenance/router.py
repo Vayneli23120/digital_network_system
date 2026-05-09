@@ -662,12 +662,48 @@ async def update_maintenance(maint_id: int, maint_data: dict):
             'device_id', 'device_name', 'maint_type', 'maint_time',
             'parts_replaced', 'parts_cost', 'labor_hours', 'labor_cost',
             'vendor', 'description', 'post_status', 'operator',
-            'status', 'priority', 'current_owner', 'sla_deadline'
+            'status', 'priority', 'current_owner', 'sla_deadline',
+            # ===== 半自动状态机字段 =====
+            'diagnosis_text', 'diagnosis_result', 'repair_actions',
+            'verification_result', 'verification_notes', 'verify_passed'
         }
 
         for key, value in maint_data.items():
             if key in valid_fields and hasattr(maint, key):
                 setattr(maint, key, value)
+
+        # ===== 记录状态机相关事件 =====
+        # 诊断内容添加事件
+        if 'diagnosis_text' in maint_data and maint_data.get('diagnosis_text'):
+            old_diag = maint.diagnosis_text or ''
+            if len(old_diag.strip()) == 0 and len(maint_data['diagnosis_text'].strip()) > 0:
+                event = MaintenanceEvent(
+                    maintenance_id=maint_id,
+                    event_type='diagnosis_added',
+                    notes='添加了诊断内容',
+                    operator=maint_data.get('operator', 'Web')
+                )
+                db.add(event)
+
+        # 验证结果提交事件
+        if 'verification_result' in maint_data and maint_data.get('verification_result'):
+            event = MaintenanceEvent(
+                maintenance_id=maint_id,
+                event_type='verification_submitted',
+                notes=f"验证结果: {maint_data['verification_result']}",
+                operator=maint_data.get('operator', 'Web')
+            )
+            db.add(event)
+
+        # 验证通过事件
+        if maint_data.get('verify_passed') == True:
+            event = MaintenanceEvent(
+                maintenance_id=maint_id,
+                event_type='verification_passed',
+                notes='验证通过',
+                operator=maint_data.get('operator', 'Web')
+            )
+            db.add(event)
 
         db.commit()
         db.refresh(maint)

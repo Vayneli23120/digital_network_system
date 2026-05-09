@@ -294,6 +294,9 @@
                 <el-icon v-else-if="event.event_type === 'completed'"><CircleCheck /></el-icon>
                 <el-icon v-else-if="event.event_type === 'cancelled'"><CircleClose /></el-icon>
                 <el-icon v-else-if="event.event_type === 'assigned'"><User /></el-icon>
+                <el-icon v-else-if="event.event_type === 'diagnosis_added'"><Search /></el-icon>
+                <el-icon v-else-if="event.event_type === 'verification_submitted'"><CircleCheck /></el-icon>
+                <el-icon v-else-if="event.event_type === 'verification_passed'"><SuccessFilled /></el-icon>
                 <el-icon v-else><MoreFilled /></el-icon>
               </div>
               <div class="timeline-content">
@@ -370,6 +373,28 @@
                 <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
                 <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
                 <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 诊断信息 Section (半自动状态机) -->
+        <div class="form-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+          <div class="form-section-title diagnosis">
+            <el-icon><Search /></el-icon>
+            {{ t('maintDiagnosisSection') || '诊断信息' }}
+            <el-tag v-if="editForm.diagnosis_text" type="success" size="small" class="section-badge">{{ t('maintDiagnosisFilled') }}</el-tag>
+          </div>
+          <el-form :model="editForm" label-width="80px">
+            <el-form-item :label="t('maintDiagnosisText')">
+              <el-input v-model="editForm.diagnosis_text" type="textarea" :rows="3" :placeholder="t('maintDiagnosisPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('maintDiagnosisResult')">
+              <el-select v-model="editForm.diagnosis_result" style="width: 200px" clearable>
+                <el-option :label="t('maintDiagnosisFaultFound')" value="fault_found" />
+                <el-option :label="t('maintDiagnosisNoFault')" value="no_fault" />
+                <el-option :label="t('maintDiagnosisNeedReplace')" value="need_replace" />
+                <el-option :label="t('maintDiagnosisNeedUpgrade')" value="need_upgrade" />
               </el-select>
             </el-form-item>
           </el-form>
@@ -596,6 +621,35 @@
       </el-form>
     </div>
 
+    <!-- 验证信息 Section (半自动状态机) -->
+    <div class="form-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+      <div class="form-section-title verification">
+        <el-icon><CircleCheck /></el-icon>
+        {{ t('maintVerificationSection') || '验证信息' }}
+        <el-tag v-if="editForm.verify_passed" type="success" size="small" class="section-badge">{{ t('maintVerificationPassed') }}</el-tag>
+      </div>
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item :label="t('maintVerificationResult')">
+          <el-select v-model="editForm.verification_result" style="width: 150px" clearable>
+            <el-option :label="t('maintVerificationPassed')" value="passed" />
+            <el-option :label="t('maintVerificationFailed')" value="failed" />
+            <el-option :label="t('maintVerificationPartial')" value="partial" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('maintVerificationNotes')">
+          <el-input v-model="editForm.verification_notes" type="textarea" :rows="2" :placeholder="t('maintVerificationNotesPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('maintVerifyPassed')">
+          <el-checkbox v-model="editForm.verify_passed" :disabled="editForm.verification_result !== 'passed'">
+            {{ editForm.verify_passed ? t('maintVerifyPassedYes') : t('maintVerifyPassedNo') }}
+          </el-checkbox>
+          <el-tag v-if="editForm.verify_passed" type="success" size="small" class="verify-badge">
+            <el-icon><CircleCheck /></el-icon>
+          </el-tag>
+        </el-form-item>
+      </el-form>
+    </div>
+
     <!-- 成本与描述 Section -->
     <div class="form-section">
       <div class="form-section-title">
@@ -637,6 +691,28 @@
       />
     </el-dialog>
 
+    <!-- 状态变更建议对话框 -->
+    <el-dialog v-model="showSuggestDialog" :title="t('maintSuggestStatusTitle')" width="400px" class="suggest-dialog">
+      <div class="suggest-content">
+        <div class="suggest-icon">
+          <el-icon :size="48" :color="getStatusTagClass(suggestInfo.suggested_status) === 'success' ? '#00b894' : '#e17055'">
+            <CircleCheck v-if="suggestInfo.suggested_status === 'completed'" />
+            <Setting v-else-if="suggestInfo.suggested_status === 'repairing'" />
+            <Search v-else-if="suggestInfo.suggested_status === 'diagnosing'" />
+            <CircleCheck v-else />
+          </el-icon>
+        </div>
+        <div class="suggest-message">
+          <p class="suggest-text">{{ suggestInfo.reason }}</p>
+          <p class="suggest-target">{{ t('maintSuggestTargetStatus') }}: <strong>{{ suggestInfo.suggested_label }}</strong></p>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="cancelSuggest">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="confirmSuggestTransition">{{ t('maintSuggestConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 扫码添加返回件对话框 -->
     <el-dialog v-model="returnScanDialogVisible" :title="t('maintDetailScanReturnDialog')" width="900px">
       <ScanSession
@@ -656,11 +732,12 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search } from '@element-plus/icons-vue'
+import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled } from '@element-plus/icons-vue'
 import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
+import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
@@ -724,7 +801,23 @@ const editForm = ref({
   labor_hours: 0,
   labor_cost: 0,
   vendor: '',
-  description: ''
+  description: '',
+  // ===== 半自动状态机字段 =====
+  diagnosis_text: '',
+  diagnosis_result: '',  // fault_found, no_fault, need_replace, need_upgrade
+  repair_actions: '',  // JSON数组字符串
+  verification_result: '',  // passed, failed, partial
+  verification_notes: '',
+  verify_passed: false
+})
+
+// 状态建议对话框
+const showSuggestDialog = ref(false)
+const suggestInfo = ref({
+  suggested_status: '',
+  suggested_label: '',
+  reason: '',
+  needs_confirm: true
 })
 
 // 状态常量映射
@@ -1287,8 +1380,16 @@ const openEditDialog = async () => {
     labor_hours: maintenance.value.labor_hours || 0,
     labor_cost: maintenance.value.labor_cost || 0,
     vendor: maintenance.value.vendor || '',
-    description: maintenance.value.description
+    description: maintenance.value.description,
+    // ===== 半自动状态机字段 =====
+    diagnosis_text: maintenance.value.diagnosis_text || '',
+    diagnosis_result: maintenance.value.diagnosis_result || '',
+    repair_actions: maintenance.value.repair_actions || '',
+    verification_result: maintenance.value.verification_result || '',
+    verification_notes: maintenance.value.verification_notes || '',
+    verify_passed: maintenance.value.verify_passed || false
   }
+  lastSuggestStatus.value = ''  // 重置状态建议
   showEditDialog.value = true
 }
 
@@ -1374,6 +1475,61 @@ const deleteMaintenanceRecord = async () => {
       ElMessage.error(t('maintDeleteFailed'))
     }
   }
+}
+
+// ===== 智能状态建议 =====
+const lastSuggestStatus = ref('')  // 防止重复弹窗
+
+// 监听表单变化，自动检测状态建议
+watch(
+  [() => editForm.value.diagnosis_text, () => editForm.value.spare_parts, () => editForm.value.verification_result, () => editForm.value.verify_passed],
+  async (newVals, oldVals) => {
+    // 只在编辑对话框打开时检测
+    if (!showEditDialog.value) return
+    // 已完成或已取消状态不需要检测
+    if (statusInfo.value.status === 'completed' || statusInfo.value.status === 'cancelled') return
+
+    try {
+      const result = await api.post(`/api/maintenance/${maintenance.value.id}/suggest-status`, {
+        diagnosis_text: editForm.value.diagnosis_text,
+        spare_parts_count: editForm.value.spare_parts.length,
+        verification_result: editForm.value.verification_result,
+        verify_passed: editForm.value.verify_passed
+      })
+
+      // 有状态建议且需要确认
+      if (result.suggested_status && result.needs_confirm && result.suggested_status !== lastSuggestStatus.value) {
+        lastSuggestStatus.value = result.suggested_status
+        suggestInfo.value = result
+        showSuggestDialog.value = true
+      }
+    } catch (e) {
+      // 静默处理错误
+    }
+  },
+  { deep: true }
+)
+
+// 确认状态变更
+const confirmSuggestTransition = async () => {
+  try {
+    const result = await api.post(`/api/maintenance/${maintenance.value.id}/auto-transition`, {
+      status: suggestInfo.value.suggested_status,
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintStatusAutoChanged', { status: result.status_label }))
+    showSuggestDialog.value = false
+    showEditDialog.value = false
+    loadMaintenance()
+  } catch (e) {
+    ElMessage.error(e.response?.data?.detail || e.message)
+  }
+}
+
+// 取消状态建议
+const cancelSuggest = () => {
+  showSuggestDialog.value = false
+  lastSuggestStatus.value = ''
 }
 
 onMounted(() => {
@@ -1720,6 +1876,18 @@ onMounted(() => {
   background: rgba(214, 48, 49, 0.1);
 }
 
+.timeline-item.diagnosis_added {
+  background: rgba(9, 132, 227, 0.1);
+}
+
+.timeline-item.verification_submitted {
+  background: rgba(116, 185, 255, 0.1);
+}
+
+.timeline-item.verification_passed {
+  background: rgba(0, 184, 148, 0.15);
+}
+
 .timeline-marker {
   display: flex;
   align-items: center;
@@ -1737,6 +1905,18 @@ onMounted(() => {
 
 .timeline-item.cancelled .timeline-marker {
   background: var(--accent-danger);
+}
+
+.timeline-item.diagnosis_added .timeline-marker {
+  background: var(--accent-secondary);
+}
+
+.timeline-item.verification_submitted .timeline-marker {
+  background: #74b9ff;
+}
+
+.timeline-item.verification_passed .timeline-marker {
+  background: var(--accent-success);
 }
 
 .timeline-content {
@@ -1955,6 +2135,18 @@ onMounted(() => {
 
 .dark .timeline-item.cancelled {
   background: rgba(214, 48, 49, 0.15);
+}
+
+.dark .timeline-item.diagnosis_added {
+  background: rgba(9, 132, 227, 0.15);
+}
+
+.dark .timeline-item.verification_submitted {
+  background: rgba(116, 185, 255, 0.15);
+}
+
+.dark .timeline-item.verification_passed {
+  background: rgba(0, 184, 148, 0.2);
 }
 
 .card-title {
@@ -2505,5 +2697,76 @@ onMounted(() => {
 
 .delete-btn-icon:hover {
   background: var(--danger-bg);
+}
+
+/* ===== 诊断和验证 Section 标题样式 ===== */
+.form-section-title.diagnosis {
+  color: var(--accent-secondary);
+}
+
+.form-section-title.diagnosis .el-icon {
+  color: #0984e3;
+}
+
+.form-section-title.verification {
+  color: var(--accent-success);
+}
+
+.form-section-title.verification .el-icon {
+  color: #00b894;
+}
+
+.section-badge {
+  margin-left: 8px;
+  font-size: 11px;
+}
+
+.verify-badge {
+  margin-left: 12px;
+}
+
+/* ===== 状态建议对话框样式 ===== */
+.suggest-dialog .suggest-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 16px;
+  text-align: center;
+}
+
+.suggest-icon {
+  width: 80px;
+  height: 80px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 184, 148, 0.1);
+  border-radius: 50%;
+}
+
+.suggest-message {
+  width: 100%;
+}
+
+.suggest-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.suggest-target {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.suggest-target strong {
+  color: var(--accent-primary);
+  font-size: 16px;
+}
+
+/* 暗色模式 */
+.dark .suggest-icon {
+  background: rgba(0, 184, 148, 0.15);
 }
 </style>

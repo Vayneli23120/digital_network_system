@@ -232,20 +232,23 @@
         </el-table-column>
 
         <!-- 操作 -->
-        <el-table-column :label="t('colOperation')" width="120" fixed="right">
+        <el-table-column :label="t('colOperation')" width="140" fixed="right">
           <template #default="{ row }">
             <div class="action-icons">
+              <!-- 动态状态推进按钮 -->
+              <el-tooltip :content="getActionTooltip(row.status)" placement="top" v-if="getNextAction(row.status)">
+                <el-button :type="getActionButtonType(row.status)" link @click="handleStatusAction(row)" class="action-icon action-main">
+                  <el-icon><component :is="getActionIcon(row.status)" /></el-icon>
+                </el-button>
+              </el-tooltip>
+              <!-- 查看详情 -->
               <el-tooltip content="查看详情" placement="top">
                 <el-button type="primary" link @click="viewDetail(row)" class="action-icon">
                   <el-icon><View /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip content="编辑" placement="top">
-                <el-button type="default" link @click="editMaintenance(row)" class="action-icon">
-                  <el-icon><Edit /></el-icon>
-                </el-button>
-              </el-tooltip>
-              <el-tooltip content="删除" placement="top">
+              <!-- 删除 -->
+              <el-tooltip content="删除" placement="top" v-if="row.status !== 'completed'">
                 <el-button type="danger" link @click="deleteMaintenance(row)" class="action-icon">
                   <el-icon><Delete /></el-icon>
                 </el-button>
@@ -566,7 +569,8 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document, Edit, Delete, View, ArrowRight, Refresh, CircleCheck, SuccessFilled, WarningFilled } from '@element-plus/icons-vue'
-import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement, getPartBySerialNumber } from '@/api'
+import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement, getPartBySerialNumber, transitionMaintenanceStatus } from '@/api'
+import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime } from '@/utils/time'
 import dayjs from 'dayjs'
@@ -697,6 +701,87 @@ const tableRowClassName = ({ row, rowIndex }) => {
 // 查看详情
 const viewDetail = (row) => {
   router.push(`/maintenance/${row.id}`)
+}
+
+// ===== 动态状态推进按钮 =====
+const ACTION_BUTTONS = {
+  'created': { action: 'diagnosing', label: '开始诊断', icon: 'Search', type: 'primary' },
+  'diagnosing': { action: 'repairing', label: '开始维修', icon: 'Setting', type: 'warning' },
+  'repairing': { action: 'verifying', label: '提交验证', icon: 'CircleCheck', type: 'info' },
+  'verifying': { action: 'completed', label: '完成维修', icon: 'SuccessFilled', type: 'success' },
+  'completed': { action: null, label: '查看详情', icon: 'View', type: 'default' },
+  'cancelled': { action: null, label: '查看详情', icon: 'View', type: 'default' }
+}
+
+const getNextAction = (status) => {
+  return ACTION_BUTTONS[status]?.action || null
+}
+
+const getActionTooltip = (status) => {
+  return ACTION_BUTTONS[status]?.label || '查看详情'
+}
+
+const getActionIcon = (status) => {
+  return ACTION_BUTTONS[status]?.icon || 'View'
+}
+
+const getActionButtonType = (status) => {
+  return ACTION_BUTTONS[status]?.type || 'default'
+}
+
+// 处理状态推进操作
+const handleStatusAction = async (row) => {
+  const nextAction = getNextAction(row.status)
+  if (!nextAction) {
+    viewDetail(row)
+    return
+  }
+
+  const actionLabel = ACTION_BUTTONS[row.status]?.label
+
+  try {
+    // 先获取状态建议
+    const suggestResult = await api.post(`/api/maintenance/${row.id}/suggest-status`, {})
+
+    // 弹出确认对话框
+    await ElMessageBox.confirm(
+      `是否执行「${actionLabel}」操作？\n状态将从「${suggestResult.current_status_label}」变为「${suggestResult.suggested_status_label || getNextStatusLabel(nextAction)}」`,
+      '状态流转确认',
+      {
+        confirmButtonText: '确认',
+        cancelButtonText: '取消',
+        type: 'info'
+      }
+    )
+
+    // 调用自动状态推进 API
+    const result = await api.post(`/api/maintenance/${row.id}/auto-transition`, {
+      status: nextAction,
+      operator: 'Web'
+    })
+
+    ElMessage.success(result.message || `状态已更新为 ${result.status_label}`)
+
+    // 刷新列表
+    await loadMaintenances()
+
+  } catch (e) {
+    if (e !== 'cancel') {
+      const detail = e.response?.data?.detail || e.message
+      ElMessage.error(detail)
+    }
+  }
+}
+
+const getNextStatusLabel = (status) => {
+  const labels = {
+    'diagnosing': '诊断',
+    'repairing': '维修',
+    'verifying': '验证',
+    'completed': '完成',
+    'cancelled': '取消'
+  }
+  return labels[status] || status
 }
 
 // 备件相关

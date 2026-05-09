@@ -1280,6 +1280,41 @@ export const languages = {
     maintProgressCompleted: '100%',
     maintProgressCancelled: '0%',
 
+    // ===== 半自动状态机相关 =====
+    // 诊断信息
+    maintDiagnosisSection: '诊断信息',
+    maintDiagnosisFilled: '已填写',
+    maintDiagnosisText: '诊断内容',
+    maintDiagnosisPlaceholder: '请填写诊断结果和问题分析...',
+    maintDiagnosisResult: '诊断结论',
+    maintDiagnosisFaultFound: '发现故障',
+    maintDiagnosisNoFault: '未发现故障',
+    maintDiagnosisNeedReplace: '需要更换',
+    maintDiagnosisNeedUpgrade: '需要升级',
+
+    // 验证信息
+    maintVerificationSection: '验证信息',
+    maintVerificationPassed: '验证通过',
+    maintVerificationFailed: '验证失败',
+    maintVerificationPartial: '部分通过',
+    maintVerificationResult: '验证结果',
+    maintVerificationNotes: '验证备注',
+    maintVerificationNotesPlaceholder: '请填写验证过程和结果说明...',
+    maintVerifyPassed: '是否通过',
+    maintVerifyPassedYes: '已通过验证',
+    maintVerifyPassedNo: '未通过验证',
+
+    // 状态建议
+    maintSuggestStatusTitle: '状态变更建议',
+    maintSuggestTargetStatus: '建议目标状态',
+    maintSuggestConfirm: '确认变更',
+    maintSuggestReason: '原因',
+    maintStatusAutoChanged: '状态已自动更新为 {status}',
+    maintSuggestDiagnosis: '检测到已填写诊断内容，是否进入「诊断中」状态？',
+    maintSuggestRepairing: '检测到已添加备件更换，是否进入「维修中」状态？',
+    maintSuggestVerifying: '检测到维修已完成，是否进入「验证」状态？',
+    maintSuggestCompleted: '检测到验证已通过，是否完成该维修单？',
+
     // 维修列表页统计和筛选
     maintStatsTitle: '维修运营统计',
     maintStatsTotal: '总维修单',
@@ -2875,6 +2910,41 @@ export const languages = {
     maintProgressVerifying: '80%',
     maintProgressCompleted: '100%',
     maintProgressCancelled: '0%',
+
+    // ===== Semi-Auto State Machine =====
+    // Diagnosis
+    maintDiagnosisSection: 'Diagnosis',
+    maintDiagnosisFilled: 'Filled',
+    maintDiagnosisText: 'Diagnosis Content',
+    maintDiagnosisPlaceholder: 'Enter diagnosis results and problem analysis...',
+    maintDiagnosisResult: 'Diagnosis Conclusion',
+    maintDiagnosisFaultFound: 'Fault Found',
+    maintDiagnosisNoFault: 'No Fault',
+    maintDiagnosisNeedReplace: 'Need Replace',
+    maintDiagnosisNeedUpgrade: 'Need Upgrade',
+
+    // Verification
+    maintVerificationSection: 'Verification',
+    maintVerificationPassed: 'Passed',
+    maintVerificationFailed: 'Failed',
+    maintVerificationPartial: 'Partial',
+    maintVerificationResult: 'Result',
+    maintVerificationNotes: 'Notes',
+    maintVerificationNotesPlaceholder: 'Enter verification process and results...',
+    maintVerifyPassed: 'Passed?',
+    maintVerifyPassedYes: 'Verification Passed',
+    maintVerifyPassedNo: 'Verification Not Passed',
+
+    // Status Suggestion
+    maintSuggestStatusTitle: 'Status Change Suggestion',
+    maintSuggestTargetStatus: 'Suggested Status',
+    maintSuggestConfirm: 'Confirm Change',
+    maintSuggestReason: 'Reason',
+    maintStatusAutoChanged: 'Status automatically changed to {status}',
+    maintSuggestDiagnosis: 'Diagnosis content detected. Move to "Diagnosing" status?',
+    maintSuggestRepairing: 'Spare parts added. Move to "Repairing" status?',
+    maintSuggestVerifying: 'Repair completed. Move to "Verifying" status?',
+    maintSuggestCompleted: 'Verification passed. Complete this maintenance?',
 
     // Maintenance List Stats and Filters
     maintStatsTitle: 'Maintenance Statistics',
