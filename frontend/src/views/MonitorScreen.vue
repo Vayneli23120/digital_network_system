@@ -49,8 +49,13 @@
 
         <!-- Floor Plan Display -->
         <div class="plan-container" ref="planContainer">
-          <div class="plan-wrapper" ref="planWrapper" v-if="currentPlan" @click="handlePlanClick">
-            <img :src="planImageUrl" class="plan-image" ref="planImage" @load="onImageLoad" />
+          <div
+            class="plan-wrapper"
+            ref="planWrapper"
+            v-if="currentPlan"
+            @click="handlePlanClick"
+            :style="{ backgroundImage: `url(${planImageUrl})` }"
+          >
             <!-- Device Nodes Overlay -->
             <div class="nodes-overlay" v-if="imageLoaded">
               <div
@@ -336,7 +341,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload } from '@element-plus/icons-vue'
@@ -358,7 +363,6 @@ const highlightedNodeId = ref(null)
 
 // Floor Plan display
 const planContainer = ref(null)
-const planImage = ref(null)
 const planWrapper = ref(null)
 const imageLoaded = ref(false)
 const currentPlan = computed(() => floorPlans.value.find(p => p.id === selectedPlanId.value))
@@ -373,6 +377,19 @@ const planImageUrl = computed(() => {
   // Encode filename to handle Chinese characters and spaces
   return '/photos/floor_plans/' + encodeURIComponent(filename)
 })
+
+// Watch planImageUrl to preload image and set loaded state
+watch(planImageUrl, (newUrl) => {
+  if (newUrl) {
+    const img = new Image()
+    img.onload = () => {
+      imageLoaded.value = true
+    }
+    img.src = newUrl
+  } else {
+    imageLoaded.value = false
+  }
+}, { immediate: true })
 
 // Node detail
 const showDetailDialog = ref(false)
@@ -507,10 +524,6 @@ const loadOfflineAlerts = async () => {
   }
 }
 
-const onImageLoad = () => {
-  imageLoaded.value = true
-}
-
 const startCreateNode = async () => {
   if (!selectedPlanId.value) return
   isCreatingNode.value = true
@@ -538,7 +551,7 @@ const handlePlanClick = (e) => {
   if (!isCreatingNode.value) return
 
   // 使用 planWrapper 获取坐标（包含图片和节点层）
-  const target = planWrapper.value || planImage.value
+  const target = planWrapper.value
   if (!target) return
 
   const rect = target.getBoundingClientRect()
@@ -843,16 +856,10 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.plan-image {
-  display: block;
-  max-width: 100%;
-  max-height: 100%;
-  object-fit: contain;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-color: var(--bg-tertiary);
 }
 
 .nodes-overlay {
