@@ -188,7 +188,7 @@ import { ref, computed, onMounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
-import axios from 'axios'
+import api from '@/api/request'
 
 // Data
 const loading = ref(false)
@@ -232,7 +232,7 @@ const filteredDevices = computed(() => {
 // Methods
 const fetchDashboard = async () => {
   try {
-    const res = await axios.get('/api/health/dashboard')
+    const res = await api.get('/health/dashboard')
     dashboard.value = res.data
 
     // Initialize charts after data loaded
@@ -247,7 +247,7 @@ const fetchRiskDevices = async () => {
   try {
     loading.value = true
     // Get all devices with health info
-    const res = await axios.get('/api/devices', {
+    const res = await api.get('/devices', {
       params: { limit: 100 }
     })
     devices.value = res.data.items || []
@@ -261,7 +261,7 @@ const fetchRiskDevices = async () => {
 const calculateAllHealth = async () => {
   try {
     calculating.value = true
-    const res = await axios.post('/api/health/calculate-all')
+    const res = await api.post('/health/calculate-all')
 
     ElMessage.success(`计算完成: ${res.data.total} 个设备`)
 
@@ -278,7 +278,7 @@ const calculateAllHealth = async () => {
 
 const calculateDeviceHealth = async (deviceId) => {
   try {
-    const res = await axios.post(`/api/health/devices/${deviceId}/calculate`)
+    const res = await api.post(`/health/devices/${deviceId}/calculate`)
     ElMessage.success(`健康评分: ${res.data.health_score}, 风险等级: ${res.data.risk_level}`)
 
     // Refresh list
@@ -291,7 +291,7 @@ const calculateDeviceHealth = async (deviceId) => {
 
 const viewDeviceHealth = async (deviceId) => {
   try {
-    const res = await axios.get(`/api/health/devices/${deviceId}/history`)
+    const res = await api.get(`/health/devices/${deviceId}/history`)
     selectedDeviceHistory.value = res.data.history || []
     historyDialogVisible.value = true
   } catch (error) {

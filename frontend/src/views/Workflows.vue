@@ -202,7 +202,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
-import axios from 'axios'
+import api from '@/api/request'
 
 // Data
 const loading = ref(false)
@@ -240,7 +240,7 @@ const filteredRules = computed(() => {
 const fetchRules = async () => {
   try {
     loading.value = true
-    const res = await axios.get('/api/workflows/rules')
+    const res = await api.get('/workflows/rules')
     rules.value = res.data.rules || []
   } catch (error) {
     console.error('Failed to fetch rules:', error)
@@ -251,7 +251,7 @@ const fetchRules = async () => {
 
 const fetchStats = async () => {
   try {
-    const res = await axios.get('/api/workflows/stats')
+    const res = await api.get('/workflows/stats')
     stats.value = res.data.rules || {}
     triggerTypes.value = { triggers: res.data.triggers_available || [], trigger_info: {} }
     actionTypes.value = { actions: res.data.actions_available || [], action_info: {} }
@@ -262,7 +262,7 @@ const fetchStats = async () => {
 
 const fetchTriggerTypes = async () => {
   try {
-    const res = await axios.get('/api/workflows/triggers')
+    const res = await api.get('/workflows/triggers')
     triggerTypes.value = res.data
   } catch (error) {
     console.error('Failed to fetch trigger types:', error)
@@ -271,7 +271,7 @@ const fetchTriggerTypes = async () => {
 
 const fetchActionTypes = async () => {
   try {
-    const res = await axios.get('/api/workflows/actions')
+    const res = await api.get('/workflows/actions')
     actionTypes.value = res.data
   } catch (error) {
     console.error('Failed to fetch action types:', error)
@@ -281,7 +281,7 @@ const fetchActionTypes = async () => {
 const initDefaultRules = async () => {
   try {
     initing.value = true
-    const res = await axios.post('/api/workflows/init-defaults')
+    const res = await api.post('/workflows/init-defaults')
     ElMessage.success(`初始化完成: ${res.data.created_count} 条规则`)
     await fetchRules()
     await fetchStats()
@@ -295,7 +295,7 @@ const initDefaultRules = async () => {
 
 const toggleRule = async (rule) => {
   try {
-    const res = await axios.patch(`/api/workflows/rules/${rule.id}/toggle`)
+    const res = await api.patch(`/workflows/rules/${rule.id}/toggle`)
     rule.is_active = res.data.is_active
     ElMessage.success(res.data.is_active ? '规则已启用' : '规则已禁用')
   } catch (error) {
@@ -358,7 +358,7 @@ const saveRule = async () => {
 
     if (editingRule.value) {
       // Update
-      await axios.put(`/api/workflows/rules/${editingRule.value.id}`, {
+      await api.put(`/workflows/rules/${editingRule.value.id}`, {
         name: ruleForm.value.name,
         description: ruleForm.value.description,
         trigger_type: ruleForm.value.trigger_type,
@@ -371,7 +371,7 @@ const saveRule = async () => {
       ElMessage.success('规则更新成功')
     } else {
       // Create
-      await axios.post('/api/workflows/rules', {
+      await api.post('/workflows/rules', {
         name: ruleForm.value.name,
         description: ruleForm.value.description,
         trigger_type: ruleForm.value.trigger_type,
@@ -400,7 +400,7 @@ const deleteRule = async (rule) => {
       type: 'warning'
     })
 
-    await axios.delete(`/api/workflows/rules/${rule.id}`)
+    await api.delete(`/workflows/rules/${rule.id}`)
     ElMessage.success('删除成功')
     await fetchRules()
   } catch (error) {
@@ -424,7 +424,7 @@ const testRule = async (rule) => {
       eventData = { maintenance_id: 1 }
     }
 
-    const res = await axios.post('/api/workflows/trigger', {
+    const res = await api.post('/workflows/trigger', {
       trigger_type: rule.trigger_type,
       event_data: eventData
     })

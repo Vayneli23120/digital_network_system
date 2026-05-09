@@ -243,7 +243,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Warning, Monitor, Calendar, Document } from '@element-plus/icons-vue'
-import axios from 'axios'
+import api from '@/api/request'
 
 // Data
 const dashboard = ref({})
@@ -281,7 +281,7 @@ const filteredHistory = computed(() => {
 // Methods
 const refreshDashboard = async () => {
   try {
-    const res = await axios.get('/api/ai/dashboard')
+    const res = await api.get('/ai/dashboard')
     dashboard.value = res.data
     providers.value = res.data.providers_available || []
   } catch (error) {
@@ -292,7 +292,7 @@ const refreshDashboard = async () => {
 const fetchHistory = async () => {
   try {
     historyLoading.value = true
-    const res = await axios.get('/api/ai/history', { params: { limit: 50 } })
+    const res = await api.get('/ai/history', { params: { limit: 50 } })
     history.value = res.data.history || []
   } catch (error) {
     console.error('Failed to fetch history:', error)
@@ -303,7 +303,7 @@ const fetchHistory = async () => {
 
 const fetchActiveFaults = async () => {
   try {
-    const res = await axios.get('/api/faults', {
+    const res = await api.get('/faults', {
       params: { status: 'open,investigating', limit: 50 }
     })
     activeFaults.value = res.data.items || []
@@ -314,7 +314,7 @@ const fetchActiveFaults = async () => {
 
 const fetchDevices = async () => {
   try {
-    const res = await axios.get('/api/devices', { params: { limit: 100 } })
+    const res = await api.get('/devices', { params: { limit: 100 } })
     devices.value = res.data.items || []
   } catch (error) {
     console.error('Failed to fetch devices:', error)
@@ -347,7 +347,7 @@ const analyzeFault = async () => {
 
   try {
     analyzing.value = true
-    const res = await axios.post(`/api/faults/${faultForm.value.fault_id}/analyze`, {
+    const res = await api.post(`/faults/${faultForm.value.fault_id}/analyze`, {
       auto_create_maintenance: faultForm.value.auto_create_maintenance
     })
 
@@ -378,7 +378,7 @@ const analyzeHealth = async () => {
 
   try {
     analyzing.value = true
-    const res = await axios.post('/api/ai/analyze-health', {
+    const res = await api.post('/ai/analyze-health', {
       device_id: healthForm.value.device_id,
       update_health_score: healthForm.value.update_health_score
     })
