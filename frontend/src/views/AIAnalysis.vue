@@ -50,7 +50,7 @@
             <div class="provider-name">{{ provider.provider }}</div>
             <div class="provider-model">{{ provider.model }}</div>
             <el-tag :type="provider.available ? 'success' : 'info'" size="small">
-              {{ provider.available ? '可用' : '未配置' }}
+              {{ provider.available ? t('aiProviderAvailable') : t('aiProviderNotConfigured') }}
             </el-tag>
           </div>
         </el-col>
@@ -65,28 +65,28 @@
           <div class="action-card" @click="openFaultAnalysisDialog">
             <el-icon size="32"><Warning /></el-icon>
             <div class="action-title">{{ t('aiAnalyzeFault') || '故障分析' }}</div>
-            <div class="action-desc">AI辅助故障根因分析</div>
+            <div class="action-desc">{{ t('aiFaultAnalysisDesc') }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openHealthAnalysisDialog">
             <el-icon size="32"><Monitor /></el-icon>
             <div class="action-title">{{ t('aiAnalyzeHealth') || '健康分析' }}</div>
-            <div class="action-desc">AI辅助健康评分</div>
+            <div class="action-desc">{{ t('aiHealthAnalysisDesc') }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openPMDialog">
             <el-icon size="32"><Calendar /></el-icon>
             <div class="action-title">{{ t('aiPredictive') || '预测性维护' }}</div>
-            <div class="action-desc">预测维护需求</div>
+            <div class="action-desc">{{ t('aiPredictiveDesc') }}</div>
           </div>
         </el-col>
         <el-col :span="6">
           <div class="action-card" @click="openSummaryDialog">
             <el-icon size="32"><Document /></el-icon>
             <div class="action-title">{{ t('aiSummary') || '维修总结' }}</div>
-            <div class="action-desc">生成维修报告</div>
+            <div class="action-desc">{{ t('aiSummaryDesc') }}</div>
           </div>
         </el-col>
       </el-row>
@@ -96,59 +96,60 @@
     <div class="history-section">
       <div class="section-header">
         <h3>{{ t('aiHistory') || '分析历史' }}</h3>
-        <el-select v-model="historyFilter" placeholder="类型筛选" clearable style="width: 150px">
-          <el-option label="故障分析" value="fault" />
-          <el-option label="健康分析" value="health" />
-          <el-option label="预测性维护" value="pm_recommend" />
-          <el-option label="维修总结" value="summary" />
+        <el-select v-model="historyFilter" :placeholder="t('aiFilterPlaceholder')" clearable style="width: 150px">
+          <el-option :label="t('aiTypeFilterAll')" value="" />
+          <el-option :label="t('aiTypeFilterFault')" value="fault" />
+          <el-option :label="t('aiTypeFilterHealth')" value="health" />
+          <el-option :label="t('aiTypeFilterPM')" value="pm_recommend" />
+          <el-option :label="t('aiTypeFilterSummary')" value="summary" />
         </el-select>
       </div>
 
       <el-table :data="filteredHistory" style="width: 100%" v-loading="historyLoading">
-        <el-table-column prop="analysis_type" label="类型" width="120">
+        <el-table-column prop="analysis_type" :label="t('aiColType')" width="120">
           <template #default="{ row }">
             {{ getTypeLabel(row.analysis_type) }}
           </template>
         </el-table-column>
-        <el-table-column prop="target_type" label="目标" width="100">
+        <el-table-column prop="target_type" :label="t('aiColTarget')" width="100">
           <template #default="{ row }">
             {{ getTargetLabel(row.target_type) }}
           </template>
         </el-table-column>
         <el-table-column prop="provider" label="Provider" width="120" />
-        <el-table-column prop="model" label="模型" width="140" />
-        <el-table-column prop="status" label="状态" width="100">
+        <el-table-column prop="model" :label="t('deviceModel')" width="140" />
+        <el-table-column prop="status" :label="t('aiColStatus')" width="100">
           <template #default="{ row }">
             <el-tag :type="row.status === 'completed' ? 'success' : 'danger'" size="small">
-              {{ row.status === 'completed' ? '成功' : '失败' }}
+              {{ row.status === 'completed' ? t('aiActionSuccess') : t('aiActionFailed') }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="confidence" label="置信度" width="100">
+        <el-table-column prop="confidence" :label="t('aiColConfidence')" width="100">
           <template #default="{ row }">
             {{ row.confidence ? `${(row.confidence * 100).toFixed(0)}%` : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="processing_time_ms" label="耗时" width="100">
+        <el-table-column prop="processing_time_ms" :label="t('aiColDuration')" width="100">
           <template #default="{ row }">
             {{ row.processing_time_ms ? `${row.processing_time_ms}ms` : '-' }}
           </template>
         </el-table-column>
-        <el-table-column prop="tokens_used" label="Tokens" width="100" />
-        <el-table-column prop="cost" label="成本" width="100">
+        <el-table-column prop="tokens_used" :label="t('aiColTokens')" width="100" />
+        <el-table-column prop="cost" :label="t('aiColCost')" width="100">
           <template #default="{ row }">
             ¥{{ row.cost?.toFixed(4) || '0' }}
           </template>
         </el-table-column>
-        <el-table-column prop="created_at" label="时间" width="160">
+        <el-table-column prop="created_at" :label="t('aiColTime')" width="160">
           <template #default="{ row }">
             {{ formatTime(row.created_at) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="100" fixed="right">
+        <el-table-column :label="t('aiColAction')" width="100" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" size="small" link @click="viewAnalysisDetail(row)">
-              详情
+              {{ t('aiActionDetail') }}
             </el-button>
           </template>
         </el-table-column>
@@ -156,75 +157,75 @@
     </div>
 
     <!-- Fault Analysis Dialog -->
-    <el-dialog v-model="faultDialogVisible" title="故障AI分析" width="600px">
+    <el-dialog v-model="faultDialogVisible" :title="t('aiFaultAnalysisTitle')" width="600px">
       <el-form :model="faultForm" label-width="100px">
-        <el-form-item label="选择故障">
-          <el-select v-model="faultForm.fault_id" placeholder="选择要分析的故障" style="width: 100%">
+        <el-form-item :label="t('aiSelectFaultLabel')">
+          <el-select v-model="faultForm.fault_id" :placeholder="t('aiSelectFaultPlaceholder')" style="width: 100%">
             <el-option v-for="f in activeFaults" :key="f.id" :label="f.fault_no + ' - ' + f.device_name" :value="f.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="自动创建维修单">
+        <el-form-item :label="t('aiAutoCreateMaintenanceLabel')">
           <el-switch v-model="faultForm.auto_create_maintenance" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="faultDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="analyzeFault" :loading="analyzing">开始分析</el-button>
+        <el-button @click="faultDialogVisible = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="analyzeFault" :loading="analyzing">{{ t('aiAnalyze') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- Health Analysis Dialog -->
-    <el-dialog v-model="healthDialogVisible" title="设备健康AI分析" width="600px">
+    <el-dialog v-model="healthDialogVisible" :title="t('aiHealthAnalysisTitle')" width="600px">
       <el-form :model="healthForm" label-width="100px">
-        <el-form-item label="选择设备">
-          <el-select v-model="healthForm.device_id" placeholder="选择要分析的设备" style="width: 100%">
+        <el-form-item :label="t('aiSelectDeviceLabel')">
+          <el-select v-model="healthForm.device_id" :placeholder="t('aiSelectDevicePlaceholder')" style="width: 100%">
             <el-option v-for="d in devices" :key="d.id" :label="d.name + ' (' + d.ip + ')'" :value="d.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="更新健康评分">
+        <el-form-item :label="t('aiUpdateHealthScoreLabel')">
           <el-switch v-model="healthForm.update_health_score" />
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="healthDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="analyzeHealth" :loading="analyzing">开始分析</el-button>
+        <el-button @click="healthDialogVisible = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="analyzeHealth" :loading="analyzing">{{ t('aiAnalyze') }}</el-button>
       </template>
     </el-dialog>
 
     <!-- Analysis Result Dialog -->
-    <el-dialog v-model="resultDialogVisible" title="分析结果" width="800px">
+    <el-dialog v-model="resultDialogVisible" :title="t('aiResultTitle')" width="800px">
       <div v-if="analysisResult" class="analysis-result">
         <div class="result-header">
           <el-tag :type="analysisResult.success ? 'success' : 'danger'" size="large">
-            {{ analysisResult.success ? '分析成功' : '分析失败' }}
+            {{ analysisResult.success ? t('aiAnalysisSuccess') : t('aiAnalysisFailed') }}
           </el-tag>
           <span class="result-provider">{{ analysisResult.provider }} / {{ analysisResult.model }}</span>
         </div>
 
         <div v-if="analysisResult.result" class="result-content">
           <el-descriptions :column="2" border>
-            <el-descriptions-item label="分析类型">
+            <el-descriptions-item :label="t('aiColType')">
               {{ getTypeLabel(analysisResult.analysis_type) }}
             </el-descriptions-item>
-            <el-descriptions-item label="置信度">
+            <el-descriptions-item :label="t('aiColConfidence')">
               {{ analysisResult.confidence ? `${(analysisResult.confidence * 100).toFixed(0)}%` : '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="处理耗时">
+            <el-descriptions-item :label="t('aiColDuration')">
               {{ analysisResult.processing_time_ms ? `${analysisResult.processing_time_ms}ms` : '-' }}
             </el-descriptions-item>
-            <el-descriptions-item label="Token使用">
+            <el-descriptions-item :label="t('aiColTokens')">
               {{ analysisResult.tokens_used || '-' }}
             </el-descriptions-item>
           </el-descriptions>
 
           <div class="result-details">
-            <h4>分析结果详情</h4>
+            <h4>{{ t('aiAnalysisResult') }}</h4>
             <pre class="result-json">{{ JSON.stringify(analysisResult.result, null, 2) }}</pre>
           </div>
 
           <div v-if="analysisResult.created_maintenance_id" class="created-maintenance">
             <el-alert type="success" :closable="false">
-              已自动创建维修单: {{ analysisResult.created_maintenance_no }}
+              {{ t('aiCreatedMaintenance') }}: {{ analysisResult.created_maintenance_no }}
             </el-alert>
           </div>
         </div>
@@ -332,16 +333,16 @@ const openHealthAnalysisDialog = async () => {
 }
 
 const openPMDialog = () => {
-  ElMessage.info('预测性维护功能正在开发中')
+  ElMessage.info(t('aiPmDevMsg'))
 }
 
 const openSummaryDialog = () => {
-  ElMessage.info('维修总结功能正在开发中')
+  ElMessage.info(t('aiSummaryDevMsg'))
 }
 
 const analyzeFault = async () => {
   if (!faultForm.value.fault_id) {
-    ElMessage.warning('请选择要分析的故障')
+    ElMessage.warning(t('aiSelectFaultPrompt'))
     return
   }
 
@@ -356,14 +357,14 @@ const analyzeFault = async () => {
     faultDialogVisible.value = false
 
     if (res.success) {
-      ElMessage.success('AI分析完成')
+      ElMessage.success(t('aiAnalysisComplete'))
     } else {
-      ElMessage.error(res.error || '分析失败')
+      ElMessage.error(res.error || t('aiAnalysisFailed'))
     }
 
     await fetchHistory()
   } catch (error) {
-    ElMessage.error('分析请求失败')
+    ElMessage.error(t('aiRequestFailed'))
     console.error(error)
   } finally {
     analyzing.value = false
@@ -372,7 +373,7 @@ const analyzeFault = async () => {
 
 const analyzeHealth = async () => {
   if (!healthForm.value.device_id) {
-    ElMessage.warning('请选择要分析的设备')
+    ElMessage.warning(t('aiSelectDevicePrompt'))
     return
   }
 
@@ -388,12 +389,12 @@ const analyzeHealth = async () => {
     healthDialogVisible.value = false
 
     if (res.success) {
-      ElMessage.success('AI健康分析完成')
+      ElMessage.success(t('aiHealthAnalysisComplete'))
     }
 
     await fetchHistory()
   } catch (error) {
-    ElMessage.error('分析请求失败')
+    ElMessage.error(t('aiRequestFailed'))
     console.error(error)
   } finally {
     analyzing.value = false
@@ -402,23 +403,23 @@ const analyzeHealth = async () => {
 
 const viewAnalysisDetail = (row) => {
   // TODO: Fetch full analysis details
-  ElMessage.info('详情查看功能正在开发中')
+  ElMessage.info(t('aiDetailDevMsg'))
 }
 
 // Helper functions
 const getTypeLabel = (type) => {
   const labels = {
-    fault: '故障分析',
-    health: '健康分析',
-    pm_recommend: '预测性维护',
-    summary: '维修总结',
-    root_cause: '根因分析'
+    fault: t('aiTypeFaultAnalysis'),
+    health: t('aiTypeHealthAnalysis'),
+    pm_recommend: t('aiTypePredictive'),
+    summary: t('aiTypeSummary'),
+    root_cause: t('aiTypeRootCause')
   }
   return labels[type] || type
 }
 
 const getTargetLabel = (target) => {
-  const labels = { device: '设备', fault: '故障', maintenance: '维修' }
+  const labels = { device: t('aiTargetDevice'), fault: t('aiTargetFault'), maintenance: t('aiTargetMaintenance') }
   return labels[target] || target
 }
 

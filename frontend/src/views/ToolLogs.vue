@@ -56,9 +56,9 @@
         <div class="filter-bar">
           <select class="fselect" v-model="filterToolType" @change="loadLogs">
             <option value="">{{ t('toolAllTools') }}</option>
-            <option value="netmiko">Netmiko</option>
-            <option value="napalm">NAPALM</option>
-            <option value="jira">JIRA</option>
+            <option value="netmiko">{{ t('toolNetmiko') }}</option>
+            <option value="napalm">{{ t('toolNapalm') }}</option>
+            <option value="jira">{{ t('toolJira') }}</option>
           </select>
           <select class="fselect" v-model="filterStatus" @change="loadLogs">
             <option value="">{{ t('toolAllStatus') }}</option>

@@ -15,7 +15,7 @@
         </el-button>
         <el-button type="warning" @click="openConsoleDeploy">
           <el-icon><Connection /></el-icon>
-          Console
+          {{ t('consoleTitle') }}
         </el-button>
         <el-button type="primary" @click="showEditDialog = true">{{ t('deviceEdit') }}</el-button>
       </div>
@@ -27,9 +27,9 @@
       <div class="detail-main-card" v-loading="loading">
         <div class="detail-title">{{ t('deviceInfo') }}</div>
         <div class="detail-meta" v-if="device">
-          <span>IP: {{ device.ip || 'N/A' }}</span>
-          <span>型号: {{ device.model || 'N/A' }}</span>
-          <span>位置: {{ device.location || 'N/A' }}</span>
+          <span>{{ t('labelIp') }}: {{ device.ip || t('valueNa') }}</span>
+          <span>{{ t('labelModel') }}: {{ device.model || t('valueNa') }}</span>
+          <span>{{ t('labelLocation') }}: {{ device.location || t('valueNa') }}</span>
           <el-tag :type="getVendorTagType(device.vendor)" size="small">{{ getVendorText(device.vendor) }}</el-tag>
         </div>
 
@@ -37,7 +37,7 @@
         <div class="info-list" v-if="device">
           <div class="info-item">
             <span class="info-label">{{ t('deviceSerialNumber') }}</span>
-            <span class="info-value">{{ device.serial_number || 'N/A' }}</span>
+            <span class="info-value">{{ device.serial_number || t('valueNa') }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('deviceRole') }}</span>
@@ -49,7 +49,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('devicePurchaseDate') }}</span>
-            <span class="info-value">{{ device.purchase_date ? formatDate(device.purchase_date) : 'N/A' }}</span>
+            <span class="info-value">{{ device.purchase_date ? formatDate(device.purchase_date) : t('valueNa') }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('deviceLifeSpan') }}</span>
@@ -57,7 +57,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('devicePurchaseCost') }}</span>
-            <span class="info-value">{{ device.purchase_cost ? '¥' + device.purchase_cost.toLocaleString() : 'N/A' }}</span>
+            <span class="info-value">{{ device.purchase_cost ? '¥' + device.purchase_cost.toLocaleString() : t('valueNa') }}</span>
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('deviceLastBackup') }}</span>
@@ -65,7 +65,7 @@
           </div>
           <div class="info-item">
             <span class="info-label">{{ t('deviceSupplier') }}</span>
-            <span class="info-value">{{ device.vendor || 'N/A' }}</span>
+            <span class="info-value">{{ device.vendor || t('valueNa') }}</span>
           </div>
         </div>
       </div>
@@ -76,7 +76,7 @@
         <div class="action-list">
           <el-button type="primary" class="action-btn" @click="backupNow">{{ t('deviceBackupNow') }}</el-button>
           <el-button type="default" class="action-btn" @click="viewLatestConfig">{{ t('backupViewConfig') }}</el-button>
-          <el-button type="default" class="action-btn" @click="openConsoleDeploy">Console {{ t('deviceConsoleDeploy') }}</el-button>
+          <el-button type="default" class="action-btn" @click="openConsoleDeploy">{{ t('consoleTitle') }}</el-button>
           <el-button type="default" class="action-btn" @click="testConnection">{{ t('deviceConnectTest') }}</el-button>
           <el-button type="default" class="action-btn" @click="openMaintDialog">{{ t('maintAddRecord') }}</el-button>
           <el-button type="danger" class="action-btn" @click="confirmDeleteDevice" v-if="device">{{ t('deviceDelete') }}</el-button>
@@ -100,7 +100,7 @@
               </template>
             </el-table-column>
             <el-table-column prop="triggered_by" :label="t('backupTriggeredBy')" width="100">
-              <template #default="{ row }">{{ row.triggered_by || 'Auto' }}</template>
+              <template #default="{ row }">{{ row.triggered_by || t('backupTriggeredAuto') }}</template>
             </el-table-column>
             <el-table-column :label="t('deviceAction')" width="150">
               <template #default="{ row }">
@@ -361,7 +361,7 @@ const getMaintTypeText = (type) => ({ preventive: t('maintTypePreventive'), corr
 const getMaintTypeType = (type) => ({ preventive: 'success', corrective: 'warning', upgrade: 'info', emergency: 'danger' }[type] || '')
 
 const calculateLifeSpan = () => {
-  if (!device.value?.purchase_date) return 'N/A'
+  if (!device.value?.purchase_date) return t('valueNa')
   const purchase = new Date(device.value.purchase_date)
   const now = new Date()
   const years = Math.floor((now - purchase) / (365 * 24 * 60 * 60 * 1000))
