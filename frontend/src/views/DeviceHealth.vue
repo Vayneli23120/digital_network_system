@@ -124,14 +124,16 @@
             {{ formatTime(row.last_health_check) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="180" fixed="right">
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" size="small" @click="calculateDeviceHealth(row.id)">
-              {{ t('healthCalculate') || '计算' }}
-            </el-button>
-            <el-button type="info" size="small" @click="viewDeviceHealth(row.id)">
-              {{ t('healthViewHistory') || '历史' }}
-            </el-button>
+            <div class="operation-buttons">
+              <el-button type="primary" size="small" @click="calculateDeviceHealth(row.id)">
+                {{ t('healthCalculate') || '计算' }}
+              </el-button>
+              <el-button type="info" size="small" @click="viewDeviceHealth(row.id)">
+                {{ t('healthViewHistory') || '历史' }}
+              </el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -559,13 +561,11 @@ onMounted(() => {
 }
 
 /* Operations column buttons alignment */
-.el-table .el-button + .el-button {
-  margin-left: 8px;
-}
-
-.el-table-column--fixed-right .cell {
+.operation-buttons {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
 }
 </style>

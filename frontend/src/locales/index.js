@@ -1633,9 +1633,6 @@ export const languages = {
     logFileContentLoadFailed: '加载日志文件内容失败',
     logRealtimeStopped: '实时刷新已停止',
     logRealtimeStarted: '实时刷新已启动（每 3 秒自动刷新）'
-  },
-
-
 // Device Health
     healthTitle: '设备健康评分',
     healthCalculateAll: '批量计算',
@@ -1651,6 +1648,10 @@ export const languages = {
     healthViewHistory: '历史',
     healthHistoryTitle: '健康评分历史',
     healthNoHistory: '暂无历史记录',
+
+
+  },
+
 
     // AI Analysis
     aiTitle: 'AI分析中心',
