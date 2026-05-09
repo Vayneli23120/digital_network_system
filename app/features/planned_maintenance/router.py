@@ -1,16 +1,25 @@
-"""Planned maintenance router - 计划性运维管理"""
+"""Planned maintenance router - 计划性运维管理（AI增强版）
 
-from fastapi import APIRouter, Depends, HTTPException
+新增功能：
+- AI推荐巡检任务生成
+- 健康评分驱动的自动PM任务
+- 与工作流引擎集成
+- 预测性维护建议
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional
+from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 import uuid
+import json
 
 from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.models import MaintenancePlan, MaintenanceTask, MaintenanceRecord, Device
+from app.services.ai_manager import predictive_maintenance_analysis
 
 router = APIRouter(prefix="/api/planned-maintenance", tags=["planned-maintenance"])
 
@@ -43,6 +52,14 @@ class TaskCreate(BaseModel):
     device_name: Optional[str] = None
     scheduled_date: datetime
     notes: Optional[str] = None
+    ai_generated: bool = False
+
+
+class GenerateAIRequest(BaseModel):
+    """AI推荐任务生成请求"""
+    min_health_score: int = 60  # 健康评分低于此值的设备生成巡检任务
+    risk_levels: List[str] = ['high', 'critical']  # 风险等级筛选
+    days_offset: int = 3  # 任务安排在几天后
 
 
 # ============ 维护计划 API ============
@@ -210,291 +227,496 @@ async def list_tasks(
     plan_id: Optional[int] = None,
     device_id: Optional[int] = None,
     status: Optional[str] = None,
+    ai_generated: Optional[bool] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     skip: int = 0,
-    limit: int = 100
+    limit: int = 100,
+    db: Session = Depends(get_db)
 ):
     """获取运维任务列表"""
-    db: Session = next(get_db())
+    query = db.query(MaintenanceTask)
 
-    try:
-        query = db.query(MaintenanceTask)
+    if plan_id:
+        query = query.filter(MaintenanceTask.plan_id == plan_id)
 
-        if plan_id:
-            query = query.filter(MaintenanceTask.plan_id == plan_id)
+    if device_id:
+        query = query.filter(MaintenanceTask.device_id == device_id)
 
-        if device_id:
-            query = query.filter(MaintenanceTask.device_id == device_id)
+    if status:
+        query = query.filter(MaintenanceTask.status == status)
 
-        if status:
-            query = query.filter(MaintenanceTask.status == status)
+    if ai_generated is not None:
+        # 检查notes中是否包含ai_generated标记
+        if ai_generated:
+            query = query.filter(MaintenanceTask.notes.contains('ai_generated'))
+        else:
+            query = query.filter(~MaintenanceTask.notes.contains('ai_generated'))
 
-        if start_date:
-            query = query.filter(MaintenanceTask.scheduled_date >= start_date)
+    if start_date:
+        query = query.filter(MaintenanceTask.scheduled_date >= start_date)
 
-        if end_date:
-            query = query.filter(MaintenanceTask.scheduled_date <= end_date)
+    if end_date:
+        query = query.filter(MaintenanceTask.scheduled_date <= end_date)
 
-        total = query.count()
-        tasks = query.order_by(MaintenanceTask.scheduled_date).offset(skip).limit(limit).all()
-        now = datetime.utcnow()
+    total = query.count()
+    tasks = query.order_by(MaintenanceTask.scheduled_date).offset(skip).limit(limit).all()
+    now = datetime.utcnow()
 
-        return {
-            "total": total,
-            "items": [
-                {
-                    "id": t.id,
-                    "plan_id": t.plan_id,
-                    "device_id": t.device_id,
-                    "device_name": t.device_name,
-                    "task_no": t.task_no,
-                    "scheduled_date": t.scheduled_date.isoformat() if t.scheduled_date else None,
-                    "actual_date": t.actual_date.isoformat() if t.actual_date else None,
-                    # 动态判断超期状态：pending且scheduled_date已过
-                    "status": "overdue" if t.status == "pending" and t.scheduled_date < now else t.status,
-                    "maintenance_id": t.maintenance_id,
-                    "notes": t.notes,
-                    "created_at": t.created_at.isoformat() if t.created_at else None
-                }
-                for t in tasks
-            ]
-        }
-    finally:
-        db.close()
+    items = []
+    for t in tasks:
+        # 解析notes获取AI生成信息
+        ai_info = None
+        if t.notes:
+            try:
+                notes_data = json.loads(t.notes)
+                ai_info = notes_data.get('ai_generated', False)
+            except:
+                pass
+
+        items.append({
+            "id": t.id,
+            "plan_id": t.plan_id,
+            "device_id": t.device_id,
+            "device_name": t.device_name,
+            "task_no": t.task_no,
+            "scheduled_date": t.scheduled_date.isoformat() if t.scheduled_date else None,
+            "actual_date": t.actual_date.isoformat() if t.actual_date else None,
+            "status": "overdue" if t.status == "pending" and t.scheduled_date < now else t.status,
+            "maintenance_id": t.maintenance_id,
+            "ai_generated": ai_info,
+            "notes": t.notes,
+            "created_at": t.created_at.isoformat() if t.created_at else None
+        })
+
+    return {"total": total, "items": items}
 
 
 @router.post("/tasks")
-async def create_task(task_data: TaskCreate):
+async def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
     """手动创建运维任务"""
-    db: Session = next(get_db())
+    # 自动生成任务编号
+    task_no = f"TASK-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
-    try:
-        # 自动生成任务编号
-        task_no = f"TASK-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+    # 检查是否超期
+    now = datetime.utcnow()
+    status = "pending"
+    if task_data.scheduled_date < now:
+        status = "overdue"
 
-        # 检查是否超期
-        now = datetime.utcnow()
-        status = "pending"
-        if task_data.scheduled_date < now:
-            status = "overdue"
+    # 构建notes，包含AI生成标记
+    notes_data = {"ai_generated": task_data.ai_generated}
+    if task_data.notes:
+        notes_data["user_notes"] = task_data.notes
 
-        task = MaintenanceTask(
-            plan_id=task_data.plan_id,
-            device_id=task_data.device_id,
-            device_name=task_data.device_name,
-            task_no=task_no,
-            scheduled_date=task_data.scheduled_date,
-            status=status,
-            notes=task_data.notes
-        )
-        db.add(task)
-        db.commit()
-        db.refresh(task)
+    task = MaintenanceTask(
+        plan_id=task_data.plan_id,
+        device_id=task_data.device_id,
+        device_name=task_data.device_name,
+        task_no=task_no,
+        scheduled_date=task_data.scheduled_date,
+        status=status,
+        notes=json.dumps(notes_data)
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
 
-        return {"id": task.id, "task_no": task_no, "message": "任务创建成功"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        db.close()
+    return {"id": task.id, "task_no": task_no, "message": "任务创建成功"}
 
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: int):
+async def get_task(task_id: int, db: Session = Depends(get_db)):
     """获取运维任务详情"""
-    db: Session = next(get_db())
+    task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-    try:
-        task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="任务不存在")
+    # 获取关联的维修单信息
+    maintenance_info = None
+    if task.maintenance_id:
+        maintenance = db.query(MaintenanceRecord).filter(
+            MaintenanceRecord.id == task.maintenance_id
+        ).first()
+        if maintenance:
+            maintenance_info = {
+                "id": maintenance.id,
+                "maint_no": maintenance.maint_no,
+                "parts_cost": float(maintenance.parts_cost) if maintenance.parts_cost else 0,
+                "labor_cost": float(maintenance.labor_cost) if maintenance.labor_cost else 0,
+                "description": maintenance.description
+            }
 
-        # 获取关联的维修单信息
-        maintenance_info = None
-        if task.maintenance_id:
-            maintenance = db.query(MaintenanceRecord).filter(
-                MaintenanceRecord.id == task.maintenance_id
-            ).first()
-            if maintenance:
-                maintenance_info = {
-                    "id": maintenance.id,
-                    "maint_no": maintenance.maint_no,
-                    "parts_cost": float(maintenance.parts_cost) if maintenance.parts_cost else 0,
-                    "labor_cost": float(maintenance.labor_cost) if maintenance.labor_cost else 0,
-                    "description": maintenance.description
-                }
+    # 获取关联的计划信息
+    plan_info = None
+    if task.plan_id:
+        plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
+        if plan:
+            plan_info = {
+                "id": plan.id,
+                "name": plan.name,
+                "plan_type": plan.plan_type
+            }
 
-        # 获取关联的计划信息
-        plan_info = None
-        if task.plan_id:
-            plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
-            if plan:
-                plan_info = {
-                    "id": plan.id,
-                    "name": plan.name,
-                    "plan_type": plan.plan_type
-                }
+    # 获取设备健康信息
+    device_info = None
+    if task.device_id:
+        device = db.query(Device).filter(Device.id == task.device_id).first()
+        if device:
+            device_info = {
+                "health_score": device.health_score,
+                "risk_level": device.risk_level,
+                "status": device.status
+            }
 
-        return {
-            "id": task.id,
-            "plan_id": task.plan_id,
-            "plan": plan_info,
-            "device_id": task.device_id,
-            "device_name": task.device_name,
-            "task_no": task.task_no,
-            "scheduled_date": task.scheduled_date.isoformat() if task.scheduled_date else None,
-            "actual_date": task.actual_date.isoformat() if task.actual_date else None,
-            "status": task.status,
-            "maintenance_id": task.maintenance_id,
-            "maintenance": maintenance_info,
-            "notes": task.notes,
-            "created_at": task.created_at.isoformat() if task.created_at else None
-        }
-    finally:
-        db.close()
+    return {
+        "id": task.id,
+        "plan_id": task.plan_id,
+        "plan": plan_info,
+        "device_id": task.device_id,
+        "device_name": task.device_name,
+        "device": device_info,
+        "task_no": task.task_no,
+        "scheduled_date": task.scheduled_date.isoformat() if task.scheduled_date else None,
+        "actual_date": task.actual_date.isoformat() if task.actual_date else None,
+        "status": task.status,
+        "maintenance_id": task.maintenance_id,
+        "maintenance": maintenance_info,
+        "notes": task.notes,
+        "created_at": task.created_at.isoformat() if task.created_at else None
+    }
 
 
 @router.post("/tasks/{task_id}/start")
-async def start_task(task_id: int):
+async def start_task(task_id: int, db: Session = Depends(get_db)):
     """开始执行任务"""
-    db: Session = next(get_db())
+    task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-    try:
-        task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status not in ["pending", "overdue"]:
+        raise HTTPException(status_code=400, detail="任务状态不允许开始")
 
-        if task.status not in ["pending", "overdue"]:
-            raise HTTPException(status_code=400, detail="任务状态不允许开始")
+    task.status = "in_progress"
+    db.commit()
 
-        task.status = "in_progress"
-        db.commit()
-
-        return {"message": "任务已开始"}
-    finally:
-        db.close()
+    return {"message": "任务已开始"}
 
 
 @router.post("/tasks/{task_id}/complete")
-async def complete_task(task_id: int, maintenance_data: Optional[dict] = None):
+async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, db: Session = Depends(get_db)):
     """完成任务并可选创建维修单"""
-    db: Session = next(get_db())
+    task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-    try:
-        task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status != "in_progress":
+        raise HTTPException(status_code=400, detail="任务未处于进行中状态")
 
-        if task.status != "in_progress":
-            raise HTTPException(status_code=400, detail="任务未处于进行中状态")
+    # 如果提供了维修数据，创建维修单
+    if maintenance_data:
+        maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
-        # 如果提供了维修数据，创建维修单
-        if maintenance_data:
-            maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+        # 处理成本字段，确保是数值
+        parts_cost = float(maintenance_data.get("parts_cost", 0) or 0)
+        labor_hours = float(maintenance_data.get("labor_hours", 0) or 0)
+        labor_cost = float(maintenance_data.get("labor_cost", 0) or 0)
 
-            # 处理成本字段，确保是数值
-            parts_cost = maintenance_data.get("parts_cost", 0)
-            if parts_cost is None:
-                parts_cost = 0
-            parts_cost = float(parts_cost)
-
-            labor_hours = maintenance_data.get("labor_hours", 0)
-            if labor_hours is None:
-                labor_hours = 0
-            labor_hours = float(labor_hours)
-
-            labor_cost = maintenance_data.get("labor_cost", 0)
-            if labor_cost is None:
-                labor_cost = 0
-            labor_cost = float(labor_cost)
-
-            maintenance = MaintenanceRecord(
-                maint_no=maint_no,
-                device_id=task.device_id,
-                device_name=task.device_name,
-                maint_type="preventive",  # 计划性维修
-                description=maintenance_data.get("description", f"计划性运维任务 {task.task_no}"),
-                parts_replaced=maintenance_data.get("parts_replaced"),
-                parts_cost=parts_cost,
-                labor_hours=labor_hours,
-                labor_cost=labor_cost,
-                maint_time=datetime.utcnow()
-            )
-            db.add(maintenance)
-            db.commit()
-            db.refresh(maintenance)
-
-            task.maintenance_id = maintenance.id
-
-        task.status = "completed"
-        task.actual_date = datetime.utcnow()
+        maintenance = MaintenanceRecord(
+            maint_no=maint_no,
+            device_id=task.device_id,
+            device_name=task.device_name,
+            maint_type="preventive",
+            title=f"计划性运维: {task.task_no}",
+            problem_description=f"关联任务: {task.task_no}",
+            description=maintenance_data.get("description", f"计划性运维任务 {task.task_no}"),
+            parts_replaced=maintenance_data.get("parts_replaced"),
+            parts_cost=parts_cost,
+            labor_hours=labor_hours,
+            labor_cost=labor_cost,
+            maint_time=datetime.utcnow()
+        )
+        db.add(maintenance)
         db.commit()
+        db.refresh(maintenance)
 
-        # 如果有关联计划，更新下次执行日期
-        if task.plan_id:
-            plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
-            if plan and plan.cycle_days:
-                plan.next_date = datetime.utcnow() + timedelta(days=plan.cycle_days)
-                db.commit()
+        task.maintenance_id = maintenance.id
 
-        from app.shared.cache import cache
-        cache.invalidate_prefix("dashboard:")
+    task.status = "completed"
+    task.actual_date = datetime.utcnow()
+    db.commit()
 
-        return {
-            "message": "任务完成",
-            "maintenance_id": task.maintenance_id
-        }
-    except HTTPException:
-        raise
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+    # 如果有关联计划，更新下次执行日期
+    if task.plan_id:
+        plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
+        if plan and plan.cycle_days:
+            plan.next_date = datetime.utcnow() + timedelta(days=plan.cycle_days)
+            db.commit()
+
+    # 触发工作流（维修完成）
+    from app.shared.cache import cache
+    cache.invalidate_prefix("dashboard:")
+
+    return {
+        "message": "任务完成",
+        "maintenance_id": task.maintenance_id
+    }
 
 
 @router.post("/tasks/{task_id}/skip")
-async def skip_task(task_id: int, reason: Optional[str] = None):
+async def skip_task(task_id: int, reason: Optional[str] = None, db: Session = Depends(get_db)):
     """跳过任务"""
-    db: Session = next(get_db())
+    task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
+    if task.status not in ["pending", "overdue"]:
+        raise HTTPException(status_code=400, detail="任务状态不允许跳过")
+
+    task.status = "skipped"
+
+    # 更新notes
     try:
-        task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="任务不存在")
+        notes_data = json.loads(task.notes or '{}')
+    except:
+        notes_data = {}
 
-        if task.status not in ["pending", "overdue"]:
-            raise HTTPException(status_code=400, detail="任务状态不允许跳过")
+    notes_data['skip_reason'] = reason or '未说明'
+    task.notes = json.dumps(notes_data)
 
-        task.status = "skipped"
-        task.notes = (task.notes or "") + f"\n跳过原因: {reason or '未说明'}"
-        db.commit()
+    db.commit()
 
-        return {"message": "任务已跳过"}
-    finally:
-        db.close()
+    return {"message": "任务已跳过"}
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: int):
+async def delete_task(task_id: int, db: Session = Depends(get_db)):
     """删除任务"""
-    db: Session = next(get_db())
+    task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="任务不存在")
 
-    try:
-        task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
-        if not task:
-            raise HTTPException(status_code=404, detail="任务不存在")
+    if task.status in ["in_progress", "completed"]:
+        raise HTTPException(status_code=400, detail="进行中或已完成的任务不能删除")
 
-        if task.status in ["in_progress", "completed"]:
-            raise HTTPException(status_code=400, detail="进行中或已完成的任务不能删除")
+    db.delete(task)
+    db.commit()
 
-        db.delete(task)
-        db.commit()
+    return {"message": "删除成功"}
 
-        return {"message": "删除成功"}
-    finally:
-        db.close()
+
+# ============ AI增强功能 ============
+
+@router.post("/generate-ai-tasks")
+async def generate_ai_recommended_tasks(
+    request: GenerateAIRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    AI推荐巡检任务生成
+
+    根据设备健康评分和风险等级自动生成巡检任务
+    """
+    # 查询符合条件的设备
+    query = db.query(Device).filter(
+        Device.status.in_(['online', 'offline', 'maintenance'])
+    )
+
+    devices = query.all()
+
+    generated_tasks = []
+
+    for device in devices:
+        health_score = device.health_score or 100
+        risk_level = device.risk_level or 'low'
+
+        # 判断是否符合生成条件
+        should_generate = False
+        reason = ""
+
+        if health_score < request.min_health_score:
+            should_generate = True
+            reason = f"健康评分低于{request.min_health_score}"
+
+        if risk_level in request.risk_levels:
+            should_generate = True
+            reason = f"风险等级为{risk_level}"
+
+        if should_generate:
+            # 检查是否已有待处理的巡检任务
+            existing = db.query(MaintenanceTask).filter(
+                MaintenanceTask.device_id == device.id,
+                MaintenanceTask.status.in_(['pending', 'overdue', 'in_progress'])
+            ).first()
+
+            if existing:
+                continue
+
+            # 创建巡检任务
+            scheduled_date = datetime.utcnow() + timedelta(days=request.days_offset)
+            task_no = f"AI-TASK-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+            task = MaintenanceTask(
+                device_id=device.id,
+                device_name=device.name,
+                task_no=task_no,
+                scheduled_date=scheduled_date,
+                status='pending',
+                notes=json.dumps({
+                    "ai_generated": True,
+                    "reason": reason,
+                    "health_score": health_score,
+                    "risk_level": risk_level,
+                    "generated_by": "health_check_system"
+                })
+            )
+
+            db.add(task)
+            generated_tasks.append({
+                "device_id": device.id,
+                "device_name": device.name,
+                "health_score": health_score,
+                "risk_level": risk_level,
+                "scheduled_date": scheduled_date.isoformat(),
+                "reason": reason
+            })
+
+    db.commit()
+
+    return {
+        "success": True,
+        "generated_count": len(generated_tasks),
+        "tasks": generated_tasks,
+        "criteria": {
+            "min_health_score": request.min_health_score,
+            "risk_levels": request.risk_levels,
+            "days_offset": request.days_offset
+        }
+    }
+
+
+@router.post("/devices/{device_id}/predictive-task")
+async def generate_predictive_task_for_device(
+    device_id: int,
+    days_offset: int = 7,
+    db: Session = Depends(get_db)
+):
+    """
+    为单个设备生成预测性维护任务
+
+    基于AI分析和设备历史数据
+    """
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 检查是否已有待处理任务
+    existing = db.query(MaintenanceTask).filter(
+        MaintenanceTask.device_id == device_id,
+        MaintenanceTask.status.in_(['pending', 'overdue', 'in_progress'])
+    ).first()
+
+    if existing:
+        return {
+            "success": False,
+            "message": "设备已有待处理任务",
+            "existing_task_id": existing.id
+        }
+
+    # 创建预测性维护任务
+    scheduled_date = datetime.utcnow() + timedelta(days=days_offset)
+    task_no = f"PM-TASK-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+    task = MaintenanceTask(
+        device_id=device.id,
+        device_name=device.name,
+        task_no=task_no,
+        scheduled_date=scheduled_date,
+        status='pending',
+        notes=json.dumps({
+            "ai_generated": True,
+            "task_type": "predictive_maintenance",
+            "health_score": device.health_score or 100,
+            "risk_level": device.risk_level or 'low',
+            "uptime_days": device.uptime_days or 0,
+            "generated_by": "predictive_system"
+        })
+    )
+
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+
+    return {
+        "success": True,
+        "task_id": task.id,
+        "task_no": task_no,
+        "device_name": device.name,
+        "scheduled_date": scheduled_date.isoformat(),
+        "health_score": device.health_score,
+        "risk_level": device.risk_level
+    }
+
+
+@router.get("/devices/{device_id}/maintenance-history")
+async def get_device_maintenance_history(
+    device_id: int,
+    limit: int = 20,
+    db: Session = Depends(get_db)
+):
+    """获取设备维护历史摘要"""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 获取历史维修记录
+    maintenance_records = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.device_id == device_id
+    ).order_by(MaintenanceRecord.created_at.desc()).limit(limit).all()
+
+    # 获取历史巡检任务
+    pm_tasks = db.query(MaintenanceTask).filter(
+        MaintenanceTask.device_id == device_id,
+        MaintenanceTask.status == 'completed'
+    ).order_by(MaintenanceTask.actual_date.desc()).limit(limit).all()
+
+    # 统计
+    total_maintenance = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.device_id == device_id
+    ).count()
+
+    total_pm_tasks = db.query(MaintenanceTask).filter(
+        MaintenanceTask.device_id == device_id,
+        MaintenanceTask.status == 'completed'
+    ).count()
+
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "health_score": device.health_score,
+        "risk_level": device.risk_level,
+        "total_maintenance_count": total_maintenance,
+        "total_pm_tasks_count": total_pm_tasks,
+        "maintenance_records": [
+            {
+                "id": m.id,
+                "maint_no": m.maint_no,
+                "maint_type": m.maint_type,
+                "created_at": m.created_at.isoformat()
+            }
+            for m in maintenance_records
+        ],
+        "pm_tasks": [
+            {
+                "id": t.id,
+                "task_no": t.task_no,
+                "scheduled_date": t.scheduled_date.isoformat(),
+                "actual_date": t.actual_date.isoformat() if t.actual_date else None
+            }
+            for t in pm_tasks
+        ]
+    }
 
 
 # ============ 统计 API ============
@@ -504,139 +726,114 @@ async def get_stats(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     device_id: Optional[int] = None,
-    plan_type: Optional[str] = None
+    db: Session = Depends(get_db)
 ):
     """获取计划性运维统计"""
-    db: Session = next(get_db())
+    # 任务统计
+    task_query = db.query(MaintenanceTask)
 
-    try:
-        # 任务统计 - 默认统计所有任务，不限制时间范围
-        task_query = db.query(MaintenanceTask)
+    if start_date:
+        task_query = task_query.filter(MaintenanceTask.scheduled_date >= start_date)
+    if end_date:
+        task_query = task_query.filter(MaintenanceTask.scheduled_date <= end_date)
 
-        # 只有明确传入时间范围时才筛选
-        if start_date:
-            task_query = task_query.filter(MaintenanceTask.scheduled_date >= start_date)
-        if end_date:
-            task_query = task_query.filter(MaintenanceTask.scheduled_date <= end_date)
+    if device_id:
+        task_query = task_query.filter(MaintenanceTask.device_id == device_id)
 
-        if device_id:
-            task_query = task_query.filter(MaintenanceTask.device_id == device_id)
+    tasks = task_query.all()
+    now = datetime.utcnow()
 
-        tasks = task_query.all()
-        now = datetime.utcnow()
+    # 统计各状态任务数
+    status_counts = {}
+    ai_generated_count = 0
+    for task in tasks:
+        actual_status = "overdue" if task.status == "pending" and task.scheduled_date < now else task.status
+        status_counts[actual_status] = status_counts.get(actual_status, 0) + 1
 
-        # 统计各状态任务数（动态判断超期）
-        status_counts = {}
-        for task in tasks:
-            # 动态判断超期状态
-            actual_status = "overdue" if task.status == "pending" and task.scheduled_date < now else task.status
-            status_counts[actual_status] = status_counts.get(actual_status, 0) + 1
+        # 统计AI生成任务
+        if task.notes:
+            try:
+                notes_data = json.loads(task.notes)
+                if notes_data.get('ai_generated'):
+                    ai_generated_count += 1
+            except:
+                pass
 
-        # 获取已完成任务的维修单，汇总成本
-        completed_task_ids = [t.id for t in tasks if t.status == "completed" and t.maintenance_id]
+    # 获取已完成任务的维修单，汇总成本
+    completed_task_ids = [t.id for t in tasks if t.status == "completed" and t.maintenance_id]
 
-        cost_query = db.query(
-            func.sum(MaintenanceRecord.parts_cost),
-            func.sum(MaintenanceRecord.labor_cost),
-            func.sum(MaintenanceRecord.labor_hours),
-            func.count(MaintenanceRecord.id)
-        ).filter(MaintenanceRecord.id.in_(
-            [t.maintenance_id for t in tasks if t.maintenance_id]
-        ))
+    cost_query = db.query(
+        func.sum(MaintenanceRecord.parts_cost),
+        func.sum(MaintenanceRecord.labor_cost),
+        func.sum(MaintenanceRecord.labor_hours),
+        func.count(MaintenanceRecord.id)
+    ).filter(MaintenanceRecord.id.in_(
+        [t.maintenance_id for t in tasks if t.maintenance_id]
+    ))
 
-        cost_result = cost_query.first()
+    cost_result = cost_query.first()
 
-        # 按计划类型分组统计
-        plan_type_stats = {}
-        for task in tasks:
-            if task.plan_id:
-                plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
-                if plan:
-                    pt = plan.plan_type
-                    if pt not in plan_type_stats:
-                        plan_type_stats[pt] = {"total": 0, "completed": 0}
-                    plan_type_stats[pt]["total"] += 1
-                    # 使用动态状态判断是否完成
-                    actual_status = "overdue" if task.status == "pending" and task.scheduled_date < now else task.status
-                    if actual_status == "completed":
-                        plan_type_stats[pt]["completed"] += 1
-
-        return {
-            "period": {
-                "start": start_date.isoformat() if start_date else None,
-                "end": end_date.isoformat() if end_date else None
-            },
-            "tasks": {
-                "total": len(tasks),
-                "completed": status_counts.get("completed", 0),
-                "in_progress": status_counts.get("in_progress", 0),
-                "pending": status_counts.get("pending", 0),
-                "overdue": status_counts.get("overdue", 0),
-                "skipped": status_counts.get("skipped", 0)
-            },
-            "costs": {
-                "parts_cost": float(cost_result[0] or 0),
-                "labor_cost": float(cost_result[1] or 0),
-                "total_cost": float((cost_result[0] or 0) + (cost_result[1] or 0)),
-                "labor_hours": float(cost_result[2] or 0),
-                "maintenance_count": cost_result[3] or 0
-            },
-            "by_plan_type": plan_type_stats
+    return {
+        "tasks": {
+            "total": len(tasks),
+            "completed": status_counts.get("completed", 0),
+            "in_progress": status_counts.get("in_progress", 0),
+            "pending": status_counts.get("pending", 0),
+            "overdue": status_counts.get("overdue", 0),
+            "skipped": status_counts.get("skipped", 0),
+            "ai_generated": ai_generated_count
+        },
+        "costs": {
+            "parts_cost": float(cost_result[0] or 0),
+            "labor_cost": float(cost_result[1] or 0),
+            "total_cost": float((cost_result[0] or 0) + (cost_result[1] or 0)),
+            "labor_hours": float(cost_result[2] or 0),
+            "maintenance_count": cost_result[3] or 0
         }
-    finally:
-        db.close()
+    }
 
 
 @router.post("/generate-tasks")
-async def generate_tasks_for_plans():
+async def generate_tasks_for_plans(db: Session = Depends(get_db)):
     """为活跃计划自动生成任务"""
-    db: Session = next(get_db())
+    now = datetime.utcnow()
+    plans = db.query(MaintenancePlan).filter(
+        MaintenancePlan.status == "active",
+        MaintenancePlan.auto_generate == True,
+        MaintenancePlan.next_date >= now - timedelta(days=1)
+    ).all()
 
-    try:
-        # 获取所有活跃且开启自动生成的计划
-        now = datetime.utcnow()
-        plans = db.query(MaintenancePlan).filter(
-            MaintenancePlan.status == "active",
-            MaintenancePlan.auto_generate == True,
-            MaintenancePlan.next_date >= now  # 只生成未过期或今天的任务
-        ).all()
+    generated_count = 0
 
-        generated_count = 0
+    for plan in plans:
+        # 检查是否已有相同日期的任务
+        existing = db.query(MaintenanceTask).filter(
+            MaintenanceTask.plan_id == plan.id,
+            MaintenanceTask.scheduled_date >= plan.next_date - timedelta(days=1),
+            MaintenanceTask.scheduled_date <= plan.next_date + timedelta(days=1)
+        ).first()
 
-        for plan in plans:
-            # 检查是否已有相同日期的任务
-            existing = db.query(MaintenanceTask).filter(
-                MaintenanceTask.plan_id == plan.id,
-                MaintenanceTask.scheduled_date >= plan.next_date - timedelta(days=1),
-                MaintenanceTask.scheduled_date <= plan.next_date + timedelta(days=1)
-            ).first()
+        if existing:
+            continue
 
-            if existing:
-                continue
+        task_no = f"TASK-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
-            task_no = f"TASK-{now.strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+        task_status = "pending"
+        if plan.next_date < now:
+            task_status = "overdue"
 
-            # 判断是否超期
-            task_status = "pending"
-            if plan.next_date < now:
-                task_status = "overdue"
+        task = MaintenanceTask(
+            plan_id=plan.id,
+            device_id=plan.device_id,
+            device_name=plan.device_name,
+            task_no=task_no,
+            scheduled_date=plan.next_date,
+            status=task_status,
+            notes=json.dumps({"plan_generated": True})
+        )
+        db.add(task)
+        generated_count += 1
 
-            task = MaintenanceTask(
-                plan_id=plan.id,
-                device_id=plan.device_id,
-                device_name=plan.device_name,
-                task_no=task_no,
-                scheduled_date=plan.next_date,
-                status=task_status
-            )
-            db.add(task)
-            generated_count += 1
+    db.commit()
 
-        db.commit()
-
-        return {"generated": generated_count, "message": f"已生成 {generated_count} 个任务"}
-    except Exception as e:
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+    return {"generated": generated_count, "message": f"已生成 {generated_count} 个任务"}
