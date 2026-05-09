@@ -1632,8 +1632,8 @@ export const languages = {
     logFilesLoadFailed: '加载日志文件列表失败',
     logFileContentLoadFailed: '加载日志文件内容失败',
     logRealtimeStopped: '实时刷新已停止',
-    logRealtimeStarted: '实时刷新已启动（每 3 秒自动刷新）'
-// Device Health
+    logRealtimeStarted: '实时刷新已启动（每 3 秒自动刷新）',
+    // Device Health
     healthTitle: '设备健康评分',
     healthCalculateAll: '批量计算',
     healthTotalDevices: '总设备数',
