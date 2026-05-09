@@ -60,7 +60,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor } from '@element-plus/icons-vue'
+import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation } from '@element-plus/icons-vue'
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -99,6 +99,9 @@ const sidebarGroups = computed(() => {
         items: [
           { path: '/', text: t('menuDashboard'), icon: DataBoard },
           { path: '/monitor-screen', text: t('menuMonitorScreen'), icon: Monitor },
+          { path: '/device-health', text: t('menuDeviceHealth') || '设备健康', icon: TrendCharts },
+          { path: '/ai-analysis', text: t('menuAIAnalysis') || 'AI分析中心', icon: Cpu },
+          { path: '/workflows', text: t('menuWorkflows') || '自动化工作流', icon: Operation },
         ]
       }
     ],
@@ -154,7 +157,7 @@ const sidebarGroups = computed(() => {
 // Sync top tab based on current route
 watch(route, (newRoute) => {
   const path = newRoute.path
-  if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/monitor-screen')) {
+  if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/monitor-screen') || path.startsWith('/device-health') || path.startsWith('/ai-analysis') || path.startsWith('/workflows')) {
     activeTopTab.value = 'dashboard'
   } else if (path.startsWith('/devices') || path.startsWith('/discovery') || path.startsWith('/backups') || path.startsWith('/faults') || path.startsWith('/maintenance') || path.startsWith('/planned-maintenance')) {
     activeTopTab.value = 'devices'

@@ -277,6 +277,48 @@ const routes = [
       }
     ]
   },
+  // v1.5 AI增强运维 - 设备健康评分
+  {
+    path: '/device-health',
+    name: 'DeviceHealthLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'DeviceHealth',
+        component: () => import('@/views/DeviceHealth.vue'),
+        meta: { title: '设备健康评分' }
+      }
+    ]
+  },
+  // v1.5 AI增强运维 - AI分析中心
+  {
+    path: '/ai-analysis',
+    name: 'AIAnalysisLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'AIAnalysis',
+        component: () => import('@/views/AIAnalysis.vue'),
+        meta: { title: 'AI分析中心' }
+      }
+    ]
+  },
+  // v1.5 AI增强运维 - 工作流管理
+  {
+    path: '/workflows',
+    name: 'WorkflowsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Workflows',
+        component: () => import('@/views/Workflows.vue'),
+        meta: { title: '自动化工作流' }
+      }
+    ]
+  },
   // 扫码枪终端页面（无需Layout）
   {
     path: '/scanner',
