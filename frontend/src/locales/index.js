@@ -670,6 +670,10 @@ export const languages = {
     deviceImportStatus: 'status (状态：online/offline/maintenance/retired)',
     deviceImportCredGroup: 'credential_group (账号组名称)',
     deviceUploadDrag: '将文件拖到此处，或点击上传',
+    deviceTooltipView: '查看详情',
+    deviceTooltipBackup: '立即备份',
+    deviceActionEdit: '编辑',
+    deviceActionDelete: '删除',
     deviceUploadTip: '只能上传 xlsx / csv 文件',
     deviceConfirmImport: '确定导入',
 
@@ -2627,6 +2631,10 @@ export const languages = {
     deviceImportStatus: 'status (status: online/offline/maintenance/retired)',
     deviceImportCredGroup: 'credential_group (credential group name)',
     deviceUploadDrag: 'Drag file here, or click to upload',
+    deviceTooltipView: 'View Details',
+    deviceTooltipBackup: 'Backup Now',
+    deviceActionEdit: 'Edit',
+    deviceActionDelete: 'Delete',
     deviceUploadTip: 'Only xlsx / csv files allowed',
     deviceConfirmImport: 'Confirm Import',
 

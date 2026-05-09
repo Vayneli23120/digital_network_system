@@ -148,7 +148,7 @@
         :row-class-name="tableRowClassName"
       >
         <el-table-column v-if="selectMode" type="selection" width="55" />
-        <el-table-column prop="name" :label="t('deviceName')" width="180">
+        <el-table-column prop="name" :label="t('deviceName')" min-width="150" show-overflow-tooltip>
           <template #default="{ row }">
             <router-link :to="`/devices/${row.id}`" class="device-name-link">
               <span class="device-name-text">{{ row.name }}</span>
@@ -156,53 +156,44 @@
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="ip" :label="t('deviceIp')" width="140" />
-        <el-table-column prop="model" :label="t('deviceModel')" width="200" />
-        <el-table-column prop="serial_number" :label="t('deviceSerialNumber')" width="160" />
-        <el-table-column prop="location" :label="t('deviceLocation')" />
-        <el-table-column prop="credential_group" :label="t('deviceCredentialGroup')" width="120" />
-        <el-table-column prop="status" :label="t('deviceStatus')" width="100">
+        <el-table-column prop="ip" :label="t('deviceIp')" width="120" />
+        <el-table-column prop="status" :label="t('deviceStatus')" width="80">
           <template #default="{ row }">
             <el-tag :type="getStatusType(row.status)" size="small" class="status-tag">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="vendor" :label="t('deviceVendor')" width="100">
+        <el-table-column prop="location" :label="t('deviceLocation')" min-width="100" show-overflow-tooltip />
+        <el-table-column prop="model" :label="t('deviceModel')" width="100" show-overflow-tooltip />
+        <el-table-column :label="t('deviceAction')" width="120" fixed="right">
           <template #default="{ row }">
-            <el-tag size="small">{{ row.vendor || 'Cisco' }}</el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="role" :label="t('deviceRole')" width="100">
-          <template #default="{ row }">
-            <el-tag :type="getRoleType(row.role)" size="small">
-              {{ getRoleText(row.role) }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column :label="t('deviceAction')" width="280" fixed="right" align="center">
-          <template #default="{ row }">
-            <div class="action-icons">
-              <el-tooltip content="详情" placement="top">
-                <el-button type="primary" link @click="viewDevice(row.id)" class="action-icon">
+            <div class="action-cell">
+              <el-tooltip :content="t('deviceTooltipView')" placement="top">
+                <el-button type="primary" link size="small" @click="viewDevice(row.id)" class="action-btn">
                   <el-icon><View /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip content="备份" placement="top">
-                <el-button type="success" link @click="backupDevice(row)" class="action-icon">
+              <el-tooltip :content="t('deviceTooltipBackup')" placement="top">
+                <el-button type="success" link size="small" @click="backupDevice(row)" class="action-btn">
                   <el-icon><Download /></el-icon>
                 </el-button>
               </el-tooltip>
-              <el-tooltip content="编辑" placement="top">
-                <el-button type="warning" link @click="editDevice(row)" class="action-icon">
-                  <el-icon><Edit /></el-icon>
+              <el-dropdown trigger="click" @command="(cmd) => handleAction(cmd, row)">
+                <el-button type="info" link size="small" class="action-btn">
+                  <el-icon><More /></el-icon>
                 </el-button>
-              </el-tooltip>
-              <el-tooltip content="删除" placement="top">
-                <el-button type="danger" link @click="deleteDevice(row)" class="action-icon">
-                  <el-icon><Delete /></el-icon>
-                </el-button>
-              </el-tooltip>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="edit">
+                      <el-icon><Edit /></el-icon> {{ t('deviceActionEdit') }}
+                    </el-dropdown-item>
+                    <el-dropdown-item command="delete" divided>
+                      <span class="delete-action"><el-icon><Delete /></el-icon> {{ t('deviceActionDelete') }}</span>
+                    </el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
             </div>
           </template>
         </el-table-column>
@@ -328,7 +319,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight } from '@element-plus/icons-vue'
+import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, More } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -483,6 +474,14 @@ const loadCredentialGroups = async () => {
 
 const viewDevice = (id) => {
   router.push(`/devices/${id}`)
+}
+
+const handleAction = (command, row) => {
+  if (command === 'edit') {
+    editDevice(row)
+  } else if (command === 'delete') {
+    deleteDevice(row)
+  }
 }
 
 const backupDevice = async (row) => {
@@ -898,19 +897,46 @@ onMounted(() => {
   font-weight: 500;
 }
 
-/* 操作图标 */
-.action-icons {
-  display: flex;
-  gap: 4px;
+/* Fixed列背景修复 */
+.modern-table :deep(.el-table__fixed-right) {
+  background: var(--bg-card) !important;
 }
 
-.action-icon {
+.modern-table :deep(.el-table__fixed-right-patch) {
+  background: var(--bg-card) !important;
+}
+
+.modern-table :deep(.el-table-fixed-column--right) {
+  background: var(--bg-card);
+}
+
+.modern-table :deep(.el-table__fixed-right .el-table__row:hover td) {
+  background: var(--bg-hover) !important;
+}
+
+/* 操作单元格 */
+.action-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-card);
+  padding: 4px 8px;
+}
+
+.action-btn {
   padding: 4px;
 }
 
-.action-icon:hover {
+.action-btn:hover {
   background: var(--bg-tertiary);
   border-radius: 6px;
+}
+
+.delete-action {
+  color: var(--accent-danger);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 /* 分页 */
