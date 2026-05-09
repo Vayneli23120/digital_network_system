@@ -1,123 +1,221 @@
 <template>
   <div class="faults-page">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>{{ t('faultTitle') }}</span>
-          <el-button type="primary" @click="showAddDialog = true">
-            <el-icon><Plus /></el-icon>
-            {{ t('faultAdd') }}
-          </el-button>
+    <!-- 顶部统计 Dashboard -->
+    <section class="stats-dashboard">
+      <div class="stats-header">
+        <span class="stats-title">{{ t('faultStatsTitle') }}</span>
+        <button class="refresh-btn" @click="loadFaults" :disabled="loading">
+          <el-icon><Refresh /></el-icon>
+        </button>
+      </div>
+      <div class="stats-grid">
+        <!-- 总故障 -->
+        <div class="stat-card total" @click="filterByStatus('')">
+          <div class="card-icon">
+            <el-icon><Document /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.total }}</div>
+            <div class="metric-label">{{ t('faultStatsTotal') }}</div>
+          </div>
         </div>
-      </template>
+        <!-- 待处理 -->
+        <div class="stat-card pending" @click="filterByStatus('open')">
+          <div class="card-icon">
+            <el-icon><Clock /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.open }}</div>
+            <div class="metric-label">{{ t('faultStatsOpen') }}</div>
+          </div>
+        </div>
+        <!-- 调查中 -->
+        <div class="stat-card investigating" @click="filterByStatus('investigating')">
+          <div class="card-icon">
+            <el-icon><Search /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.investigating }}</div>
+            <div class="metric-label">{{ t('faultStatsInvestigating') }}</div>
+          </div>
+        </div>
+        <!-- 已解决 -->
+        <div class="stat-card resolved" @click="filterByStatus('resolved')">
+          <div class="card-icon">
+            <el-icon><CircleCheck /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.resolved }}</div>
+            <div class="metric-label">{{ t('faultStatsResolved') }}</div>
+          </div>
+        </div>
+        <!-- 已关闭 -->
+        <div class="stat-card closed" @click="filterByStatus('closed')">
+          <div class="card-icon">
+            <el-icon><SuccessFilled /></el-icon>
+          </div>
+          <div class="card-body">
+            <div class="metric-value">{{ stats.closed }}</div>
+            <div class="metric-label">{{ t('faultStatsClosed') }}</div>
+          </div>
+        </div>
+      </div>
+    </section>
 
-      <!-- 筛选栏 -->
-      <div class="filter-bar">
+    <!-- 高级筛选工具栏 -->
+    <section class="filter-section">
+      <div class="filter-toolbar">
+        <!-- 搜索框 -->
         <el-input
           v-model="searchText"
           :placeholder="t('faultSearchPlaceholder')"
-          style="width: 220px"
+          class="search-input"
           clearable
           @input="filterFaults"
         >
           <template #prefix><el-icon><Search /></el-icon></template>
         </el-input>
-        <el-select v-model="filterSeverity" :placeholder="t('faultLevel')" clearable style="width: 140px" @change="filterFaults">
-          <el-option :label="t('dashCritical')" value="critical" />
-          <el-option :label="t('dashMajor')" value="major" />
-          <el-option :label="t('dashMinor')" value="minor" />
-          <el-option :label="t('dashWarning')" value="warning" />
-        </el-select>
-        <el-select v-model="filterStatus" :placeholder="t('faultStatus')" clearable style="width: 120px" @change="filterFaults">
-          <el-option :label="t('faultStatusOpen')" value="open" />
-          <el-option :label="t('faultStatusInvestigating')" value="investigating" />
-          <el-option :label="t('faultStatusResolved')" value="resolved" />
-          <el-option :label="t('faultStatusClosed')" value="closed" />
-        </el-select>
-        <el-date-picker
-          v-model="dateRange"
-          type="daterange"
-          :range-separator="t('faultToDate')"
-          :start-placeholder="t('faultStartDate')"
-          :end-placeholder="t('faultEndDate')"
-          value-format="YYYY-MM-DD"
-          style="width: 240px"
-          @change="filterFaults"
-        />
-        <el-select v-model="sortBy" :placeholder="t('faultSort')" style="width: 150px" @change="filterFaults">
-          <el-option :label="t('faultSortTimeDesc')" value="created_at_desc" />
-          <el-option :label="t('faultSortTimeAsc')" value="created_at_asc" />
-          <el-option :label="t('faultSortDowntimeDesc')" value="downtime_desc" />
-          <el-option :label="t('faultSortDowntimeAsc')" value="downtime_asc" />
-        </el-select>
-      </div>
 
-      <el-table :data="filteredFaults" style="width: 100%" v-loading="loading">
-        <el-table-column prop="fault_no" :label="t('faultNo')" width="200">
+        <!-- 状态 Chips -->
+        <div class="status-chips">
+          <el-tag
+            :class="['status-chip', { active: filterStatus === '' }]"
+            @click="filterByStatus('')"
+          >{{ t('faultFilterAll') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-open', { active: filterStatus === 'open' }]"
+            @click="filterByStatus('open')"
+          >{{ t('faultStatusOpen') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-investigating', { active: filterStatus === 'investigating' }]"
+            @click="filterByStatus('investigating')"
+          >{{ t('faultStatusInvestigating') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-resolved', { active: filterStatus === 'resolved' }]"
+            @click="filterByStatus('resolved')"
+          >{{ t('faultStatusResolved') }}</el-tag>
+          <el-tag
+            :class="['status-chip', 'chip-closed', { active: filterStatus === 'closed' }]"
+            @click="filterByStatus('closed')"
+          >{{ t('faultStatusClosed') }}</el-tag>
+        </div>
+
+        <!-- 更多筛选 -->
+        <div class="more-filters">
+          <el-select v-model="filterSeverity" :placeholder="t('faultLevel')" clearable style="width: 100px" @change="filterFaults">
+            <el-option :label="t('dashCritical')" value="critical" />
+            <el-option :label="t('dashMajor')" value="major" />
+            <el-option :label="t('dashMinor')" value="minor" />
+            <el-option :label="t('dashWarning')" value="warning" />
+          </el-select>
+          <el-date-picker
+            v-model="dateRange"
+            type="daterange"
+            :range-separator="t('faultToDate')"
+            :start-placeholder="t('faultStartDate')"
+            :end-placeholder="t('faultEndDate')"
+            value-format="YYYY-MM-DD"
+            style="width: 200px"
+            @change="filterFaults"
+          />
+          <el-select v-model="sortBy" :placeholder="t('faultSort')" style="width: 140px" @change="filterFaults">
+            <el-option :label="t('faultSortTimeDesc')" value="created_at_desc" />
+            <el-option :label="t('faultSortTimeAsc')" value="created_at_asc" />
+            <el-option :label="t('faultSortDowntimeDesc')" value="downtime_desc" />
+            <el-option :label="t('faultSortDowntimeAsc')" value="downtime_asc" />
+          </el-select>
+        </div>
+
+        <!-- 新增按钮 -->
+        <el-button type="primary" class="add-btn" @click="showAddDialog = true">
+          <el-icon><Plus /></el-icon>
+          {{ t('faultAdd') }}
+        </el-button>
+      </div>
+    </section>
+
+    <!-- 故障数据面板 -->
+    <section class="data-section">
+      <el-table :data="filteredFaults" class="modern-table" v-loading="loading">
+        <el-table-column prop="fault_no" :label="t('faultNo')" width="180">
           <template #default="{ row }">
             <router-link :to="`/faults/${row.id}`" class="fault-link">
-              {{ row.fault_no }}
+              <span class="fault-no-text">{{ row.fault_no }}</span>
+              <el-icon class="link-arrow"><ArrowRight /></el-icon>
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="device_name" :label="t('faultDevice')" width="180" />
+        <el-table-column prop="device_name" :label="t('faultDevice')" width="140" />
         <el-table-column prop="severity" :label="t('faultSeverity')" width="100">
           <template #default="{ row }">
-            <el-tag :type="getSeverityType(row.severity)">
+            <el-tag :type="getSeverityType(row.severity)" size="small" class="severity-tag">
               {{ getSeverityText(row.severity) }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="status" :label="t('faultStatus')" width="100">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)">
+            <el-tag :type="getStatusType(row.status)" size="small" class="status-tag">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
         <el-table-column prop="downtime_minutes" :label="t('faultDowntime')" width="100">
-          <template #default="{ row }">{{ row.downtime_minutes }} {{ t('faultMinutes') }}</template>
+          <template #default="{ row }">
+            <span class="downtime-value">{{ row.downtime_minutes }} {{ t('faultMinutes') }}</span>
+          </template>
         </el-table-column>
         <el-table-column prop="description" :label="t('faultDescription')" />
-        <el-table-column prop="created_at" :label="t('faultOccurTime')" width="180">
+        <el-table-column prop="created_at" :label="t('faultOccurTime')" width="140">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
-        <el-table-column :label="t('faultAction')" width="240" fixed="right">
+        <el-table-column :label="t('faultAction')" width="180" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editFault(row)">{{ t('actionEdit') }}</el-button>
-            <el-button
-              v-if="row.status === 'open'"
-              size="small"
-              type="warning"
-              @click="changeStatus(row, 'investigating')"
-            >
-              {{ t('faultProcess') }}
-            </el-button>
-            <el-button
-              v-if="row.status === 'investigating'"
-              size="small"
-              type="success"
-              @click="changeStatus(row, 'resolved')"
-            >
-              {{ t('faultResolve') }}
-            </el-button>
-            <el-button
-              v-if="row.status === 'resolved'"
-              size="small"
-              type="info"
-              @click="changeStatus(row, 'closed')"
-            >
-              {{ t('actionClose') }}
-            </el-button>
-            <el-button
-              v-if="row.status === 'closed'"
-              size="small"
-              type="primary"
-              plain
-              @click="changeStatus(row, 'open')"
-            >
-              {{ t('faultReopen') }}
-            </el-button>
+            <div class="action-icons">
+              <el-button size="small" link @click="editFault(row)" class="action-icon">
+                <el-icon><Edit /></el-icon>
+              </el-button>
+              <el-button
+                v-if="row.status === 'open'"
+                size="small"
+                type="warning"
+                link
+                @click="changeStatus(row, 'investigating')"
+                class="action-icon action-main"
+              >
+                <el-icon><Search /></el-icon>
+              </el-button>
+              <el-button
+                v-if="row.status === 'investigating'"
+                size="small"
+                type="success"
+                link
+                @click="changeStatus(row, 'resolved')"
+                class="action-icon action-main"
+              >
+                <el-icon><CircleCheck /></el-icon>
+              </el-button>
+              <el-button
+                v-if="row.status === 'resolved'"
+                size="small"
+                type="info"
+                link
+                @click="changeStatus(row, 'closed')"
+                class="action-icon action-main"
+              >
+                <el-icon><SuccessFilled /></el-icon>
+              </el-button>
+              <el-button
+                v-if="row.status === 'closed'"
+                size="small"
+                type="primary"
+                link
+                @click="changeStatus(row, 'open')"
+                class="action-icon"
+              >
+                <el-icon><RefreshRight /></el-icon>
+              </el-button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -127,9 +225,9 @@
         </template>
       </el-table>
       <div class="pagination-bar">
-        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="total" @size-change="loadFaults" @current-change="loadFaults" />
+        <el-pagination v-model:current-page="currentPage" v-model:page-size="pageSize" :page-sizes="[10, 20, 50, 100]" layout="total, sizes, prev, pager, next" :total="filteredTotal" @size-change="handlePageSizeChange" @current-change="handlePageChange" />
       </div>
-    </el-card>
+    </section>
 
     <!-- 添加故障对话框 -->
     <el-dialog v-model="showAddDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="600px">
@@ -179,10 +277,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Search, Plus, Refresh, Document, Clock, CircleCheck, SuccessFilled, ArrowRight, Edit, RefreshRight } from '@element-plus/icons-vue'
 import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
-import { Search } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 
@@ -204,6 +302,42 @@ const filterSeverity = ref('')
 const filterStatus = ref('')
 const dateRange = ref([])
 const sortBy = ref('created_at_desc')
+
+// 统计数据
+const stats = computed(() => {
+  const list = faults.value
+  const totalCount = list.length
+  const openCount = list.filter(f => f.status === 'open').length
+  const investigatingCount = list.filter(f => f.status === 'investigating').length
+  const resolvedCount = list.filter(f => f.status === 'resolved').length
+  const closedCount = list.filter(f => f.status === 'closed').length
+  return {
+    total: totalCount,
+    open: openCount,
+    investigating: investigatingCount,
+    resolved: resolvedCount,
+    closed: closedCount
+  }
+})
+
+// 分页后的总数
+const filteredTotal = computed(() => filteredFaults.value.length)
+
+// 状态筛选
+const filterByStatus = (status) => {
+  filterStatus.value = status
+  currentPage.value = 1
+  filterFaults()
+}
+
+// 分页处理
+const handlePageSizeChange = () => {
+  currentPage.value = 1
+}
+
+const handlePageChange = () => {
+  // 分页切换
+}
 
 const faultForm = ref({
   id: null,
@@ -427,6 +561,7 @@ const resetForm = () => {
     description: '',
     status: 'open'
   }
+  editMode.value = false
 }
 
 onMounted(() => {
@@ -438,28 +573,332 @@ onMounted(() => {
 <style scoped>
 .faults-page {
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
-.card-header {
+/* ===== 统计 Dashboard ===== */
+.stats-dashboard {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.stats-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  margin-bottom: 12px;
 }
 
-.filter-bar {
+.stats-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.refresh-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.refresh-btn:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+}
+
+.refresh-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
   display: flex;
-  gap: var(--gap-md);
-  margin-bottom: var(--gap-lg);
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  background: var(--bg-hover);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 48, 135, 0.08);
+}
+
+.card-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.stat-card.total .card-icon {
+  background: rgba(9, 132, 227, 0.15);
+  color: #0984e3;
+}
+
+.stat-card.pending .card-icon {
+  background: rgba(116, 185, 255, 0.15);
+  color: #74b9ff;
+}
+
+.stat-card.investigating .card-icon {
+  background: rgba(225, 112, 85, 0.15);
+  color: #e17055;
+}
+
+.stat-card.resolved .card-icon {
+  background: rgba(0, 184, 148, 0.15);
+  color: #00b894;
+}
+
+.stat-card.closed .card-icon {
+  background: rgba(45, 52, 54, 0.15);
+  color: #2d3436;
+}
+
+.card-body {
+  flex: 1;
+}
+
+.metric-value {
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1;
+}
+
+.metric-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+}
+
+/* ===== 筛选工具栏 ===== */
+.filter-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 12px 16px;
+}
+
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   flex-wrap: wrap;
 }
 
+.search-input {
+  width: 220px;
+}
+
+.status-chips {
+  display: flex;
+  gap: 8px;
+}
+
+.status-chip {
+  cursor: pointer;
+  transition: all 0.2s;
+  border-radius: 6px;
+}
+
+.status-chip.active {
+  box-shadow: 0 0 0 2px var(--accent-primary);
+}
+
+.status-chip.chip-open { background: rgba(116, 185, 255, 0.1); border-color: rgba(116, 185, 255, 0.3); color: #74b9ff; }
+.status-chip.chip-investigating { background: rgba(225, 112, 85, 0.1); border-color: rgba(225, 112, 85, 0.3); color: #e17055; }
+.status-chip.chip-resolved { background: rgba(0, 184, 148, 0.1); border-color: rgba(0, 184, 148, 0.3); color: #00b894; }
+.status-chip.chip-closed { background: rgba(45, 52, 54, 0.1); border-color: rgba(45, 52, 54, 0.3); color: #2d3436; }
+
+.more-filters {
+  display: flex;
+  gap: 8px;
+}
+
+.add-btn {
+  margin-left: auto;
+}
+
+/* ===== 数据面板 ===== */
+.data-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+/* 现代化表格 */
+.modern-table {
+  width: 100%;
+}
+
+.modern-table :deep(.el-table__header-wrapper) {
+  border-bottom: 2px solid var(--border-default);
+}
+
+.modern-table :deep(th.el-table__cell) {
+  background: var(--bg-tertiary);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+}
+
+.modern-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.modern-table :deep(.el-table__row) {
+  transition: all 0.2s;
+}
+
+.modern-table :deep(.el-table__row:hover > td) {
+  background: var(--bg-hover) !important;
+}
+
+/* 故障单号链接 */
 .fault-link {
-  color: var(--accent-secondary);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--accent-primary);
   text-decoration: none;
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
   font-weight: 500;
+  font-size: 13px;
+  transition: all 0.2s;
 }
 
 .fault-link:hover {
-  text-decoration: underline;
+  color: var(--accent-secondary);
 }
+
+.fault-link:hover .link-arrow {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+.link-arrow {
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+/* 状态标签 */
+.status-tag {
+  font-weight: 500;
+}
+
+/* 严重等级标签 */
+.severity-tag {
+  font-weight: 500;
+}
+
+/* 停机时间 */
+.downtime-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 操作图标 */
+.action-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.action-icon {
+  padding: 4px;
+}
+
+.action-icon:hover {
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.action-main {
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+/* 分页 */
+.pagination-bar {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ===== 响应式 ===== */
+@media (max-width: 1200px) {
+  .stats-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .search-input {
+    width: 100%;
+  }
+
+  .status-chips {
+    flex-wrap: wrap;
+  }
+
+  .more-filters {
+    flex-wrap: wrap;
+  }
+
+  .add-btn {
+    width: 100%;
+    margin-left: 0;
+  }
+}
+
+/* ===== 暗色模式 ===== */
+.dark .stat-card:hover {
+  box-shadow: 0 4px 12px rgba(0, 184, 148, 0.1);
+}
+
+.dark .stat-card.total .card-icon { background: rgba(9, 132, 227, 0.2); }
+.dark .stat-card.pending .card-icon { background: rgba(116, 185, 255, 0.2); }
+.dark .stat-card.investigating .card-icon { background: rgba(225, 112, 85, 0.2); }
+.dark .stat-card.resolved .card-icon { background: rgba(0, 184, 148, 0.2); }
+.dark .stat-card.closed .card-icon { background: rgba(45, 52, 54, 0.2); }
+
+.dark .status-chip.chip-open { background: rgba(116, 185, 255, 0.15); }
+.dark .status-chip.chip-investigating { background: rgba(225, 112, 85, 0.15); }
+.dark .status-chip.chip-resolved { background: rgba(0, 184, 148, 0.15); }
+.dark .status-chip.chip-closed { background: rgba(45, 52, 54, 0.15); }
 </style>

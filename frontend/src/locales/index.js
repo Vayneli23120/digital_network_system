@@ -673,6 +673,15 @@ export const languages = {
     deviceUploadTip: '只能上传 xlsx / csv 文件',
     deviceConfirmImport: '确定导入',
 
+    // 设备列表页统计和筛选
+    deviceStatsTitle: '设备运营统计',
+    deviceStatsTotal: '总设备',
+    deviceStatsOnline: '在线',
+    deviceStatsOffline: '离线',
+    deviceStatsMaintenance: '维护中',
+    deviceStatsRetired: '已退役',
+    deviceFilterAll: '全部',
+
     // 设备详情
     deviceInfo: '设备信息',
     deviceConnectTest: '连接测试',
@@ -814,6 +823,17 @@ export const languages = {
     backupSelectAtLeastOne: '请选择至少一台设备',
     backupBatchComplete: '批量备份完成',
     backupBatchFailed: '批量备份失败',
+
+    // 备份列表页统计和筛选
+    backupStatsTitle: '备份运营统计',
+    backupStatsTotal: '总备份',
+    backupStatsHasChange: '有变更',
+    backupStatsNoChange: '无变更',
+    backupStatsRecent: '近期备份',
+    backupFilterAll: '全部',
+    backupFilterHasChange: '有变更',
+    backupFilterNoChange: '无变更',
+
     statusYes: '是',
     statusNo: '否',
 
@@ -1000,6 +1020,13 @@ export const languages = {
 
     // 故障管理
     faultTitle: '故障记录',
+    faultStatsTitle: '故障统计',
+    faultStatsTotal: '总故障',
+    faultStatsOpen: '待处理',
+    faultStatsInvestigating: '调查中',
+    faultStatsResolved: '已解决',
+    faultStatsClosed: '已关闭',
+    faultFilterAll: '全部',
     faultAdd: '添加故障',
     faultEdit: '编辑故障',
     faultEditRecord: '编辑故障记录',
@@ -2461,6 +2488,15 @@ export const languages = {
     deviceUploadTip: 'Only xlsx / csv files allowed',
     deviceConfirmImport: 'Confirm Import',
 
+    // Device List Stats and Filter
+    deviceStatsTitle: 'Device Statistics',
+    deviceStatsTotal: 'Total Devices',
+    deviceStatsOnline: 'Online',
+    deviceStatsOffline: 'Offline',
+    deviceStatsMaintenance: 'In Maintenance',
+    deviceStatsRetired: 'Retired',
+    deviceFilterAll: 'All',
+
     // Device Detail
     deviceInfo: 'Device Info',
     deviceConnectTest: 'Connection Test',
@@ -2602,6 +2638,17 @@ export const languages = {
     backupSelectAtLeastOne: 'Please select at least one device',
     backupBatchComplete: 'Batch backup complete',
     backupBatchFailed: 'Batch backup failed',
+
+    // Backup List Stats and Filters
+    backupStatsTitle: 'Backup Statistics',
+    backupStatsTotal: 'Total',
+    backupStatsHasChange: 'Modified',
+    backupStatsNoChange: 'No Change',
+    backupStatsRecent: 'Recent Backups',
+    backupFilterAll: 'All',
+    backupFilterHasChange: 'Modified',
+    backupFilterNoChange: 'No Change',
+
     statusYes: 'Yes',
     statusNo: 'No',
 
@@ -2788,6 +2835,13 @@ export const languages = {
 
     // Fault Management
     faultTitle: 'Fault Records',
+    faultStatsTitle: 'Fault Statistics',
+    faultStatsTotal: 'Total Faults',
+    faultStatsOpen: 'Open',
+    faultStatsInvestigating: 'Investigating',
+    faultStatsResolved: 'Resolved',
+    faultStatsClosed: 'Closed',
+    faultFilterAll: 'All',
     faultAdd: 'Add Fault',
     faultEdit: 'Edit Fault',
     faultEditRecord: 'Edit Fault Record',
