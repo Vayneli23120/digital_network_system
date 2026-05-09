@@ -2,11 +2,11 @@
   <div class="device-health-page">
     <!-- Header -->
     <div class="page-header">
-      <h2>{{ $t('health.title') || '设备健康评分' }}</h2>
+      <h2>{{ t('health.title') || '设备健康评分' }}</h2>
       <div class="header-actions">
         <el-button type="primary" @click="calculateAllHealth" :loading="calculating">
           <el-icon><Refresh /></el-icon>
-          {{ $t('health.calculateAll') || '批量计算' }}
+          {{ t('health.calculateAll') || '批量计算' }}
         </el-button>
       </div>
     </div>
@@ -17,7 +17,7 @@
         <el-col :span="6">
           <div class="stat-card">
             <div class="stat-value">{{ dashboard.total_devices }}</div>
-            <div class="stat-label">{{ $t('health.totalDevices') || '总设备数' }}</div>
+            <div class="stat-label">{{ t('health.totalDevices') || '总设备数' }}</div>
           </div>
         </el-col>
         <el-col :span="6">
@@ -189,6 +189,9 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getHealthDashboard, getHealthDevices, calculateAllHealth as calcAllHealth, calculateDeviceHealth as calcDeviceHealth, getDeviceHealthHistory } from '@/api'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 // Data
 const loading = ref(false)
