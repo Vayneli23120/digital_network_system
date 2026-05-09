@@ -146,50 +146,52 @@
         v-loading="loading"
         @selection-change="handleSelectionChange"
         :row-class-name="tableRowClassName"
+        :table-layout="'auto'"
       >
-        <el-table-column v-if="selectMode" type="selection" width="55" />
-        <el-table-column prop="name" :label="t('deviceName')" min-width="150" show-overflow-tooltip>
+        <el-table-column v-if="selectMode" type="selection" width="48" />
+        <el-table-column prop="name" :label="t('deviceName')" width="160">
           <template #default="{ row }">
-            <router-link :to="`/devices/${row.id}`" class="device-name-link">
-              <span class="device-name-text">{{ row.name }}</span>
-              <el-icon class="link-arrow"><ArrowRight /></el-icon>
+            <router-link :to="`/devices/${row.id}`" class="device-link">
+              <span class="device-name">{{ row.name }}</span>
+              <el-icon class="link-icon"><ArrowRight /></el-icon>
             </router-link>
           </template>
         </el-table-column>
-        <el-table-column prop="ip" :label="t('deviceIp')" width="120" />
-        <el-table-column prop="status" :label="t('deviceStatus')" width="80">
+        <el-table-column prop="ip" :label="t('deviceIp')" width="130" />
+        <el-table-column prop="status" :label="t('deviceStatus')" width="85" align="center">
           <template #default="{ row }">
-            <el-tag :type="getStatusType(row.status)" size="small" class="status-tag">
+            <el-tag :type="getStatusType(row.status)" size="small" effect="light" class="status-tag">
               {{ getStatusText(row.status) }}
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column prop="location" :label="t('deviceLocation')" min-width="100" show-overflow-tooltip />
-        <el-table-column prop="model" :label="t('deviceModel')" width="100" show-overflow-tooltip />
-        <el-table-column :label="t('deviceAction')" width="120" fixed="right">
+        <el-table-column prop="location" :label="t('deviceLocation')" width="150" show-overflow-tooltip />
+        <el-table-column prop="model" :label="t('deviceModel')" width="140" show-overflow-tooltip />
+        <el-table-column :label="t('deviceAction')" width="110" fixed="right" align="center">
           <template #default="{ row }">
-            <div class="action-cell">
+            <div class="action-bar">
               <el-tooltip :content="t('deviceTooltipView')" placement="top">
-                <el-button type="primary" link size="small" @click="viewDevice(row.id)" class="action-btn">
+                <span class="action-item" @click="viewDevice(row.id)">
                   <el-icon><View /></el-icon>
-                </el-button>
+                </span>
               </el-tooltip>
               <el-tooltip :content="t('deviceTooltipBackup')" placement="top">
-                <el-button type="success" link size="small" @click="backupDevice(row)" class="action-btn">
+                <span class="action-item" @click="backupDevice(row)">
                   <el-icon><Download /></el-icon>
-                </el-button>
+                </span>
               </el-tooltip>
               <el-dropdown trigger="click" @command="(cmd) => handleAction(cmd, row)">
-                <el-button type="info" link size="small" class="action-btn">
-                  <el-icon><More /></el-icon>
-                </el-button>
+                <span class="action-item">
+                  <el-icon><MoreFilled /></el-icon>
+                </span>
                 <template #dropdown>
                   <el-dropdown-menu>
                     <el-dropdown-item command="edit">
                       <el-icon><Edit /></el-icon> {{ t('deviceActionEdit') }}
                     </el-dropdown-item>
                     <el-dropdown-item command="delete" divided>
-                      <span class="delete-action"><el-icon><Delete /></el-icon> {{ t('deviceActionDelete') }}</span>
+                      <el-icon style="color:#d63031"><Delete /></el-icon>
+                      <span style="color:#d63031">{{ t('deviceActionDelete') }}</span>
                     </el-dropdown-item>
                   </el-dropdown-menu>
                 </template>
@@ -319,7 +321,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, More } from '@element-plus/icons-vue'
+import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, MoreFilled } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -866,35 +868,36 @@ onMounted(() => {
   opacity: 0.6;
 }
 
-/* 设备名称链接 */
-.device-name-link {
-  display: flex;
+/* 设备链接 */
+.device-link {
+  display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   color: var(--accent-primary);
   text-decoration: none;
   font-weight: 500;
-  font-size: 13px;
-  transition: all 0.2s;
+  transition: color 0.15s;
 }
 
-.device-name-link:hover {
+.device-link:hover {
   color: var(--accent-secondary);
 }
 
-.device-name-link:hover .link-arrow {
+.device-link:hover .link-icon {
   opacity: 1;
-  transform: translateX(4px);
+  transform: translateX(2px);
 }
 
-.link-arrow {
+.link-icon {
   opacity: 0;
-  transition: all 0.2s;
+  font-size: 12px;
+  transition: all 0.15s;
 }
 
 /* 状态标签 */
 .status-tag {
   font-weight: 500;
+  font-size: 12px;
 }
 
 /* Fixed列背景修复 */
@@ -914,30 +917,36 @@ onMounted(() => {
   background: var(--bg-hover) !important;
 }
 
-/* 操作单元格 */
-.action-cell {
-  display: flex;
+/* 操作栏 - 紧凑图标式 */
+.action-bar {
+  display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
+  padding: 4px 6px;
   background: var(--bg-card);
-  padding: 4px 8px;
-}
-
-.action-btn {
-  padding: 4px;
-}
-
-.action-btn:hover {
-  background: var(--bg-tertiary);
   border-radius: 6px;
 }
 
-.delete-action {
-  color: var(--accent-danger);
+.action-item {
   display: flex;
   align-items: center;
-  gap: 4px;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  color: var(--text-tertiary);
+  border-radius: 4px;
+  transition: all 0.15s;
 }
+
+.action-item:hover {
+  background: var(--bg-tertiary);
+  color: var(--accent-primary);
+}
+
+.action-item:nth-child(1):hover { color: #0984e3; }
+.action-item:nth-child(2):hover { color: #00b894; }
+.action-item:nth-child(3):hover { color: #636e72; }
 
 /* 分页 */
 .pagination-bar {
