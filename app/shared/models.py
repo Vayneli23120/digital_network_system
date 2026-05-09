@@ -34,15 +34,29 @@ class Device(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # ===== 企业级智能运维扩展字段 =====
+    # 健康评分
+    health_score = Column(Integer, default=100)  # 0-100 健康评分
+    risk_level = Column(String(20), default="low", index=True)  # low/medium/high/critical
+    last_health_check = Column(DateTime)  # 最后健康检查时间
+    # 生命周期
+    uptime_days = Column(Integer, default=0)  # 运行天数
+    warranty_expire = Column(DateTime)  # 保修到期时间
+    lifecycle_stage = Column(String(20), default="new", index=True)  # new/active/aging/retired
+    # AI分析
+    ai_last_analyzed = Column(DateTime)  # AI最后分析时间
+
     # 关系
     backups = relationship("BackupRecord", back_populates="device", cascade="all, delete-orphan")
     faults = relationship("FaultRecord", back_populates="device", cascade="all, delete-orphan")
     maintenances = relationship("MaintenanceRecord", back_populates="device", cascade="all, delete-orphan")
     photos = relationship("DevicePhoto", back_populates="device", cascade="all, delete-orphan")
     nodes = relationship("DeviceNode", back_populates="device", cascade="all, delete-orphan")
+    health_records = relationship("DeviceHealthScore", back_populates="device", cascade="all, delete-orphan")
+    spare_relations = relationship("DeviceSpareRelation", back_populates="device", cascade="all, delete-orphan")
 
     def __repr__(self):
-        return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}')>"
+        return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}', health={self.health_score})>"
 
 
 class BackupRecord(Base):
@@ -579,3 +593,166 @@ class DeviceNode(Base):
 
     def __repr__(self):
         return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent})>"
+
+
+# =============================================================================
+# 企业级智能运维扩展模型
+# =============================================================================
+
+class DeviceHealthScore(Base):
+    """设备健康评分表 - 记录设备健康评分历史"""
+    __tablename__ = "device_health_scores"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    health_score = Column(Integer, nullable=False)  # 0-100
+    score_factors = Column(Text)  # JSON格式评分因素 {"fault_freq": 30, "repair_freq": 20, ...}
+    risk_level = Column(String(20), nullable=False, index=True)  # low/medium/high/critical
+    trend = Column(String(20), default="stable")  # improving/stable/declining
+    ai_analysis_text = Column(Text)  # AI分析结果
+    recommendations = Column(Text)  # JSON格式建议列表
+    last_calculated_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    device = relationship("Device", back_populates="health_records")
+
+    def __repr__(self):
+        return f"<DeviceHealthScore(device_id={self.device_id}, score={self.health_score}, risk={self.risk_level})>"
+
+    def get_score_factors_dict(self):
+        """解析评分因素JSON"""
+        if self.score_factors:
+            try:
+                import json
+                return json.loads(self.score_factors)
+            except:
+                return {}
+        return {}
+
+    def get_recommendations_list(self):
+        """解析建议列表JSON"""
+        if self.recommendations:
+            try:
+                import json
+                return json.loads(self.recommendations)
+            except:
+                return []
+        return []
+
+
+class AIAnalysisRecord(Base):
+    """AI分析记录表 - 记录所有AI分析调用"""
+    __tablename__ = "ai_analysis_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_type = Column(String(50), nullable=False, index=True)  # fault/root_cause/health/pm_recommend/summary
+    target_type = Column(String(50), nullable=False, index=True)  # device/fault/maintenance
+    target_id = Column(Integer, nullable=False, index=True)
+    input_data = Column(Text)  # JSON格式输入数据
+    ai_provider = Column(String(50))  # deepseek/claude/qwen/openai
+    model_name = Column(String(100))  # 模型名称
+    output_result = Column(Text)  # JSON格式输出结果
+    confidence_score = Column(DECIMAL(3, 2))  # 0.00-1.00 置信度
+    processing_time_ms = Column(Integer)  # 处理耗时毫秒
+    tokens_used = Column(Integer)  # Token使用量
+    cost = Column(DECIMAL(10, 4))  # 成本（元）
+    status = Column(String(20), default="completed")  # pending/completed/failed
+    error_message = Column(Text)  # 错误信息
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<AIAnalysisRecord(type={self.analysis_type}, target={self.target_type}:{self.target_id})>"
+
+    def get_input_dict(self):
+        """解析输入数据JSON"""
+        if self.input_data:
+            try:
+                import json
+                return json.loads(self.input_data)
+            except:
+                return {}
+        return {}
+
+    def get_output_dict(self):
+        """解析输出结果JSON"""
+        if self.output_result:
+            try:
+                import json
+                return json.loads(self.output_result)
+            except:
+                return {}
+        return {}
+
+
+class WorkflowRule(Base):
+    """自动化工作流规则表"""
+    __tablename__ = "workflow_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    description = Column(String(500))
+    trigger_type = Column(String(50), nullable=False, index=True)  # fault_created/device_health_low/maintenance_completed
+    trigger_conditions = Column(Text)  # JSON格式触发条件 {"health_score": {"<": 60}}
+    action_type = Column(String(50), nullable=False)  # create_maintenance/create_pm_task/send_alert/update_health
+    action_config = Column(Text)  # JSON格式动作配置
+    is_active = Column(Boolean, default=True, index=True)
+    priority = Column(Integer, default=100)  # 规则优先级，数字越小优先级越高
+    execution_count = Column(Integer, default=0)  # 执行次数统计
+    last_triggered_at = Column(DateTime)  # 最后触发时间
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<WorkflowRule(name='{self.name}', trigger={self.trigger_type}, active={self.is_active})>"
+
+    def get_trigger_conditions_dict(self):
+        """解析触发条件JSON"""
+        if self.trigger_conditions:
+            try:
+                import json
+                return json.loads(self.trigger_conditions)
+            except:
+                return {}
+        return {}
+
+    def get_action_config_dict(self):
+        """解析动作配置JSON"""
+        if self.action_config:
+            try:
+                import json
+                return json.loads(self.action_config)
+            except:
+                return {}
+        return {}
+
+
+class DeviceSpareRelation(Base):
+    """设备-备件关系表 - 记录设备上安装的备件"""
+    __tablename__ = "device_spare_relations"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    spare_instance_id = Column(Integer, ForeignKey("spare_part_instances.id", ondelete="SET NULL"), nullable=True, index=True)
+    part_number = Column(String(100))  # 备件型号（冗余，方便查询）
+    part_name = Column(String(200))  # 备件名称（冗余）
+    serial_number = Column(String(100))  # 序列号
+    position = Column(String(100))  # 安装位置描述
+    installed_at = Column(DateTime, nullable=False)  # 安装时间
+    installed_by = Column(String(100))  # 安装操作人
+    status = Column(String(20), default="active", index=True)  # active/removed/failed
+    removed_at = Column(DateTime)  # 移除时间
+    removed_by = Column(String(100))  # 移除操作人
+    removal_reason = Column(String(200))  # 移除原因
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联维修单
+    notes = Column(String(500))  # 备注
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    device = relationship("Device", back_populates="spare_relations")
+    spare_instance = relationship("SparePartInstance")
+    maintenance = relationship("MaintenanceRecord")
+
+    def __repr__(self):
+        return f"<DeviceSpareRelation(device={self.device_id}, part={self.part_number}, status={self.status})>"
