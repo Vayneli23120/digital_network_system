@@ -1,4 +1,9 @@
-/* 科技感双主题设计 - 符合企业级 UI 标准 */
+/* 科技感双主题设计 - 笔合企业级 UI 标准 */
+
+/* ===== 全局字体引入 ===== */
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+/* 备用：Satoshi 字体 */
+@import url('https://fonts.googleapis.com/css2?family=Satoshi:wght@300;400;500;600&display=swap');
 
 :root {
   /* ===== 通用变量 ===== */
@@ -149,9 +154,3 @@
   --chart-grid: #30363d;
   --chart-axis: #8b949e;
 }
-
-/* ===== 全局字体引入 ===== */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
-
-/* 备用：Satoshi 字体 */
-@import url('https://fonts.googleapis.com/css2?family=Satoshi:wght@300;400;500;600&display=swap');

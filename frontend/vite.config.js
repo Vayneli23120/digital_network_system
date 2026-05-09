@@ -31,6 +31,10 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: apiBaseUrl,
           changeOrigin: true
+        },
+        '/photos': {
+          target: apiBaseUrl,
+          changeOrigin: true
         }
       }
     }
