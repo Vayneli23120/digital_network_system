@@ -49,6 +49,7 @@ from .routers import (
 from .features.health.router import router as health_router
 from .features.ai.router import router as ai_router
 from .features.workflows.router import router as workflow_router
+from .features.notifications.router import router as notifications_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter import RateLimitMiddleware
 
@@ -158,6 +159,7 @@ app.include_router(monitor_screen_router)
 app.include_router(health_router)      # 健康评分路由
 app.include_router(ai_router)          # AI分析路由
 app.include_router(workflow_router)    # 自动化工作流路由
+app.include_router(notifications_router)  # 系统通知路由
 
 
 # ============ 健康检查 ============

@@ -614,3 +614,53 @@ export function deleteWorkflowRule(ruleId) {
 export function testWorkflowTrigger(data) {
   return api.post('/workflows/trigger', data)
 }
+
+// ============ 系统通知 API ============
+export function getNotifications(unreadOnly = false) {
+  return api.get('/notifications', { params: { unread_only: unreadOnly } })
+}
+
+export function getUnreadCount() {
+  return api.get('/notifications/unread-count')
+}
+
+export function markNotificationRead(id) {
+  return api.post(`/notifications/${id}/read`)
+}
+
+export function markAllNotificationsRead() {
+  return api.post('/notifications/read-all')
+}
+
+export function deleteNotification(id) {
+  return api.delete(`/notifications/${id}`)
+}
+
+// ============ 故障状态流转 API ============
+export function assignFault(faultId, assignedTo) {
+  return api.post(`/faults/${faultId}/assign`, { assigned_to: assignedTo })
+}
+
+export function acceptFault(faultId) {
+  return api.post(`/faults/${faultId}/accept`, { accepted: true })
+}
+
+export function diagnoseFault(faultId, data) {
+  return api.post(`/faults/${faultId}/diagnose`, data)
+}
+
+export function transferFaultToMaintenance(faultId, data) {
+  return api.post(`/faults/${faultId}/transfer-to-maintenance`, data)
+}
+
+export function resolveFault(faultId, resolution) {
+  return api.post(`/faults/${faultId}/resolve`, { resolution })
+}
+
+export function closeFault(faultId) {
+  return api.post(`/faults/${faultId}/close`)
+}
+
+export function getFaultTransitions(faultId) {
+  return api.get(`/faults/${faultId}/transitions`)
+}

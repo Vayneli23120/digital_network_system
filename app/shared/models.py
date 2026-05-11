@@ -98,11 +98,25 @@ class FaultRecord(Base):
     resolution = Column(Text)
     cost = Column(DECIMAL(10, 2), default=0)
     reporter = Column(String(100))
-    status = Column(String(20), default="open", index=True)  # open, investigating, resolved, closed
+    status = Column(String(20), default="open", index=True)  # open, assigned, accepted, diagnosing, resolving, transferred, resolved, closed
     maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联的维修单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     device_name = Column(String(100))
+
+    # ===== 流程管理字段 =====
+    assigned_to = Column(String(100), index=True)  # 指派负责人
+    assigned_at = Column(DateTime)  # 指派时间
+    accepted_at = Column(DateTime)  # 接收确认时间
+    diagnosing_at = Column(DateTime)  # 开始诊断时间
+    transferred_at = Column(DateTime)  # 转维修时间
+    resolved_at = Column(DateTime)  # 解决时间
+    closed_at = Column(DateTime)  # 关闭时间
+
+    # ===== 诊断信息 =====
+    fault_type = Column(String(20))  # 故障类型：hardware/software/config/network/other
+    diagnosis_text = Column(Text)  # 诊断内容
+    diagnosis_result = Column(String(50))  # 诊断结论：config_issue/need_replace/need_upgrade/field_check
 
     # ===== AI分析增强字段 =====
     ai_analysis_result = Column(Text)  # JSON格式AI分析结果
@@ -784,3 +798,22 @@ class DeviceSpareRelation(Base):
 
     def __repr__(self):
         return f"<DeviceSpareRelation(device={self.device_id}, part={self.part_number}, status={self.status})>"
+
+
+class Notification(Base):
+    """系统通知表"""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user = Column(String(100), nullable=False, index=True)  # 接收用户
+    type = Column(String(50), nullable=False, index=True)  # fault_assigned/maintenance_created/etc
+    title = Column(String(200), nullable=False)
+    content = Column(Text)
+    reference_type = Column(String(50))  # fault/maintenance/device
+    reference_id = Column(Integer)  # 关联记录ID
+    read = Column(Boolean, default=False, index=True)
+    read_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<Notification(user='{self.user}', type='{self.type}')>"

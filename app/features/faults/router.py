@@ -23,6 +23,52 @@ from app.services.workflow.executor import WorkflowExecutor
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
 
+# ===== 状态流转规则 =====
+FAULT_VALID_TRANSITIONS = {
+    'open': ['assigned', 'closed'],
+    'assigned': ['accepted', 'reassigned', 'closed'],
+    'accepted': ['diagnosing', 'closed'],
+    'diagnosing': ['resolving', 'transferred', 'closed'],
+    'resolving': ['resolved', 'closed'],
+    'transferred': ['resolved', 'closed'],
+    'resolved': ['closed'],
+    'closed': []
+}
+
+FAULT_STATUS_LABELS = {
+    'open': '待处理',
+    'assigned': '已指派',
+    'accepted': '已接收',
+    'diagnosing': '诊断中',
+    'resolving': '技术处理',
+    'transferred': '已转维修',
+    'resolved': '已解决',
+    'closed': '已关闭',
+    'investigating': '调查中',  # 兼容旧状态
+}
+
+FAULT_STATUS_COLORS = {
+    'open': 'warning',
+    'assigned': 'info',
+    'accepted': 'primary',
+    'diagnosing': 'warning',
+    'resolving': 'primary',
+    'transferred': 'success',
+    'resolved': 'success',
+    'closed': 'info',
+    'investigating': 'warning',
+}
+
+FAULT_DIAGNOSIS_RESULTS = {
+    'config_issue': '配置问题',
+    'software_issue': '软件问题',
+    'need_replace': '需更换配件',
+    'need_upgrade': '需升级',
+    'field_check': '需现场排查',
+    'no_fault': '未发现故障',
+}
+
+
 # ===== Request Models =====
 
 class CreateFaultRequest(BaseModel):
@@ -33,6 +79,38 @@ class CreateFaultRequest(BaseModel):
     impact: Optional[str] = None
     reporter: Optional[str] = None
     fault_time: Optional[datetime] = None
+    fault_type: Optional[str] = None  # hardware/software/config/network/other
+    assigned_to: Optional[str] = None  # 指派负责人
+
+
+class AssignFaultRequest(BaseModel):
+    """指派故障请求"""
+    assigned_to: str  # 负责人
+
+
+class AcceptFaultRequest(BaseModel):
+    """接收故障请求"""
+    accepted: bool = True
+
+
+class DiagnoseFaultRequest(BaseModel):
+    """诊断故障请求"""
+    fault_type: Optional[str] = None
+    diagnosis_text: Optional[str] = None
+    diagnosis_result: Optional[str] = None  # config_issue/need_replace/need_upgrade/field_check
+
+
+class TransferToMaintenanceRequest(BaseModel):
+    """转维修请求"""
+    maintenance_type: str = "corrective"  # corrective/preventive/emergency
+    description: Optional[str] = None
+    priority: Optional[str] = "P3"
+
+
+class ResolveFaultRequest(BaseModel):
+    """解决故障请求"""
+    resolution: str
+    resolution_type: Optional[str] = None  # config_fix/software_fix/other
 
 
 class UpdateFaultRequest(BaseModel):
@@ -42,6 +120,10 @@ class UpdateFaultRequest(BaseModel):
     description: Optional[str] = None
     resolution: Optional[str] = None
     impact: Optional[str] = None
+    assigned_to: Optional[str] = None
+    fault_type: Optional[str] = None
+    diagnosis_text: Optional[str] = None
+    diagnosis_result: Optional[str] = None
 
 
 class AnalyzeFaultRequest(BaseModel):
@@ -226,6 +308,7 @@ async def create_fault(
     创建后自动触发：
     - 工作流检查（是否需要自动创建维修单）
     - AI分析（如果配置了自动分析）
+    - 如果指定了负责人，自动进入assigned状态
     """
     # 获取设备信息
     device = db.query(Device).filter(Device.id == request.device_id).first()
@@ -238,17 +321,27 @@ async def create_fault(
     # 确定故障时间
     fault_time = request.fault_time or datetime.utcnow()
 
+    # 确定初始状态
+    initial_status = "open"
+    assigned_at = None
+    if request.assigned_to:
+        initial_status = "assigned"
+        assigned_at = datetime.utcnow()
+
     # 创建故障记录
     fault = FaultRecord(
         fault_no=fault_no,
         device_id=request.device_id,
         device_name=device.name,
         severity=request.severity,
-        status="open",
+        status=initial_status,
         description=request.description,
         impact=request.impact,
         reporter=request.reporter,
-        fault_time=fault_time
+        fault_time=fault_time,
+        fault_type=request.fault_type,
+        assigned_to=request.assigned_to,
+        assigned_at=assigned_at
     )
 
     db.add(fault)
@@ -261,6 +354,14 @@ async def create_fault(
         fault.id,
         request.severity
     )
+
+    # 如果有负责人，触发通知（后台执行）
+    if request.assigned_to:
+        background_tasks.add_task(
+            send_fault_assigned_notification,
+            fault.id,
+            request.assigned_to
+        )
 
     # 清除Dashboard缓存
     from app.shared.cache import cache
@@ -755,3 +856,297 @@ async def trigger_fault_workflow(fault_id: int, severity: str):
         print(f"Workflow trigger error: {e}")
     finally:
         db.close()
+
+
+async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
+    """后台发送故障指派通知"""
+    from app.shared.database import get_db_manager
+    from app.services.system_notification import SystemNotificationService
+
+    db_manager = get_db_manager()
+    db = db_manager.get_session()
+
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if fault:
+            notification_service = SystemNotificationService(db)
+            notification_service.send_notification(
+                user=assigned_to,
+                type="fault_assigned",
+                title=f"新故障指派: {fault.fault_no}",
+                content=f"设备 {fault.device_name} 的故障已指派给您，请尽快处理。",
+                reference_type="fault",
+                reference_id=fault_id
+            )
+    except Exception as e:
+        print(f"Notification send error: {e}")
+    finally:
+        db.close()
+
+
+# ===== 状态流转API =====
+
+@router.post("/{fault_id}/assign")
+async def assign_fault(
+    fault_id: int,
+    request: AssignFaultRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """指派故障给负责人"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    # 验证状态流转
+    if fault.status not in FAULT_VALID_TRANSITIONS:
+        raise HTTPException(status_code=400, detail=f"当前状态 {fault.status} 不允许指派")
+
+    if 'assigned' not in FAULT_VALID_TRANSITIONS.get(fault.status, []):
+        raise HTTPException(status_code=400, detail=f"不能从 {fault.status} 转换到 assigned")
+
+    # 更新故障
+    fault.assigned_to = request.assigned_to
+    fault.assigned_at = datetime.utcnow()
+    fault.status = "assigned"
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(fault)
+
+    # 发送通知
+    background_tasks.add_task(
+        send_fault_assigned_notification,
+        fault_id,
+        request.assigned_to
+    )
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "assigned_to": fault.assigned_to,
+        "assigned_at": fault.assigned_at.isoformat(),
+        "message": f"故障已指派给 {request.assigned_to}"
+    }
+
+
+@router.post("/{fault_id}/accept")
+async def accept_fault(
+    fault_id: int,
+    request: AcceptFaultRequest,
+    db: Session = Depends(get_db)
+):
+    """接收故障（负责人确认）"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    if fault.status != 'assigned':
+        raise HTTPException(status_code=400, detail="只有已指派的故障才能接收")
+
+    fault.status = "accepted"
+    fault.accepted_at = datetime.utcnow()
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "accepted_at": fault.accepted_at.isoformat(),
+        "message": "故障已接收"
+    }
+
+
+@router.post("/{fault_id}/diagnose")
+async def diagnose_fault(
+    fault_id: int,
+    request: DiagnoseFaultRequest,
+    db: Session = Depends(get_db)
+):
+    """开始诊断并填写诊断信息"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    # 允许 accepted 或 diagnosing 状态
+    if fault.status not in ['accepted', 'diagnosing']:
+        raise HTTPException(status_code=400, detail="只有已接收或诊断中的故障才能进行诊断")
+
+    # 如果是第一次诊断，更新状态
+    if fault.status == 'accepted':
+        fault.status = "diagnosing"
+        fault.diagnosing_at = datetime.utcnow()
+
+    # 更新诊断信息
+    if request.fault_type:
+        fault.fault_type = request.fault_type
+    if request.diagnosis_text:
+        fault.diagnosis_text = request.diagnosis_text
+    if request.diagnosis_result:
+        fault.diagnosis_result = request.diagnosis_result
+
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "fault_type": fault.fault_type,
+        "diagnosis_text": fault.diagnosis_text,
+        "diagnosis_result": fault.diagnosis_result,
+        "diagnosis_result_label": FAULT_DIAGNOSIS_RESULTS.get(fault.diagnosis_result),
+        "message": "诊断信息已保存"
+    }
+
+
+@router.post("/{fault_id}/transfer-to-maintenance")
+async def transfer_to_maintenance(
+    fault_id: int,
+    request: TransferToMaintenanceRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """转维修（创建维修单）"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    if fault.status not in ['diagnosing', 'accepted']:
+        raise HTTPException(status_code=400, detail="只有诊断中或已接收的故障才能转维修")
+
+    # 创建维修单
+    maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+
+    maintenance = MaintenanceRecord(
+        maint_no=maint_no,
+        device_id=fault.device_id,
+        device_name=fault.device_name,
+        fault_id=fault_id,
+        maint_type=request.maintenance_type,
+        description=request.description or fault.description,
+        status="created",
+        priority=request.priority,
+        current_owner=fault.assigned_to,
+        operator="Web"
+    )
+
+    db.add(maintenance)
+
+    # 更新故障状态
+    fault.status = "transferred"
+    fault.transferred_at = datetime.utcnow()
+    fault.maintenance_id = maintenance.id
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(maintenance)
+
+    # 发送通知给维修负责人（如果与诊断负责人不同）
+    if maintenance.current_owner:
+        background_tasks.add_task(
+            send_fault_assigned_notification,
+            fault_id,
+            maintenance.current_owner
+        )
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "maintenance_id": maintenance.id,
+        "maint_no": maintenance.maint_no,
+        "message": f"已创建维修单 {maint_no}"
+    }
+
+
+@router.post("/{fault_id}/resolve")
+async def resolve_fault(
+    fault_id: int,
+    request: ResolveFaultRequest,
+    db: Session = Depends(get_db)
+):
+    """直接解决故障（技术问题，无需备件）"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    if fault.status not in ['diagnosing', 'resolving']:
+        raise HTTPException(status_code=400, detail="只有诊断中或技术处理中的故障才能解决")
+
+    fault.status = "resolved"
+    fault.resolved_at = datetime.utcnow()
+    fault.resolution = request.resolution
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "resolution": fault.resolution,
+        "resolved_at": fault.resolved_at.isoformat(),
+        "message": "故障已解决"
+    }
+
+
+@router.post("/{fault_id}/close")
+async def close_fault(fault_id: int, db: Session = Depends(get_db)):
+    """关闭故障"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    if fault.status not in ['resolved', 'transferred']:
+        raise HTTPException(status_code=400, detail="只有已解决或已转维修的故障才能关闭")
+
+    # 如果是转维修状态，检查维修是否完成
+    if fault.status == 'transferred' and fault.maintenance_id:
+        maintenance = db.query(MaintenanceRecord).filter(
+            MaintenanceRecord.id == fault.maintenance_id
+        ).first()
+        if maintenance and maintenance.status != 'completed':
+            raise HTTPException(status_code=400, detail="关联的维修单尚未完成")
+
+    fault.status = "closed"
+    fault.closed_at = datetime.utcnow()
+    fault.updated_at = datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "closed_at": fault.closed_at.isoformat(),
+        "message": "故障已关闭"
+    }
+
+
+@router.get("/{fault_id}/transitions")
+async def get_fault_transitions(fault_id: int, db: Session = Depends(get_db)):
+    """获取故障可用的状态流转选项"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    valid_transitions = FAULT_VALID_TRANSITIONS.get(fault.status, [])
+    transition_options = []
+
+    for status in valid_transitions:
+        transition_options.append({
+            "status": status,
+            "label": FAULT_STATUS_LABELS.get(status),
+            "color": FAULT_STATUS_COLORS.get(status)
+        })
+
+    return {
+        "current_status": fault.status,
+        "current_status_label": FAULT_STATUS_LABELS.get(fault.status),
+        "valid_transitions": transition_options
+    }
