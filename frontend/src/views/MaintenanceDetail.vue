@@ -633,11 +633,12 @@
       <div class="form-section-title verification">
         <el-icon><CircleCheck /></el-icon>
         {{ t('maintVerificationSection') || '验证信息' }}
-        <el-tag v-if="editForm.verify_passed" type="success" size="small" class="section-badge">{{ t('maintVerificationPassed') }}</el-tag>
+        <el-tag v-if="editForm.verification_result === 'passed'" type="success" size="small" class="section-badge">{{ t('maintVerificationPassed') }}</el-tag>
+        <el-tag v-if="editForm.verification_result === 'failed'" type="danger" size="small" class="section-badge">{{ t('maintVerificationFailed') }}</el-tag>
       </div>
       <el-form :model="editForm" label-width="80px">
         <el-form-item :label="t('maintVerificationResult')">
-          <el-select v-model="editForm.verification_result" style="width: 150px" clearable>
+          <el-select v-model="editForm.verification_result" style="width: 150px" clearable @change="handleVerificationResultChange">
             <el-option :label="t('maintVerificationPassed')" value="passed" />
             <el-option :label="t('maintVerificationFailed')" value="failed" />
             <el-option :label="t('maintVerificationPartial')" value="partial" />
@@ -645,14 +646,6 @@
         </el-form-item>
         <el-form-item :label="t('maintVerificationNotes')">
           <el-input v-model="editForm.verification_notes" type="textarea" :rows="2" :placeholder="t('maintVerificationNotesPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('maintVerifyPassed')">
-          <el-checkbox v-model="editForm.verify_passed" :disabled="editForm.verification_result !== 'passed'">
-            {{ editForm.verify_passed ? t('maintVerifyPassedYes') : t('maintVerifyPassedNo') }}
-          </el-checkbox>
-          <el-tag v-if="editForm.verify_passed" type="success" size="small" class="verify-badge">
-            <el-icon><CircleCheck /></el-icon>
-          </el-tag>
         </el-form-item>
       </el-form>
     </div>
@@ -999,6 +992,12 @@ const saveDiagnosis = async () => {
   } finally {
     savingDiagnosis.value = false
   }
+}
+
+// 验证结果变更处理
+const handleVerificationResultChange = (value) => {
+  // 根据验证结果自动设置 verify_passed
+  editForm.value.verify_passed = value === 'passed'
 }
 
 // 分配负责人
