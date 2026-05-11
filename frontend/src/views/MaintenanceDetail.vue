@@ -397,6 +397,13 @@
                 <el-option :label="t('maintDiagnosisNeedUpgrade')" value="need_upgrade" />
               </el-select>
             </el-form-item>
+            <el-form-item>
+              <el-button type="primary" @click="saveDiagnosis" :loading="savingDiagnosis">
+                <el-icon><Select /></el-icon>
+                {{ t('maintSaveDiagnosis') || '保存诊断' }}
+              </el-button>
+              <span class="save-tip" v-if="statusInfo.status === 'created'">{{ t('maintDiagnosisAutoTransitionTip') || '保存后将自动进入诊断阶段' }}</span>
+            </el-form-item>
           </el-form>
         </div>
 
@@ -735,7 +742,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled } from '@element-plus/icons-vue'
+import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select } from '@element-plus/icons-vue'
 import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
@@ -750,6 +757,7 @@ const router = useRouter()
 const maintenance = ref({})
 const device = ref(null)
 const loading = ref(false)
+const savingDiagnosis = ref(false)
 const showEditDialog = ref(false)
 const activeTab = ref('spare')
 
@@ -949,6 +957,43 @@ const handleCancel = async () => {
     if (e !== 'cancel') {
       ElMessage.error(t('maintTransitionFailed'))
     }
+  }
+}
+
+// 保存诊断信息
+const saveDiagnosis = async () => {
+  if (!editForm.value.diagnosis_text) {
+    ElMessage.warning(t('maintDiagnosisPlaceholder') || '请输入诊断内容')
+    return
+  }
+
+  savingDiagnosis.value = true
+  try {
+    // 保存诊断信息
+    await updateMaintenance(maintenance.value.id, {
+      diagnosis_text: editForm.value.diagnosis_text,
+      diagnosis_result: editForm.value.diagnosis_result
+    })
+
+    // 如果当前是 created 状态，自动推进到 diagnosing
+    if (statusInfo.value.status === 'created') {
+      await transitionMaintenanceStatus(maintenance.value.id, {
+        status: 'diagnosing',
+        operator: 'Web',
+        notes: '填写诊断信息后自动推进'
+      })
+      ElMessage.success(t('maintDiagnosisSavedAndTransitioned') || '诊断信息已保存，状态已推进到诊断阶段')
+    } else {
+      ElMessage.success(t('maintDiagnosisSaved') || '诊断信息已保存')
+    }
+
+    // 刷新数据
+    loadMaintenance()
+  } catch (e) {
+    const detail = e.response?.data?.detail || e.message
+    ElMessage.error(t('maintDiagnosisSaveFailed') || '保存诊断信息失败: ' + detail)
+  } finally {
+    savingDiagnosis.value = false
   }
 }
 
@@ -2719,6 +2764,12 @@ onMounted(() => {
 .section-badge {
   margin-left: 8px;
   font-size: 11px;
+}
+
+.save-tip {
+  margin-left: 12px;
+  font-size: 12px;
+  color: var(--text-tertiary);
 }
 
 .verify-badge {

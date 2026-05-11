@@ -1326,6 +1326,11 @@ export const languages = {
     maintDiagnosisNoFault: '未发现故障',
     maintDiagnosisNeedReplace: '需要更换',
     maintDiagnosisNeedUpgrade: '需要升级',
+    maintSaveDiagnosis: '保存诊断',
+    maintDiagnosisAutoTransitionTip: '保存后将自动进入诊断阶段',
+    maintDiagnosisSaved: '诊断信息已保存',
+    maintDiagnosisSavedAndTransitioned: '诊断信息已保存，状态已推进到诊断阶段',
+    maintDiagnosisSaveFailed: '保存诊断信息失败',
 
     // 验证信息
     maintVerificationSection: '验证信息',
@@ -3287,6 +3292,11 @@ export const languages = {
     maintDiagnosisNoFault: 'No Fault',
     maintDiagnosisNeedReplace: 'Need Replace',
     maintDiagnosisNeedUpgrade: 'Need Upgrade',
+    maintSaveDiagnosis: 'Save Diagnosis',
+    maintDiagnosisAutoTransitionTip: 'Will automatically enter diagnosis phase after saving',
+    maintDiagnosisSaved: 'Diagnosis information saved',
+    maintDiagnosisSavedAndTransitioned: 'Diagnosis saved, status advanced to diagnosis phase',
+    maintDiagnosisSaveFailed: 'Failed to save diagnosis',
 
     // Verification
     maintVerificationSection: 'Verification',
