@@ -15,6 +15,7 @@ router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 # 状态流转规则
 VALID_TRANSITIONS = {
     'created': ['diagnosing', 'cancelled'],
+    'pending': ['diagnosing', 'cancelled'],  # pending 视为初始状态，等同于 created
     'diagnosing': ['repairing', 'cancelled'],
     'repairing': ['verifying', 'cancelled'],
     'verifying': ['completed', 'cancelled'],
@@ -24,6 +25,7 @@ VALID_TRANSITIONS = {
 
 STATUS_LABELS = {
     'created': '创建',
+    'pending': '待处理',
     'diagnosing': '诊断',
     'repairing': '维修',
     'verifying': '验证',
@@ -33,6 +35,7 @@ STATUS_LABELS = {
 
 STATUS_PERCENT = {
     'created': 20,
+    'pending': 20,  # pending 视为初始状态
     'diagnosing': 40,
     'repairing': 60,
     'verifying': 80,
@@ -256,6 +259,13 @@ async def get_maintenance(maint_id: int):
             "verifying_at": maintenance.verifying_at.isoformat() if maintenance.verifying_at else None,
             "completed_at": maintenance.completed_at.isoformat() if maintenance.completed_at else None,
             "cancelled_at": maintenance.cancelled_at.isoformat() if maintenance.cancelled_at else None,
+            # 诊断信息字段
+            "diagnosis_text": maintenance.diagnosis_text,
+            "diagnosis_result": maintenance.diagnosis_result,
+            # 验证信息字段
+            "verification_result": maintenance.verification_result,
+            "verification_notes": maintenance.verification_notes,
+            "verify_passed": maintenance.verify_passed,
             "events": events
         }
     finally:

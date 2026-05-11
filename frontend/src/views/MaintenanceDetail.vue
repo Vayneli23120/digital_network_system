@@ -402,7 +402,7 @@
                 <el-icon><Select /></el-icon>
                 {{ t('maintSaveDiagnosis') || '保存诊断' }}
               </el-button>
-              <span class="save-tip" v-if="statusInfo.status === 'created'">{{ t('maintDiagnosisAutoTransitionTip') || '保存后将自动进入诊断阶段' }}</span>
+              <span class="save-tip" v-if="statusInfo.status === 'created' || statusInfo.status === 'pending'">{{ t('maintDiagnosisAutoTransitionTip') || '保存后将自动进入诊断阶段' }}</span>
             </el-form-item>
           </el-form>
         </div>
@@ -831,6 +831,7 @@ const suggestInfo = ref({
 // 状态常量映射
 const STATUS_STEPS = {
   'created': 1,
+  'pending': 1,  // pending 视为初始状态
   'diagnosing': 2,
   'repairing': 3,
   'verifying': 4,
@@ -840,6 +841,7 @@ const STATUS_STEPS = {
 
 const STATUS_ICONS = {
   'created': 'Document',
+  'pending': 'Document',  // pending 视为初始状态
   'diagnosing': 'Search',
   'repairing': 'Setting',
   'verifying': 'CircleCheck',
@@ -849,6 +851,7 @@ const STATUS_ICONS = {
 
 const STATUS_COLORS = {
   'created': 'info',
+  'pending': 'info',  // pending 视为初始状态
   'diagnosing': 'warning',
   'repairing': 'primary',
   'verifying': 'success',
@@ -873,6 +876,7 @@ const nextStatusOptions = computed(() => {
   const currentStatus = statusInfo.value.status
   const transitions = {
     'created': [{ status: 'diagnosing', label: t('maintTransitionToDiagnosing') }],
+    'pending': [{ status: 'diagnosing', label: t('maintTransitionToDiagnosing') }],  // pending 视为初始状态
     'diagnosing': [{ status: 'repairing', label: t('maintTransitionToRepairing') }],
     'repairing': [{ status: 'verifying', label: t('maintTransitionToVerifying') }],
     'verifying': [{ status: 'completed', label: t('maintTransitionToCompleted') }],
@@ -884,7 +888,7 @@ const nextStatusOptions = computed(() => {
 
 // 是否可以取消
 const canCancel = computed(() => {
-  const cancellableStates = ['created', 'diagnosing', 'repairing', 'verifying']
+  const cancellableStates = ['created', 'pending', 'diagnosing', 'repairing', 'verifying']
   return cancellableStates.includes(statusInfo.value.status)
 })
 
@@ -975,8 +979,8 @@ const saveDiagnosis = async () => {
       diagnosis_result: editForm.value.diagnosis_result
     })
 
-    // 如果当前是 created 状态，自动推进到 diagnosing
-    if (statusInfo.value.status === 'created') {
+    // 如果当前是 created 或 pending 状态，自动推进到 diagnosing
+    if (statusInfo.value.status === 'created' || statusInfo.value.status === 'pending') {
       await transitionMaintenanceStatus(maintenance.value.id, {
         status: 'diagnosing',
         operator: 'Web',
