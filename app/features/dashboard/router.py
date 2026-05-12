@@ -7,6 +7,8 @@ from typing import Optional
 from app.shared.database import get_db
 from .dashboard_service import get_dashboard_summary as svc_get_dashboard_summary
 from .dashboard_service import get_fault_trend as svc_get_fault_trend
+from .dashboard_service import get_cost_trend as svc_get_cost_trend
+from .dashboard_service import get_top_fault_devices as svc_get_top_fault_devices
 from app.shared.cache import cache, _DASHBOARD_TTL, _TREND_TTL, _cache_key
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -22,6 +24,32 @@ async def get_dashboard_summary(db: Session = Depends(get_db)):
 
     result = svc_get_dashboard_summary(db)
     cache.set(key, result, ttl=_DASHBOARD_TTL)
+    return result
+
+
+@router.get("/cost-trend")
+async def get_cost_trend(db: Session = Depends(get_db), months: int = 6):
+    """获取近 N 个月运维成本趋势（60s 缓存）"""
+    key = _cache_key("dashboard:cost-trend", months=months)
+    result = cache.get(key)
+    if result is not None:
+        return result
+
+    result = svc_get_cost_trend(db, months=months)
+    cache.set(key, result, ttl=_TREND_TTL)
+    return result
+
+
+@router.get("/top-fault-devices")
+async def get_top_fault_devices(db: Session = Depends(get_db), days: int = 30, limit: int = 5):
+    """获取近 N 天故障最多的设备（60s 缓存）"""
+    key = _cache_key("dashboard:top-fault-devices", days=days, limit=limit)
+    result = cache.get(key)
+    if result is not None:
+        return result
+
+    result = svc_get_top_fault_devices(db, days=days, limit=limit)
+    cache.set(key, result, ttl=_TREND_TTL)
     return result
 
 

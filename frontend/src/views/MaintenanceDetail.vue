@@ -208,41 +208,69 @@
 
       <!-- 右侧：操作卡片 -->
       <div class="maint-actions-card">
-        <!-- 状态流转操作区 -->
-        <div class="status-transition-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+        <!-- 工作日志输入区（ServiceNow Notes风格） -->
+        <div class="work-notes-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+          <div class="actions-card-header">
+            <el-icon><Edit /></el-icon>
+            {{ t('maintWorkNotes') || '工作日志' }}
+          </div>
+          <el-input
+            v-model="newNote"
+            type="textarea"
+            :rows="3"
+            :placeholder="t('maintNotePlaceholder') || '添加工作进展记录...'"
+            class="note-input"
+          />
+          <el-button type="primary" size="default" class="note-submit-btn" @click="addWorkNote" :loading="addingNote">
+            <el-icon><Plus /></el-icon>
+            {{ t('maintAddNote') || '添加日志' }}
+          </el-button>
+        </div>
+
+        <!-- 流程操作区（条件显示） -->
+        <div class="flow-actions-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <div class="actions-card-header">
             <el-icon><Operation /></el-icon>
-            {{ t('maintTransitionBtn') }}
+            {{ t('maintFlowActions') || '流程操作' }}
           </div>
-          <div class="transition-buttons">
-            <el-button
-              v-for="option in nextStatusOptions"
-              :key="option.status"
-              :type="getStatusTagClass(option.status)"
-              size="default"
-              @click="handleStatusTransition(option.status)"
-              class="transition-btn"
-            >
-              <el-icon v-if="option.status === 'diagnosing'"><Search /></el-icon>
-              <el-icon v-else-if="option.status === 'repairing'"><Setting /></el-icon>
-              <el-icon v-else-if="option.status === 'verifying'"><CircleCheck /></el-icon>
-              <el-icon v-else-if="option.status === 'completed'"><CircleCheck /></el-icon>
-              {{ option.label }}
+
+          <!-- 维修中状态：显示备件和提交验证按钮 -->
+          <div class="flow-buttons" v-if="statusInfo.status === 'repairing'">
+            <el-button type="primary" @click="openEditDialog" class="flow-btn">
+              <el-icon><Box /></el-icon>
+              {{ t('maintAddSpare') || '添加备件' }}
+            </el-button>
+            <el-button type="warning" @click="openEditDialog" class="flow-btn">
+              <el-icon><RefreshRight /></el-icon>
+              {{ t('maintAddReturn') || '入库返回件' }}
             </el-button>
             <el-button
-              v-if="canCancel"
-              type="danger"
-              size="default"
-              @click="handleCancel"
-              class="transition-btn"
+              type="success"
+              @click="submitForVerification"
+              class="flow-btn"
+              :disabled="!canSubmitVerification"
             >
-              <el-icon><CircleClose /></el-icon>
-              {{ t('maintTransitionToCancelled') }}
+              <el-icon><CircleCheck /></el-icon>
+              {{ t('maintSubmitVerification') || '提交验证' }}
             </el-button>
+            <div class="flow-tip" v-if="!canSubmitVerification">
+              {{ t('maintSubmitTip') || '请先添加备件信息后再提交验证' }}
+            </div>
+          </div>
+
+          <!-- 验证中状态：只显示验证通过按钮 -->
+          <div class="flow-buttons" v-if="statusInfo.status === 'verifying'">
+            <el-button type="success" @click="verifyPass" class="flow-btn verify-btn">
+              <el-icon><SuccessFilled /></el-icon>
+              {{ t('maintVerifyPass') || '验证通过' }}
+            </el-button>
+            <div class="verify-tip">
+              {{ t('maintVerifyTip') || '设备已修复，运行一段时间确认无误后点击验证通过' }}
+            </div>
           </div>
         </div>
 
-        <!-- 分配负责人 -->
+        <!-- 分配负责人（维修中或验证中状态时如果还没有负责人） -->
         <div class="assign-card" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <div class="actions-card-header">
             <el-icon><User /></el-icon>
@@ -260,32 +288,29 @@
           </el-button>
         </div>
 
-        <!-- 操作区独立 Card -->
-        <div class="actions-card">
-          <div class="actions-card-header">
-            <el-icon><Operation /></el-icon>
-            {{ t('maintDetailActions') }}
-          </div>
-          <div class="action-btn-group">
-            <el-button type="primary" @click="openEditDialog">
-              <el-icon><Edit /></el-icon>
-              {{ t('actionEdit') }}
-            </el-button>
-            <el-button type="danger" @click="deleteMaintenanceRecord">
-              <el-icon><Delete /></el-icon>
-              {{ t('actionDelete') }}
-            </el-button>
-          </div>
+        <!-- 取消按钮（仅维修中状态显示） -->
+        <div class="cancel-card" v-if="statusInfo.status === 'repairing'">
+          <el-button type="danger" size="default" @click="handleCancel" class="cancel-btn">
+            <el-icon><CircleClose /></el-icon>
+            {{ t('maintTransitionToCancelled') }}
+          </el-button>
         </div>
 
-        <!-- 事件时间线 -->
+        <!-- 事件时间线（工作日志） -->
         <div class="events-timeline-card" v-if="events.length > 0">
           <div class="actions-card-header">
             <el-icon><Clock /></el-icon>
-            {{ t('maintTimeline') }}
+            {{ t('maintTimeline') || '工作日志' }}
+            <el-tag v-if="maintenance.has_fault_work_notes" type="info" size="small" class="fault-notes-tag">
+              {{ t('maintIncludesFaultNotes') || '含故障诊断日志' }}
+            </el-tag>
           </div>
           <div class="timeline-list">
-            <div class="timeline-item" v-for="(event, index) in events" :key="index" :class="event.event_type">
+            <div class="timeline-item" v-for="(event, index) in events" :key="index" :class="[event.event_type, { 'from-fault': event.source === 'fault' }]">
+              <!-- 故障来源标记 -->
+              <div class="fault-source-badge" v-if="event.source === 'fault'">
+                <el-tag type="warning" size="small">{{ t('maintFromFault') || '来自故障' }}</el-tag>
+              </div>
               <div class="timeline-marker">
                 <el-icon v-if="event.event_type === 'created'"><Document /></el-icon>
                 <el-icon v-else-if="event.event_type === 'diagnosing'"><Search /></el-icon>
@@ -295,6 +320,8 @@
                 <el-icon v-else-if="event.event_type === 'cancelled'"><CircleClose /></el-icon>
                 <el-icon v-else-if="event.event_type === 'assigned'"><User /></el-icon>
                 <el-icon v-else-if="event.event_type === 'diagnosis_added'"><Search /></el-icon>
+                <el-icon v-else-if="event.event_type === 'fault_diagnosis'"><WarningFilled /></el-icon>
+                <el-icon v-else-if="event.event_type === 'work_note'"><Edit /></el-icon>
                 <el-icon v-else-if="event.event_type === 'verification_submitted'"><CircleCheck /></el-icon>
                 <el-icon v-else-if="event.event_type === 'verification_passed'"><SuccessFilled /></el-icon>
                 <el-icon v-else><MoreFilled /></el-icon>
@@ -735,7 +762,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select } from '@element-plus/icons-vue'
+import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select, Plus } from '@element-plus/icons-vue'
 import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
@@ -753,6 +780,10 @@ const loading = ref(false)
 const savingDiagnosis = ref(false)
 const showEditDialog = ref(false)
 const activeTab = ref('spare')
+
+// 工作日志
+const newNote = ref('')
+const addingNote = ref(false)
 
 // 状态系统
 const statusInfo = ref({
@@ -885,6 +916,15 @@ const canCancel = computed(() => {
   return cancellableStates.includes(statusInfo.value.status)
 })
 
+// 是否可以提交验证（维修中状态且已填写备件信息）
+const canSubmitVerification = computed(() => {
+  // 必须在 repairing 状态
+  if (statusInfo.value.status !== 'repairing') return false
+  // 检查是否有备件或返回件信息（至少填写过内容）
+  // 这个条件可以灵活调整，比如只要有工作日志就可以提交
+  return true  // 暂时允许任何维修中状态提交验证
+})
+
 const getStepClass = (step) => {
   if (workflowStep.value > step) return 'completed'
   if (workflowStep.value === step) return 'active'
@@ -953,6 +993,87 @@ const handleCancel = async () => {
   } catch (e) {
     if (e !== 'cancel') {
       ElMessage.error(t('maintTransitionFailed'))
+    }
+  }
+}
+
+// 添加工作日志
+const addWorkNote = async () => {
+  if (!newNote.value.trim()) {
+    ElMessage.warning(t('maintNotePlaceholder') || '请输入日志内容')
+    return
+  }
+
+  addingNote.value = true
+  try {
+    await api.post(`/maintenance/${maintenance.value.id}/work-note`, {
+      note: newNote.value,
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintNoteAdded') || '工作日志已添加')
+    newNote.value = ''
+    loadMaintenance()
+  } catch (e) {
+    const detail = e.response?.data?.detail || e.message
+    ElMessage.error(t('maintNoteFailed') || '添加日志失败: ' + detail)
+  } finally {
+    addingNote.value = false
+  }
+}
+
+// 提交验证
+const submitForVerification = async () => {
+  try {
+    await ElMessageBox.confirm(
+      t('maintSubmitConfirm') || '确认提交验证？提交后进入验证阶段，需要运行一段时间确认无误。',
+      t('msgConfirm') || '确认',
+      { type: 'info' }
+    )
+
+    // 先保存当前编辑的备件信息
+    if (editForm.value.spare_parts.length > 0 || editForm.value.return_parts.length > 0) {
+      const combinedParts = [
+        ...editForm.value.spare_parts.map(p => ({ ...p, is_return: false })),
+        ...editForm.value.return_parts.map(p => ({ ...p, is_return: true }))
+      ]
+      await updateMaintenance(maintenance.value.id, {
+        parts_replaced: JSON.stringify(combinedParts),
+        parts_cost: editForm.value.parts_cost
+      })
+    }
+
+    // 提交验证
+    const result = await api.post(`/maintenance/${maintenance.value.id}/submit-verification`, {
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintSubmitted') || '已提交验证')
+    loadMaintenance()
+  } catch (e) {
+    if (e !== 'cancel') {
+      const detail = e.response?.data?.detail || e.message
+      ElMessage.error(t('maintSubmitFailed') || '提交验证失败: ' + detail)
+    }
+  }
+}
+
+// 验证通过
+const verifyPass = async () => {
+  try {
+    await ElMessageBox.confirm(
+      t('maintVerifyConfirm') || '确认验证通过？设备运行正常，维修完成。',
+      t('msgConfirm') || '确认',
+      { type: 'success' }
+    )
+
+    const result = await api.post(`/maintenance/${maintenance.value.id}/verify-pass`, {
+      operator: 'Web'
+    })
+    ElMessage.success(t('maintVerified') || '维修已完成')
+    loadMaintenance()
+  } catch (e) {
+    if (e !== 'cancel') {
+      const detail = e.response?.data?.detail || e.message
+      ElMessage.error(t('maintVerifyFailed') || '验证通过失败: ' + detail)
     }
   }
 }
@@ -1580,8 +1701,12 @@ const cancelSuggest = () => {
   lastSuggestStatus.value = ''
 }
 
-onMounted(() => {
-  loadMaintenance()
+onMounted(async () => {
+  await loadMaintenance()
+  // 如果URL参数有 edit=true，自动打开编辑对话框
+  if (route.query.edit === 'true') {
+    openEditDialog()
+  }
 })
 </script>
 
@@ -1881,6 +2006,92 @@ onMounted(() => {
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
+/* 工作日志输入区 */
+.work-notes-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.note-input {
+  margin-top: 12px;
+}
+
+.note-submit-btn {
+  width: 100%;
+  margin-top: 12px;
+  height: 40px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+
+/* 流程操作区 */
+.flow-actions-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  padding: 16px;
+}
+
+.flow-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.flow-btn {
+  width: 100%;
+  height: 44px;
+  border-radius: 10px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.2s;
+}
+
+.flow-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.flow-tip, .verify-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.verify-btn {
+  background: linear-gradient(135deg, var(--accent-success) 0%, #00a884 100%);
+  border: none;
+}
+
+.verify-tip {
+  background: rgba(0, 184, 148, 0.1);
+  color: var(--accent-success);
+}
+
+/* 取消按钮区 */
+.cancel-card {
+  padding: 12px;
+}
+
+.cancel-btn {
+  width: 100%;
+  height: 40px;
+}
+
+/* 故障来源标记 */
+.fault-notes-tag {
+  margin-left: 8px;
+}
+
 /* 事件时间线 */
 .events-timeline-card {
   background: var(--bg-card);
@@ -1934,6 +2145,23 @@ onMounted(() => {
 
 .timeline-item.verification_passed {
   background: rgba(0, 184, 148, 0.15);
+}
+
+.timeline-item.from-fault {
+  border: 1px dashed var(--accent-warning);
+  background: rgba(255, 184, 0, 0.08);
+}
+
+.timeline-item.fault_diagnosis {
+  background: rgba(255, 184, 0, 0.1);
+}
+
+.timeline-item.work_note {
+  background: rgba(9, 132, 227, 0.08);
+}
+
+.fault-source-badge {
+  margin-bottom: 4px;
 }
 
 .timeline-marker {

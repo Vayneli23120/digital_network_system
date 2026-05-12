@@ -24,7 +24,7 @@ class Device(Base):
     location = Column(String(200))
     role = Column(String(50), index=True)  # access, distribution, core
     status = Column(String(50), default="online", index=True)  # online, offline, maintenance, retired
-    device_type = Column(String(50), default="switch", index=True)  # switch, ap, router, other
+    device_type = Column(String(50), default="switch", index=True)  # uce, core_switch, server_switch, office_switch, ap, router, firewall, other
     purchase_date = Column(DateTime)
     vendor = Column(String(200))
     purchase_cost = Column(DECIMAL(10, 2), default=0)

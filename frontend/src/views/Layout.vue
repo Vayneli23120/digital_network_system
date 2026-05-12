@@ -5,7 +5,7 @@
       :dark-mode="darkMode"
       :active-top-tab="activeTopTab"
       :current-lang="currentLang"
-      :has-notifications="hasNotifications"
+      :unread-count="unreadNotifCount"
       :logo-text="t('logoText')"
       :dashboard-label="t('navDashboard')"
       :devices-label="t('navDevices')"
@@ -24,7 +24,7 @@
       :lang-switch-title="t('langSwitch')"
       :theme-light-title="t('themeLight')"
       :theme-dark-title="t('themeDark')"
-      :user-name="t('userAdmin')"
+      :user-name="currentUser"
       :profile-label="t('userProfile')"
       :settings-label="t('userSettings')"
       :logout-label="t('userLogout')"
@@ -64,6 +64,7 @@ import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key,
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
+import { getUnreadCount } from '@/api'
 
 const route = useRoute()
 const router = useRouter()
@@ -73,7 +74,8 @@ const { t, currentLang, toggleLang } = useI18n()
 const collapsed = ref(false)
 const darkMode = ref(localStorage.getItem('darkMode') === 'true')
 const isMobile = ref(window.innerWidth < 768)
-const hasNotifications = ref(true)
+const unreadNotifCount = ref(0)
+const currentUser = ref(localStorage.getItem('currentUser') || 'Admin')
 const activeTopTab = ref('dashboard')
 const showSearchOverlay = ref(false)
 
@@ -87,6 +89,16 @@ const loadFaultBadge = async () => {
     faultBadge.value = data.items?.filter(f => f.status === 'open' || f.status === 'investigating').length || 0
   } catch (err) {
     console.error('Failed to load fault badge:', err)
+  }
+}
+
+// Notification unread count
+const loadUnreadNotifCount = async () => {
+  try {
+    const res = await getUnreadCount()
+    unreadNotifCount.value = res.unread_count || 0
+  } catch (err) {
+    console.error('Failed to load notification count:', err)
   }
 }
 
@@ -144,6 +156,7 @@ const sidebarGroups = computed(() => {
       {
         label: t('groupSystem'),
         items: [
+          { path: '/notifications', text: t('menuNotifications') || '通知中心', icon: Bell },
           { path: '/logs', text: t('menuLogs'), icon: Document },
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell },
           { path: '/users', text: t('menuUsers'), icon: User },
@@ -165,7 +178,7 @@ watch(route, (newRoute) => {
     activeTopTab.value = 'config'
   } else if (path.startsWith('/spare') || path.startsWith('/scrap')) {
     activeTopTab.value = 'spare'
-  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users')) {
+  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users') || path.startsWith('/notifications')) {
     activeTopTab.value = 'system'
   }
 }, { immediate: true })
@@ -211,8 +224,11 @@ onMounted(() => {
   }
   // Load fault badge
   loadFaultBadge()
+  // Load notification unread count
+  loadUnreadNotifCount()
   // Update every 30 seconds
   setInterval(loadFaultBadge, 30000)
+  setInterval(loadUnreadNotifCount, 30000)
 })
 
 onUnmounted(() => {

@@ -1,6 +1,6 @@
 """Maintenance management router"""
 
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Body
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -9,6 +9,7 @@ import json
 
 from app.shared.database import get_db
 from app.shared.models import MaintenanceRecord, MaintenanceEvent, FaultRecord
+from app.features.faults.router import send_maintenance_completed_notification
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
@@ -205,8 +206,9 @@ async def get_maintenance(maint_id: int):
         if not maintenance:
             raise HTTPException(status_code=404, detail="维修记录不存在")
 
-        # 获取关联的故障信息
+        # 获取关联的故障信息（增强版，包含工作日志）
         fault_info = None
+        fault_work_notes = []  # 故障的工作日志
         if maintenance.fault_id:
             fault = db.query(FaultRecord).filter(FaultRecord.id == maintenance.fault_id).first()
             if fault:
@@ -215,11 +217,28 @@ async def get_maintenance(maint_id: int):
                     "fault_no": fault.fault_no,
                     "severity": fault.severity,
                     "status": fault.status,
-                    "description": fault.description
+                    "description": fault.description,
+                    "assigned_to": fault.assigned_to if hasattr(fault, 'assigned_to') else None,
+                    "diagnosis_text": fault.diagnosis_text if hasattr(fault, 'diagnosis_text') else None,
+                    "diagnosis_result": fault.diagnosis_result if hasattr(fault, 'diagnosis_result') else None
                 }
 
-        # 构建事件时间线
-        events = build_events_from_record(maintenance)
+                # 构建故障工作日志事件（标记来源为 fault）
+                if fault.diagnosis_text:
+                    fault_work_notes.append({
+                        "event_type": "fault_diagnosis",
+                        "event_time": fault.diagnosing_at.isoformat() if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else maintenance.created_at.isoformat(),
+                        "operator": fault.assigned_to or "Unknown",
+                        "notes": fault.diagnosis_text,
+                        "source": "fault"  # 标记来自故障
+                    })
+
+        # 构建事件时间线（包含故障工作日志）
+        # 故障工作日志放在最前面，然后是维修事件
+        events = fault_work_notes + build_events_from_record(maintenance)
+
+        # 按时间排序，最新的在最上面
+        events.sort(key=lambda e: e.get('event_time') or '', reverse=True)
 
         # 计算SLA剩余时间
         sla_remaining = None
@@ -266,7 +285,10 @@ async def get_maintenance(maint_id: int):
             "verification_result": maintenance.verification_result,
             "verification_notes": maintenance.verification_notes,
             "verify_passed": maintenance.verify_passed,
-            "events": events
+            # 工作日志
+            "events": events,
+            "fault_work_notes": fault_work_notes,  # 故障工作日志（单独字段供前端使用）
+            "has_fault_work_notes": len(fault_work_notes) > 0  # 是否有故障工作日志
         }
     finally:
         db.close()
@@ -305,7 +327,11 @@ async def get_maintenance_events(maint_id: int):
 
 
 @router.post("/{maint_id}/transition")
-async def transition_maintenance_status(maint_id: int, data: dict):
+async def transition_maintenance_status(
+    maint_id: int,
+    data: dict,
+    background_tasks: BackgroundTasks
+):
     """状态流转"""
     db: Session = next(get_db())
 
@@ -337,6 +363,15 @@ async def transition_maintenance_status(maint_id: int, data: dict):
             maintenance.verifying_at = datetime.utcnow()
         elif new_status == "completed":
             maintenance.completed_at = datetime.utcnow()
+            # 维修完成时通知故障负责人去确认解决
+            if maintenance.fault_id:
+                from app.features.faults.router import send_maintenance_completed_notification
+                # 在后台发送通知
+                background_tasks.add_task(
+                    send_maintenance_completed_notification,
+                    maintenance.fault_id,
+                    maintenance.id
+                )
         elif new_status == "cancelled":
             maintenance.cancelled_at = datetime.utcnow()
 
@@ -399,6 +434,177 @@ async def assign_maintenance(maint_id: int, data: dict):
         db.commit()
 
         return {"id": maint_id, "owner": owner, "message": f"已分配给 {owner}"}
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{maint_id}/work-note")
+async def add_work_note(maint_id: int, data: dict):
+    """添加工作日志（Note）
+
+    用于维修过程中记录工作进展
+    """
+    db: Session = next(get_db())
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
+
+        if maintenance.status in ['completed', 'cancelled']:
+            raise HTTPException(status_code=400, detail="已完成或已取消的维修单不能添加日志")
+
+        note_text = data.get("note")
+        operator = data.get("operator", "Web")
+
+        if not note_text:
+            raise HTTPException(status_code=400, detail="缺少日志内容")
+
+        # 创建工作日志事件
+        event = MaintenanceEvent(
+            maintenance_id=maint_id,
+            event_type="work_note",
+            event_time=datetime.utcnow(),
+            operator=operator,
+            notes=note_text
+        )
+        db.add(event)
+        db.commit()
+
+        return {
+            "id": maint_id,
+            "event_id": event.id,
+            "message": "工作日志已添加"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{maint_id}/submit-verification")
+async def submit_for_verification(maint_id: int, data: dict, background_tasks: BackgroundTasks):
+    """提交验证（维修完成，进入验证阶段）
+
+    必须在 repairing 状态才能提交
+    """
+    db: Session = next(get_db())
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
+
+        if maintenance.status != 'repairing':
+            raise HTTPException(status_code=400, detail=f"只有维修中状态才能提交验证，当前状态: {maintenance.status}")
+
+        # 更新备件和返回件信息（如果有）
+        if data.get('spare_parts'):
+            maintenance.parts_replaced = data.get('spare_parts')
+        if data.get('parts_cost'):
+            maintenance.parts_cost = data.get('parts_cost')
+
+        # 状态流转到 verifying
+        maintenance.status = 'verifying'
+        maintenance.verifying_at = datetime.utcnow()
+
+        # 创建事件记录
+        event = MaintenanceEvent(
+            maintenance_id=maint_id,
+            event_type="verifying",
+            event_time=datetime.utcnow(),
+            operator=data.get("operator", "Web"),
+            notes="提交验证"
+        )
+        db.add(event)
+        db.commit()
+
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
+        return {
+            "id": maint_id,
+            "status": "verifying",
+            "status_label": STATUS_LABELS.get("verifying"),
+            "progress_percent": STATUS_PERCENT.get("verifying"),
+            "message": "已提交验证，等待运行确认"
+        }
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        db.close()
+
+
+@router.post("/{maint_id}/verify-pass")
+async def verify_pass(maint_id: int, data: dict, background_tasks: BackgroundTasks):
+    """验证通过（维修完成）
+
+    必须在 verifying 状态才能验证通过
+    验证通过后自动更新关联故障状态为 resolved
+    """
+    db: Session = next(get_db())
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maint_id).first()
+        if not maintenance:
+            raise HTTPException(status_code=404, detail="维修记录不存在")
+
+        if maintenance.status != 'verifying':
+            raise HTTPException(status_code=400, detail=f"只有验证中状态才能通过验证，当前状态: {maintenance.status}")
+
+        # 状态流转到 completed
+        maintenance.status = 'completed'
+        maintenance.completed_at = datetime.utcnow()
+        maintenance.verify_passed = True
+        if data.get('verification_notes'):
+            maintenance.verification_notes = data.get('verification_notes')
+
+        # 创建事件记录
+        event = MaintenanceEvent(
+            maintenance_id=maint_id,
+            event_type="completed",
+            event_time=datetime.utcnow(),
+            operator=data.get("operator", "Web"),
+            notes="验证通过，维修完成"
+        )
+        db.add(event)
+
+        # 自动更新关联故障状态为 resolved
+        if maintenance.fault_id:
+            fault = db.query(FaultRecord).filter(FaultRecord.id == maintenance.fault_id).first()
+            if fault and fault.status == 'transferred':
+                fault.status = 'resolved'
+                fault.resolved_at = datetime.utcnow()
+                fault.resolution = f"维修完成 - 维修单号: {maintenance.maint_no}"
+                fault.updated_at = datetime.utcnow()
+
+        db.commit()
+
+        # 维修完成时通知故障负责人
+        if maintenance.fault_id:
+            background_tasks.add_task(
+                send_maintenance_completed_notification,
+                maintenance.fault_id,
+                maintenance.id
+            )
+
+        # 清除 Dashboard 缓存
+        from app.shared.cache import cache
+        cache.invalidate_prefix("dashboard:")
+
+        return {
+            "id": maint_id,
+            "status": "completed",
+            "status_label": STATUS_LABELS.get("completed"),
+            "progress_percent": STATUS_PERCENT.get("completed"),
+            "message": "维修已完成，故障已自动解决"
+        }
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))

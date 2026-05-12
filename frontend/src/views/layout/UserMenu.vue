@@ -1,9 +1,9 @@
 <template>
-  <div class="avatar-wrap" @click="toggleMenu">
-    <div class="avatar" :class="{ dark: darkMode }">A</div>
+  <div class="avatar-wrap" @click.stop="toggleMenu">
+    <div class="avatar" :class="{ dark: darkMode }">{{ avatarLetter }}</div>
     <div class="user-menu" v-if="showMenu">
       <div class="um-header">
-        <div class="um-avatar">A</div>
+        <div class="um-avatar">{{ avatarLetter }}</div>
         <div class="um-info">
           <span class="um-name">{{ displayUserName }}</span>
           <span class="um-email">{{ displayUserEmail }}</span>
@@ -13,17 +13,21 @@
       <button class="um-item"><el-icon><User /></el-icon> {{ displayProfileLabel }}</button>
       <button class="um-item"><el-icon><Setting /></el-icon> {{ displaySettingsLabel }}</button>
       <div class="um-divider"></div>
-      <button class="um-item danger"><el-icon><SwitchButton /></el-icon> {{ displayLogoutLabel }}</button>
+      <button class="um-item danger" @click.stop="handleLogout"><el-icon><SwitchButton /></el-icon> {{ displayLogoutLabel }}</button>
     </div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import { User, Setting, SwitchButton } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
+import { logout } from '@/api'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const props = defineProps({
   darkMode: {
@@ -59,7 +63,13 @@ const displayProfileLabel = computed(() => props.profileLabel || t('userProfile'
 const displaySettingsLabel = computed(() => props.settingsLabel || t('userSettings'))
 const displayLogoutLabel = computed(() => props.logoutLabel || t('userLogout'))
 
-const emit = defineEmits(['toggle'])
+// Avatar letter (first letter of username)
+const avatarLetter = computed(() => {
+  const name = displayUserName.value || 'A'
+  return name.charAt(0).toUpperCase()
+})
+
+const emit = defineEmits(['toggle', 'logout'])
 
 const showMenu = ref(false)
 
@@ -70,6 +80,23 @@ const toggleMenu = () => {
 
 const closeMenu = () => {
   showMenu.value = false
+}
+
+const handleLogout = async () => {
+  try {
+    await logout()
+    localStorage.removeItem('isLoggedIn')
+    localStorage.removeItem('currentUser')
+    localStorage.removeItem('accessToken')
+    ElMessage.success(t('userLogout') + '成功')
+    router.push('/login')
+  } catch (e) {
+    // Even if API fails, clear local storage and redirect
+    localStorage.removeItem('isLoggedIn')
+    localStorage.removeItem('currentUser')
+    localStorage.removeItem('accessToken')
+    router.push('/login')
+  }
 }
 
 // Close menu on outside click

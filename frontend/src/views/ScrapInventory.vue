@@ -1,147 +1,269 @@
 <template>
-  <div class="scrap-inventory">
-    <el-tabs v-model="activeTab">
-      <!-- 报废库存 Tab -->
-      <el-tab-pane :label="t('scrapTabLabel')" name="scrap">
-        <el-card>
-          <template #header>
-            <div class="card-header">
-              <span>{{ t('scrapManagement') }}</span>
-            </div>
-          </template>
+  <div class="scrap-page">
+    <!-- 页面顶部导航条 -->
+    <section class="page-nav-bar">
+      <div class="nav-left">
+        <h1 class="page-title">{{ t('scrapManagement') }}</h1>
+      </div>
+      <div class="nav-right">
+        <button class="nav-action-btn secondary" @click="loadScrapItems" :disabled="loading">
+          <el-icon><Refresh /></el-icon>
+        </button>
+      </div>
+    </section>
 
-          <!-- 统计卡片 -->
-          <el-row :gutter="16" class="stats-row">
-            <el-col :span="6">
-              <el-card shadow="hover" class="stat-card">
-                <el-statistic :title="t('scrapTypes')" :value="stats.total_types" />
-              </el-card>
-            </el-col>
-            <el-col :span="6">
-              <el-card shadow="hover" class="stat-card">
-                <el-statistic :title="t('scrapTotalCount')" :value="stats.total_quantity" />
-              </el-card>
-            </el-col>
-            <el-col :span="6">
-              <el-card shadow="hover" class="stat-card">
-                <el-statistic :title="t('scrapTotalValue')" :value="stats.total_value" :precision="2" />
-              </el-card>
-            </el-col>
-            <el-col :span="6">
-              <el-card shadow="hover" class="stat-card">
-                <el-statistic :title="t('scrapMonthNew')" :value="stats.month_count" />
-              </el-card>
-            </el-col>
-          </el-row>
+    <!-- Tab 切换 Chips -->
+    <section class="tab-section">
+      <div class="tab-chips">
+        <div
+          :class="['tab-chip', { active: activeTab === 'scrap' }]"
+          @click="activeTab = 'scrap'"
+        >
+          <el-icon class="chip-icon"><Document /></el-icon>
+          <span class="chip-label">{{ t('scrapTabLabel') }}</span>
+          <span class="chip-count">{{ scrapItems.length }}</span>
+        </div>
+        <div
+          :class="['tab-chip', 'chip-history', { active: activeTab === 'history' }]"
+          @click="activeTab = 'history'"
+        >
+          <el-icon class="chip-icon"><Clock /></el-icon>
+          <span class="chip-label">{{ t('scrapHistoryTab') }}</span>
+          <span class="chip-count">{{ historyTotal }}</span>
+        </div>
+      </div>
+    </section>
 
-          <!-- 筛选工具栏 -->
-          <div class="toolbar">
-            <div class="toolbar-left">
-              <el-input
-                v-model="search"
-                :placeholder="t('spareSearchPlaceholder')"
-                clearable
-                class="search-input"
-                @keyup.enter="loadScrapItems"
-                @clear="loadScrapItems"
-              />
-              <el-select v-model="category" :placeholder="t('spareCategory')" clearable class="category-select" @change="loadScrapItems">
-                <el-option :label="t('spareCategoryModule')" value="module" />
-                <el-option :label="t('spareCategoryPower')" value="power" />
-                <el-option :label="t('spareCategoryCable')" value="cable" />
-                <el-option :label="t('spareCategoryOther')" value="other" />
-              </el-select>
-            </div>
-            <div class="toolbar-right">
-              <el-button size="small" @click="resetFilters">{{ t('actionReset') }}</el-button>
-              <el-button size="small" type="primary" @click="loadScrapItems">{{ t('actionSearch') }}</el-button>
+    <!-- 报废库存 Tab 内容 -->
+    <section v-show="activeTab === 'scrap'" class="scrap-content">
+      <!-- 统计 Dashboard -->
+      <section class="stats-dashboard">
+        <div class="stats-grid">
+          <!-- 类型数 -->
+          <div class="stat-card types">
+            <div class="card-content">
+              <div class="card-icon">
+                <el-icon><Collection /></el-icon>
+              </div>
+              <div class="card-body">
+                <div class="metric-value">{{ stats.total_types }}</div>
+                <div class="metric-label">{{ t('scrapTypes') }}</div>
+              </div>
             </div>
           </div>
-
-          <!-- 表格 - 按备件类型分组 -->
-          <el-table :data="scrapItems" stripe border v-loading="loading">
-            <el-table-column prop="name" :label="t('spareName')" width="150">
-              <template #default="{ row }">
-                <el-button type="primary" link @click="showScrapDetail(row)">
-                  {{ row.name }}
-                </el-button>
-              </template>
-            </el-table-column>
-            <el-table-column prop="part_number" :label="t('sparePartNumber')" width="150" />
-            <el-table-column prop="quantity" :label="t('spareQuantity')" width="100">
-              <template #default="{ row }">
-                <el-tag type="danger">{{ row.quantity }}</el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('spareTotalPrice')" width="100">
-              <template #default="{ row }">¥{{ row.total_value.toFixed(2) }}</template>
-            </el-table-column>
-            <el-table-column :label="t('dashAction')" width="160" fixed="right">
-              <template #default="{ row }">
-                <div class="table-actions">
-                  <el-button size="small" type="success" @click="showInDialog(row)">{{ t('spareStockIn') }}</el-button>
-                  <el-button size="small" type="danger" @click="showScrapOutDialog(row)">{{ t('scrapScrap') }}</el-button>
-                </div>
-              </template>
-            </el-table-column>
-          </el-table>
-        </el-card>
-      </el-tab-pane>
-
-      <!-- 报废历史 Tab -->
-      <el-tab-pane :label="t('scrapHistoryTab')" name="history">
-        <el-card>
-          <template #header>
-            <div class="card-header">
-              <span>{{ t('scrapHistoryTitle') }}</span>
-              <el-button @click="loadHistory"><el-icon><Refresh /></el-icon> {{ t('toolRefresh') }}</el-button>
+          <!-- 总数量 -->
+          <div class="stat-card quantity">
+            <div class="card-content">
+              <div class="card-icon">
+                <el-icon><Box /></el-icon>
+              </div>
+              <div class="card-body">
+                <div class="metric-value">{{ stats.total_quantity }}</div>
+                <div class="metric-label">{{ t('scrapTotalCount') }}</div>
+              </div>
+              <div class="card-trend warning" v-if="stats.total_quantity > 0">
+                <el-icon><Warning /></el-icon>
+              </div>
             </div>
-          </template>
-          <el-table :data="historyItems" v-loading="historyLoading" stripe border>
-            <el-table-column prop="created_at" :label="t('movementTime')" width="180">
-              <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
-            </el-table-column>
-            <el-table-column prop="name" :label="t('scrapPartName')" width="150">
-              <template #default="{ row }">{{ row.name || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="part_number" :label="t('sparePartNumber')" width="150">
-              <template #default="{ row }">{{ row.part_number || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="serial_number" :label="t('scrapSerialNumber')" width="150">
-              <template #default="{ row }">{{ row.serial_number || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="movement_type" :label="t('movementType')" width="100" align="center">
-              <template #default="{ row }">
-                <el-tag :type="row.movement_type === 'scrap_in' ? 'warning' : 'danger'" size="small">
-                  {{ row.movement_type === 'scrap_in' ? t('scrapScrapIn') : t('scrapScrapped') }}
-                </el-tag>
-              </template>
-            </el-table-column>
-            <el-table-column prop="quantity" :label="t('spareQuantity')" width="80" align="right" />
-            <el-table-column :label="t('scrapSourceDevice')" width="120">
-              <template #default="{ row }">
-                <span v-if="row.source_device_name">{{ row.source_device_name }}</span>
-                <span v-else>-</span>
-              </template>
-            </el-table-column>
-            <el-table-column prop="unit_price" :label="t('spareUnitPrice')" width="100">
-              <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
-            </el-table-column>
-            <el-table-column prop="reason" :label="t('spareReason')" min-width="150" show-overflow-tooltip />
-            <el-table-column prop="reference" :label="t('scrapRelatedMaintenance')" width="120" show-overflow-tooltip />
-          </el-table>
-          <div class="pagination-bar">
-            <el-pagination
-              v-model:current-page="historyPage"
-              :page-size="50"
-              layout="total, prev, pager, next"
-              :total="historyTotal"
-              @current-change="loadHistory"
+          </div>
+          <!-- 总价值 -->
+          <div class="stat-card value">
+            <div class="card-content">
+              <div class="card-icon">
+                <el-icon><Wallet /></el-icon>
+              </div>
+              <div class="card-body">
+                <div class="metric-value">¥{{ stats.total_value.toFixed(2) }}</div>
+                <div class="metric-label">{{ t('scrapTotalValue') }}</div>
+              </div>
+            </div>
+          </div>
+          <!-- 本月新增 -->
+          <div class="stat-card month">
+            <div class="card-content">
+              <div class="card-icon">
+                <el-icon><Calendar /></el-icon>
+              </div>
+              <div class="card-body">
+                <div class="metric-value">{{ stats.month_count }}</div>
+                <div class="metric-label">{{ t('scrapMonthNew') }}</div>
+              </div>
+              <div class="card-trend stable">
+                <span class="trend-icon">●</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 筛选工具栏 -->
+      <section class="filter-section">
+        <div class="filter-toolbar">
+          <div class="search-box">
+            <el-icon class="search-icon"><Search /></el-icon>
+            <el-input
+              v-model="search"
+              :placeholder="t('spareSearchPlaceholder')"
+              class="search-input"
+              clearable
+              @keyup.enter="loadScrapItems"
+              @clear="loadScrapItems"
             />
           </div>
-        </el-card>
-      </el-tab-pane>
-    </el-tabs>
+          <div class="filter-selects">
+            <el-select v-model="category" :placeholder="t('spareCategory')" clearable style="width: 120px" @change="loadScrapItems">
+              <el-option :label="t('spareCategoryModule')" value="module" />
+              <el-option :label="t('spareCategoryPower')" value="power" />
+              <el-option :label="t('spareCategoryCable')" value="cable" />
+              <el-option :label="t('spareCategoryOther')" value="other" />
+            </el-select>
+          </div>
+          <div class="filter-actions">
+            <button class="filter-btn secondary" @click="resetFilters">{{ t('actionReset') }}</button>
+            <button class="filter-btn primary" @click="loadScrapItems">{{ t('actionSearch') }}</button>
+          </div>
+        </div>
+      </section>
+
+        <!-- 数据面板 -->
+      <section class="data-section">
+        <div class="table-header">
+          <span class="table-title">{{ t('scrapInventoryListTitle') }}</span>
+          <span class="table-count">{{ t('commonRecordsCount', { count: scrapItems.length }) }}</span>
+        </div>
+
+        <el-table
+          :data="scrapItems"
+          class="enterprise-table"
+          v-loading="loading"
+          :header-cell-style="{ background: 'transparent' }"
+        >
+          <el-table-column prop="name" :label="t('spareName')" width="180">
+            <template #default="{ row }">
+              <button class="name-link" @click="showScrapDetail(row)">
+                <span class="name-badge">{{ row.name }}</span>
+                <el-icon class="link-arrow"><ArrowRight /></el-icon>
+              </button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="part_number" :label="t('sparePartNumber')" width="160">
+            <template #default="{ row }">
+              <span class="part-number-text">{{ row.part_number }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity" :label="t('spareQuantity')" width="120">
+            <template #default="{ row }">
+              <div class="quantity-badge danger">
+                <span class="quantity-value">{{ row.quantity }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('spareTotalPrice')" width="120">
+            <template #default="{ row }">
+              <div class="price-cell">
+                <span class="price-currency">¥</span>
+                <span class="price-value">{{ row.total_value.toFixed(2) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('dashAction')" width="200" fixed="right">
+            <template #default="{ row }">
+              <div class="action-group">
+                <button class="action-btn success" @click="showInDialog(row)" :title="t('spareStockIn')">
+                  <el-icon><Download /></el-icon>
+                </button>
+                <button class="action-btn danger" @click="showScrapOutDialog(row)" :title="t('scrapScrap')">
+                  <el-icon><Upload /></el-icon>
+                </button>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </section>
+    </section>
+
+    <!-- 报废历史 Tab 内容 -->
+    <section v-show="activeTab === 'history'" class="history-content">
+      <!-- 数据面板 -->
+      <section class="data-section">
+        <div class="table-header">
+          <span class="table-title">{{ t('scrapHistoryListTitle') }}</span>
+          <span class="table-count">{{ t('commonRecordsCount', { count: historyTotal }) }}</span>
+          <button class="refresh-btn" @click="loadHistory">
+            <el-icon><Refresh /></el-icon>
+          </button>
+        </div>
+
+        <el-table
+          :data="historyItems"
+          class="enterprise-table"
+          v-loading="historyLoading"
+          :header-cell-style="{ background: 'transparent' }"
+        >
+          <el-table-column prop="created_at" :label="t('movementTime')" width="180">
+            <template #default="{ row }">
+              <div class="time-cell">
+                <el-icon class="time-icon"><Clock /></el-icon>
+                <span class="time-text">{{ formatDateTime(row.created_at) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" :label="t('scrapPartName')" width="150">
+            <template #default="{ row }">
+              <span class="name-text">{{ row.name || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="part_number" :label="t('sparePartNumber')" width="150">
+            <template #default="{ row }">
+              <span class="part-number-text">{{ row.part_number || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="serial_number" :label="t('scrapSerialNumber')" width="150">
+            <template #default="{ row }">
+              <span class="serial-text">{{ row.serial_number || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="movement_type" :label="t('movementType')" width="100" align="center">
+            <template #default="{ row }">
+              <div :class="['type-badge', row.movement_type === 'scrap_in' ? 'in' : 'out']">
+                <span class="type-dot"></span>
+                <span class="type-text">{{ row.movement_type === 'scrap_in' ? t('scrapScrapIn') : t('scrapScrapped') }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="quantity" :label="t('spareQuantity')" width="80" align="right">
+            <template #default="{ row }">
+              <span class="quantity-value">{{ row.quantity }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column :label="t('scrapSourceDevice')" width="120">
+            <template #default="{ row }">
+              <span class="device-text">{{ row.source_device_name || '-' }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="unit_price" :label="t('spareUnitPrice')" width="100">
+            <template #default="{ row }">
+              <div class="price-cell">
+                <span class="price-currency">¥</span>
+                <span class="price-value">{{ (row.unit_price || 0).toFixed(2) }}</span>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reason" :label="t('spareReason')" min-width="150" show-overflow-tooltip />
+          <el-table-column prop="reference" :label="t('scrapRelatedMaintenance')" width="120" show-overflow-tooltip />
+        </el-table>
+
+        <div class="pagination-bar">
+          <el-pagination
+            v-model:current-page="historyPage"
+            :page-size="50"
+            layout="total, prev, pager, next"
+            :total="historyTotal"
+            @current-change="loadHistory"
+          />
+        </div>
+      </section>
+    </section>
 
     <!-- 报废详情对话框 -->
     <el-dialog v-model="detailDialogVisible" :title="t('scrapStockList')" width="750px">
@@ -371,7 +493,7 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Aim } from '@element-plus/icons-vue'
+import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload } from '@element-plus/icons-vue'
 import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -943,83 +1065,1125 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.header-buttons {
+/* 字体清晰度优化 - 所有等宽字体 */
+.metric-value,
+.chip-count,
+.table-count,
+.part-number-text,
+.serial-text,
+.quantity-value,
+.price-value,
+.price-currency,
+.time-text {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ===== 页面整体背景 ===== */
+.scrap-page {
+  padding: 0;
+  min-height: calc(100vh - 60px);
+  background: linear-gradient(135deg, #f8fafc 0%, #e8f4fc 50%, #f0f7ff 100%);
   display: flex;
-  gap: var(--gap-sm);
+  flex-direction: column;
+  gap: 16px;
 }
-.stats-row {
-  margin-bottom: var(--gap-lg);
-}
-.stat-card {
-  text-align: center;
-}
-.toolbar {
+
+/* ===== 页面顶部导航条 ===== */
+.page-nav-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: var(--gap-md);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  margin-bottom: var(--gap-md);
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.06);
+  position: relative;
+  overflow: hidden;
 }
-.toolbar-left {
+
+.page-nav-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #0984e3, #74b9ff, #00b894);
+}
+
+.nav-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.nav-right {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-action-btn {
   display: flex;
   align-items: center;
-  gap: var(--gap-md);
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(9, 132, 227, 0.25);
 }
-.search-input {
-  width: 200px;
+
+.nav-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(9, 132, 227, 0.35);
 }
-.category-select {
-  width: 100px;
+
+.nav-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+  padding: 8px 12px;
 }
-.toolbar-right {
+
+.nav-action-btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+/* ===== Tab 切换 Chips ===== */
+.tab-section {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 12px rgba(0, 48, 135, 0.06);
+}
+
+.tab-chips {
   display: flex;
-  gap: var(--gap-sm);
+  gap: 8px;
 }
-.scrap-out-scan-btn {
+
+.tab-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.9);
+  border-radius: 10px;
+  border: 1px solid var(--border-default);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.tab-chip::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  right: 50%;
+  height: 2px;
+  background: currentColor;
+  transition: all 0.25s ease;
+}
+
+.tab-chip:hover::before,
+.tab-chip.active::before {
+  left: 0;
+  right: 0;
+}
+
+.tab-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.1);
+}
+
+.tab-chip.active {
+  background: rgba(9, 132, 227, 0.08);
+  border-color: rgba(9, 132, 227, 0.3);
+  color: #0984e3;
+}
+
+.chip-icon {
+  font-size: 14px;
+  opacity: 0.8;
+}
+
+.chip-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tab-chip.active .chip-label {
+  color: #0984e3;
+}
+
+.chip-count {
+  font-size: 11px;
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--text-tertiary);
+  padding: 2px 8px;
+  background: rgba(0, 48, 135, 0.05);
+  border-radius: 6px;
+}
+
+.tab-chip.chip-history:hover {
+  background: rgba(0, 184, 148, 0.08);
+  border-color: rgba(0, 184, 148, 0.3);
+}
+
+.tab-chip.chip-history.active {
+  background: rgba(0, 184, 148, 0.12);
+  border-color: rgba(0, 184, 148, 0.4);
+  color: #00b894;
+}
+
+.tab-chip.chip-history.active .chip-label {
+  color: #00b894;
+}
+
+/* ===== 内容区域 ===== */
+.scrap-content,
+.history-content {
   display: flex;
   flex-direction: column;
-  gap: var(--gap-sm);
-  margin-bottom: var(--gap-md);
+  gap: 16px;
 }
-.scrap-out-scan-tip {
+
+/* ===== 统计 Dashboard ===== */
+.stats-dashboard {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(16px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  box-shadow: 0 4px 24px rgba(0, 48, 135, 0.08);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+}
+
+.stat-card {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 18px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  cursor: default;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, transparent 40%, rgba(9, 132, 227, 0.05) 100%);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+
+.stat-card:hover::before {
+  opacity: 1;
+}
+
+.stat-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 32px rgba(0, 48, 135, 0.12);
+}
+
+.card-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.card-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  transition: transform 0.3s;
+}
+
+.stat-card:hover .card-icon {
+  transform: scale(1.05);
+}
+
+.stat-card.types .card-icon {
+  background: linear-gradient(135deg, rgba(9, 132, 227, 0.15) 0%, rgba(9, 132, 227, 0.08) 100%);
+  color: #0984e3;
+}
+.stat-card.quantity .card-icon {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(239, 68, 68, 0.1) 100%);
+  color: #ef4444;
+}
+.stat-card.value .card-icon {
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.2) 0%, rgba(251, 191, 36, 0.1) 100%);
+  color: #f59e0b;
+}
+.stat-card.month .card-icon {
+  background: linear-gradient(135deg, rgba(0, 184, 148, 0.2) 0%, rgba(0, 184, 148, 0.1) 100%);
+  color: #00b894;
+}
+
+.card-body { flex: 1; }
+
+.metric-value {
+  font-family: 'JetBrains Mono', 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.metric-label {
   font-size: 12px;
-  color: var(--accent-danger);
-  padding: 4px 8px;
-  background: var(--danger-bg);
-  border-radius: var(--radius-sm);
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  font-weight: 500;
 }
-.scrap-out-manual {
-  margin-top: var(--gap-md);
+
+.card-trend {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 }
-.manual-title {
+
+.card-trend.stable { background: rgba(9, 132, 227, 0.1); color: #0984e3; }
+.card-trend.warning { background: rgba(239, 68, 68, 0.1); color: #ef4444; }
+
+/* ===== 筛选工具栏 ===== */
+.filter-section {
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 12px rgba(0, 48, 135, 0.06);
+}
+
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: var(--text-tertiary);
   font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: var(--gap-sm);
+  z-index: 1;
 }
+
+.search-input {
+  width: 240px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  padding-left: 36px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+  transition: all 0.25s;
+}
+
+.search-input :deep(.el-input__wrapper:hover) {
+  border-color: var(--accent-primary);
+}
+
+.search-input :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--accent-primary);
+  box-shadow: 0 0 0 3px rgba(9, 132, 227, 0.15);
+}
+
+.filter-selects {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-selects :deep(.el-select .el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+}
+
+.filter-actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.filter-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+}
+
+.filter-btn:hover {
+  transform: translateY(-1px);
+}
+
+.filter-btn.primary {
+  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(9, 132, 227, 0.25);
+}
+
+.filter-btn.primary:hover {
+  box-shadow: 0 4px 16px rgba(9, 132, 227, 0.35);
+}
+
+.filter-btn.secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* ===== 数据面板 ===== */
+.data-section {
+  padding: 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 24px rgba(0, 48, 135, 0.08);
+}
+
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.08);
+  gap: 12px;
+}
+
+.table-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.03em;
+}
+
+.table-count {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.refresh-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.refresh-btn:hover {
+  background: rgba(9, 132, 227, 0.08);
+  border-color: rgba(9, 132, 227, 0.2);
+  color: #0984e3;
+}
+
+.enterprise-table { width: 100%; }
+
+.enterprise-table :deep(.el-table__inner-wrapper::before) {
+  display: none;
+}
+
+.enterprise-table :deep(.el-table__header-wrapper) {
+  border-bottom: 2px solid rgba(0, 48, 135, 0.1);
+}
+
+.enterprise-table :deep(th.el-table__cell) {
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.03em;
+  padding: 12px 0;
+  border-bottom: none;
+}
+
+.enterprise-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+  padding: 10px 0;
+  background: transparent;
+}
+
+.enterprise-table :deep(.el-table__row) {
+  transition: all 0.25s ease;
+  background: transparent;
+}
+
+.enterprise-table :deep(.el-table__row:hover > td) {
+  background: rgba(9, 132, 227, 0.04) !important;
+}
+
+/* 名称链接 */
+.name-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-primary);
+  text-decoration: none;
+  transition: all 0.25s;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.name-link:hover {
+  color: var(--accent-secondary);
+}
+
+.name-badge {
+  font-family: 'JetBrains Mono', 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  font-size: 13px;
+  padding: 4px 8px;
+  background: rgba(9, 132, 227, 0.08);
+  border-radius: 6px;
+  transition: all 0.25s;
+}
+
+.name-link:hover .name-badge {
+  background: rgba(9, 132, 227, 0.15);
+}
+
+.link-arrow {
+  opacity: 0;
+  font-size: 12px;
+  transition: all 0.25s;
+  color: var(--accent-primary);
+}
+
+.name-link:hover .link-arrow {
+  opacity: 1;
+  transform: translateX(4px);
+}
+
+/* 编号文本 */
+.part-number-text {
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.serial-text {
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--accent-primary);
+}
+
+/* 名称文本 */
+.name-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 数量徽章 */
+.quantity-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.quantity-badge.danger {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+/* 价格单元格 */
+.price-cell {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.price-currency {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.price-value {
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+/* 时间单元格 */
+.time-cell {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.time-icon {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+.time-text {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+/* 设备文本 */
+.device-text {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* 类型徽章 */
+.type-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid;
+}
+
+.type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.type-badge.in {
+  border-color: rgba(251, 191, 36, 0.3);
+  color: #f59e0b;
+}
+.type-badge.in .type-dot { background: #f59e0b; }
+
+.type-badge.out {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+.type-badge.out .type-dot { background: #ef4444; }
+
+/* 操作按钮组 */
+.action-group {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.25s ease;
+  font-size: 12px;
+}
+
+.action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.15);
+}
+
+.action-btn.success:hover {
+  background: rgba(0, 184, 148, 0.08);
+  border-color: rgba(0, 184, 148, 0.2);
+  color: #00b894;
+}
+
+.action-btn.danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+/* 分页 */
+.pagination-bar {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 48, 135, 0.06);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.pagination-bar :deep(.el-pagination) {
+  gap: 8px;
+}
+
+.pagination-bar :deep(.el-pagination button),
+.pagination-bar :deep(.el-pager li) {
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 6px;
+  border: 1px solid var(--border-default);
+  font-size: 12px;
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.pagination-bar :deep(.el-pager li.is-active) {
+  background: linear-gradient(135deg, #0984e3, #74b9ff);
+  border-color: transparent;
+  color: white;
+}
+
+/* ===== 对话框样式 ===== */
 .compact-header {
   display: flex;
   flex-wrap: wrap;
   gap: var(--gap-md);
   padding: var(--gap-sm) var(--gap-md);
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 8px;
   font-size: 13px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
 }
+
 .compact-header strong {
   font-weight: 600;
 }
+
 .text-primary {
   color: var(--accent-primary);
   font-weight: 500;
 }
+
 .text-success {
-  color: var(--accent-primary);
+  color: #00b894;
   font-weight: 600;
 }
+
 .text-danger {
   color: var(--accent-danger);
   font-weight: 600;
+}
+
+.scrap-in-scan-btn,
+.scrap-out-scan-btn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.scrap-out-scan-tip {
+  font-size: 12px;
+  color: #ef4444;
+  padding: 8px 12px;
+  background: rgba(239, 68, 68, 0.08);
+  border-radius: 6px;
+  border: 1px solid rgba(239, 68, 68, 0.15);
+}
+
+.scrap-out-manual {
+  margin-top: var(--gap-md);
+}
+
+.manual-title {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: var(--gap-sm);
+  font-weight: 500;
+}
+
+@media (max-width: 768px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .filter-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filter-actions {
+    margin-left: 0;
+    justify-content: center;
+  }
+
+  .page-nav-bar {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .nav-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .tab-chips {
+    justify-content: center;
+  }
+}
+
+/* ===== 暗黑模式 ===== */
+.dark .scrap-page {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 50%, #161b22 100%);
+}
+
+.dark .page-nav-bar {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(48, 54, 61, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .page-nav-bar::before {
+  background: linear-gradient(90deg, #0984e3, #74b9ff, #00b894);
+}
+
+.dark .page-title {
+  color: #f0f6fc;
+}
+
+.dark .nav-action-btn.secondary {
+  background: rgba(48, 54, 61, 0.8);
+  color: #8b949e;
+  border-color: #30363d;
+}
+
+.dark .nav-action-btn.secondary:hover {
+  background: rgba(9, 132, 227, 0.15);
+  border-color: #0984e3;
+  color: #58a6ff;
+}
+
+.dark .tab-section {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dark .tab-chip {
+  background: rgba(13, 17, 23, 0.9);
+  border-color: #30363d;
+}
+
+.dark .tab-chip:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .chip-label {
+  color: #8b949e;
+}
+
+.dark .tab-chip.active {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.4);
+  color: #58a6ff;
+}
+
+.dark .tab-chip.active .chip-label {
+  color: #58a6ff;
+}
+
+.dark .chip-count {
+  background: rgba(48, 54, 61, 0.3);
+  color: #8b949e;
+}
+
+.dark .tab-chip.chip-history:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: rgba(63, 185, 80, 0.4);
+}
+
+.dark .tab-chip.chip-history.active {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: rgba(63, 185, 80, 0.4);
+  color: #3fb950;
+}
+
+.dark .tab-chip.chip-history.active .chip-label {
+  color: #3fb950;
+}
+
+.dark .stats-dashboard {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.dark .stat-card {
+  background: rgba(13, 17, 23, 0.95);
+  border-color: rgba(48, 54, 61, 0.6);
+}
+
+.dark .stat-card:hover {
+  background: rgba(22, 27, 34, 0.95);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.dark .metric-value {
+  color: #f0f6fc;
+}
+
+.dark .metric-label {
+  color: #8b949e;
+}
+
+.dark .card-trend.stable { background: rgba(9, 132, 227, 0.2); color: #58a6ff; }
+.dark .card-trend.warning { background: rgba(239, 68, 68, 0.2); color: #f85149; }
+
+.dark .filter-section {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.dark .search-input :deep(.el-input__wrapper) {
+  background: rgba(13, 17, 23, 0.95);
+  border-color: #30363d;
+}
+
+.dark .search-input :deep(.el-input__wrapper:hover),
+.dark .search-input :deep(.el-input__wrapper.is-focus) {
+  border-color: #58a6ff;
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+}
+
+.dark .search-icon {
+  color: #8b949e;
+}
+
+.dark .filter-selects :deep(.el-select .el-input__wrapper) {
+  background: rgba(13, 17, 23, 0.95);
+  border-color: #30363d;
+}
+
+.dark .filter-btn {
+  background: rgba(13, 17, 23, 0.9);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .filter-btn.secondary:hover {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+}
+
+.dark .data-section {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.dark .table-header {
+  border-bottom-color: rgba(48, 54, 61, 0.6);
+}
+
+.dark .table-title {
+  color: #8b949e;
+}
+
+.dark .table-count {
+  color: #6e7681;
+}
+
+.dark .refresh-btn {
+  background: rgba(13, 17, 23, 0.9);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .refresh-btn:hover {
+  background: rgba(88, 166, 255, 0.15);
+  border-color: rgba(88, 166, 255, 0.3);
+  color: #58a6ff;
+}
+
+.dark .enterprise-table :deep(.el-table__header-wrapper) {
+  border-bottom-color: rgba(48, 54, 61, 0.6);
+}
+
+.dark .enterprise-table :deep(th.el-table__cell) {
+  color: #8b949e;
+}
+
+.dark .enterprise-table :deep(td.el-table__cell) {
+  border-bottom-color: rgba(48, 54, 61, 0.3);
+}
+
+.dark .enterprise-table :deep(.el-table__row:hover > td) {
+  background: rgba(88, 166, 255, 0.08) !important;
+}
+
+.dark .name-link {
+  color: #58a6ff;
+}
+
+.dark .name-badge {
+  background: rgba(88, 166, 255, 0.15);
+}
+
+.dark .name-link:hover .name-badge {
+  background: rgba(88, 166, 255, 0.25);
+}
+
+.dark .part-number-text,
+.dark .name-text,
+.dark .device-text {
+  color: #8b949e;
+}
+
+.dark .serial-text {
+  color: #58a6ff;
+}
+
+.dark .quantity-badge.danger {
+  background: rgba(248, 81, 73, 0.15);
+  color: #f85149;
+}
+
+.dark .price-value {
+  color: #8b949e;
+}
+
+.dark .time-text {
+  color: #8b949e;
+}
+
+.dark .type-badge {
+  background: rgba(13, 17, 23, 0.9);
+}
+
+.dark .type-badge.in {
+  border-color: rgba(210, 153, 34, 0.4);
+  color: #d29922;
+}
+.dark .type-badge.in .type-dot { background: #d29922; }
+
+.dark .type-badge.out {
+  border-color: rgba(248, 81, 73, 0.4);
+  color: #f85149;
+}
+.dark .type-badge.out .type-dot { background: #f85149; }
+
+.dark .action-btn {
+  background: rgba(13, 17, 23, 0.9);
+  color: #8b949e;
+  border-color: transparent;
+}
+
+.dark .action-btn:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.dark .action-btn.success:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: rgba(63, 185, 80, 0.3);
+  color: #3fb950;
+}
+
+.dark .action-btn.danger:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #f85149;
+}
+
+.dark .pagination-bar {
+  border-top-color: rgba(48, 54, 61, 0.3);
+}
+
+.dark .pagination-bar :deep(.el-pagination button),
+.dark .pagination-bar :deep(.el-pager li) {
+  background: rgba(13, 17, 23, 0.95);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .pagination-bar :deep(.el-pager li.is-active) {
+  background: linear-gradient(135deg, #0984e3, #74b9ff);
+  color: white;
+}
+
+.dark .compact-header {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .scrap-out-scan-tip {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: rgba(248, 81, 73, 0.3);
+  color: #f85149;
+}
+
+.dark .manual-title {
+  color: #8b949e;
 }
 </style>

@@ -194,7 +194,14 @@ import { useI18n } from '@/composables/useI18n'
 import PartsToolbar from './PartsToolbar.vue'
 
 const { t } = useI18n()
-const emit = defineEmits(['scan-in', 'scan-out', 'show-detail', 'refreshed'])
+const emit = defineEmits(['scan-in', 'scan-out', 'show-detail', 'refreshed', 'stats-loaded'])
+
+// 接收外部筛选参数
+const props = defineProps({
+  externalSearch: { type: String, default: '' },
+  externalCategory: { type: String, default: '' },
+  externalLowStock: { type: Boolean, default: false }
+})
 
 const parts = ref([])
 const loading = ref(false)
@@ -240,11 +247,17 @@ const manualOutForm = reactive({
 const loadParts = async () => {
   loading.value = true
   try {
-    const params = { search: search.value, category: category.value, low_stock: lowStock.value, limit: 200 }
+    // 使用外部筛选参数或内部筛选参数
+    const effectiveSearch = props.externalSearch || search.value
+    const effectiveCategory = props.externalCategory || category.value
+    const effectiveLowStock = props.externalLowStock || lowStock.value
+
+    const params = { search: effectiveSearch, category: effectiveCategory, low_stock: effectiveLowStock, limit: 200 }
     const result = await getPartList(params)
     parts.value = result.items || []
     const statsData = await getPartStats()
     Object.assign(stats, statsData)
+    emit('stats-loaded', statsData)
     emit('refreshed')
   } catch (e) {
     ElMessage.error(t('spareLoadFailed') + ': ' + (e.response?.data?.detail || e.message))

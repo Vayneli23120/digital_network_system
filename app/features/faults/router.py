@@ -24,13 +24,14 @@ router = APIRouter(prefix="/api/faults", tags=["faults"])
 
 
 # ===== 状态流转规则 =====
+# 新流程：创建 → 指派 → 开始诊断 → 技术处理/转维修 → 解决 → 关闭
+# 去掉"接收"步骤，指派后直接进入诊断
 FAULT_VALID_TRANSITIONS = {
     'open': ['assigned', 'closed'],
-    'assigned': ['accepted', 'reassigned', 'closed'],
-    'accepted': ['diagnosing', 'closed'],
+    'assigned': ['diagnosing', 'reassigned', 'closed'],  # 直接开始诊断
     'diagnosing': ['resolving', 'transferred', 'closed'],
     'resolving': ['resolved', 'closed'],
-    'transferred': ['resolved', 'closed'],
+    'transferred': ['resolved', 'closed'],  # 维修完成需人工确认
     'resolved': ['closed'],
     'closed': []
 }
@@ -38,7 +39,6 @@ FAULT_VALID_TRANSITIONS = {
 FAULT_STATUS_LABELS = {
     'open': '待处理',
     'assigned': '已指派',
-    'accepted': '已接收',
     'diagnosing': '诊断中',
     'resolving': '技术处理',
     'transferred': '已转维修',
@@ -50,7 +50,6 @@ FAULT_STATUS_LABELS = {
 FAULT_STATUS_COLORS = {
     'open': 'warning',
     'assigned': 'info',
-    'accepted': 'primary',
     'diagnosing': 'warning',
     'resolving': 'primary',
     'transferred': 'success',
@@ -105,6 +104,8 @@ class TransferToMaintenanceRequest(BaseModel):
     maintenance_type: str = "corrective"  # corrective/preventive/emergency
     description: Optional[str] = None
     priority: Optional[str] = "P3"
+    maintenance_owner: Optional[str] = None  # 维修负责人，默认继承诊断负责人
+    estimated_parts: Optional[str] = None  # 预估需要的备件
 
 
 class ResolveFaultRequest(BaseModel):
@@ -190,6 +191,29 @@ async def list_faults(
     for f in faults:
         device = db.query(Device).filter(Device.id == f.device_id).first()
 
+        # 获取关联维修单成本
+        maintenance_cost = 0
+        if f.maintenance_id:
+            maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == f.maintenance_id).first()
+            if maintenance:
+                maintenance_cost = float(maintenance.parts_cost or 0) + float(maintenance.labor_cost or 0)
+
+        # 计算SLA剩余时间（根据严重程度设置不同SLA时长）
+        sla_hours = {"critical": 4, "major": 24, "minor": 72, "warning": 168}
+        sla_deadline_hours = sla_hours.get(f.severity, 72)
+        if f.created_at:
+            elapsed_hours = (datetime.utcnow() - f.created_at).total_seconds() / 3600
+            remaining_hours = sla_deadline_hours - elapsed_hours
+            if remaining_hours > 0:
+                if remaining_hours >= 24:
+                    sla_remaining = f"{int(remaining_hours / 24)}d {int(remaining_hours % 24)}h"
+                else:
+                    sla_remaining = f"{int(remaining_hours)}h"
+            else:
+                sla_remaining = "已超期"
+        else:
+            sla_remaining = "--"
+
         items.append({
             "id": f.id,
             "fault_no": f.fault_no,
@@ -199,11 +223,15 @@ async def list_faults(
             "device_health_score": device.health_score if device else None,
             "severity": f.severity,
             "status": f.status,
+            "assigned_to": f.assigned_to,
+            "fault_type": f.fault_type,
             "downtime_minutes": f.downtime_minutes,
             "description": f.description,
             "impact": f.impact,
             "reporter": f.reporter,
             "maintenance_id": f.maintenance_id,
+            "maintenance_cost": maintenance_cost,
+            "sla_remaining": sla_remaining,
             "auto_created_maintenance": f.auto_created_maintenance or False,
             "has_ai_analysis": f.ai_analysis_result is not None,
             "ai_recommendation": f.ai_recommendation,
@@ -251,19 +279,41 @@ async def get_fault(fault_id: int, db: Session = Depends(get_db)):
         for r in ai_records
     ]
 
-    # 获取关联维修单
+    # 获取关联维修单（增强显示）
     maintenance = None
     if fault.maintenance_id:
         m = db.query(MaintenanceRecord).filter(
             MaintenanceRecord.id == fault.maintenance_id
         ).first()
         if m:
+            # 获取维修单关联的备件更换记录
+            spare_parts_used = []
+            if hasattr(m, 'spare_parts_used') and m.spare_parts_used:
+                try:
+                    spare_parts_used = json.loads(m.spare_parts_used)
+                except:
+                    spare_parts_used = []
+
             maintenance = {
                 "id": m.id,
                 "maint_no": m.maint_no,
                 "maint_type": m.maint_type,
                 "status": m.status,
-                "created_at": m.created_at.isoformat()
+                "status_label": {
+                    "created": "已创建",
+                    "in_progress": "进行中",
+                    "completed": "已完成",
+                    "verified": "已验证"
+                }.get(m.status, m.status),
+                "current_owner": m.current_owner if hasattr(m, 'current_owner') else None,
+                "priority": m.priority if hasattr(m, 'priority') else None,
+                "estimated_completion": m.estimated_completion.isoformat() if hasattr(m, 'estimated_completion') and m.estimated_completion else None,
+                "spare_parts_used": spare_parts_used,
+                "parts_cost": float(m.parts_cost) if hasattr(m, 'parts_cost') and m.parts_cost else 0,
+                "labor_cost": float(m.labor_cost) if hasattr(m, 'labor_cost') and m.labor_cost else 0,
+                "description": m.description,
+                "created_at": m.created_at.isoformat(),
+                "updated_at": m.updated_at.isoformat() if hasattr(m, 'updated_at') and m.updated_at else None
             }
 
     return {
@@ -281,6 +331,16 @@ async def get_fault(fault_id: int, db: Session = Depends(get_db)):
         "description": fault.description,
         "resolution": fault.resolution,
         "reporter": fault.reporter,
+        "fault_type": fault.fault_type if hasattr(fault, 'fault_type') else None,
+        "assigned_to": fault.assigned_to if hasattr(fault, 'assigned_to') else None,
+        "assigned_at": fault.assigned_at.isoformat() if hasattr(fault, 'assigned_at') and fault.assigned_at else None,
+        "accepted_at": fault.accepted_at.isoformat() if hasattr(fault, 'accepted_at') and fault.accepted_at else None,
+        "diagnosing_at": fault.diagnosing_at.isoformat() if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else None,
+        "transferred_at": fault.transferred_at.isoformat() if hasattr(fault, 'transferred_at') and fault.transferred_at else None,
+        "resolved_at": fault.resolved_at.isoformat() if hasattr(fault, 'resolved_at') and fault.resolved_at else None,
+        "closed_at": fault.closed_at.isoformat() if hasattr(fault, 'closed_at') and fault.closed_at else None,
+        "diagnosis_text": fault.diagnosis_text if hasattr(fault, 'diagnosis_text') else None,
+        "diagnosis_result": fault.diagnosis_result if hasattr(fault, 'diagnosis_result') else None,
         "maintenance_id": fault.maintenance_id,
         "maintenance": maintenance,
         "auto_created_maintenance": fault.auto_created_maintenance if hasattr(fault, 'auto_created_maintenance') else False,
@@ -316,7 +376,7 @@ async def create_fault(
         raise HTTPException(status_code=404, detail="设备不存在")
 
     # 自动生成故障单号
-    fault_no = f"FAULT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+    fault_no = f"INC-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
     # 确定故障时间
     fault_time = request.fault_time or datetime.utcnow()
@@ -884,6 +944,61 @@ async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
         db.close()
 
 
+async def send_maintenance_assigned_notification(maintenance_id: int, assigned_to: str):
+    """后台发送维修单指派通知"""
+    from app.shared.database import get_db_manager
+    from app.services.system_notification import SystemNotificationService
+
+    db_manager = get_db_manager()
+    db = db_manager.get_session()
+
+    try:
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maintenance_id).first()
+        if maintenance:
+            notification_service = SystemNotificationService(db)
+            notification_service.send_notification(
+                user=assigned_to,
+                type="maintenance_assigned",
+                title=f"新维修单指派: {maintenance.maint_no}",
+                content=f"设备 {maintenance.device_name} 的维修任务已指派给您，故障来源: {maintenance.fault_id}。",
+                reference_type="maintenance",
+                reference_id=maintenance_id
+            )
+    except Exception as e:
+        print(f"Maintenance notification send error: {e}")
+    finally:
+        db.close()
+
+
+async def send_maintenance_completed_notification(fault_id: int, maintenance_id: int):
+    """后台发送维修完成通知（通知故障负责人确认解决）"""
+    from app.shared.database import get_db_manager
+    from app.services.system_notification import SystemNotificationService
+
+    db_manager = get_db_manager()
+    db = db_manager.get_session()
+
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maintenance_id).first()
+        if fault and maintenance:
+            # 通知故障负责人
+            notification_service = SystemNotificationService(db)
+            if fault.assigned_to:
+                notification_service.send_notification(
+                    user=fault.assigned_to,
+                    type="maintenance_completed",
+                    title=f"维修完成待确认: {maintenance.maint_no}",
+                    content=f"设备 {maintenance.device_name} 的维修已完成，请确认故障是否解决。",
+                    reference_type="fault",
+                    reference_id=fault_id
+                )
+    except Exception as e:
+        print(f"Maintenance completed notification send error: {e}")
+    finally:
+        db.close()
+
+
 # ===== 状态流转API =====
 
 @router.post("/{fault_id}/assign")
@@ -966,17 +1081,20 @@ async def diagnose_fault(
     request: DiagnoseFaultRequest,
     db: Session = Depends(get_db)
 ):
-    """开始诊断并填写诊断信息"""
+    """开始诊断并填写诊断信息
+
+    新流程：assigned 状态可直接开始诊断，无需先接收
+    """
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    # 允许 accepted 或 diagnosing 状态
-    if fault.status not in ['accepted', 'diagnosing']:
-        raise HTTPException(status_code=400, detail="只有已接收或诊断中的故障才能进行诊断")
+    # 新流程：允许 assigned 或 diagnosing 状态直接诊断
+    if fault.status not in ['assigned', 'diagnosing']:
+        raise HTTPException(status_code=400, detail="只有已指派或诊断中的故障才能进行诊断")
 
-    # 如果是第一次诊断，更新状态
-    if fault.status == 'accepted':
+    # 如果是第一次诊断（从 assigned 开始），更新状态为 diagnosing
+    if fault.status == 'assigned':
         fault.status = "diagnosing"
         fault.diagnosing_at = datetime.utcnow()
 
@@ -1004,6 +1122,44 @@ async def diagnose_fault(
     }
 
 
+@router.post("/{fault_id}/work-note")
+async def add_fault_work_note(
+    fault_id: int,
+    request: dict,
+    db: Session = Depends(get_db)
+):
+    """添加工作日志（在故障未关闭前都可以添加）
+
+    用于记录故障诊断/处理过程中的工作进展
+    """
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    # 不允许在已关闭状态添加日志
+    if fault.status == 'closed':
+        raise HTTPException(status_code=400, detail="已关闭的故障不能添加日志")
+
+    note_text = request.get("note")
+    if not note_text:
+        raise HTTPException(status_code=400, detail="缺少日志内容")
+
+    # 追加到诊断内容（用换行分隔多条日志）
+    if fault.diagnosis_text:
+        fault.diagnosis_text = f"{fault.diagnosis_text}\n\n--- {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} ---\n{note_text}"
+    else:
+        fault.diagnosis_text = note_text
+
+    fault.updated_at = datetime.utcnow()
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "diagnosis_text": fault.diagnosis_text,
+        "message": "工作日志已添加"
+    }
+
+
 @router.post("/{fault_id}/transfer-to-maintenance")
 async def transfer_to_maintenance(
     fault_id: int,
@@ -1011,15 +1167,21 @@ async def transfer_to_maintenance(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db)
 ):
-    """转维修（创建维修单）"""
+    """转维修（创建维修单）
+
+    维修负责人默认继承诊断负责人，可通过 maintenance_owner 参数指定其他负责人
+    """
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    if fault.status not in ['diagnosing', 'accepted']:
-        raise HTTPException(status_code=400, detail="只有诊断中或已接收的故障才能转维修")
+    if fault.status not in ['diagnosing']:
+        raise HTTPException(status_code=400, detail="只有诊断中的故障才能转维修")
 
-    # 创建维修单
+    # 确定维修负责人：默认继承诊断负责人，如果指定了 maintenance_owner 则覆盖
+    maintenance_owner = request.maintenance_owner or fault.assigned_to
+
+    # 创建维修单 - 状态直接设为 repairing（跳过诊断，故障已诊断过）
     maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
     maintenance = MaintenanceRecord(
@@ -1029,13 +1191,25 @@ async def transfer_to_maintenance(
         fault_id=fault_id,
         maint_type=request.maintenance_type,
         description=request.description or fault.description,
-        status="created",
+        status="repairing",  # 直接进入维修状态（故障已诊断）
         priority=request.priority,
-        current_owner=fault.assigned_to,
-        operator="Web"
+        current_owner=maintenance_owner,
+        operator="Web",
+        repairing_at=datetime.utcnow()  # 设置维修开始时间
     )
 
+    # 存储预估备件信息（如果有的话）
+    if request.estimated_parts:
+        maintenance.notes = f"预估备件: {request.estimated_parts}"
+
+    # 复制故障的诊断内容到维修单，方便维修参考
+    if fault.diagnosis_text:
+        maintenance.diagnosis_text = fault.diagnosis_text
+    if fault.diagnosis_result:
+        maintenance.diagnosis_result = fault.diagnosis_result
+
     db.add(maintenance)
+    db.flush()  # 先 flush 获取 maintenance.id
 
     # 更新故障状态
     fault.status = "transferred"
@@ -1045,13 +1219,14 @@ async def transfer_to_maintenance(
 
     db.commit()
     db.refresh(maintenance)
+    db.refresh(fault)
 
-    # 发送通知给维修负责人（如果与诊断负责人不同）
-    if maintenance.current_owner:
+    # 发送通知给维修负责人
+    if maintenance_owner:
         background_tasks.add_task(
-            send_fault_assigned_notification,
-            fault_id,
-            maintenance.current_owner
+            send_maintenance_assigned_notification,
+            maintenance.id,
+            maintenance_owner
         )
 
     return {
@@ -1060,7 +1235,8 @@ async def transfer_to_maintenance(
         "status_label": FAULT_STATUS_LABELS.get(fault.status),
         "maintenance_id": maintenance.id,
         "maint_no": maintenance.maint_no,
-        "message": f"已创建维修单 {maint_no}"
+        "maintenance_owner": maintenance_owner,
+        "message": f"已创建维修单 {maint_no}，负责人: {maintenance_owner}"
     }
 
 

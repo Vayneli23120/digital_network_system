@@ -8,19 +8,23 @@ const api = axios.create({
 
 // 请求拦截器 — 自动附加 Auth Token
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('token')
+  const token = localStorage.getItem('accessToken')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-// 响应拦截器
+// 响应拦截器 - 只处理认证等特殊错误，业务错误由调用处处理
 api.interceptors.response.use(
   response => response.data,
   error => {
-    const message = error.response?.data?.detail || error.message || '请求失败'
-    ElMessage.error(message)
+    // 只处理认证相关错误
+    if (error.response?.status === 401) {
+      ElMessage.error('登录已过期，请重新登录')
+      localStorage.removeItem('accessToken')
+      window.location.href = '/login'
+    }
     return Promise.reject(error)
   }
 )

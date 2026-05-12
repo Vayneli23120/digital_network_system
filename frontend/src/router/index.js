@@ -1,7 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Layout from '@/views/Layout.vue'
+import Login from '@/views/Login.vue'
 
 const routes = [
+  {
+    path: '/login',
+    name: 'Login',
+    component: Login,
+    meta: { title: '登录', noAuth: true }
+  },
   {
     path: '/',
     name: 'Layout',
@@ -325,12 +332,49 @@ const routes = [
     name: 'ScannerTerminal',
     component: () => import('@/views/ScannerTerminal.vue'),
     meta: { title: '扫码枪终端' }
+  },
+  // 系统通知
+  {
+    path: '/notifications',
+    name: 'NotificationsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Notifications',
+        component: () => import('@/views/Notifications.vue'),
+        meta: { title: '系统通知' }
+      }
+    ]
   }
 ]
 
 const router = createRouter({
   history: createWebHistory(),
   routes
+})
+
+// Navigation guard - check authentication
+router.beforeEach((to, from, next) => {
+  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+
+  // If route doesn't require auth and user is not logged in, allow access
+  if (to.meta.noAuth) {
+    // If already logged in and trying to access login page, redirect to home
+    if (to.path === '/login' && isLoggedIn) {
+      next('/')
+    } else {
+      next()
+    }
+    return
+  }
+
+  // If route requires auth and user is not logged in, redirect to login
+  if (!isLoggedIn) {
+    next('/login')
+  } else {
+    next()
+  }
 })
 
 export default router

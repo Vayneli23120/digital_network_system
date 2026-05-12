@@ -39,10 +39,14 @@
         />
 
         <!-- Notification -->
-        <button class="icon-btn" :class="{ dark: darkMode }" :title="notifTitle">
-          <el-icon><Bell /></el-icon>
-          <span class="notif-dot" v-if="hasNotifications"></span>
-        </button>
+        <NotificationDropdown
+          :dark-mode="darkMode"
+          :notif-title="notifTitle"
+          :unread-count="unreadCount"
+          @mark-read="handleMarkRead"
+          @mark-all-read="handleMarkAllRead"
+          @view-all="handleViewAll"
+        />
 
         <!-- Language Toggle -->
         <button class="icon-btn lang-btn" :class="{ dark: darkMode }" @click="toggleLang" :title="langSwitchTitle">
@@ -71,11 +75,13 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { Monitor, Bell, Sunny, Moon } from '@element-plus/icons-vue'
 import SearchDropdown from './SearchDropdown.vue'
 import UserMenu from './UserMenu.vue'
+import NotificationDropdown from './NotificationDropdown.vue'
+import { getUnreadCount, markNotificationRead, markAllNotificationsRead } from '@/api'
 
 const props = defineProps({
   darkMode: {
@@ -89,10 +95,6 @@ const props = defineProps({
   currentLang: {
     type: String,
     default: 'zh'
-  },
-  hasNotifications: {
-    type: Boolean,
-    default: true
   },
   // Navigation Labels
   dashboardLabel: {
@@ -156,6 +158,10 @@ const props = defineProps({
     type: String,
     default: 'Notifications'
   },
+  unreadCount: {
+    type: Number,
+    default: 0
+  },
   langSwitchTitle: {
     type: String,
     default: 'Switch Language'
@@ -190,10 +196,34 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['setTopTab', 'toggleDark', 'toggleLang'])
+const emit = defineEmits(['setTopTab', 'toggleDark', 'toggleLang', 'markRead', 'markAllRead', 'viewAll'])
 
 const router = useRouter()
 const searchDropdownRef = ref(null)
+
+// Notification handlers
+const handleMarkRead = async (id) => {
+  try {
+    await markNotificationRead(id)
+    emit('markRead', id)
+  } catch (e) {
+    console.error('Failed to mark notification read:', e)
+  }
+}
+
+const handleMarkAllRead = async () => {
+  try {
+    await markAllNotificationsRead()
+    emit('markAllRead')
+  } catch (e) {
+    console.error('Failed to mark all notifications read:', e)
+  }
+}
+
+const handleViewAll = () => {
+  emit('viewAll')
+  router.push('/notifications')
+}
 
 const topTabs = computed(() => [
   { key: 'dashboard', label: props.dashboardLabel || 'Dashboard' },

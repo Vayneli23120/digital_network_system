@@ -1,6 +1,6 @@
 """系统通知路由"""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -11,14 +11,32 @@ from app.services.system_notification import SystemNotificationService
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 
+def get_current_user(request: Request) -> str:
+    """从请求中获取当前用户名"""
+    # 从 Authorization header 中获取 JWT token
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith("Bearer "):
+        token = auth_header[7:]
+        try:
+            from jose import jwt
+            from app.shared.config import get_config
+            config = get_config()
+            payload = jwt.decode(token, config.security.jwt_secret, algorithms=[config.security.jwt_algorithm])
+            return payload.get("sub", "default")
+        except Exception:
+            pass
+    return "default"
+
+
 @router.get("")
 async def get_notifications(
-    user: str = "default",  # TODO: 从认证获取用户
+    request: Request,
     unread_only: bool = False,
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
     """获取用户通知列表"""
+    user = get_current_user(request)
     service = SystemNotificationService(db)
     notifications = service.get_user_notifications(user, unread_only, limit)
 
@@ -47,10 +65,11 @@ async def get_notifications(
 
 @router.get("/unread-count")
 async def get_unread_count(
-    user: str = "default",
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """获取未读通知数量"""
+    user = get_current_user(request)
     service = SystemNotificationService(db)
     count = service.get_unread_count(user)
     return {"unread_count": count}
@@ -59,10 +78,11 @@ async def get_unread_count(
 @router.post("/{notification_id}/read")
 async def mark_as_read(
     notification_id: int,
-    user: str = "default",
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """标记通知为已读"""
+    user = get_current_user(request)
     service = SystemNotificationService(db)
     success = service.mark_as_read(notification_id, user)
 
@@ -74,10 +94,11 @@ async def mark_as_read(
 
 @router.post("/read-all")
 async def mark_all_as_read(
-    user: str = "default",
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """标记所有通知为已读"""
+    user = get_current_user(request)
     service = SystemNotificationService(db)
     count = service.mark_all_as_read(user)
     return {"message": f"已标记 {count} 条通知为已读"}
@@ -86,10 +107,11 @@ async def mark_all_as_read(
 @router.delete("/{notification_id}")
 async def delete_notification(
     notification_id: int,
-    user: str = "default",
+    request: Request,
     db: Session = Depends(get_db)
 ):
     """删除通知"""
+    user = get_current_user(request)
     service = SystemNotificationService(db)
     success = service.delete_notification(notification_id, user)
 
