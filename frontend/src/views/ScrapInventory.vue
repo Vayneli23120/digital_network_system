@@ -166,15 +166,11 @@
               </div>
             </template>
           </el-table-column>
-          <el-table-column :label="t('dashAction')" width="200" fixed="right">
+          <el-table-column :label="t('dashAction')" width="160" fixed="right">
             <template #default="{ row }">
-              <div class="action-group">
-                <button class="action-btn success" @click="showInDialog(row)" :title="t('spareStockIn')">
-                  <el-icon><Download /></el-icon>
-                </button>
-                <button class="action-btn danger" @click="showScrapOutDialog(row)" :title="t('scrapScrap')">
-                  <el-icon><Upload /></el-icon>
-                </button>
+              <div class="table-actions">
+                <el-button size="small" type="success" @click="showInDialog(row)">{{ t('spareStockIn') }}</el-button>
+                <el-button size="small" type="danger" @click="showScrapOutDialog(row)">{{ t('scrapScrap') }}</el-button>
               </div>
             </template>
           </el-table-column>
@@ -1738,42 +1734,26 @@ onMounted(() => {
 }
 .type-badge.out .type-dot { background: #ef4444; }
 
-/* 操作按钮组 */
-.action-group {
+/* 操作按钮 */
+.table-actions {
   display: flex;
-  gap: 8px;
+  gap: 4px;
 }
 
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 6px 12px;
+.enterprise-table :deep(.el-button--small) {
   border-radius: 6px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all 0.25s ease;
   font-size: 12px;
+  padding: 6px 12px;
 }
 
-.action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.15);
+.enterprise-table :deep(.el-button--success) {
+  background: linear-gradient(135deg, rgba(0, 184, 148, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
+  border: none;
 }
 
-.action-btn.success:hover {
-  background: rgba(0, 184, 148, 0.08);
-  border-color: rgba(0, 184, 148, 0.2);
-  color: #00b894;
-}
-
-.action-btn.danger:hover {
-  background: rgba(239, 68, 68, 0.08);
-  border-color: rgba(239, 68, 68, 0.2);
-  color: #ef4444;
+.enterprise-table :deep(.el-button--danger) {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(248, 81, 73, 0.9) 100%);
+  border: none;
 }
 
 /* 分页 */
@@ -2134,26 +2114,12 @@ onMounted(() => {
 }
 .dark .type-badge.out .type-dot { background: #f85149; }
 
-.dark .action-btn {
-  background: rgba(13, 17, 23, 0.9);
-  color: #8b949e;
-  border-color: transparent;
+.dark .enterprise-table :deep(.el-button--success) {
+  background: linear-gradient(135deg, rgba(63, 185, 80, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
 }
 
-.dark .action-btn:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-.dark .action-btn.success:hover {
-  background: rgba(63, 185, 80, 0.15);
-  border-color: rgba(63, 185, 80, 0.3);
-  color: #3fb950;
-}
-
-.dark .action-btn.danger:hover {
-  background: rgba(248, 81, 73, 0.15);
-  border-color: rgba(248, 81, 73, 0.3);
-  color: #f85149;
+.dark .enterprise-table :deep(.el-button--danger) {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.9) 0%, rgba(248, 81, 73, 0.9) 100%);
 }
 
 .dark .pagination-bar {

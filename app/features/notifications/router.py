@@ -13,6 +13,11 @@ router = APIRouter(prefix="/api/notifications", tags=["notifications"])
 
 def get_current_user(request: Request) -> str:
     """从请求中获取当前用户名"""
+    # 优先从 X-User header 获取（前端传递的当前登录用户）
+    x_user = request.headers.get("X-User")
+    if x_user:
+        return x_user
+
     # 从 Authorization header 中获取 JWT token
     auth_header = request.headers.get("Authorization", "")
     if auth_header.startswith("Bearer "):
@@ -22,10 +27,14 @@ def get_current_user(request: Request) -> str:
             from app.shared.config import get_config
             config = get_config()
             payload = jwt.decode(token, config.security.jwt_secret, algorithms=[config.security.jwt_algorithm])
-            return payload.get("sub", "default")
-        except Exception:
-            pass
-    return "default"
+            user = payload.get("sub")
+            if user:
+                return user
+        except Exception as e:
+            print(f"JWT decode error: {e}")
+
+    # 默认返回 Admin（超级管理员）
+    return "Admin"
 
 
 @router.get("")
@@ -35,7 +44,7 @@ async def get_notifications(
     limit: int = 20,
     db: Session = Depends(get_db)
 ):
-    """获取用户通知列表"""
+    """获取用户通知列表 - 内部系统返回所有通知"""
     user = get_current_user(request)
     service = SystemNotificationService(db)
     notifications = service.get_user_notifications(user, unread_only, limit)

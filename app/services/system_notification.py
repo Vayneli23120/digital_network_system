@@ -46,8 +46,16 @@ class SystemNotificationService:
         unread_only: bool = False,
         limit: int = 20
     ) -> List[Notification]:
-        """获取用户通知"""
-        query = self.db.query(Notification).filter(Notification.user == user)
+        """获取用户通知
+
+        Admin 用户可以看到所有通知（超级管理员）
+        其他用户只能看到发给自己的通知
+        """
+        query = self.db.query(Notification)
+
+        # Admin 超级管理员可以看到所有通知
+        if user.lower() != 'admin':
+            query = query.filter(Notification.user == user)
 
         if unread_only:
             query = query.filter(Notification.read == False)
@@ -55,9 +63,37 @@ class SystemNotificationService:
         return query.order_by(Notification.created_at.desc()).limit(limit).all()
 
     def get_unread_count(self, user: str) -> int:
-        """获取未读通知数量"""
+        """获取未读通知数量
+
+        Admin 用户可以看到所有未读通知
+        其他用户只能看到自己的未读通知
+        """
+        query = self.db.query(Notification).filter(Notification.read == False)
+
+        if user.lower() != 'admin':
+            query = query.filter(Notification.user == user)
+
+        return query.count()
+
+    def get_broadcast_notifications(
+        self,
+        unread_only: bool = False,
+        limit: int = 20
+    ) -> List[Notification]:
+        """获取广播通知（所有用户都能看到的）"""
+        query = self.db.query(Notification).filter(
+            Notification.user.in_(['all', 'Admin', 'admin', 'broadcast', 'default', '*'])
+        )
+
+        if unread_only:
+            query = query.filter(Notification.read == False)
+
+        return query.order_by(Notification.created_at.desc()).limit(limit).all()
+
+    def get_broadcast_unread_count(self) -> int:
+        """获取广播通知未读数量"""
         return self.db.query(Notification).filter(
-            Notification.user == user,
+            Notification.user.in_(['all', 'Admin', 'admin', 'broadcast', 'default', '*']),
             Notification.read == False
         ).count()
 

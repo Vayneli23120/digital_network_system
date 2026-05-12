@@ -4,6 +4,15 @@
     <section class="page-nav-bar">
       <div class="nav-left">
         <h1 class="page-title">{{ t('menuDevices') }}</h1>
+        <div class="search-box">
+          <el-icon class="search-icon"><Search /></el-icon>
+          <el-input
+            v-model="searchText"
+            :placeholder="t('deviceSearchPlaceholder')"
+            class="search-input"
+            clearable
+          />
+        </div>
       </div>
       <div class="nav-right">
         <button class="nav-action-btn" @click="showAddDialog = true">
@@ -26,263 +35,235 @@
       </div>
     </section>
 
-    <!-- 顶部统计 Dashboard -->
-    <section class="stats-dashboard">
-      <div class="stats-grid">
+    <!-- 顶部统计 Dashboard - 企业级紧凑卡片 -->
+    <section class="stats-dashboard-compact">
+      <div class="stats-grid-5">
         <!-- 总设备 -->
-        <div class="stat-card total" @click="filterByStatus('')">
-          <div class="card-content">
-            <div class="card-icon">
-              <el-icon><Monitor /></el-icon>
+        <div class="stat-card-compact total" :class="{ active: activeFilter === '' }" @click="filterByType('')">
+          <div class="stat-header">
+            <span class="stat-title">{{ t('deviceStatsTotal') }}</span>
+          </div>
+          <div class="stat-body">
+            <span class="stat-value">{{ stats.total }}</span>
+            <div class="stat-bar-container">
+              <div class="stat-bar-segment online" :style="{ width: percent(stats.online, stats.total) + '%' }"></div>
+              <div class="stat-bar-segment offline" :style="{ width: percent(stats.offline, stats.total) + '%' }"></div>
+              <div class="stat-bar-segment maintenance" :style="{ width: percent(stats.maintenance, stats.total) + '%' }"></div>
             </div>
-            <div class="card-body">
-              <div class="metric-value">{{ stats.total }}</div>
-              <div class="metric-label">{{ t('deviceStatsTotal') }}</div>
-            </div>
-            <div class="card-trend stable">
-              <span class="trend-icon">●</span>
-            </div>
+          </div>
+          <div class="stat-footer">
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ stats.online }} 在线</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', '')"><span class="indicator-dot"></span>{{ stats.offline }} 离线</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', '')"><span class="indicator-dot"></span>{{ stats.maintenance }} 维护</span>
           </div>
         </div>
-        <!-- 在线设备 -->
-        <div class="stat-card online" @click="filterByStatus('online')">
-          <div class="card-content">
-            <div class="card-icon">
-              <el-icon><CircleCheck /></el-icon>
+        <!-- UCE -->
+        <div class="stat-card-compact uce" :class="{ active: activeFilter === 'uce' && !filterStatus }" @click="filterByType('uce')">
+          <div class="stat-header">
+            <span class="stat-title">UCE</span>
+          </div>
+          <div class="stat-body">
+            <span class="stat-value">{{ uceStats.total }}</span>
+            <div class="stat-bar-container">
+              <div class="stat-bar-segment online" :style="{ width: percent(uceStats.online, uceStats.total) + '%' }"></div>
+              <div class="stat-bar-segment offline" :style="{ width: percent(uceStats.offline, uceStats.total) + '%' }"></div>
+              <div class="stat-bar-segment maintenance" :style="{ width: percent(uceStats.maintenance, uceStats.total) + '%' }"></div>
             </div>
-            <div class="card-body">
-              <div class="metric-value">{{ stats.online }}</div>
-              <div class="metric-label">{{ t('deviceStatsOnline') }}</div>
-            </div>
-            <div class="card-trend success" v-if="stats.online > 0">
-              <el-icon><CircleCheck /></el-icon>
-            </div>
+          </div>
+          <div class="stat-footer">
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ uceStats.online }} 在线</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'uce')"><span class="indicator-dot"></span>{{ uceStats.offline }} 离线</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'uce')"><span class="indicator-dot"></span>{{ uceStats.maintenance }} 维护</span>
           </div>
         </div>
-        <!-- 离线设备 -->
-        <div class="stat-card offline" @click="filterByStatus('offline')">
-          <div class="card-content">
-            <div class="card-icon">
-              <el-icon><CircleClose /></el-icon>
+        <!-- AP -->
+        <div class="stat-card-compact ap" :class="{ active: activeFilter === 'ap' && !filterStatus }" @click="filterByType('ap')">
+          <div class="stat-header">
+            <span class="stat-title">AP</span>
+          </div>
+          <div class="stat-body">
+            <span class="stat-value">{{ apStats.total }}</span>
+            <div class="stat-bar-container">
+              <div class="stat-bar-segment online" :style="{ width: percent(apStats.online, apStats.total) + '%' }"></div>
+              <div class="stat-bar-segment offline" :style="{ width: percent(apStats.offline, apStats.total) + '%' }"></div>
+              <div class="stat-bar-segment maintenance" :style="{ width: percent(apStats.maintenance, apStats.total) + '%' }"></div>
             </div>
-            <div class="card-body">
-              <div class="metric-value danger">{{ stats.offline }}</div>
-              <div class="metric-label">{{ t('deviceStatsOffline') }}</div>
-            </div>
-            <div class="card-trend warning" v-if="stats.offline > 0">
-              <el-icon><Warning /></el-icon>
-            </div>
+          </div>
+          <div class="stat-footer">
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ apStats.online }} 在线</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'ap')"><span class="indicator-dot"></span>{{ apStats.offline }} 离线</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'ap')"><span class="indicator-dot"></span>{{ apStats.maintenance }} 维护</span>
           </div>
         </div>
-        <!-- 维护中 -->
-        <div class="stat-card maintenance" @click="filterByStatus('maintenance')">
-          <div class="card-content">
-            <div class="card-icon">
-              <el-icon><Setting /></el-icon>
+        <!-- 办公室交换机 -->
+        <div class="stat-card-compact office" :class="{ active: activeFilter === 'office_switch' && !filterStatus }" @click="filterByType('office_switch')">
+          <div class="stat-header">
+            <span class="stat-title">{{ t('deviceTypeOfficeSwitch') }}</span>
+          </div>
+          <div class="stat-body">
+            <span class="stat-value">{{ officeSwitchStats.total }}</span>
+            <div class="stat-bar-container">
+              <div class="stat-bar-segment online" :style="{ width: percent(officeSwitchStats.online, officeSwitchStats.total) + '%' }"></div>
+              <div class="stat-bar-segment offline" :style="{ width: percent(officeSwitchStats.offline, officeSwitchStats.total) + '%' }"></div>
+              <div class="stat-bar-segment maintenance" :style="{ width: percent(officeSwitchStats.maintenance, officeSwitchStats.total) + '%' }"></div>
             </div>
-            <div class="card-body">
-              <div class="metric-value">{{ stats.maintenance }}</div>
-              <div class="metric-label">{{ t('deviceStatsMaintenance') }}</div>
-            </div>
-            <div class="card-progress" v-if="stats.maintenance > 0">
-              <div class="progress-ring" :style="{ '--percent': getMaintenancePercent() }"></div>
-            </div>
+          </div>
+          <div class="stat-footer">
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ officeSwitchStats.online }} 在线</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.offline }} 离线</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.maintenance }} 维护</span>
           </div>
         </div>
-        <!-- 已退役 -->
-        <div class="stat-card retired" @click="filterByStatus('retired')">
-          <div class="card-content">
-            <div class="card-icon">
-              <el-icon><WarningFilled /></el-icon>
+        <!-- 数据中心网络设备 -->
+        <div class="stat-card-compact datacenter" :class="{ active: activeFilter === 'datacenter' && !filterStatus }" @click="filterByType('datacenter')">
+          <div class="stat-header">
+            <span class="stat-title">{{ t('deviceLayerDatacenter') }}</span>
+          </div>
+          <div class="stat-body">
+            <span class="stat-value">{{ datacenterStats.total }}</span>
+            <div class="stat-bar-container">
+              <div class="stat-bar-segment online" :style="{ width: percent(datacenterStats.online, datacenterStats.total) + '%' }"></div>
+              <div class="stat-bar-segment offline" :style="{ width: percent(datacenterStats.offline, datacenterStats.total) + '%' }"></div>
+              <div class="stat-bar-segment maintenance" :style="{ width: percent(datacenterStats.maintenance, datacenterStats.total) + '%' }"></div>
             </div>
-            <div class="card-body">
-              <div class="metric-value">{{ stats.retired }}</div>
-              <div class="metric-label">{{ t('deviceStatsRetired') }}</div>
-            </div>
-            <div class="card-trend done" v-if="stats.retired > 0">
-              <el-icon><WarningFilled /></el-icon>
-            </div>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- 高级筛选工具栏 -->
-    <section class="filter-section">
-      <div class="filter-toolbar">
-        <!-- 搜索框 -->
-        <div class="search-box">
-          <el-icon class="search-icon"><Search /></el-icon>
-          <el-input
-            v-model="searchText"
-            :placeholder="t('deviceSearchPlaceholder')"
-            class="search-input"
-            clearable
-            @input="applyFilters"
-          />
-        </div>
-
-        <!-- 状态 Chips -->
-        <div class="status-chips">
-          <div
-            :class="['status-chip', { active: filterStatus === '' }]"
-            @click="filterByStatus('')"
-          >
-            <span class="chip-label">{{ t('deviceFilterAll') }}</span>
-            <span class="chip-count">{{ stats.total }}</span>
+          <div class="stat-footer">
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ datacenterStats.online }} 在线</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.offline }} 离线</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.maintenance }} 维护</span>
           </div>
-          <div
-            :class="['status-chip', 'chip-online', { active: filterStatus === 'online' }]"
-            @click="filterByStatus('online')"
-          >
-            <span class="chip-dot"></span>
-            <span class="chip-label">{{ t('statusOnline') }}</span>
-          </div>
-          <div
-            :class="['status-chip', 'chip-offline', { active: filterStatus === 'offline' }]"
-            @click="filterByStatus('offline')"
-          >
-            <span class="chip-dot"></span>
-            <span class="chip-label">{{ t('statusOffline') }}</span>
-          </div>
-          <div
-            :class="['status-chip', 'chip-maintenance', { active: filterStatus === 'maintenance' }]"
-            @click="filterByStatus('maintenance')"
-          >
-            <span class="chip-dot"></span>
-            <span class="chip-label">{{ t('statusMaintenance') }}</span>
-          </div>
-          <div
-            :class="['status-chip', 'chip-retired', { active: filterStatus === 'retired' }]"
-            @click="filterByStatus('retired')"
-          >
-            <span class="chip-dot"></span>
-            <span class="chip-label">{{ t('statusRetired') }}</span>
-          </div>
-        </div>
-
-        <!-- 更多筛选 -->
-        <div class="more-filters">
-          <el-select v-model="filterRole" :placeholder="t('deviceFilterRole')" clearable style="width: 100px" @change="applyFilters">
-            <el-option :label="t('deviceRoleAccess')" value="access" />
-            <el-option :label="t('deviceRoleDistribution')" value="distribution" />
-            <el-option :label="t('deviceRoleCore')" value="core" />
-          </el-select>
-        </div>
-
-        <!-- 批量操作 -->
-        <div class="batch-actions">
-          <el-checkbox v-model="selectMode">{{ t('deviceBatchSelect') }}</el-checkbox>
-          <el-button type="success" size="small" @click="batchBackup" :disabled="selectedDevices.length === 0">
-            <el-icon><Download /></el-icon>
-            {{ t('deviceBatchBackup') }} ({{ selectedDevices.length }})
-          </el-button>
         </div>
       </div>
     </section>
 
-    <!-- 设备数据面板 -->
+    <!-- 设备数据面板 - 树形表格 -->
     <section class="data-section">
       <div class="table-header">
-        <span class="table-title">Device List</span>
-        <span class="table-count">{{ filteredTotal }} records</span>
+        <div class="table-title-row">
+          <span class="table-title">
+            {{ filterStatus ? getStatusText(filterStatus) + ' ' : '' }}{{ activeFilter ? getFilterLabel(activeFilter) + ' ' : '' }}{{ t('deviceListTitle') }}
+          </span>
+          <el-tag v-if="filterStatus" size="small" type="danger" closable @close="filterStatus = ''" class="filter-tag">
+            {{ getStatusText(filterStatus) }}
+          </el-tag>
+          <el-tag v-if="activeFilter" size="small" type="primary" closable @close="filterByType('')" class="filter-tag">
+            {{ getFilterLabel(activeFilter) }}
+          </el-tag>
+        </div>
+        <span class="table-count">{{ treeData.length }} {{ t('deviceRecords') }}</span>
       </div>
 
       <el-table
-        :data="filteredDevices"
-        class="enterprise-table"
+        ref="tableRef"
+        :data="treeData"
+        row-key="id"
+        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
+        class="enterprise-tree-table"
         v-loading="loading"
-        @selection-change="handleSelectionChange"
-        :row-class-name="tableRowClassName"
+        :row-class-name="treeRowClassName"
         :header-cell-style="{ background: 'transparent' }"
+        default-expand-all
       >
-        <el-table-column v-if="selectMode" type="selection" width="48" />
-        <el-table-column prop="name" :label="t('deviceName')" min-width="140">
+        <el-table-column prop="name" :label="t('deviceName')" min-width="180">
           <template #default="{ row }">
-            <router-link :to="`/devices/${row.id}`" class="device-link">
-              <span class="device-no-badge">{{ row.name }}</span>
-              <el-icon class="link-arrow"><ArrowRight /></el-icon>
-            </router-link>
+            <template v-if="row.isLayer">
+              <div class="layer-row">
+                <span class="layer-icon" :class="row.layerClass"></span>
+                <span class="layer-name">{{ row.name }}</span>
+                <span class="layer-count-badge">{{ row.onlineCount }}/{{ row.totalCount }}</span>
+              </div>
+            </template>
+            <template v-else-if="row.isType">
+              <div class="type-row">
+                <span class="type-dot" :class="row.layerClass"></span>
+                <span class="type-name">{{ row.name }}</span>
+                <span class="type-stats">{{ row.onlineCount }} {{ t('statusOnline') }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <router-link :to="`/devices/${row.id}`" class="device-link">
+                <span class="device-name">{{ row.name }}</span>
+                <el-icon class="link-arrow"><ArrowRight /></el-icon>
+              </router-link>
+            </template>
           </template>
         </el-table-column>
         <el-table-column prop="ip" :label="t('deviceIp')" min-width="130">
           <template #default="{ row }">
-            <div class="ip-cell">
-              <el-icon class="ip-icon"><Connection /></el-icon>
-              <span class="ip-text">{{ row.ip }}</span>
-            </div>
+            <template v-if="!row.isLayer && !row.isType">
+              <div class="ip-cell">
+                <span class="ip-text">{{ row.ip }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
           </template>
         </el-table-column>
-        <el-table-column prop="status" :label="t('deviceStatus')" min-width="120" align="center">
+        <el-table-column prop="status" :label="t('deviceStatus')" min-width="110" align="center">
           <template #default="{ row }">
-            <div :class="['status-badge', row.status]">
-              <span class="status-dot"></span>
-              <span class="status-text">{{ getStatusText(row.status) }}</span>
-            </div>
+            <template v-if="!row.isLayer && !row.isType">
+              <div :class="['status-badge', row.status]">
+                <span class="status-dot"></span>
+                <span class="status-text">{{ getStatusText(row.status) }}</span>
+              </div>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
           </template>
         </el-table-column>
-        <el-table-column prop="location" :label="t('deviceLocation')" min-width="140" show-overflow-tooltip>
+        <el-table-column prop="model" :label="t('deviceModel')" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="location-cell">
-              <el-icon class="location-icon"><Location /></el-icon>
-              <span class="location-text">{{ row.location || '--' }}</span>
-            </div>
-          </template>
-        </el-table-column>
-        <el-table-column prop="model" :label="t('deviceModel')" min-width="130" show-overflow-tooltip>
-          <template #default="{ row }">
-            <div class="model-cell">
+            <template v-if="!row.isLayer && !row.isType">
               <span class="model-text">{{ row.model || '--' }}</span>
-            </div>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
           </template>
         </el-table-column>
-        <el-table-column :label="t('deviceAction')" width="140" fixed="right" align="center">
+        <el-table-column prop="location" :label="t('deviceLocation')" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <div class="action-group">
-              <button class="action-btn view" @click="viewDevice(row.id)" title="查看详情">
-                <el-icon><View /></el-icon>
-              </button>
-              <button class="action-btn backup" @click="backupDevice(row)" title="备份配置">
-                <el-icon><Download /></el-icon>
-              </button>
-              <button class="action-btn edit" @click="editDevice(row)" title="编辑">
-                <el-icon><Edit /></el-icon>
-              </button>
-              <button class="action-btn delete" @click="deleteDevice(row)" title="删除">
-                <el-icon><Delete /></el-icon>
-              </button>
-            </div>
+            <template v-if="!row.isLayer && !row.isType">
+              <span class="location-text">{{ row.location || '--' }}</span>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
           </template>
         </el-table-column>
-        <template #empty>
-          <el-empty :description="t('msgNoDevices')" :image-size="80">
-            <el-button type="primary" size="small" @click="showAddDialog = true">{{ t('deviceAdd') }}</el-button>
-          </el-empty>
-        </template>
+        <el-table-column :label="t('deviceAction')" width="120" fixed="right" align="center">
+          <template #default="{ row }">
+            <template v-if="!row.isLayer && !row.isType">
+              <div class="action-group">
+                <button class="action-btn backup" @click="backupDevice(row)" title="备份配置">
+                  <el-icon><Download /></el-icon>
+                </button>
+                <button class="action-btn edit" @click="editDevice(row)" title="编辑">
+                  <el-icon><Edit /></el-icon>
+                </button>
+                <button class="action-btn delete" @click="deleteDevice(row)" title="删除">
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </div>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
+          </template>
+        </el-table-column>
       </el-table>
-
-      <!-- 分页 -->
-      <div class="pagination-bar">
-        <el-pagination
-          v-model:current-page="currentPage"
-          v-model:page-size="pageSize"
-          :page-sizes="[10, 20, 50, 100]"
-          layout="total, sizes, prev, pager, next"
-          :total="filteredTotal"
-          @size-change="handlePageSizeChange"
-          @current-change="handlePageChange"
-        />
-      </div>
     </section>
 
     <!-- 添加/编辑设备对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('editDeviceTitle') : t('addDeviceTitle')" width="600px" class="edit-device-dialog">
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('editDeviceTitle') : t('addDeviceTitle')" width="600px" class="edit-device-dialog" @close="resetNewDevice">
       <div class="edit-dialog-content">
         <!-- 基础信息 Section -->
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Monitor /></el-icon>
-            {{ t('deviceBasicInfo') || '基础信息' }}
+            {{ t('deviceBasicInfo') }}
           </div>
           <el-form :model="newDevice" label-width="100px">
             <el-form-item :label="t('deviceName')" required>
@@ -294,22 +275,64 @@
             <el-form-item :label="t('deviceModel')">
               <el-input v-model="newDevice.model" :placeholder="t('editDeviceModelPlaceholder')" />
             </el-form-item>
-            <el-form-item :label="t('deviceSerialNumber')">
-              <el-input v-model="newDevice.serial_number" />
-            </el-form-item>
             <el-form-item :label="t('deviceLocation')">
               <el-input v-model="newDevice.location" :placeholder="t('editDeviceLocationPlaceholder')" />
             </el-form-item>
           </el-form>
         </div>
 
+        <!-- 模块序列号 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Box /></el-icon>
+            {{ t('deviceModules') }}
+          </div>
+          <div class="modules-container">
+            <div v-for="(module, index) in newDevice.modules" :key="index" class="module-row">
+              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 140px;">
+                <el-option :label="t('deviceMainModule')" value="main" />
+                <el-option :label="t('deviceExpansionModule')" value="expansion" />
+                <el-option :label="t('devicePowerModule')" value="power" />
+                <el-option :label="t('deviceSfpModule')" value="sfp" />
+                <el-option :label="t('deviceFanModule')" value="fan" />
+                <el-option :label="t('deviceTypeOther')" value="other" />
+              </el-select>
+              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 180px;" />
+              <el-button type="danger" size="small" :icon="Close" circle @click="removeModule(index)" v-if="newDevice.modules.length > 1" />
+            </div>
+            <el-button type="primary" size="small" :icon="Plus" @click="addModule">{{ t('deviceAddModule') }}</el-button>
+          </div>
+        </div>
+
         <!-- 分类与状态 Section -->
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Setting /></el-icon>
-            {{ t('deviceCategoryStatus') || '分类与状态' }}
+            {{ t('deviceCategoryStatus') }}
           </div>
           <el-form :model="newDevice" label-width="100px">
+            <el-form-item :label="t('deviceType')" required>
+              <el-select v-model="newDevice.device_type" :placeholder="t('deviceSelectType')">
+                <el-option-group :label="t('deviceLayerDatacenter')">
+                  <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
+                  <el-option :label="t('deviceTypeServerSwitch')" value="server_switch" />
+                  <el-option :label="t('deviceTypeRouter')" value="router" />
+                  <el-option :label="t('deviceTypePA')" value="pa" />
+                  <el-option :label="t('deviceTypeFTD')" value="ftd" />
+                </el-option-group>
+                <el-option-group :label="t('deviceLayerWiFi')">
+                  <el-option :label="t('deviceTypeAP')" value="ap" />
+                  <el-option :label="t('deviceTypeWLC')" value="wlc" />
+                </el-option-group>
+                <el-option-group :label="t('deviceLayerAccess')">
+                  <el-option :label="t('deviceTypeUCE')" value="uce" />
+                  <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
+                </el-option-group>
+                <el-option-group :label="t('deviceTypeOther')">
+                  <el-option :label="t('deviceTypeOther')" value="other" />
+                </el-option-group>
+              </el-select>
+            </el-form-item>
             <el-form-item :label="t('deviceVendor')">
               <el-select v-model="newDevice.vendor">
                 <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
@@ -363,6 +386,7 @@
           <li>{{ t('deviceImportRole') }}</li>
           <li>{{ t('deviceImportStatus') }}</li>
           <li>{{ t('deviceImportCredGroup') }}</li>
+          <li><strong>device_type</strong> (必填): uce / office_switch / ap / wlc / core_switch / server_switch / router / pa / ftd / other</li>
         </ul>
       </el-alert>
       <el-upload
@@ -395,7 +419,7 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, Connection, Location, Warning } from '@element-plus/icons-vue'
+import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, Connection, Location, Warning, Box, Close } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -404,127 +428,304 @@ const router = useRouter()
 
 const loading = ref(false)
 const devices = ref([])
+const tableRef = ref(null)  // el-table ref
 const searchText = ref('')
 const filterStatus = ref('')
 const filterRole = ref('')
+const activeFilter = ref('') // 统计卡片筛选激活状态
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const showAddDialog = ref(false)
 const showImportDialog = ref(false)
 const editMode = ref(false)
-const selectMode = ref(false)
 const selectedDevices = ref([])
 const credentialGroups = ref([])
 const selectedFile = ref(null)
 const vendors = ref([])
 
+// 设备层级类型映射
+const datacenterTypes = ['core_switch', 'server_switch', 'router', 'pa', 'ftd']
+const wifiTypes = ['ap', 'wlc']
+const accessTypes = ['uce', 'office_switch']
+
 const newDevice = ref({
   name: '',
   ip: '',
   model: '',
-  serial_number: '',
   location: '',
+  device_type: 'other',
   role: 'access',
   status: 'online',
   vendor: 'cisco',
-  credential_group: 'default'
+  credential_group: 'default',
+  modules: [{ type: 'main', serial_number: '' }] // 默认一个主机模块
 })
 
-// 统计数据
+// 模块管理
+const addModule = () => {
+  newDevice.value.modules.push({ type: 'other', serial_number: '' })
+}
+
+const removeModule = (index) => {
+  newDevice.value.modules.splice(index, 1)
+}
+
+const resetNewDevice = () => {
+  newDevice.value = {
+    name: '',
+    ip: '',
+    model: '',
+    location: '',
+    device_type: 'other',
+    role: 'access',
+    status: 'online',
+    vendor: 'cisco',
+    credential_group: 'default',
+    modules: [{ type: 'main', serial_number: '' }]
+  }
+}
+
+// 百分比计算函数
+const percent = (value, total) => {
+  if (total === 0) return 0
+  return Math.round((value / total) * 100)
+}
+
+// 统计数据 - 总设备
 const stats = computed(() => {
   const list = devices.value
-  const totalCount = list.length
-  const onlineCount = list.filter(d => d.status === 'online').length
-  const offlineCount = list.filter(d => d.status === 'offline').length
-  const maintenanceCount = list.filter(d => d.status === 'maintenance').length
-  const retiredCount = list.filter(d => d.status === 'retired').length
   return {
-    total: totalCount,
-    online: onlineCount,
-    offline: offlineCount,
-    maintenance: maintenanceCount,
-    retired: retiredCount
+    total: list.length,
+    online: list.filter(d => d.status === 'online').length,
+    offline: list.filter(d => d.status === 'offline').length,
+    maintenance: list.filter(d => d.status === 'maintenance').length,
+    retired: list.filter(d => d.status === 'retired').length
   }
 })
 
-// 分页后的总数
-const filteredTotal = computed(() => filteredDevices.value.length)
+// UCE 统计
+const uceStats = computed(() => {
+  const list = devices.value.filter(d => d.device_type === 'uce')
+  return {
+    total: list.length,
+    online: list.filter(d => d.status === 'online').length,
+    offline: list.filter(d => d.status === 'offline').length,
+    maintenance: list.filter(d => d.status === 'maintenance').length
+  }
+})
 
-// 筛选后的设备列表
-const filteredDevices = computed(() => {
-  let result = [...devices.value]
+// AP 统计
+const apStats = computed(() => {
+  const list = devices.value.filter(d => d.device_type === 'ap')
+  return {
+    total: list.length,
+    online: list.filter(d => d.status === 'online').length,
+    offline: list.filter(d => d.status === 'offline').length,
+    maintenance: list.filter(d => d.status === 'maintenance').length
+  }
+})
 
-  if (searchText.value) {
-    const search = searchText.value.toLowerCase()
-    result = result.filter(d =>
-      d.name.toLowerCase().includes(search) ||
-      d.ip?.includes(search)
-    )
+// 办公室交换机统计
+const officeSwitchStats = computed(() => {
+  const list = devices.value.filter(d => d.device_type === 'office_switch')
+  return {
+    total: list.length,
+    online: list.filter(d => d.status === 'online').length,
+    offline: list.filter(d => d.status === 'offline').length,
+    maintenance: list.filter(d => d.status === 'maintenance').length
+  }
+})
+
+// 数据中心网络设备统计
+const datacenterStats = computed(() => {
+  const list = devices.value.filter(d => datacenterTypes.includes(d.device_type))
+  return {
+    total: list.length,
+    online: list.filter(d => d.status === 'online').length,
+    offline: list.filter(d => d.status === 'offline').length,
+    maintenance: list.filter(d => d.status === 'maintenance').length
+  }
+})
+
+// 设备类型标签
+const typeLabel = (dtype) => {
+  const map = {
+    uce: t('deviceTypeUCE'),
+    core_switch: t('deviceTypeCoreSwitch'),
+    server_switch: t('deviceTypeServerSwitch'),
+    office_switch: t('deviceTypeOfficeSwitch'),
+    firewall: t('deviceTypeFirewall'),
+    ap: t('deviceTypeAP'),
+    wlc: t('deviceTypeWLC'),
+    router: t('deviceTypeRouter'),
+    pa: t('deviceTypePA'),
+    ftd: t('deviceTypeFTD'),
+    other: t('deviceTypeOther'),
+  }
+  return map[dtype] || dtype
+}
+
+// 构建树形数据
+const treeData = computed(() => {
+  let list = searchText.value
+    ? devices.value.filter(d =>
+        d.name.toLowerCase().includes(searchText.value.toLowerCase()) ||
+        d.ip?.includes(searchText.value)
+      )
+    : devices.value
+
+  // 统计卡片类型筛选
+  if (activeFilter.value) {
+    if (activeFilter.value === 'datacenter') {
+      list = list.filter(d => datacenterTypes.includes(d.device_type))
+    } else {
+      list = list.filter(d => d.device_type === activeFilter.value)
+    }
   }
 
+  // 状态筛选（点击离线/维护数字）
   if (filterStatus.value) {
-    result = result.filter(d => d.status === filterStatus.value)
+    list = list.filter(d => d.status === filterStatus.value)
   }
 
-  if (filterRole.value) {
-    result = result.filter(d => d.role === filterRole.value)
+  // 有筛选时返回扁平列表
+  if (activeFilter.value || filterStatus.value) {
+    return list.map(d => ({ ...d }))
   }
 
-  return result
+  // 无筛选时显示树形结构
+  const tree = []
+
+  // 数据中心网络设备层级
+  const datacenterDevices = list.filter(d => datacenterTypes.includes(d.device_type))
+  if (datacenterDevices.length > 0) {
+    const datacenterChildren = []
+    // 按类型分组
+    const typeGroups = {}
+    datacenterDevices.forEach(d => {
+      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
+      typeGroups[d.device_type].push(d)
+    })
+    Object.entries(typeGroups).forEach(([dtype, devs]) => {
+      const onlineCount = devs.filter(d => d.status === 'online').length
+      datacenterChildren.push({
+        id: `type-${dtype}`,
+        name: typeLabel(dtype),
+        isType: true,
+        layerClass: 'datacenter',
+        onlineCount,
+        totalCount: devs.length,
+        children: devs.map(d => ({ ...d, device_type: dtype }))
+      })
+    })
+    tree.push({
+      id: 'layer-datacenter',
+      name: t('deviceLayerDatacenter'),
+      isLayer: true,
+      layerClass: 'datacenter',
+      onlineCount: datacenterDevices.filter(d => d.status === 'online').length,
+      totalCount: datacenterDevices.length,
+      children: datacenterChildren
+    })
+  }
+
+  // 无线网络层级
+  const wifiDevices = list.filter(d => wifiTypes.includes(d.device_type))
+  if (wifiDevices.length > 0) {
+    const wifiChildren = []
+    const typeGroups = {}
+    wifiDevices.forEach(d => {
+      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
+      typeGroups[d.device_type].push(d)
+    })
+    Object.entries(typeGroups).forEach(([dtype, devs]) => {
+      const onlineCount = devs.filter(d => d.status === 'online').length
+      wifiChildren.push({
+        id: `type-${dtype}`,
+        name: typeLabel(dtype),
+        isType: true,
+        layerClass: 'wifi',
+        onlineCount,
+        totalCount: devs.length,
+        children: devs.map(d => ({ ...d, device_type: dtype }))
+      })
+    })
+    tree.push({
+      id: 'layer-wifi',
+      name: t('deviceLayerWiFi'),
+      isLayer: true,
+      layerClass: 'wifi',
+      onlineCount: wifiDevices.filter(d => d.status === 'online').length,
+      totalCount: wifiDevices.length,
+      children: wifiChildren
+    })
+  }
+
+  // 接入层层级
+  const accessDevices = list.filter(d => accessTypes.includes(d.device_type))
+  if (accessDevices.length > 0) {
+    const accessChildren = []
+    const typeGroups = {}
+    accessDevices.forEach(d => {
+      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
+      typeGroups[d.device_type].push(d)
+    })
+    Object.entries(typeGroups).forEach(([dtype, devs]) => {
+      const onlineCount = devs.filter(d => d.status === 'online').length
+      accessChildren.push({
+        id: `type-${dtype}`,
+        name: typeLabel(dtype),
+        isType: true,
+        layerClass: 'access',
+        onlineCount,
+        totalCount: devs.length,
+        children: devs.map(d => ({ ...d, device_type: dtype }))
+      })
+    })
+    tree.push({
+      id: 'layer-access',
+      name: t('deviceLayerAccess'),
+      isLayer: true,
+      layerClass: 'access',
+      onlineCount: accessDevices.filter(d => d.status === 'online').length,
+      totalCount: accessDevices.length,
+      children: accessChildren
+    })
+  }
+
+  // 其他设备层级
+  const otherDevices = list.filter(d =>
+    !datacenterTypes.includes(d.device_type) &&
+    !wifiTypes.includes(d.device_type) &&
+    !accessTypes.includes(d.device_type)
+  )
+  if (otherDevices.length > 0) {
+    tree.push({
+      id: 'layer-other',
+      name: t('deviceTypeOther'),
+      isLayer: true,
+      layerClass: 'other',
+      onlineCount: otherDevices.filter(d => d.status === 'online').length,
+      totalCount: otherDevices.length,
+      children: otherDevices.map(d => ({ ...d }))
+    })
+  }
+
+  return tree
 })
-
-// 维护中百分比
-const getMaintenancePercent = () => {
-  if (stats.value.total === 0) return 0
-  return Math.round((stats.value.maintenance / stats.value.total) * 100)
-}
-
-// 状态筛选
-const filterByStatus = (status) => {
-  filterStatus.value = status
-  currentPage.value = 1
-}
-
-// 应用筛选
-const applyFilters = () => {
-  currentPage.value = 1
-}
-
-// 分页处理
-const handlePageSizeChange = () => {
-  currentPage.value = 1
-}
-
-const handlePageChange = () => {
-  // 分页切换
-}
 
 // 表格行样式
-const tableRowClassName = ({ row, rowIndex }) => {
+const treeRowClassName = ({ row }) => {
+  if (row.isLayer) return 'layer-row'
+  if (row.isType) return 'type-row'
   if (row.status === 'offline') return 'offline-row'
-  if (row.status === 'retired') return 'retired-row'
   return ''
-}
-
-const getStatusType = (status) => {
-  const types = { online: 'success', offline: 'danger', maintenance: 'warning', retired: 'info' }
-  return types[status] || 'info'
 }
 
 const getStatusText = (status) => {
   const texts = { online: t('statusOnline'), offline: t('statusOffline'), maintenance: t('statusMaintenance'), retired: t('statusRetired') }
   return texts[status] || status
-}
-
-const getRoleType = (role) => {
-  const types = { access: '', distribution: 'warning', core: 'danger' }
-  return types[role] || ''
-}
-
-const getRoleText = (role) => {
-  const texts = { access: t('deviceRoleAccess'), distribution: t('deviceRoleDistribution'), core: t('deviceRoleCore') }
-  return texts[role] || role
 }
 
 const handleSelectionChange = (selection) => {
@@ -590,7 +791,12 @@ const batchBackup = async () => {
 
 const editDevice = (row) => {
   editMode.value = true
-  newDevice.value = { ...row }
+  // 解析 modules 数据
+  const modules = row.modules || [{ type: 'main', serial_number: '' }]
+  newDevice.value = {
+    ...row,
+    modules: Array.isArray(modules) && modules.length > 0 ? modules : [{ type: 'main', serial_number: '' }]
+  }
   showAddDialog.value = true
 }
 
@@ -601,11 +807,11 @@ const updateDevice = async () => {
       name: newDevice.value.name,
       ip: newDevice.value.ip,
       model: newDevice.value.model,
-      serial_number: newDevice.value.serial_number,
       location: newDevice.value.location,
       role: newDevice.value.role,
       status: newDevice.value.status,
-      credential_group: newDevice.value.credential_group
+      credential_group: newDevice.value.credential_group,
+      modules: newDevice.value.modules
     }
     await updateDeviceApi(newDevice.value.id, updateData)
     ElMessage.success(t('msgDeviceUpdateSuccess'))
@@ -699,6 +905,69 @@ const loadVendors = async () => {
   }
 }
 
+// 卡片点击导航函数
+const scrollToTable = () => {
+  const tableSection = document.querySelector('.data-section')
+  if (tableSection) {
+    tableSection.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+}
+
+// 统计卡片筛选
+const filterByType = (type) => {
+  activeFilter.value = type
+  filterStatus.value = '' // 清除状态筛选
+  scrollToTable()
+}
+
+// 点击离线/维护数字筛选
+const filterByStatus = (status, type) => {
+  filterStatus.value = status
+  activeFilter.value = type
+  scrollToTable()
+}
+
+// 获取筛选类型显示名称
+const getFilterLabel = (type) => {
+  const labels = {
+    'uce': 'UCE',
+    'ap': 'AP',
+    'office_switch': t('deviceTypeOfficeSwitch'),
+    'datacenter': t('deviceLayerDatacenter')
+  }
+  return labels[type] || type
+}
+
+const expandAndScrollTo = (typeOrLayer) => {
+  scrollToTable()
+
+  // 根据点击的卡片类型，确定要展开的层级或类型节点
+  let targetNodeId = ''
+
+  if (typeOrLayer === 'datacenter') {
+    targetNodeId = 'layer-datacenter'
+  } else if (typeOrLayer === 'ap' || typeOrLayer === 'wlc') {
+    targetNodeId = 'layer-wifi'
+  } else if (typeOrLayer === 'uce' || typeOrLayer === 'office_switch') {
+    targetNodeId = 'layer-access'
+  } else if (typeOrLayer === 'other') {
+    targetNodeId = 'layer-other'
+  }
+
+  // 等待 DOM 更新后展开节点
+  setTimeout(() => {
+    if (tableRef.value) {
+      // 展开所有节点（因为已经有 default-expand-all）
+      // 尝试滚动到特定层级行
+      const rows = document.querySelectorAll('.el-table__row')
+      rows.forEach(row => {
+        // Element Plus 的树形表格会通过 data-row-key 属性标识行
+        // 由于层级行带有特殊 class，可以尝试找到它
+      })
+    }
+  }, 100)
+}
+
 onMounted(() => {
   loadDevices()
   loadCredentialGroups()
@@ -756,8 +1025,8 @@ onMounted(() => {
 
 .nav-left {
   display: flex;
-  align-items: baseline;
-  gap: 12px;
+  align-items: center;
+  gap: 16px;
 }
 
 .page-title {
@@ -826,323 +1095,148 @@ onMounted(() => {
   cursor: not-allowed;
 }
 
-/* ===== 统计 Dashboard ===== */
-.stats-dashboard {
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(16px);
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.5);
-  box-shadow: 0 4px 24px rgba(0, 48, 135, 0.08);
+/* ===== 统计 Dashboard - 企业级紧凑卡片 ===== */
+.stats-dashboard-compact {
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 24px rgba(0, 48, 135, 0.06);
 }
 
-.stats-grid {
+.stats-grid-5 {
   display: grid;
   grid-template-columns: repeat(5, 1fr);
   gap: 12px;
 }
 
-.stat-card {
-  position: relative;
+.stat-card-compact {
+  display: flex;
+  flex-direction: column;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 12px;
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.stat-card-compact:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(0, 48, 135, 0.08);
+}
+
+.stat-card-compact.active {
+  border: 2px solid #0984e3;
+  box-shadow: 0 4px 16px rgba(9, 132, 227, 0.25);
+  background: rgba(9, 132, 227, 0.08);
+}
+
+.stat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.stat-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  letter-spacing: 0.02em;
+}
+
+.stat-body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 18px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.8);
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  margin-bottom: 10px;
+}
+
+.stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+}
+
+.stat-bar-container {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
   overflow: hidden;
-}
-
-.stat-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, transparent 40%, rgba(9, 132, 227, 0.05) 100%);
-  opacity: 0;
-  transition: opacity 0.3s;
-}
-
-.stat-card:hover::before {
-  opacity: 1;
-}
-
-.stat-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 32px rgba(0, 48, 135, 0.12);
-}
-
-.card-content {
+  background: rgba(148, 163, 184, 0.1);
   display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
 }
 
-.card-icon {
-  width: 44px;
-  height: 44px;
-  border-radius: 10px;
+.stat-bar-segment {
+  height: 100%;
+  transition: width 0.4s ease;
+}
+
+.stat-bar-segment.online { background: #00b894; }
+.stat-bar-segment.offline { background: #d63031; }
+.stat-bar-segment.maintenance { background: #e17055; }
+
+.stat-footer {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  transition: transform 0.3s;
+  gap: 8px;
 }
 
-.stat-card:hover .card-icon {
+.stat-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+  background: rgba(248, 250, 252, 0.8);
+}
+
+.stat-indicator .indicator-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+}
+
+.stat-indicator.online .indicator-dot { background: #00b894; }
+.stat-indicator.offline .indicator-dot { background: #d63031; }
+.stat-indicator.maintenance .indicator-dot { background: #e17055; }
+
+.stat-indicator.clickable {
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-radius: 6px;
+}
+
+.stat-indicator.clickable:hover {
+  background: rgba(214, 48, 49, 0.12);
+  color: #d63031;
   transform: scale(1.05);
 }
 
-.stat-card.total .card-icon {
-  background: linear-gradient(135deg, rgba(9, 132, 227, 0.15) 0%, rgba(9, 132, 227, 0.08) 100%);
-  color: #0984e3;
-}
-.stat-card.online .card-icon {
-  background: linear-gradient(135deg, rgba(0, 184, 148, 0.2) 0%, rgba(0, 184, 148, 0.1) 100%);
-  color: #00b894;
-}
-.stat-card.offline .card-icon {
-  background: linear-gradient(135deg, rgba(214, 48, 49, 0.2) 0%, rgba(214, 48, 49, 0.1) 100%);
-  color: #d63031;
-}
-.stat-card.maintenance .card-icon {
-  background: linear-gradient(135deg, rgba(225, 112, 85, 0.2) 0%, rgba(225, 112, 85, 0.1) 100%);
+.stat-indicator.maintenance.clickable:hover {
+  background: rgba(225, 112, 85, 0.12);
   color: #e17055;
 }
-.stat-card.retired .card-icon {
-  background: linear-gradient(135deg, rgba(116, 185, 255, 0.2) 0%, rgba(116, 185, 255, 0.1) 100%);
-  color: #74b9ff;
-}
 
-.card-body { flex: 1; }
-
-.metric-value {
-  font-family: 'JetBrains Mono', 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 28px;
-  font-weight: 700;
-  color: var(--text-primary);
-  line-height: 1;
-  letter-spacing: -0.02em;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-.metric-value.danger {
-  color: #d63031;
-}
-
-.metric-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-top: 6px;
-  font-weight: 500;
-}
-
-.card-trend {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-}
-
-.card-trend.stable { background: rgba(9, 132, 227, 0.1); color: #0984e3; }
-.card-trend.warning { background: rgba(214, 48, 49, 0.1); color: #d63031; }
-.card-trend.success { background: rgba(0, 184, 148, 0.1); color: #00b894; }
-.card-trend.done { background: rgba(116, 185, 255, 0.1); color: #74b9ff; }
-
-.card-progress {
-  width: 24px;
-  height: 24px;
-  position: relative;
-}
-
-.progress-ring {
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: conic-gradient(#e17055 calc(var(--percent) * 1%), rgba(225, 112, 85, 0.2) 0);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.progress-ring::after {
-  content: '';
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: white;
-}
-
-/* ===== 筛选工具栏 ===== */
-.filter-section {
-  padding: 14px 16px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  border-radius: var(--radius-lg);
-  border: 1px solid rgba(255, 255, 255, 0.6);
-  box-shadow: 0 2px 12px rgba(0, 48, 135, 0.06);
-}
-
-.filter-toolbar {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.search-box {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.search-icon {
-  position: absolute;
-  left: 12px;
-  color: var(--text-tertiary);
-  font-size: 14px;
-  z-index: 1;
-}
-
-.search-input {
-  width: 240px;
-}
-
-.search-input :deep(.el-input__wrapper) {
-  padding-left: 36px;
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  box-shadow: none;
-  transition: all 0.25s;
-}
-
-.search-input :deep(.el-input__wrapper:hover) {
-  border-color: var(--accent-primary);
-}
-
-.search-input :deep(.el-input__wrapper.is-focus) {
-  border-color: var(--accent-primary);
-  box-shadow: 0 0 0 3px rgba(9, 132, 227, 0.15);
-}
-
-/* Status Chips */
-.status-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-.status-chip {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: rgba(255, 255, 255, 0.9);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  cursor: pointer;
-  transition: all 0.25s ease;
-  position: relative;
-  overflow: hidden;
-}
-
-.status-chip::before {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 50%;
-  right: 50%;
-  height: 2px;
-  background: currentColor;
-  transition: all 0.25s ease;
-}
-
-.status-chip:hover::before,
-.status-chip.active::before {
-  left: 0;
-  right: 0;
-}
-
-.status-chip:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.1);
-}
-
-.status-chip.active {
-  background: rgba(9, 132, 227, 0.08);
-  border-color: rgba(9, 132, 227, 0.3);
-  color: #0984e3;
-}
-
-.chip-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.chip-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-}
-
-.status-chip.active .chip-label {
-  color: #0984e3;
-}
-
-.chip-count {
-  font-size: 11px;
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  color: var(--text-tertiary);
-  padding: 2px 6px;
-  background: rgba(0, 48, 135, 0.05);
-  border-radius: 4px;
-}
-
-.status-chip.chip-online .chip-dot { background: #00b894; }
-.status-chip.chip-offline .chip-dot { background: #d63031; }
-.status-chip.chip-maintenance .chip-dot { background: #e17055; }
-.status-chip.chip-retired .chip-dot { background: #74b9ff; }
-
-.status-chip.chip-online:hover { background: rgba(0, 184, 148, 0.08); border-color: rgba(0, 184, 148, 0.3); }
-.status-chip.chip-offline:hover { background: rgba(214, 48, 49, 0.08); border-color: rgba(214, 48, 49, 0.3); }
-.status-chip.chip-maintenance:hover { background: rgba(225, 112, 85, 0.08); border-color: rgba(225, 112, 85, 0.3); }
-.status-chip.chip-retired:hover { background: rgba(116, 185, 255, 0.08); border-color: rgba(116, 185, 255, 0.3); }
-
-.more-filters {
-  display: flex;
-  gap: 8px;
-}
-
-.more-filters :deep(.el-select .el-input__wrapper) {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 8px;
-  border: 1px solid var(--border-default);
-  box-shadow: none;
-}
-
-.batch-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-left: auto;
-}
+/* 卡片类型特定样式 */
+.stat-card-compact.total .stat-value { color: #0984e3; }
+.stat-card-compact.uce .stat-value { color: #e17055; }
+.stat-card-compact.ap .stat-value { color: #00b894; }
+.stat-card-compact.office .stat-value { color: #f59e0b; }
+.stat-card-compact.datacenter .stat-value { color: #0984e3; }
 
 /* ===== 数据面板 ===== */
 .data-section {
   padding: 16px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 4px 24px rgba(0, 48, 135, 0.08);
 }
@@ -1156,121 +1250,205 @@ onMounted(() => {
   border-bottom: 1px solid rgba(0, 48, 135, 0.08);
 }
 
+.table-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.filter-tag {
+  cursor: pointer;
+}
+
 .table-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.03em;
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
 }
 
 .table-count {
   font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #64748b;
+  font-family: 'JetBrains Mono', monospace;
 }
 
-.enterprise-table { width: 100%; }
+/* ===== 树形表格 ===== */
+.enterprise-tree-table {
+  width: 100%;
+}
 
-.enterprise-table :deep(.el-table__inner-wrapper::before) {
+.enterprise-tree-table :deep(.el-table__inner-wrapper::before) {
   display: none;
 }
 
-.enterprise-table :deep(.el-table__header-wrapper) {
-  border-bottom: 2px solid rgba(0, 48, 135, 0.1);
-}
-
-.enterprise-table :deep(th.el-table__cell) {
+.enterprise-tree-table :deep(th.el-table__cell) {
   background: transparent;
   font-size: 11px;
   font-weight: 600;
-  color: var(--text-tertiary);
+  color: #64748b;
   letter-spacing: 0.03em;
   padding: 12px 0;
-  border-bottom: none;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.1);
 }
 
-.enterprise-table :deep(td.el-table__cell) {
+.enterprise-tree-table :deep(td.el-table__cell) {
   border-bottom: 1px solid rgba(0, 48, 135, 0.06);
   padding: 10px 0;
   background: transparent;
 }
 
-.enterprise-table :deep(.el-table__row) {
-  transition: all 0.25s ease;
-  background: transparent;
+.enterprise-tree-table :deep(.el-table__row) {
+  transition: all 0.2s ease;
 }
 
-.enterprise-table :deep(.el-table__row:hover > td) {
+.enterprise-tree-table :deep(.el-table__row:hover > td) {
   background: rgba(9, 132, 227, 0.04) !important;
 }
 
-.enterprise-table :deep(.offline-row > td) {
-  background: rgba(214, 48, 49, 0.04) !important;
+/* 层级行样式 */
+.enterprise-tree-table :deep(.layer-row) {
+  background: rgba(0, 48, 135, 0.04) !important;
 }
 
-.enterprise-table :deep(.retired-row) {
-  opacity: 0.6;
+.enterprise-tree-table :deep(.layer-row > td) {
+  background: rgba(0, 48, 135, 0.04) !important;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.1);
+}
+
+.enterprise-tree-table :deep(.type-row) {
+  background: rgba(248, 250, 252, 0.6) !important;
+}
+
+/* 层级行内容 */
+.layer-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.layer-icon {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.layer-icon.datacenter {
+  background: rgba(9, 132, 227, 0.12);
+  color: #0984e3;
+}
+
+.layer-icon.wifi {
+  background: rgba(0, 184, 148, 0.12);
+  color: #00b894;
+}
+
+.layer-icon.access {
+  background: rgba(225, 112, 85, 0.12);
+  color: #e17055;
+}
+
+.layer-icon.other {
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
+.layer-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.layer-count-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(0, 184, 148, 0.12);
+  color: #00b894;
+}
+
+/* 类型行内容 */
+.type-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.type-dot.datacenter { background: #0984e3; }
+.type-dot.wifi { background: #00b894; }
+.type-dot.access { background: #e17055; }
+.type-dot.other { background: #64748b; }
+
+.type-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #475569;
+}
+
+.type-stats {
+  font-size: 11px;
+  color: #00b894;
+  font-weight: 500;
 }
 
 /* 设备链接 */
 .device-link {
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: var(--accent-primary);
+  gap: 6px;
+  color: #0984e3;
   text-decoration: none;
-  transition: all 0.25s;
+  transition: all 0.2s;
 }
 
 .device-link:hover {
-  color: var(--accent-secondary);
+  color: #74b9ff;
 }
 
-.device-no-badge {
-  font-family: 'JetBrains Mono', 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-weight: 600;
+.device-name {
   font-size: 13px;
-  padding: 4px 8px;
-  background: rgba(9, 132, 227, 0.08);
-  border-radius: 6px;
-  transition: all 0.25s;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  letter-spacing: 0.02em;
-}
-
-.device-link:hover .device-no-badge {
-  background: rgba(9, 132, 227, 0.15);
+  font-weight: 500;
 }
 
 .link-arrow {
   opacity: 0;
   font-size: 12px;
-  transition: all 0.25s;
-  color: var(--accent-primary);
+  transition: all 0.2s;
 }
 
 .device-link:hover .link-arrow {
   opacity: 1;
-  transform: translateX(4px);
+  transform: translateX(3px);
+}
+
+/* 空单元格 */
+.empty-cell {
+  color: #94a3b8;
+  font-size: 12px;
 }
 
 /* IP单元格 */
-.ip-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.ip-icon {
-  font-size: 14px;
-  color: var(--text-tertiary);
-}
-
 .ip-text {
   font-size: 13px;
-  color: var(--text-secondary);
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #475569;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+/* 型号/位置 */
+.model-text, .location-text {
+  font-size: 13px;
+  color: #475569;
 }
 
 /* 状态徽章 */
@@ -1290,66 +1468,18 @@ onMounted(() => {
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 
-.status-text {
-  letter-spacing: 0.02em;
-}
-
-.status-badge.online {
-  border-color: rgba(0, 184, 148, 0.3);
-  color: #00b894;
-}
+.status-badge.online { border-color: rgba(0, 184, 148, 0.3); color: #00b894; }
 .status-badge.online .status-dot { background: #00b894; }
-
-.status-badge.offline {
-  border-color: rgba(214, 48, 49, 0.3);
-  color: #d63031;
-}
+.status-badge.offline { border-color: rgba(214, 48, 49, 0.3); color: #d63031; }
 .status-badge.offline .status-dot { background: #d63031; }
-
-.status-badge.maintenance {
-  border-color: rgba(225, 112, 85, 0.3);
-  color: #e17055;
-}
+.status-badge.maintenance { border-color: rgba(225, 112, 85, 0.3); color: #e17055; }
 .status-badge.maintenance .status-dot { background: #e17055; }
-
-.status-badge.retired {
-  border-color: rgba(116, 185, 255, 0.3);
-  color: #74b9ff;
-}
+.status-badge.retired { border-color: rgba(116, 185, 255, 0.3); color: #74b9ff; }
 .status-badge.retired .status-dot { background: #74b9ff; }
 
-/* 位置单元格 */
-.location-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.location-icon {
-  font-size: 14px;
-  color: var(--text-tertiary);
-}
-
-.location-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* 型号单元格 */
-.model-cell {
-  display: flex;
-  align-items: center;
-}
-
-.model-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* 操作按钮组 */
+/* 操作按钮 */
 .action-group {
   display: flex;
   gap: 4px;
@@ -1362,9 +1492,9 @@ onMounted(() => {
   border-radius: 6px;
   border: 1px solid transparent;
   background: rgba(255, 255, 255, 0.9);
-  color: var(--text-tertiary);
+  color: #64748b;
   cursor: pointer;
-  transition: all 0.25s ease;
+  transition: all 0.2s;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1372,60 +1502,160 @@ onMounted(() => {
 
 .action-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.15);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.12);
 }
 
-.action-btn.view:hover {
-  background: rgba(9, 132, 227, 0.08);
-  border-color: rgba(9, 132, 227, 0.2);
-  color: #0984e3;
-}
+.action-btn.backup:hover { background: rgba(0, 184, 148, 0.08); color: #00b894; }
+.action-btn.edit:hover { background: rgba(245, 158, 11, 0.08); color: #f59e0b; }
+.action-btn.delete:hover { background: rgba(214, 48, 49, 0.08); color: #d63031; }
 
-.action-btn.backup:hover {
-  background: rgba(0, 184, 148, 0.08);
-  border-color: rgba(0, 184, 148, 0.2);
-  color: #00b894;
-}
-
-.action-btn.edit:hover {
-  background: rgba(251, 191, 36, 0.08);
-  border-color: rgba(251, 191, 36, 0.2);
-  color: #f59e0b;
-}
-
-.action-btn.delete:hover {
-  background: rgba(214, 48, 49, 0.08);
-  border-color: rgba(214, 48, 49, 0.2);
-  color: #d63031;
-}
-
-/* 分页 */
-.pagination-bar {
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0, 48, 135, 0.06);
+/* 搜索框 */
+.search-box {
+  position: relative;
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
 }
 
-.pagination-bar :deep(.el-pagination) {
-  gap: 8px;
+.search-icon {
+  position: absolute;
+  left: 12px;
+  color: #64748b;
+  font-size: 14px;
+  z-index: 1;
 }
 
-.pagination-bar :deep(.el-pagination button),
-.pagination-bar :deep(.el-pager li) {
+.search-input {
+  width: 240px;
+}
+
+.search-input :deep(.el-input__wrapper) {
+  padding-left: 36px;
   background: rgba(255, 255, 255, 0.95);
-  border-radius: 6px;
-  border: 1px solid var(--border-default);
-  font-size: 12px;
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  box-shadow: none;
 }
 
-.pagination-bar :deep(.el-pager li.is-active) {
-  background: linear-gradient(135deg, #0984e3, #74b9ff);
-  border-color: transparent;
-  color: white;
+.search-input :deep(.el-input__wrapper:hover),
+.search-input :deep(.el-input__wrapper.is-focus) {
+  border-color: #0984e3;
+  box-shadow: 0 0 0 3px rgba(9, 132, 227, 0.1);
 }
+
+/* ===== 响应式 ===== */
+@media (max-width: 1200px) {
+  .stats-grid-5 { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .stats-grid-5 { grid-template-columns: repeat(2, 1fr); }
+  .nav-left { flex-direction: column; align-items: flex-start; }
+  .search-input { width: 100%; }
+}
+
+/* ===== 暗黑模式 ===== */
+.dark .devices-page {
+  background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 50%, #161b22 100%);
+}
+
+.dark .page-nav-bar {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(48, 54, 61, 0.8);
+}
+
+.dark .page-title { color: #f0f6fc; }
+
+.dark .nav-action-btn { background: linear-gradient(135deg, #0984e3, #74b9ff); }
+
+.dark .nav-action-btn.secondary {
+  background: rgba(48, 54, 61, 0.8);
+  color: #8b949e;
+  border-color: #30363d;
+}
+
+.dark .stats-dashboard-compact {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+}
+
+.dark .stat-card-compact {
+  background: rgba(13, 17, 23, 0.9);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .stat-title { color: #8b949e; }
+.dark .stat-value { color: #f0f6fc; }
+.dark .stat-card-compact.total .stat-value { color: #58a6ff; }
+.dark .stat-card-compact.uce .stat-value { color: #e17055; }
+.dark .stat-card-compact.ap .stat-value { color: #3fb950; }
+.dark .stat-card-compact.office .stat-value { color: #d29922; }
+.dark .stat-card-compact.datacenter .stat-value { color: #58a6ff; }
+
+.dark .stat-card-compact.active {
+  border: 2px solid #58a6ff;
+  box-shadow: 0 4px 16px rgba(88, 166, 255, 0.25);
+  background: rgba(88, 166, 255, 0.1);
+}
+
+.dark .stat-bar-container { background: rgba(48, 54, 61, 0.3); }
+.dark .stat-indicator { background: rgba(48, 54, 61, 0.3); color: #8b949e; }
+
+.dark .search-input :deep(.el-input__wrapper) {
+  background: rgba(13, 17, 23, 0.95);
+  border-color: #30363d;
+}
+
+.dark .search-icon { color: #8b949e; }
+
+.dark .data-section {
+  background: rgba(22, 27, 34, 0.85);
+  border-color: rgba(48, 54, 61, 0.6);
+}
+
+.dark .table-title { color: #f0f6fc; }
+.dark .table-count { color: #8b949e; }
+
+.dark .enterprise-tree-table :deep(th.el-table__cell) { color: #8b949e; }
+.dark .enterprise-tree-table :deep(td.el-table__cell) { border-bottom-color: rgba(48, 54, 61, 0.3); }
+.dark .enterprise-tree-table :deep(.el-table__row:hover > td) { background: rgba(88, 166, 255, 0.08) !important; }
+
+.dark .enterprise-tree-table :deep(.layer-row > td) { background: rgba(48, 54, 61, 0.2) !important; }
+.dark .enterprise-tree-table :deep(.type-row > td) { background: rgba(48, 54, 61, 0.15) !important; }
+
+.dark .layer-icon.datacenter { background: rgba(88, 166, 255, 0.2); color: #58a6ff; }
+.dark .layer-icon.wifi { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+.dark .layer-icon.access { background: rgba(225, 112, 85, 0.2); color: #e17055; }
+
+.dark .layer-name { color: #f0f6fc; }
+.dark .layer-count-badge { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+
+.dark .type-dot.datacenter { background: #58a6ff; }
+.dark .type-dot.wifi { background: #3fb950; }
+.dark .type-dot.access { background: #e17055; }
+
+.dark .type-name { color: #8b949e; }
+.dark .type-stats { color: #3fb950; }
+
+.dark .device-link { color: #58a6ff; }
+.dark .device-link:hover { color: #74b9ff; }
+.dark .device-name { color: #f0f6fc; }
+
+.dark .empty-cell { color: #6e7681; }
+.dark .ip-text, .dark .model-text, .dark .location-text { color: #8b949e; }
+
+.dark .status-badge { background: rgba(13, 17, 23, 0.9); }
+.dark .status-badge.online { border-color: rgba(63, 185, 80, 0.4); color: #3fb950; }
+.dark .status-badge.online .status-dot { background: #3fb950; }
+.dark .status-badge.offline { border-color: rgba(248, 81, 73, 0.4); color: #f85149; }
+.dark .status-badge.offline .status-dot { background: #f85149; }
+.dark .status-badge.maintenance { border-color: rgba(225, 112, 85, 0.4); color: #e17055; }
+.dark .status-badge.maintenance .status-dot { background: #e17055; }
+
+.dark .action-btn { background: rgba(13, 17, 23, 0.9); color: #8b949e; }
+.dark .action-btn:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
+.dark .action-btn.backup:hover { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
+.dark .action-btn.edit:hover { background: rgba(210, 153, 34, 0.15); color: #d29922; }
+.dark .action-btn.delete:hover { background: rgba(248, 81, 73, 0.15); color: #f85149; }
 
 /* ===== 编辑对话框 ===== */
 .edit-dialog-content {
@@ -1447,336 +1677,20 @@ onMounted(() => {
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: #475569;
   margin-bottom: 12px;
 }
 
-/* ===== 响应式 ===== */
-@media (max-width: 1200px) {
-  .stats-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
+.modules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
-@media (max-width: 768px) {
-  .stats-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
-  .filter-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .search-input {
-    width: 100%;
-  }
-
-  .status-chips {
-    justify-content: center;
-  }
-
-  .more-filters {
-    justify-content: center;
-  }
-
-  .batch-actions {
-    justify-content: center;
-    margin-left: 0;
-  }
-
-  .page-nav-bar {
-    flex-direction: column;
-    gap: 12px;
-  }
-
-  .nav-right {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-/* ===== 暗黑模式 ===== */
-.dark .devices-page {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 50%, #161b22 100%);
-}
-
-.dark .page-nav-bar {
-  background: rgba(22, 27, 34, 0.9);
-  border-color: rgba(48, 54, 61, 0.8);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.dark .page-nav-bar::before {
-  background: linear-gradient(90deg, #0984e3, #74b9ff, #00b894);
-}
-
-.dark .page-title {
-  color: #f0f6fc;
-}
-
-.dark .nav-action-btn {
-  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
-}
-
-.dark .nav-action-btn.secondary {
-  background: rgba(48, 54, 61, 0.8);
-  color: #8b949e;
-  border-color: #30363d;
-}
-
-.dark .nav-action-btn.secondary:hover {
-  background: rgba(9, 132, 227, 0.15);
-  border-color: #0984e3;
-  color: #58a6ff;
-}
-
-.dark .nav-action-btn.export {
-  background: rgba(48, 54, 61, 0.8);
-  color: #8b949e;
-  border-color: #30363d;
-}
-
-.dark .nav-action-btn.export:hover {
-  background: rgba(9, 132, 227, 0.15);
-  border-color: #0984e3;
-  color: #58a6ff;
-}
-
-.dark .stats-dashboard {
-  background: rgba(22, 27, 34, 0.85);
-  border-color: rgba(48, 54, 61, 0.6);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-}
-
-.dark .stat-card {
-  background: rgba(13, 17, 23, 0.95);
-  border-color: rgba(48, 54, 61, 0.6);
-}
-
-.dark .stat-card:hover {
-  background: rgba(22, 27, 34, 0.95);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
-}
-
-.dark .metric-value {
-  color: #f0f6fc;
-}
-
-.dark .metric-value.danger {
-  color: #f85149;
-}
-
-.dark .metric-label {
-  color: #8b949e;
-}
-
-.dark .card-trend.stable { background: rgba(9, 132, 227, 0.2); color: #58a6ff; }
-.dark .card-trend.warning { background: rgba(248, 81, 73, 0.2); color: #f85149; }
-.dark .card-trend.success { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
-.dark .card-trend.done { background: rgba(116, 185, 255, 0.2); color: #74b9ff; }
-
-.dark .progress-ring {
-  background: conic-gradient(#e17055 calc(var(--percent) * 1%), rgba(225, 112, 85, 0.3) 0);
-}
-
-.dark .progress-ring::after {
-  background: #0d1117;
-}
-
-.dark .filter-section {
-  background: rgba(22, 27, 34, 0.85);
-  border-color: rgba(48, 54, 61, 0.6);
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-}
-
-.dark .search-input :deep(.el-input__wrapper) {
-  background: rgba(13, 17, 23, 0.95);
-  border-color: #30363d;
-}
-
-.dark .search-input :deep(.el-input__wrapper:hover),
-.dark .search-input :deep(.el-input__wrapper.is-focus) {
-  border-color: #58a6ff;
-  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
-}
-
-.dark .search-icon {
-  color: #8b949e;
-}
-
-.dark .status-chip {
-  background: rgba(13, 17, 23, 0.9);
-  border-color: #30363d;
-}
-
-.dark .status-chip:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-}
-
-.dark .chip-label {
-  color: #8b949e;
-}
-
-.dark .status-chip.active {
-  background: rgba(88, 166, 255, 0.15);
-  border-color: rgba(88, 166, 255, 0.4);
-  color: #58a6ff;
-}
-
-.dark .status-chip.active .chip-label {
-  color: #58a6ff;
-}
-
-.dark .chip-count {
-  background: rgba(48, 54, 61, 0.3);
-  color: #8b949e;
-}
-
-.dark .more-filters :deep(.el-select .el-input__wrapper) {
-  background: rgba(13, 17, 23, 0.95);
-  border-color: #30363d;
-}
-
-/* 状态徽章暗黑模式 */
-.dark .status-badge {
-  background: rgba(13, 17, 23, 0.9);
-}
-
-.dark .status-badge.online {
-  border-color: rgba(63, 185, 80, 0.4);
-  color: #3fb950;
-}
-.dark .status-badge.online .status-dot { background: #3fb950; }
-
-.dark .status-badge.offline {
-  border-color: rgba(248, 81, 73, 0.4);
-  color: #f85149;
-}
-.dark .status-badge.offline .status-dot { background: #f85149; }
-
-.dark .status-badge.maintenance {
-  border-color: rgba(225, 112, 85, 0.4);
-  color: #e17055;
-}
-.dark .status-badge.maintenance .status-dot { background: #e17055; }
-
-.dark .status-badge.retired {
-  border-color: rgba(116, 185, 255, 0.4);
-  color: #74b9ff;
-}
-.dark .status-badge.retired .status-dot { background: #74b9ff; }
-
-.dark .data-section {
-  background: rgba(22, 27, 34, 0.85);
-  border-color: rgba(48, 54, 61, 0.6);
-  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
-}
-
-.dark .table-header {
-  border-bottom-color: rgba(48, 54, 61, 0.6);
-}
-
-.dark .table-title {
-  color: #8b949e;
-}
-
-.dark .table-count {
-  color: #6e7681;
-}
-
-.dark .enterprise-table :deep(.el-table__header-wrapper) {
-  border-bottom-color: rgba(48, 54, 61, 0.6);
-}
-
-.dark .enterprise-table :deep(th.el-table__cell) {
-  color: #8b949e;
-}
-
-.dark .enterprise-table :deep(td.el-table__cell) {
-  border-bottom-color: rgba(48, 54, 61, 0.3);
-}
-
-.dark .enterprise-table :deep(.el-table__row:hover > td) {
-  background: rgba(88, 166, 255, 0.08) !important;
-}
-
-.dark .enterprise-table :deep(.offline-row > td) {
-  background: rgba(248, 81, 73, 0.08) !important;
-}
-
-.dark .device-link {
-  color: #58a6ff;
-}
-
-.dark .device-no-badge {
-  background: rgba(88, 166, 255, 0.15);
-}
-
-.dark .device-link:hover .device-no-badge {
-  background: rgba(88, 166, 255, 0.25);
-}
-
-.dark .ip-text {
-  color: #8b949e;
-}
-
-.dark .location-text {
-  color: #8b949e;
-}
-
-.dark .model-text {
-  color: #8b949e;
-}
-
-.dark .pagination-bar {
-  border-top-color: rgba(48, 54, 61, 0.3);
-}
-
-.dark .pagination-bar :deep(.el-pagination button),
-.dark .pagination-bar :deep(.el-pager li) {
-  background: rgba(13, 17, 23, 0.95);
-  border-color: #30363d;
-  color: #8b949e;
-}
-
-.dark .pagination-bar :deep(.el-pager li.is-active) {
-  background: linear-gradient(135deg, #0984e3, #74b9ff);
-  color: white;
-}
-
-.dark .action-btn {
-  background: rgba(13, 17, 23, 0.9);
-  color: #8b949e;
-  border-color: transparent;
-}
-
-.dark .action-btn:hover {
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
-}
-
-.dark .action-btn.view:hover {
-  background: rgba(88, 166, 255, 0.15);
-  border-color: rgba(88, 166, 255, 0.3);
-  color: #58a6ff;
-}
-
-.dark .action-btn.backup:hover {
-  background: rgba(63, 185, 80, 0.15);
-  border-color: rgba(63, 185, 80, 0.3);
-  color: #3fb950;
-}
-
-.dark .action-btn.edit:hover {
-  background: rgba(210, 153, 34, 0.15);
-  border-color: rgba(210, 153, 34, 0.3);
-  color: #d29922;
-}
-
-.dark .action-btn.delete:hover {
-  background: rgba(248, 81, 73, 0.15);
-  border-color: rgba(248, 81, 73, 0.3);
-  color: #f85149;
+.module-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .dark .form-section {
@@ -1784,7 +1698,5 @@ onMounted(() => {
   border-color: rgba(48, 54, 61, 0.4);
 }
 
-.dark .form-section-title {
-  color: #8b949e;
-}
+.dark .form-section-title { color: #8b949e; }
 </style>

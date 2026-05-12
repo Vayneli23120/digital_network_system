@@ -172,6 +172,19 @@ const routes = [
     ]
   },
   {
+    path: '/movements',
+    name: 'MovementsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Movements',
+        component: () => import('@/views/Movements.vue'),
+        meta: { title: '出入库历史' }
+      }
+    ]
+  },
+  {
     path: '/scrap-inventory',
     name: 'ScrapInventoryLayout',
     component: Layout,

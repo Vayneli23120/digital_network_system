@@ -314,11 +314,14 @@
         </el-table-column>
 
         <!-- 操作 -->
-        <el-table-column :label="t('faultAction')" width="120" fixed="right">
+        <el-table-column :label="t('faultAction')" width="160" fixed="right">
           <template #default="{ row }">
             <div class="action-group">
               <button class="action-btn view" @click="viewDetail(row)" title="查看详情">
                 <el-icon><View /></el-icon>
+              </button>
+              <button class="action-btn locate" @click="locateDevice(row)" v-if="row.device_id" title="定位设备">
+                <el-icon><Aim /></el-icon>
               </button>
               <button class="action-btn edit" @click="editFault(row)" v-if="row.status !== 'closed'" title="编辑">
                 <el-icon><Edit /></el-icon>
@@ -432,7 +435,7 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, Plus, Refresh, Document, Clock, CircleCheck, SuccessFilled, ArrowRight, Edit, View, Delete, Setting, Warning, InfoFilled, Connection } from '@element-plus/icons-vue'
+import { Search, Plus, Refresh, Document, Clock, CircleCheck, SuccessFilled, ArrowRight, Edit, View, Delete, Setting, Warning, InfoFilled, Connection, Aim } from '@element-plus/icons-vue'
 import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
 import { formatDateTime, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -777,6 +780,10 @@ const deleteFaultRecord = async (row) => {
 
 const viewDetail = (row) => {
   router.push(`/faults/${row.id}`)
+}
+
+const locateDevice = (row) => {
+  router.push(`/monitor-screen?device_id=${row.device_id}`)
 }
 
 const resetForm = () => {
@@ -1649,6 +1656,12 @@ onMounted(() => {
   background: rgba(251, 191, 36, 0.08);
   border-color: rgba(251, 191, 36, 0.2);
   color: #f59e0b;
+}
+
+.action-btn.locate:hover {
+  background: rgba(0, 212, 170, 0.08);
+  border-color: rgba(0, 212, 170, 0.2);
+  color: #00d4aa;
 }
 
 .action-btn.delete:hover {

@@ -69,7 +69,27 @@
                       <div class="noc-segment maintenance" v-if="coreMaintenance > 0" :style="{ width: (coreTotal > 0 ? coreMaintenance / coreTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
-                      <div class="noc-type-pill" v-for="dtype in ['core_switch', 'server_switch', 'firewall', 'router']" :key="dtype"
+                      <div class="noc-type-pill" v-for="dtype in ['core_switch', 'server_switch', 'router']" :key="dtype"
+                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
+                        v-if="deviceByType(dtype, 'total') > 0">
+                        <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
+                        <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
+                        <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="noc-layer">
+                    <div class="noc-layer-header">
+                      <span class="noc-layer-name">{{ t('deviceLayerFirewall') }}</span>
+                      <span class="noc-layer-count">{{ firewallTotal }} {{ t('dashDevices') }}</span>
+                    </div>
+                    <div class="noc-layer-bar">
+                      <div class="noc-segment online" :style="{ width: (firewallTotal > 0 ? firewallOnline / firewallTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment offline" v-if="firewallOffline > 0" :style="{ width: (firewallTotal > 0 ? firewallOffline / firewallTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment maintenance" v-if="firewallMaintenance > 0" :style="{ width: (firewallTotal > 0 ? firewallMaintenance / firewallTotal * 100 : 0) + '%' }"></div>
+                    </div>
+                    <div class="noc-layer-types">
+                      <div class="noc-type-pill" v-for="dtype in ['pa', 'ftd']" :key="dtype"
                         :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
                         v-if="deviceByType(dtype, 'total') > 0">
                         <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
@@ -439,11 +459,12 @@ const onlinePercent = computed(() => {
 
 const topFaultDeviceName = computed(() => faultDeviceList.value.length > 0 ? faultDeviceList.value[0].device_name : '—')
 
-const coreDeviceTypes = ['core_switch', 'server_switch', 'firewall', 'router']
+const coreDeviceTypes = ['core_switch', 'server_switch', 'router']
 const accessDeviceTypes = ['uce', 'office_switch']
 const wifiDeviceTypes = ['ap', 'wlc']
+const firewallDeviceTypes = ['pa', 'ftd']
 
-// Core/Access/WiFi counts
+// Core/Access/WiFi/Firewall counts
 const coreTotal = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
 const coreOnline = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
 const coreOffline = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
@@ -461,6 +482,12 @@ const wifiOnline = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + devic
 const wifiOffline = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
 const wifiMaintenance = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
 const wifiRetired = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+
+const firewallTotal = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
+const firewallOnline = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
+const firewallOffline = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
+const firewallMaintenance = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
+const firewallRetired = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
 
 const totalDevices = computed(() => stats.value.devices?.total || 0)
 const offlineDeviceCount = computed(() => stats.value.devices?.offline || 0)
@@ -516,6 +543,8 @@ const typeLabel = (dtype) => {
     ap: t('deviceTypeAP'),
     wlc: t('deviceTypeWLC'),
     router: t('deviceTypeRouter'),
+    pa: t('deviceTypePA'),
+    ftd: t('deviceTypeFTD'),
     other: t('deviceTypeOther'),
   }
   return map[dtype] || dtype

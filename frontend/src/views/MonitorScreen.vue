@@ -47,19 +47,53 @@
           </button>
         </div>
 
+        <!-- Filter Toolbar -->
+        <div class="filter-toolbar">
+          <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 140px;">
+            <el-option label="全部车间" value="" />
+            <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
+          </el-select>
+          <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 120px;">
+            <el-option label="全部类型" value="" />
+            <el-option label="UCE" value="uce" />
+            <el-option label="AP" value="ap" />
+            <el-option label="交换机" value="switch" />
+            <el-option label="办公交换机" value="office_switch" />
+            <el-option label="核心交换机" value="core_switch" />
+          </el-select>
+        </div>
+
         <!-- Floor Plan Display -->
         <div class="plan-container" ref="planContainer">
+          <!-- 缩放控制栏 -->
+          <div class="zoom-controls">
+            <button class="zoom-btn" @click="zoomIn" title="放大">
+              <el-icon><Plus /></el-icon>
+            </button>
+            <span class="zoom-value">{{ Math.round(zoomScale * 100) }}%</span>
+            <button class="zoom-btn" @click="zoomOut" title="缩小">
+              <el-icon><Minus /></el-icon>
+            </button>
+            <button class="zoom-btn" @click="resetZoom" title="重置">
+              <el-icon><RefreshRight /></el-icon>
+            </button>
+          </div>
           <div
             class="plan-wrapper"
             ref="planWrapper"
             v-if="currentPlan"
             @click="handlePlanClick"
-            :style="{ backgroundImage: `url(${planImageUrl})` }"
+            @wheel="handleWheel"
+            @mousedown="startPan"
+            @mousemove="handlePan"
+            @mouseup="endPan"
+            @mouseleave="endPan"
+            :style="planWrapperStyle"
           >
             <!-- Device Nodes Overlay -->
             <div class="nodes-overlay" v-if="imageLoaded">
               <div
-                v-for="node in nodes"
+                v-for="node in filteredNodes"
                 :key="node.id"
                 :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id }]"
                 :style="{ left: node.x_percent + '%', top: node.y_percent + '%' }"
@@ -342,13 +376,14 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload } from '@element-plus/icons-vue'
+import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
+const route = useRoute()
 const { t } = useI18n()
 
 // State
@@ -360,6 +395,93 @@ const nodes = ref([])
 const stats = ref({ total: 0, online: 0, offline: 0, switch_count: 0, ap_count: 0 })
 const offlineAlerts = ref([])
 const highlightedNodeId = ref(null)
+
+// Filter State
+const filterArea = ref('')
+const filterDeviceType = ref('')
+
+// 缩放和平移状态
+const zoomScale = ref(1)
+const panOffset = ref({ x: 0, y: 0 })
+const isPanning = ref(false)
+const panStart = ref({ x: 0, y: 0 })
+
+// 计算平面图样式
+const planWrapperStyle = computed(() => {
+  return {
+    backgroundImage: `url(${planImageUrl.value})`,
+    transform: `scale(${zoomScale.value}) translate(${panOffset.value.x}px, ${panOffset.value.y}px)`,
+    transformOrigin: 'center center',
+    cursor: isPanning.value ? 'grabbing' : 'grab'
+  }
+})
+
+// 缩放控制
+const zoomIn = () => {
+  if (zoomScale.value < 5) {
+    zoomScale.value = Math.min(5, zoomScale.value + 0.25)
+  }
+}
+
+const zoomOut = () => {
+  if (zoomScale.value > 0.25) {
+    zoomScale.value = Math.max(0.25, zoomScale.value - 0.25)
+  }
+}
+
+const resetZoom = () => {
+  zoomScale.value = 1
+  panOffset.value = { x: 0, y: 0 }
+}
+
+// 鼠标滚轮缩放
+const handleWheel = (e) => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1
+  const newScale = Math.max(0.25, Math.min(5, zoomScale.value + delta))
+  zoomScale.value = newScale
+}
+
+// 拖拽平移
+const startPan = (e) => {
+  if (e.button === 0 && zoomScale.value > 1) {
+    isPanning.value = true
+    panStart.value = { x: e.clientX - panOffset.value.x, y: e.clientY - panOffset.value.y }
+  }
+}
+
+const handlePan = (e) => {
+  if (isPanning.value) {
+    panOffset.value = {
+      x: e.clientX - panStart.value.x,
+      y: e.clientY - panStart.value.y
+    }
+  }
+}
+
+const endPan = () => {
+  isPanning.value = false
+}
+
+// 车间列表（从节点中提取）
+const areaList = computed(() => {
+  const areas = new Set()
+  nodes.value.forEach(n => {
+    if (n.location) {
+      areas.add(n.location)
+    }
+  })
+  return Array.from(areas).sort()
+})
+
+// 过滤后的节点
+const filteredNodes = computed(() => {
+  return nodes.value.filter(n => {
+    if (filterArea.value && n.location !== filterArea.value) return false
+    if (filterDeviceType.value && n.device_type !== filterDeviceType.value) return false
+    return true
+  })
+})
 
 // Floor Plan display
 const planContainer = ref(null)
@@ -672,6 +794,38 @@ const uploadFloorPlan = async () => {
 // Lifecycle
 let refreshInterval = null
 
+// 处理路由参数（故障工单联动）
+const handleRouteParams = async () => {
+  const deviceId = route.query.device_id
+  if (deviceId) {
+    // 等待数据加载
+    await loadFloorPlans()
+    await loadStats()
+    await loadOfflineAlerts()
+    if (selectedPlanId.value) {
+      await loadPlanNodes(selectedPlanId.value)
+    }
+
+    // 找到对应的节点并高亮
+    const node = nodes.value.find(n => n.device_id === parseInt(deviceId))
+    if (node) {
+      highlightedNodeId.value = node.id
+      // 打开设备详情
+      await showNodeDetail(node)
+    }
+
+    // 清除路由参数
+    router.replace({ query: {} })
+  }
+}
+
+// 监听路由参数变化
+watch(route, (newRoute) => {
+  if (newRoute.query.device_id) {
+    handleRouteParams()
+  }
+}, { immediate: true })
+
 onMounted(() => {
   refreshData()
 
@@ -809,6 +963,15 @@ onUnmounted(() => {
   gap: 12px;
 }
 
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
 .node-count {
   font-size: 11px;
   color: var(--text-tertiary);
@@ -820,24 +983,28 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--bg-tertiary);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
   border: 1px solid var(--border-default);
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s;
+  box-shadow: 0 2px 4px rgba(0, 48, 135, 0.08);
 }
 
 .btn-add-plan:hover, .btn-add-node:hover {
-  background: var(--accent-primary);
+  background: linear-gradient(135deg, rgba(0, 184, 148, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
   color: #fff;
-  border-color: var(--accent-primary);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 184, 148, 0.2);
 }
 
 .btn-cancel-node {
-  background: var(--accent-danger);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
   color: #fff;
-  border-color: var(--accent-danger);
+  border: none;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
 }
 
 .plan-container {
@@ -850,16 +1017,60 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.zoom-controls {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+}
+
+.zoom-btn {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.zoom-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+.zoom-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 50px;
+  text-align: center;
+}
+
 .plan-wrapper {
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background-size: contain;
+  background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   background-color: var(--bg-tertiary);
+  transition: transform 0.1s ease-out;
+  will-change: transform;
 }
 
 .nodes-overlay {
@@ -1166,23 +1377,39 @@ onUnmounted(() => {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--bg-tertiary);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.9) 0%, rgba(248, 250, 252, 0.9) 100%);
   border: 1px solid var(--border-default);
   border-radius: 6px;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s;
+  box-shadow: 0 2px 4px rgba(0, 48, 135, 0.08);
 }
 
 .btn-action:hover {
-  background: var(--accent-secondary);
+  background: linear-gradient(135deg, rgba(9, 132, 227, 0.9) 0%, rgba(116, 185, 255, 0.9) 100%);
   color: #fff;
-  border-color: var(--accent-secondary);
+  border-color: transparent;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(9, 132, 227, 0.2);
 }
 
 .btn-action.danger:hover {
-  background: var(--accent-danger);
-  border-color: var(--accent-danger);
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+  border-color: transparent;
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.2);
+}
+
+/* Element Plus danger button 玻璃渐变 */
+.plan-selector :deep(.el-button--danger) {
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+  border: none;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.plan-selector :deep(.el-button--danger:hover) {
+  background: linear-gradient(135deg, rgba(220, 53, 69, 0.95) 0%, rgba(255, 71, 87, 0.95) 100%);
+  box-shadow: 0 4px 8px rgba(239, 68, 68, 0.3);
 }
 
 /* Upload Dialog */
@@ -1331,5 +1558,60 @@ onUnmounted(() => {
   padding: 24px;
   text-align: center;
   color: var(--text-tertiary);
+}
+
+/* 暗黑模式 */
+.dark .zoom-controls {
+  background: rgba(22, 27, 34, 0.95);
+  border: 1px solid rgba(48, 54, 61, 0.8);
+}
+
+.dark .zoom-btn {
+  background: rgba(48, 54, 61, 0.8);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .zoom-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
+.dark .zoom-value {
+  color: #f0f6fc;
+}
+
+/* 暗黑模式按钮玻璃质感 */
+.dark .btn-add-plan, .dark .btn-add-node {
+  background: linear-gradient(135deg, rgba(48, 54, 61, 0.9) 0%, rgba(22, 27, 34, 0.9) 100%);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .btn-add-plan:hover, .dark .btn-add-node:hover {
+  background: linear-gradient(135deg, rgba(63, 185, 80, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
+  color: #fff;
+}
+
+.dark .btn-cancel-node {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+}
+
+.dark .btn-action {
+  background: linear-gradient(135deg, rgba(48, 54, 61, 0.9) 0%, rgba(22, 27, 34, 0.9) 100%);
+  border-color: #30363d;
+  color: #8b949e;
+}
+
+.dark .btn-action:hover {
+  background: linear-gradient(135deg, rgba(88, 166, 255, 0.9) 0%, rgba(116, 185, 255, 0.9) 100%);
+}
+
+.dark .btn-action.danger:hover {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+}
+
+.dark .plan-selector :deep(.el-button--danger) {
+  background: linear-gradient(135deg, rgba(248, 81, 73, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
 }
 </style>

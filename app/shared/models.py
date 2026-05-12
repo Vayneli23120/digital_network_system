@@ -24,7 +24,7 @@ class Device(Base):
     location = Column(String(200))
     role = Column(String(50), index=True)  # access, distribution, core
     status = Column(String(50), default="online", index=True)  # online, offline, maintenance, retired
-    device_type = Column(String(50), default="switch", index=True)  # uce, core_switch, server_switch, office_switch, ap, router, firewall, other
+    device_type = Column(String(50), default="switch", index=True)  # uce, office_switch, ap, wlc, core_switch, server_switch, router, pa, ftd, other
     purchase_date = Column(DateTime)
     vendor = Column(String(200))
     purchase_cost = Column(DECIMAL(10, 2), default=0)
@@ -35,6 +35,8 @@ class Device(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # ===== 企业级智能运维扩展字段 =====
+    # 模块序列号（JSON格式存储多个模块）
+    modules = Column(Text)  # JSON: [{"type": "main", "serial_number": "SN001"}, {"type": "power", "serial_number": "SN002"}]
     # 健康评分
     health_score = Column(Integer, default=100)  # 0-100 健康评分
     risk_level = Column(String(20), default="low", index=True)  # low/medium/high/critical
@@ -57,6 +59,24 @@ class Device(Base):
 
     def __repr__(self):
         return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}', health={self.health_score})>"
+
+    def get_modules_list(self):
+        """解析模块序列号JSON"""
+        if self.modules:
+            try:
+                import json
+                return json.loads(self.modules)
+            except:
+                return []
+        return []
+
+    def set_modules_list(self, modules_list):
+        """设置模块序列号JSON"""
+        if modules_list:
+            import json
+            self.modules = json.dumps(modules_list)
+        else:
+            self.modules = None
 
 
 class BackupRecord(Base):

@@ -2,42 +2,9 @@
   <el-card>
     <template #header>
       <div class="card-header">
-        <span>{{ t('spareTitle') }}</span>
+        <span>{{ t('sparePartsList') }}</span>
       </div>
     </template>
-
-    <!-- 工具栏 -->
-    <PartsToolbar
-      :stats="stats"
-      @scan-in="$emit('scan-in')"
-      @scan-out="$emit('scan-out')"
-      @add="showAddDialog"
-    />
-
-    <!-- 篮选工具栏 -->
-    <div class="filter-toolbar">
-      <div class="toolbar-left">
-        <el-input
-          v-model="search"
-          :placeholder="t('spareSearchPlaceholder')"
-          clearable
-          class="search-input"
-          @keyup.enter="handleSearch"
-          @clear="handleSearch"
-        />
-        <el-select v-model="category" :placeholder="t('spareCategory')" clearable class="category-select" @change="handleSearch">
-          <el-option :label="t('spareCategoryModule')" value="module" />
-          <el-option :label="t('spareCategoryPower')" value="power" />
-          <el-option :label="t('spareCategoryCable')" value="cable" />
-          <el-option :label="t('spareCategoryOther')" value="other" />
-        </el-select>
-        <el-checkbox v-model="lowStock" @change="handleSearch">{{ t('spareLowStock') }}</el-checkbox>
-      </div>
-      <div class="toolbar-right">
-        <el-button size="small" @click="resetFilters">{{ t('actionReset') }}</el-button>
-        <el-button size="small" type="primary" @click="handleSearch">{{ t('actionSearch') }}</el-button>
-      </div>
-    </div>
 
     <!-- 表格 -->
     <el-table :data="parts" stripe border v-loading="loading">
@@ -74,7 +41,7 @@
   </el-card>
 
   <!-- 新增/编辑对话框 -->
-  <el-dialog v-model="dialogVisible" :title="isEdit ? t('spareEdit') : t('spareNew')" width="600px">
+  <el-dialog v-model="dialogVisible" :title="isEdit ? t('spareEdit') : t('spareNew')" width="600px" append-to-body draggable align-center>
     <el-form :model="form" label-width="100px">
       <el-form-item :label="t('spareName')" required>
         <el-input v-model="form.name" />
@@ -115,86 +82,151 @@
     </template>
   </el-dialog>
 
-  <!-- 手动入库对话框 -->
-  <el-dialog v-model="manualInDialogVisible" :title="t('spareManualIn')" width="500px">
-    <el-form :model="manualInForm" label-width="80px">
-      <el-form-item :label="t('spareName')">
-        <el-input :value="currentManualPart?.name" disabled />
-      </el-form-item>
-      <el-form-item :label="t('spareSerialNumber')" required>
-        <el-input v-model="manualInForm.serial_number" :placeholder="t('spareEnterSerialPlaceholder')" />
-      </el-form-item>
-      <el-form-item :label="t('sparePoNumber')">
-        <el-input v-model="manualInForm.po_number" :placeholder="t('sparePoNumberPlaceholder')" />
-      </el-form-item>
-      <el-form-item :label="t('spareUnitPrice')">
-        <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" :placeholder="t('spareUnitPrice')" />
-      </el-form-item>
-      <el-form-item :label="t('spareLocation')">
-        <el-input v-model="manualInForm.location" :placeholder="t('spareLocation')" />
-      </el-form-item>
-      <el-form-item :label="t('spareNotes')">
-        <el-input v-model="manualInForm.notes" type="textarea" :placeholder="t('spareNotes')" />
-      </el-form-item>
-      <el-form-item :label="t('spareStockInReason')">
-        <el-input v-model="manualInForm.reason" type="textarea" :placeholder="t('spareStockInReason')" />
-      </el-form-item>
-    </el-form>
+  <!-- 入库对话框（带扫码功能） -->
+  <el-dialog v-model="manualInDialogVisible" :title="t('spareStockIn')" width="700px" append-to-body draggable align-center>
+    <div class="stock-content">
+      <!-- 扫码功能条 -->
+      <div class="scan-action-bar">
+        <el-button type="default" class="scan-btn" @click="openScanInDialog">
+          <el-icon><Aim /></el-icon>
+          {{ t('spareScanToAdd') }}
+        </el-button>
+        <div class="scan-tip-badge">
+          <el-icon><InfoFilled /></el-icon>
+          {{ t('spareScanInTip') }}
+        </div>
+      </div>
+
+      <!-- 手动输入表单 -->
+      <div class="manual-section">
+        <div class="section-title">
+          <el-icon><Edit /></el-icon>
+          {{ t('spareManualInput') }}
+        </div>
+        <el-form :model="manualInForm" label-width="80px">
+          <el-form-item :label="t('spareName')">
+            <el-input :value="currentManualPart?.name" disabled />
+          </el-form-item>
+          <el-form-item :label="t('spareSerialNumber')" required>
+            <el-input v-model="manualInForm.serial_number" :placeholder="t('spareEnterSerialPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('sparePoNumber')">
+            <el-input v-model="manualInForm.po_number" :placeholder="t('sparePoNumberPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('spareUnitPrice')">
+            <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" />
+          </el-form-item>
+          <el-form-item :label="t('spareLocation')">
+            <el-input v-model="manualInForm.location" :placeholder="t('spareLocation')" />
+          </el-form-item>
+          <el-form-item :label="t('spareNotes')">
+            <el-input v-model="manualInForm.notes" type="textarea" />
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
     <template #footer>
       <el-button @click="manualInDialogVisible = false">{{ t('actionCancel') }}</el-button>
       <el-button type="primary" @click="submitManualIn" :loading="manualInSubmitting">{{ t('spareConfirmIn') }}</el-button>
     </template>
   </el-dialog>
 
-  <!-- 手动出库对话框 -->
-  <el-dialog v-model="manualOutDialogVisible" :title="t('spareManualOut')" width="500px">
-    <el-form :model="manualOutForm" label-width="80px">
-      <el-form-item :label="t('spareSerialNumber')" required>
-        <el-input v-model="manualOutForm.serial_number" :placeholder="t('spareSearchSerialPlaceholder')" @keyup.enter="searchSerialForOut" />
-        <el-button size="small" type="primary" @click="searchSerialForOut" :loading="searchingSerial" style="margin-top: 8px">{{ t('spareQuery') }}</el-button>
-      </el-form-item>
-      <div v-if="outPartInfo" style="background: #f5f7fa; padding: 12px; border-radius: 8px; margin-bottom: 16px">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px">
-          <el-tag :type="outPartInfo.status === 'in_stock' ? 'success' : 'warning'" size="small">
-            {{ outPartInfo.status === 'in_stock' ? t('statusInStock') : t('statusOut') }}
-          </el-tag>
-          <span style="font-weight: 600; color: #1677ff">{{ outPartInfo.serial_number }}</span>
+  <!-- 扫码入库对话框 -->
+  <el-dialog v-model="scanInDialogVisible" :title="t('spareScanStockIn')" width="800px" append-to-body draggable align-center>
+    <ScanSession
+      ref="scanInSessionRef"
+      default-type="in"
+      :part-id="currentManualPart?.id"
+      :po-number="manualInForm.po_number"
+      :location="manualInForm.location"
+      :auto-start="scanInDialogVisible"
+      @complete="onScanInComplete"
+      @cancel="scanInDialogVisible = false"
+    />
+  </el-dialog>
+
+  <!-- 出库对话框（带扫码功能） -->
+  <el-dialog v-model="manualOutDialogVisible" :title="t('spareStockOut')" width="700px" append-to-body draggable align-center>
+    <div class="stock-content">
+      <!-- 扫码功能条 -->
+      <div class="scan-action-bar out">
+        <el-button type="default" class="scan-btn" @click="openScanOutDialog">
+          <el-icon><Aim /></el-icon>
+          {{ t('spareScanToOut') }}
+        </el-button>
+        <div class="scan-tip-badge">
+          <el-icon><InfoFilled /></el-icon>
+          {{ t('spareScanOutTip') }}
         </div>
-        <div style="color: #8c8c8c; font-size: 14px">
-          <span style="min-width: 50px">{{ t('spareName') }}:</span>{{ outPartInfo.name }}<br>
-          <span style="min-width: 50px">{{ t('sparePartNumber') }}:</span>{{ outPartInfo.part_number }}<br>
-          <span style="min-width: 50px">{{ t('spareLocation') }}:</span>{{ outPartInfo.location || '-' }}
-        </div>
-        <el-alert v-if="outPartInfo.status !== 'in_stock'" type="warning" :closable="false" style="margin-top: 8px">
-          {{ t('msgCannotOut') }}
-        </el-alert>
       </div>
-      <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareStockOutReason')" required>
-        <el-input v-model="manualOutForm.reason" type="textarea" :placeholder="t('spareStockOutReason')" />
-      </el-form-item>
-      <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareDestination')">
-        <el-input v-model="manualOutForm.destination" :placeholder="t('spareDestinationPlaceholder')" />
-      </el-form-item>
-      <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareNotes')">
-        <el-input v-model="manualOutForm.notes" type="textarea" :placeholder="t('spareNotes')" />
-      </el-form-item>
-    </el-form>
+
+      <!-- 手动输入表单 -->
+      <div class="manual-section">
+        <div class="section-title">
+          <el-icon><Edit /></el-icon>
+          {{ t('spareManualInput') }}
+        </div>
+        <el-form :model="manualOutForm" label-width="80px">
+          <el-form-item :label="t('spareSerialNumber')" required>
+            <el-input v-model="manualOutForm.serial_number" :placeholder="t('spareSearchSerialPlaceholder')" @keyup.enter="searchSerialForOut" />
+            <el-button size="small" type="primary" @click="searchSerialForOut" :loading="searchingSerial" style="margin-top: 8px">{{ t('spareQuery') }}</el-button>
+          </el-form-item>
+          <div v-if="outPartInfo" class="part-info-card">
+            <div class="info-header">
+              <el-tag :type="outPartInfo.status === 'in_stock' ? 'success' : 'warning'" size="small">
+                {{ outPartInfo.status === 'in_stock' ? t('statusInStock') : t('statusOut') }}
+              </el-tag>
+              <span class="serial-text">{{ outPartInfo.serial_number }}</span>
+            </div>
+            <div class="info-body">
+              <span>{{ t('spareName') }}: {{ outPartInfo.name }}</span>
+              <span>{{ t('sparePartNumber') }}: {{ outPartInfo.part_number }}</span>
+              <span>{{ t('spareLocation') }}: {{ outPartInfo.location || '-' }}</span>
+            </div>
+            <el-alert v-if="outPartInfo.status !== 'in_stock'" type="warning" :closable="false" style="margin-top: 8px">
+              {{ t('msgCannotOut') }}
+            </el-alert>
+          </div>
+          <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareStockOutReason')" required>
+            <el-input v-model="manualOutForm.reason" type="textarea" :placeholder="t('spareStockOutReason')" />
+          </el-form-item>
+          <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareDestination')">
+            <el-input v-model="manualOutForm.destination" :placeholder="t('spareDestinationPlaceholder')" />
+          </el-form-item>
+          <el-form-item v-if="outPartInfo && outPartInfo.status === 'in_stock'" :label="t('spareNotes')">
+            <el-input v-model="manualOutForm.notes" type="textarea" />
+          </el-form-item>
+        </el-form>
+      </div>
+    </div>
     <template #footer>
       <el-button @click="manualOutDialogVisible = false">{{ t('actionCancel') }}</el-button>
       <el-button type="primary" @click="submitManualOut" :loading="manualOutSubmitting" :disabled="!outPartInfo || outPartInfo.status !== 'in_stock'">{{ t('spareConfirmOut') }}</el-button>
     </template>
+  </el-dialog>
+
+  <!-- 扫码出库对话框 -->
+  <el-dialog v-model="scanOutDialogVisible" :title="t('spareScanStockOut')" width="800px" append-to-body draggable align-center>
+    <ScanSession
+      ref="scanOutSessionRef"
+      default-type="out"
+      :auto-start="scanOutDialogVisible"
+      @complete="onScanOutComplete"
+      @cancel="scanOutDialogVisible = false"
+    />
   </el-dialog>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Aim, InfoFilled, Edit } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { useI18n } from '@/composables/useI18n'
-import PartsToolbar from './PartsToolbar.vue'
+import ScanSession from '@/components/ScanSession.vue'
 
 const { t } = useI18n()
-const emit = defineEmits(['scan-in', 'scan-out', 'show-detail', 'refreshed', 'stats-loaded'])
+const emit = defineEmits(['show-detail', 'stats-loaded'])
 
 // 接收外部筛选参数
 const props = defineProps({
@@ -205,10 +237,6 @@ const props = defineProps({
 
 const parts = ref([])
 const loading = ref(false)
-const search = ref('')
-const category = ref('')
-const lowStock = ref(false)
-const stats = reactive({ total_parts: 0, total_quantity: 0, low_stock_count: 0, total_value: 0 })
 
 // 新增/编辑对话框
 const dialogVisible = ref(false)
@@ -232,6 +260,10 @@ const manualInForm = reactive({
   reason: ''
 })
 
+// 扫码入库
+const scanInDialogVisible = ref(false)
+const scanInSessionRef = ref(null)
+
 // 手动出库
 const manualOutDialogVisible = ref(false)
 const manualOutSubmitting = ref(false)
@@ -244,35 +276,27 @@ const manualOutForm = reactive({
   notes: ''
 })
 
+// 扫码出库
+const scanOutDialogVisible = ref(false)
+const scanOutSessionRef = ref(null)
+
 const loadParts = async () => {
   loading.value = true
   try {
-    // 使用外部筛选参数或内部筛选参数
-    const effectiveSearch = props.externalSearch || search.value
-    const effectiveCategory = props.externalCategory || category.value
-    const effectiveLowStock = props.externalLowStock || lowStock.value
-
-    const params = { search: effectiveSearch, category: effectiveCategory, low_stock: effectiveLowStock, limit: 200 }
+    const params = {
+      search: props.externalSearch || '',
+      category: props.externalCategory || '',
+      low_stock: props.externalLowStock || false,
+      limit: 200
+    }
     const result = await getPartList(params)
     parts.value = result.items || []
-    const statsData = await getPartStats()
-    Object.assign(stats, statsData)
-    emit('stats-loaded', statsData)
-    emit('refreshed')
+    emit('stats-loaded', await getPartStats())
   } catch (e) {
     ElMessage.error(t('spareLoadFailed') + ': ' + (e.response?.data?.detail || e.message))
   } finally {
     loading.value = false
   }
-}
-
-const handleSearch = () => loadParts()
-
-const resetFilters = () => {
-  search.value = ''
-  category.value = ''
-  lowStock.value = false
-  loadParts()
 }
 
 const showAddDialog = () => {
@@ -391,26 +415,196 @@ const submitManualOut = async () => {
   }
 }
 
+// 扫码入库功能
+const openScanInDialog = () => {
+  if (!manualInForm.po_number) {
+    ElMessage.warning(t('spareEnterPoFirst'))
+    return
+  }
+  scanInDialogVisible.value = true
+}
+
+const onScanInComplete = (result) => {
+  const count = result.items?.length || 0
+  if (count > 0) {
+    ElMessage.success(t('spareStockIn') + t('msgSuccess') + ` (${count} ${t('spareQuantity')})`)
+  }
+  scanInDialogVisible.value = false
+  manualInDialogVisible.value = false
+  loadParts()
+}
+
+// 扫码出库功能
+const openScanOutDialog = () => {
+  scanOutDialogVisible.value = true
+}
+
+const onScanOutComplete = (result) => {
+  const count = result.out_count || result.items?.length || 0
+  if (count > 0) {
+    ElMessage.success(t('spareStockOut') + t('msgSuccess') + ` (${count} ${t('spareQuantity')})`)
+  }
+  scanOutDialogVisible.value = false
+  manualOutDialogVisible.value = false
+  loadParts()
+}
+
 onMounted(loadParts)
 
 defineExpose({ loadParts, parts })
 </script>
 
 <style scoped>
+.filter-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
 .toolbar-left {
   display: flex;
   align-items: center;
-  gap: var(--gap-md);
+  gap: 12px;
   flex-wrap: wrap;
 }
+
 .search-input {
   width: 200px;
 }
+
 .category-select {
-  width: 100px;
+  width: 120px;
 }
+
 .toolbar-right {
   display: flex;
-  gap: var(--gap-sm);
+  gap: 8px;
+}
+
+.table-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 入库/出库对话框内容样式 */
+.stock-content {
+  padding: 0;
+}
+
+/* 扫码功能条样式 */
+.scan-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #00b894 0%, #0984e3 100%);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.scan-action-bar.out {
+  background: linear-gradient(135deg, #636e72 0%, #4a5455 100%);
+}
+
+.scan-action-bar .scan-btn {
+  background: rgba(255,255,255,0.15);
+  border-color: rgba(255,255,255,0.3);
+  color: #fff;
+  font-weight: 500;
+  height: 36px;
+  border-radius: 8px;
+  transition: all 0.2s;
+}
+
+.scan-action-bar .scan-btn:hover {
+  background: rgba(255,255,255,0.25);
+  transform: translateY(-1px);
+}
+
+.scan-tip-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.9);
+  font-size: 12px;
+}
+
+/* 手动输入区域 */
+.manual-section {
+  padding: 16px;
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+/* 备件信息卡片 */
+.part-info-card {
+  background: rgba(0, 48, 135, 0.06);
+  border: 1px solid rgba(0, 48, 135, 0.1);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.info-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.serial-text {
+  font-weight: 600;
+  color: #1677ff;
+  font-size: 14px;
+}
+
+.info-body {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.info-body span {
+  display: block;
+  line-height: 1.6;
+}
+
+/* 暗色模式 */
+.dark .scan-action-bar {
+  background: linear-gradient(135deg, #3fb950 0%, #58a6ff 100%);
+}
+
+.dark .scan-action-bar.out {
+  background: linear-gradient(135deg, #636e72 0%, #95a5a6 100%);
+}
+
+.dark .manual-section {
+  background: rgba(63, 185, 80, 0.08);
+  border-color: rgba(63, 185, 80, 0.2);
+}
+
+.dark .part-info-card {
+  background: rgba(63, 185, 80, 0.08);
+  border-color: rgba(63, 185, 80, 0.2);
+}
+
+.dark .serial-text {
+  color: #3fb950;
 }
 </style>

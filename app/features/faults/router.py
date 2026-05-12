@@ -930,6 +930,7 @@ async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
         fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
         if fault:
             notification_service = SystemNotificationService(db)
+            # 只发给被指派的人
             notification_service.send_notification(
                 user=assigned_to,
                 type="fault_assigned",
@@ -956,6 +957,7 @@ async def send_maintenance_assigned_notification(maintenance_id: int, assigned_t
         maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maintenance_id).first()
         if maintenance:
             notification_service = SystemNotificationService(db)
+            # 只发给被指派的人
             notification_service.send_notification(
                 user=assigned_to,
                 type="maintenance_assigned",

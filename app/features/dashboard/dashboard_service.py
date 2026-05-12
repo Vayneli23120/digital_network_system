@@ -32,7 +32,7 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     retired_devices = db.query(Device).filter(Device.status == "retired").count()
 
     # 按设备类型统计
-    device_types = ["uce", "core_switch", "server_switch", "office_switch", "ap", "router", "firewall", "other"]
+    device_types = ["uce", "core_switch", "server_switch", "office_switch", "ap", "wlc", "router", "pa", "ftd", "other"]
     devices_by_type = {}
     for dtype in device_types:
         devices_by_type[dtype] = {

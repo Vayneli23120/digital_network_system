@@ -6,14 +6,6 @@
         <h1 class="page-title">{{ t('menuSpareParts') }}</h1>
       </div>
       <div class="nav-right">
-        <button class="nav-action-btn" @click="handleScanIn">
-          <el-icon><Plus /></el-icon>
-          <span>{{ t('spareScanIn') }}</span>
-        </button>
-        <button class="nav-action-btn secondary" @click="handleScanOut">
-          <el-icon><Minus /></el-icon>
-          <span>{{ t('spareScanOut') }}</span>
-        </button>
         <button class="nav-action-btn secondary" @click="refreshData" :disabled="loading">
           <el-icon><Refresh /></el-icon>
         </button>
@@ -31,7 +23,7 @@
             </div>
             <div class="card-body">
               <div class="metric-value">{{ stats.total_parts }}</div>
-              <div class="metric-label">{{ t('spareStatsTotalTypes') || '备件种类' }}</div>
+              <div class="metric-label">{{ t('spareStatsTotal') }}</div>
             </div>
             <div class="card-trend stable">
               <span class="trend-icon">●</span>
@@ -46,7 +38,7 @@
             </div>
             <div class="card-body">
               <div class="metric-value">{{ stats.total_quantity }}</div>
-              <div class="metric-label">{{ t('spareStatsTotalQty') || '库存总量' }}</div>
+              <div class="metric-label">{{ t('spareStatsQuantity') }}</div>
             </div>
             <div class="card-trend success">
               <el-icon><CircleCheck /></el-icon>
@@ -61,7 +53,7 @@
             </div>
             <div class="card-body">
               <div class="metric-value">{{ formatValue(stats.total_value) }}</div>
-              <div class="metric-label">{{ t('spareStatsTotalValue') || '库存价值' }}</div>
+              <div class="metric-label">{{ t('spareStatsValue') }}</div>
             </div>
             <div class="card-trend info">
               <span class="trend-currency">¥</span>
@@ -76,7 +68,7 @@
             </div>
             <div class="card-body">
               <div class="metric-value">{{ stats.low_stock_count }}</div>
-              <div class="metric-label">{{ t('spareStatsLowStock') || '低库存预警' }}</div>
+              <div class="metric-label">{{ t('spareStatsLowStock') }}</div>
             </div>
             <div class="card-trend alert" v-if="stats.low_stock_count > 0">
               <el-icon><Warning /></el-icon>
@@ -107,7 +99,7 @@
             :class="['status-chip', { active: filterCategory === '' }]"
             @click="filterByCategory('')"
           >
-            <span class="chip-label">{{ t('spareFilterAll') || '全部' }}</span>
+            <span class="chip-label">{{ t('spareFilterAll') }}</span>
             <span class="chip-count">{{ stats.total_parts }}</span>
           </div>
           <div
@@ -149,120 +141,34 @@
       </div>
     </section>
 
-    <!-- Tab 切换区域 -->
-    <section class="tab-section">
-      <div class="tab-header">
-        <div class="tab-nav">
-          <button
-            :class="['tab-btn', { active: activeTab === 'parts' }]"
-            @click="switchTab('parts')"
-          >
-            <el-icon><Box /></el-icon>
-            <span>{{ t('sparePartsList') }}</span>
-          </button>
-          <button
-            :class="['tab-btn', { active: activeTab === 'movements' }]"
-            @click="switchTab('movements')"
-          >
-            <el-icon><List /></el-icon>
-            <span>{{ t('spareMovementsHistory') }}</span>
-          </button>
-        </div>
-      </div>
-
-      <!-- 备件列表 Tab -->
-      <div class="tab-content" v-show="activeTab === 'parts'">
-        <PartsTable
-          ref="partsTableRef"
-          :external-search="searchText"
-          :external-category="filterCategory"
-          :external-low-stock="lowStockFilter"
-          @scan-in="showScanDialog('in')"
-          @scan-out="showScanDialog('out')"
-          @show-detail="showPartDetail"
-          @refreshed="onPartsRefreshed"
-          @stats-loaded="onStatsLoaded"
-        />
-      </div>
-
-      <!-- 出入库历史 Tab -->
-      <div class="tab-content" v-show="activeTab === 'movements'">
-        <MovementsTable ref="movementsTableRef" @show-detail="showMovementDetail" />
-      </div>
+    <!-- 数据表格区域 -->
+    <section class="data-section">
+      <PartsTable
+        ref="partsTableRef"
+        :external-search="searchText"
+        :external-category="filterCategory"
+        :external-low-stock="lowStockFilter"
+        @show-detail="showPartDetail"
+        @stats-loaded="onStatsLoaded"
+      />
     </section>
 
     <!-- 备件详情对话框 -->
     <PartDetailDialog v-model="detailDialogVisible" :part="currentDetailPart" />
-
-    <!-- 出入库详情对话框 -->
-    <MovementDetailDialog v-model="movementDetailVisible" :movement="currentMovement" />
-
-    <!-- 选择备件和填PO号对话框 -->
-    <el-dialog v-model="selectPartDialogVisible" :title="t('spareSelectPart')" width="500px" class="spare-dialog">
-      <div class="dialog-content">
-        <el-form :model="scanInForm" label-width="100px">
-          <el-form-item :label="t('spareName')" required>
-            <el-select v-model="scanInForm.part_id" :placeholder="t('spareSelectPartPlaceholder')" filterable style="width: 100%">
-              <el-option
-                v-for="part in partsList"
-                :key="part.id"
-                :label="`${part.name} (${part.part_number})`"
-                :value="part.id"
-              >
-                <span>{{ part.name }}</span>
-                <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ part.part_number }}</span>
-                <span style="color: var(--el-text-color-secondary); margin-left: 8px;">{{ t('spareQuantity') }}: {{ part.quantity_in_stock }}</span>
-              </el-option>
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('sparePoNumber')" required>
-            <el-input v-model="scanInForm.po_number" :placeholder="t('sparePoNumberPlaceholder')" />
-          </el-form-item>
-          <el-form-item :label="t('spareLocation')">
-            <el-input v-model="scanInForm.location" :placeholder="t('spareLocation')" />
-          </el-form-item>
-        </el-form>
-      </div>
-      <template #footer>
-        <el-button @click="selectPartDialogVisible = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="startScanIn" :disabled="!scanInForm.part_id || !scanInForm.po_number">
-          {{ t('spareStartScanIn') }}
-        </el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 扫码出入库对话框 -->
-    <el-dialog v-model="scanDialogVisible" :title="scanMode === 'in' ? t('spareScanIn') : t('spareScanOut')" width="700px" class="spare-dialog">
-      <ScanSession
-        ref="scanSessionRef"
-        :default-type="scanMode"
-        :part-id="scanInForm.part_id"
-        :po-number="scanInForm.po_number"
-        :location="scanInForm.location"
-        :auto-start="scanDialogVisible"
-        @complete="onScanSessionComplete"
-        @cancel="scanDialogVisible = false"
-      />
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Plus, Minus, Refresh, Box, Goods, Money, Warning, CircleCheck, Search, List } from '@element-plus/icons-vue'
-import ScanSession from '@/components/ScanSession.vue'
+import { Refresh, Box, Goods, Money, Warning, CircleCheck, Search } from '@element-plus/icons-vue'
 import PartsTable from './spare-parts/PartsTable.vue'
-import MovementsTable from './spare-parts/MovementsTable.vue'
 import PartDetailDialog from './spare-parts/PartDetailDialog.vue'
-import MovementDetailDialog from './spare-parts/MovementDetailDialog.vue'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
 
-const activeTab = ref('parts')
 const partsTableRef = ref(null)
-const movementsTableRef = ref(null)
 const loading = ref(false)
 
 // 统计数据
@@ -278,27 +184,9 @@ const searchText = ref('')
 const filterCategory = ref('')
 const lowStockFilter = ref(false)
 
-// 备件列表（用于选择备件对话框）
-const partsList = ref([])
-
 // 备件详情对话框
 const detailDialogVisible = ref(false)
 const currentDetailPart = ref(null)
-
-// 出入库详情对话框
-const movementDetailVisible = ref(false)
-const currentMovement = ref(null)
-
-// 扫码会话相关
-const scanDialogVisible = ref(false)
-const scanMode = ref('in')
-const scanSessionRef = ref(null)
-const selectPartDialogVisible = ref(false)
-const scanInForm = reactive({
-  part_id: null,
-  po_number: '',
-  location: ''
-})
 
 // 格式化价值显示
 const formatValue = (value) => {
@@ -307,11 +195,6 @@ const formatValue = (value) => {
     return (value / 10000).toFixed(1) + 'w'
   }
   return value.toFixed(0)
-}
-
-// 切换 Tab
-const switchTab = (tab) => {
-  activeTab.value = tab
 }
 
 // 类型筛选
@@ -343,76 +226,15 @@ const refreshData = () => {
   if (partsTableRef.value) {
     partsTableRef.value.loadParts()
   }
-  if (movementsTableRef.value) {
-    movementsTableRef.value.loadMovements()
-  }
   setTimeout(() => {
     loading.value = false
   }, 500)
-}
-
-// 扫码入库按钮
-const handleScanIn = () => {
-  showScanDialog('in')
-}
-
-// 扫码出库按钮
-const handleScanOut = () => {
-  showScanDialog('out')
-}
-
-// 显示扫码对话框（入库需要先选择备件）
-const showScanDialog = (mode) => {
-  scanMode.value = mode
-  if (mode === 'in') {
-    selectPartDialogVisible.value = true
-    scanInForm.part_id = null
-    scanInForm.po_number = ''
-    scanInForm.location = ''
-  } else {
-    scanDialogVisible.value = true
-  }
-}
-
-// 开始扫码入库
-const startScanIn = () => {
-  selectPartDialogVisible.value = false
-  scanDialogVisible.value = true
-}
-
-// 扫码会话完成处理
-const onScanSessionComplete = async (result) => {
-  const { items, message } = result
-  if (items && items.length === 0) return
-
-  scanDialogVisible.value = false
-
-  if (message) {
-    ElMessage.success(message)
-  } else {
-    ElMessage.success(`${t('msgSuccess')} ${items?.length || 0} ${t('dashAction')}`)
-  }
-
-  partsTableRef.value?.loadParts()
 }
 
 // 显示备件详情
 const showPartDetail = (row) => {
   currentDetailPart.value = row
   detailDialogVisible.value = true
-}
-
-// 显示出入库详情
-const showMovementDetail = (detail) => {
-  currentMovement.value = detail
-  movementDetailVisible.value = true
-}
-
-// 备件刷新后获取列表
-const onPartsRefreshed = () => {
-  if (partsTableRef.value) {
-    partsList.value = partsTableRef.value.parts || []
-  }
 }
 
 // 统计数据加载
@@ -827,8 +649,8 @@ onMounted(() => {
   font-size: 13px;
 }
 
-/* ===== Tab 切换区域 ===== */
-.tab-section {
+/* ===== 数据表格区域 ===== */
+.data-section {
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   border-radius: var(--radius-lg);
@@ -837,77 +659,32 @@ onMounted(() => {
   overflow: hidden;
 }
 
-.tab-header {
-  padding: 12px 16px;
-  border-bottom: 1px solid rgba(0, 48, 135, 0.08);
-}
-
-.tab-nav {
-  display: flex;
-  gap: 8px;
-}
-
-.tab-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 10px 20px;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.95);
-  color: var(--text-secondary);
-  border: 1px solid transparent;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.tab-btn:hover {
-  background: rgba(0, 184, 148, 0.08);
-  color: #00b894;
-}
-
-.tab-btn.active {
-  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
-  color: white;
-  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
-}
-
-.tab-btn.active:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 184, 148, 0.35);
-}
-
-.tab-content {
-  padding: 0;
-}
-
 /* ===== 子组件样式覆盖 - 企业级表格 ===== */
-.tab-content :deep(.el-card) {
+.data-section :deep(.el-card) {
   border: none;
   border-radius: 0;
   box-shadow: none;
   background: transparent;
 }
 
-.tab-content :deep(.el-card__header) {
+.data-section :deep(.el-card__header) {
   padding: 12px 16px;
   border-bottom: 1px solid rgba(0, 48, 135, 0.08);
   background: transparent;
 }
 
-.tab-content :deep(.el-card__body) {
+.data-section :deep(.el-card__body) {
   padding: 0 16px 16px;
 }
 
-.tab-content :deep(.card-header) {
+.data-section :deep(.card-header) {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.tab-content :deep(.filter-toolbar),
-.tab-content :deep(.toolbar) {
+.data-section :deep(.filter-toolbar),
+.data-section :deep(.toolbar) {
   padding: 12px 0;
   margin-bottom: 8px;
   border-bottom: 1px solid rgba(0, 48, 135, 0.06);
@@ -918,41 +695,41 @@ onMounted(() => {
   gap: 12px;
 }
 
-.tab-content :deep(.toolbar-left) {
+.data-section :deep(.toolbar-left) {
   display: flex;
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
 }
 
-.tab-content :deep(.toolbar-right) {
+.data-section :deep(.toolbar-right) {
   display: flex;
   gap: 8px;
 }
 
-.tab-content :deep(.el-input__wrapper),
-.tab-content :deep(.el-select .el-input__wrapper) {
+.data-section :deep(.el-input__wrapper),
+.data-section :deep(.el-select .el-input__wrapper) {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 6px;
   border: 1px solid var(--border-default);
   box-shadow: none;
 }
 
-.tab-content :deep(.el-table) {
+.data-section :deep(.el-table) {
   border-radius: 8px;
   border: 1px solid rgba(0, 48, 135, 0.08);
   background: rgba(255, 255, 255, 0.95);
 }
 
-.tab-content :deep(.el-table__inner-wrapper::before) {
+.data-section :deep(.el-table__inner-wrapper::before) {
   display: none;
 }
 
-.tab-content :deep(.el-table__header-wrapper) {
+.data-section :deep(.el-table__header-wrapper) {
   border-bottom: 2px solid rgba(0, 48, 135, 0.1);
 }
 
-.tab-content :deep(th.el-table__cell) {
+.data-section :deep(th.el-table__cell) {
   background: transparent;
   font-size: 11px;
   font-weight: 600;
@@ -962,32 +739,32 @@ onMounted(() => {
   border-bottom: none;
 }
 
-.tab-content :deep(td.el-table__cell) {
+.data-section :deep(td.el-table__cell) {
   border-bottom: 1px solid rgba(0, 48, 135, 0.06);
   padding: 10px 0;
   background: transparent;
 }
 
-.tab-content :deep(.el-table__row) {
+.data-section :deep(.el-table__row) {
   transition: all 0.25s ease;
   background: transparent;
 }
 
-.tab-content :deep(.el-table__row:hover > td) {
+.data-section :deep(.el-table__row:hover > td) {
   background: rgba(0, 184, 148, 0.04) !important;
 }
 
-.tab-content :deep(.el-button--primary.is-link) {
+.data-section :deep(.el-button--primary.is-link) {
   color: #00b894;
   font-weight: 500;
 }
 
-.tab-content :deep(.el-button--primary.is-link:hover) {
+.data-section :deep(.el-button--primary.is-link:hover) {
   color: #55efc4;
 }
 
 /* 状态徽章 */
-.tab-content :deep(.el-tag) {
+.data-section :deep(.el-tag) {
   border-radius: 6px;
   font-size: 11px;
   font-weight: 500;
@@ -995,54 +772,54 @@ onMounted(() => {
   border: 1px solid;
 }
 
-.tab-content :deep(.el-tag.el-tag--success) {
+.data-section :deep(.el-tag.el-tag--success) {
   background: rgba(0, 184, 148, 0.08);
   border-color: rgba(0, 184, 148, 0.3);
   color: #00b894;
 }
 
-.tab-content :deep(.el-tag.el-tag--danger) {
+.data-section :deep(.el-tag.el-tag--danger) {
   background: rgba(239, 68, 68, 0.08);
   border-color: rgba(239, 68, 68, 0.3);
   color: #ef4444;
 }
 
-.tab-content :deep(.el-tag.el-tag--warning) {
+.data-section :deep(.el-tag.el-tag--warning) {
   background: rgba(251, 191, 36, 0.08);
   border-color: rgba(251, 191, 36, 0.3);
   color: #f59e0b;
 }
 
-.tab-content :deep(.el-tag.el-tag--info) {
+.data-section :deep(.el-tag.el-tag--info) {
   background: rgba(9, 132, 227, 0.08);
   border-color: rgba(9, 132, 227, 0.3);
   color: #0984e3;
 }
 
 /* 操作按钮 */
-.tab-content :deep(.table-actions) {
+.data-section :deep(.table-actions) {
   display: flex;
   gap: 4px;
 }
 
-.tab-content :deep(.el-button--small) {
+.data-section :deep(.el-button--small) {
   border-radius: 6px;
   font-size: 12px;
   padding: 6px 12px;
 }
 
-.tab-content :deep(.el-button--success) {
+.data-section :deep(.el-button--success) {
   background: linear-gradient(135deg, rgba(0, 184, 148, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
   border: none;
 }
 
-.tab-content :deep(.el-button--warning) {
+.data-section :deep(.el-button--warning) {
   background: linear-gradient(135deg, rgba(251, 191, 36, 0.9) 0%, rgba(250, 200, 100, 0.9) 100%);
   border: none;
 }
 
 /* 分页 */
-.tab-content :deep(.pagination-bar) {
+.data-section :deep(.pagination-bar) {
   margin-top: 16px;
   padding-top: 12px;
   border-top: 1px solid rgba(0, 48, 135, 0.06);
@@ -1050,12 +827,12 @@ onMounted(() => {
   justify-content: flex-end;
 }
 
-.tab-content :deep(.el-pagination) {
+.data-section :deep(.el-pagination) {
   gap: 8px;
 }
 
-.tab-content :deep(.el-pagination button),
-.tab-content :deep(.el-pager li) {
+.data-section :deep(.el-pagination button),
+.data-section :deep(.el-pager li) {
   background: rgba(255, 255, 255, 0.95);
   border-radius: 6px;
   border: 1px solid var(--border-default);
@@ -1063,7 +840,7 @@ onMounted(() => {
   font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
 }
 
-.tab-content :deep(.el-pager li.is-active) {
+.data-section :deep(.el-pager li.is-active) {
   background: linear-gradient(135deg, #00b894, #55efc4);
   border-color: transparent;
   color: white;
@@ -1118,10 +895,6 @@ onMounted(() => {
   .nav-right {
     width: 100%;
     justify-content: center;
-  }
-
-  .tab-nav {
-    flex-wrap: wrap;
   }
 }
 
@@ -1242,114 +1015,94 @@ onMounted(() => {
   color: #8b949e;
 }
 
-.dark .tab-section {
+.dark .data-section {
   background: rgba(22, 27, 34, 0.85);
   border-color: rgba(48, 54, 61, 0.6);
   box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
 }
 
-.dark .tab-header {
-  border-bottom-color: rgba(48, 54, 61, 0.6);
-}
-
-.dark .tab-btn {
-  background: rgba(13, 17, 23, 0.9);
-  color: #8b949e;
-  border-color: transparent;
-}
-
-.dark .tab-btn:hover {
-  background: rgba(63, 185, 80, 0.15);
-  color: #3fb950;
-}
-
-.dark .tab-btn.active {
-  background: linear-gradient(135deg, #3fb950 0%, #55efc4 100%);
-  color: white;
-}
-
 /* 暗黑模式子组件覆盖 */
-.dark .tab-content :deep(.el-card__header) {
+.dark .data-section :deep(.el-card__header) {
   border-bottom-color: rgba(48, 54, 61, 0.6);
 }
 
-.dark .tab-content :deep(.filter-toolbar),
-.dark .tab-content :deep(.toolbar) {
+.dark .data-section :deep(.filter-toolbar),
+.dark .data-section :deep(.toolbar) {
   border-bottom-color: rgba(48, 54, 61, 0.3);
 }
 
-.dark .tab-content :deep(.el-input__wrapper),
-.dark .tab-content :deep(.el-select .el-input__wrapper) {
+.dark .data-section :deep(.el-input__wrapper),
+.dark .data-section :deep(.el-select .el-input__wrapper) {
   background: rgba(13, 17, 23, 0.95);
   border-color: #30363d;
 }
 
-.dark .tab-content :deep(.el-table) {
+.dark .data-section :deep(.el-table) {
   border-color: rgba(48, 54, 61, 0.3);
   background: rgba(13, 17, 23, 0.95);
 }
 
-.dark .tab-content :deep(.el-table__header-wrapper) {
+.dark .data-section :deep(.el-table__header-wrapper) {
   border-bottom-color: rgba(48, 54, 61, 0.6);
 }
 
-.dark .tab-content :deep(th.el-table__cell) {
+.dark .data-section :deep(th.el-table__cell) {
   color: #8b949e;
 }
 
-.dark .tab-content :deep(td.el-table__cell) {
+.dark .data-section :deep(td.el-table__cell) {
   border-bottom-color: rgba(48, 54, 61, 0.3);
 }
 
-.dark .tab-content :deep(.el-table__row:hover > td) {
+.dark .data-section :deep(.el-table__row:hover > td) {
   background: rgba(63, 185, 80, 0.08) !important;
 }
 
-.dark .tab-content :deep(.el-button--primary.is-link) {
+.dark .data-section :deep(.el-button--primary.is-link) {
   color: #3fb950;
 }
 
-.dark .tab-content :deep(.el-button--primary.is-link:hover) {
+.dark .data-section :deep(.el-button--primary.is-link:hover) {
   color: #55efc4;
 }
 
 /* 暗黑模式状态徽章 */
-.dark .tab-content :deep(.el-tag.el-tag--success) {
+.dark .data-section :deep(.el-tag.el-tag--success) {
   background: rgba(63, 185, 80, 0.15);
   border-color: rgba(63, 185, 80, 0.4);
   color: #3fb950;
 }
 
-.dark .tab-content :deep(.el-tag.el-tag--danger) {
+.dark .data-section :deep(.el-tag.el-tag--danger) {
   background: rgba(248, 81, 73, 0.15);
   border-color: rgba(248, 81, 73, 0.4);
   color: #f85149;
 }
 
-.dark .tab-content :deep(.el-tag.el-tag--warning) {
+.dark .data-section :deep(.el-tag.el-tag--warning) {
   background: rgba(210, 153, 34, 0.15);
   border-color: rgba(210, 153, 34, 0.4);
   color: #d29922;
 }
 
-.dark .tab-content :deep(.el-tag.el-tag--info) {
+.dark .data-section :deep(.el-tag.el-tag--info) {
   background: rgba(88, 166, 255, 0.15);
   border-color: rgba(88, 166, 255, 0.4);
   color: #58a6ff;
 }
 
-.dark .tab-content :deep(.pagination-bar) {
+.dark .data-section :deep(.pagination-bar) {
   border-top-color: rgba(48, 54, 61, 0.3);
 }
 
-.dark .tab-content :deep(.el-pagination button),
-.dark .tab-content :deep(.el-pager li) {
+.dark .data-section :deep(.el-pagination button),
+.dark .data-section :deep(.el-pager li) {
   background: rgba(13, 17, 23, 0.95);
   border-color: #30363d;
   color: #8b949e;
 }
 
-.dark .tab-content :deep(.el-pager li.is-active) {
+.dark .data-section :deep(.el-pager li.is-active) {
   background: linear-gradient(135deg, #3fb950, #55efc4);
   color: white;
 }

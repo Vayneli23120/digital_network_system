@@ -12,13 +12,15 @@ from app.shared.models import Device
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 
-def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 200) -> Dict[str, Any]:
+def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None,
+                 device_type: Optional[str] = None, skip: int = 0, limit: int = 200) -> Dict[str, Any]:
     """获取设备列表
 
     Args:
         db: 数据库会话
         status: 按状态过滤
         role: 按角色过滤
+        device_type: 按设备类型过滤
         skip: 偏移量
         limit: 最大返回数量
 
@@ -31,6 +33,8 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
         query = query.filter(Device.status == status)
     if role:
         query = query.filter(Device.role == role)
+    if device_type:
+        query = query.filter(Device.device_type == device_type)
 
     total = query.count()
     devices = query.offset(skip).limit(limit).all()
@@ -47,6 +51,7 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
                 "location": d.location,
                 "role": d.role,
                 "status": d.status,
+                "device_type": d.device_type,
                 "credential_group": d.credential_group,
                 "last_backup_time": d.last_backup_time.isoformat() if d.last_backup_time else None,
             }
@@ -73,6 +78,12 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
     if existing:
         raise ConflictException(f"设备名称 '{device_data.get('name')}' already exists")
 
+    # 处理 modules 字段 - 转换为 JSON
+    modules_data = device_data.pop("modules", None)
+    if modules_data:
+        import json
+        device_data["modules"] = json.dumps(modules_data)
+
     device = Device(**device_data)
     db.add(device)
     db.commit()
@@ -83,14 +94,15 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
         "name": device.name,
         "ip": device.ip,
         "model": device.model,
-        "serial_number": device.serial_number,
         "location": device.location,
+        "device_type": device.device_type,
         "role": device.role,
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
         "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
         "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
+        "modules": device.get_modules_list(),
     }
 
 
@@ -116,14 +128,15 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         "name": device.name,
         "ip": device.ip,
         "model": device.model,
-        "serial_number": device.serial_number,
         "location": device.location,
+        "device_type": device.device_type,
         "role": device.role,
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
         "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
         "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
+        "modules": device.get_modules_list(),
     }
 
 
@@ -146,14 +159,22 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         raise ResourceNotFoundException("Device")
 
     allowed_fields = [
-        "ip", "model", "serial_number", "location",
-        "role", "status", "purchase_date", "vendor", "purchase_cost",
+        "ip", "model", "location",
+        "device_type", "role", "status", "purchase_date", "vendor", "purchase_cost",
         "photo_dir", "credential_group", "name"
     ]
 
     for key, value in update_data.items():
         if key in allowed_fields and hasattr(device, key):
             setattr(device, key, value)
+
+    # 处理 modules 字段
+    if "modules" in update_data:
+        import json
+        if update_data["modules"]:
+            device.modules = json.dumps(update_data["modules"])
+        else:
+            device.modules = None
 
     db.commit()
     db.refresh(device)

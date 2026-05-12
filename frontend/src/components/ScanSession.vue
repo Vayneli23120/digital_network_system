@@ -1,5 +1,5 @@
 <template>
-  <div class="scan-session-wrapper">
+  <div class="scan-session-wrapper enterprise">
     <!-- 会话创建阶段 -->
     <div v-if="!sessionCode && !autoStart" class="create-session">
       <el-form :model="sessionForm" label-width="80px">
@@ -20,7 +20,7 @@
           <el-input v-model="sessionForm.reference" :placeholder="t('scanTaskNumberPlaceholder')" />
         </el-form-item>
       </el-form>
-      <el-button type="primary" @click="createSession" :loading="creating">
+      <el-button type="primary" class="glass-btn-primary" @click="createSession" :loading="creating">
         {{ t('scanCreateSession') }}
       </el-button>
     </div>
@@ -33,11 +33,11 @@
 
     <!-- 扫码阶段 -->
     <div v-else class="scan-phase">
-      <!-- 条形码显示 -->
-      <div v-if="!joined" class="barcode-section">
-        <div class="barcode-tip">
+      <!-- 条形码显示 - 卡片化设计 -->
+      <div v-if="!joined" class="barcode-card">
+        <div class="barcode-header">
           <h3>{{ t('scanBarcodeTipTitle') }}</h3>
-          <p>{{ t('scanBarcodeTipDesc') }}</p>
+          <el-tag type="primary" size="default">{{ sessionTypeText }}</el-tag>
         </div>
         <div class="barcode-display">
           <svg id="barcodeSvg" class="barcode-svg"></svg>
@@ -136,9 +136,9 @@
 
         <!-- 提交按钮 -->
         <div class="submit-actions">
-          <el-button @click="cancelSession">{{ t('scanCancelSessionBtn') }}</el-button>
+          <el-button class="glass-btn-secondary" @click="cancelSession">{{ t('scanCancelSessionBtn') }}</el-button>
           <el-button
-            type="primary"
+            class="glass-btn-primary submit-btn"
             @click="submitSession"
             :loading="submitting"
           >
@@ -493,8 +493,19 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.scan-session-wrapper {
+/* 企业级扫描会话样式 */
+.scan-session-wrapper.enterprise {
   padding: 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  min-height: 300px;
+}
+
+.scan-session-wrapper.enterprise :deep(.el-card) {
+  border: none;
+  background: transparent;
+  box-shadow: none;
 }
 
 .create-session {
@@ -521,25 +532,35 @@ onUnmounted(() => {
   to { transform: rotate(360deg); }
 }
 
-.barcode-section {
+/* 条形码卡片化设计 */
+.barcode-card {
+  background: linear-gradient(135deg, #003087 0%, #0984e3 100%);
+  border-radius: 12px;
+  padding: 24px;
+  color: white;
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 20px;
 }
 
-.barcode-tip {
-  text-align: center;
+.barcode-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
   margin-bottom: 20px;
 }
 
-.barcode-tip h3 {
+.barcode-header h3 {
   font-size: 18px;
-  margin-bottom: 8px;
+  font-weight: 600;
+  margin: 0;
 }
 
-.barcode-tip p {
-  color: var(--el-text-color-secondary);
+.barcode-header :deep(.el-tag) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: white;
 }
 
 .barcode-display {
@@ -550,7 +571,7 @@ onUnmounted(() => {
 }
 
 .barcode-svg {
-  border: 2px solid var(--el-border-color);
+  border: 2px solid rgba(255, 255, 255, 0.3);
   border-radius: 8px;
   background: #fff;
 }
@@ -558,19 +579,19 @@ onUnmounted(() => {
 .barcode-text {
   font-size: 16px;
   font-weight: 600;
-  color: var(--el-color-primary);
+  color: rgba(255, 255, 255, 0.95);
   margin-top: 8px;
   letter-spacing: 2px;
 }
 
 .session-info {
   text-align: center;
-  color: var(--el-text-color-secondary);
+  color: rgba(255, 255, 255, 0.8);
   font-size: 14px;
 }
 
 .session-info strong {
-  color: var(--el-color-primary);
+  color: #55efc4;
   font-size: 16px;
 }
 
@@ -605,5 +626,62 @@ onUnmounted(() => {
   gap: 12px;
   justify-content: flex-end;
   margin-top: 20px;
+}
+
+/* 玻璃渐变按钮 */
+.glass-btn-primary {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+  background: linear-gradient(135deg, #00d9a5 0%, #6af7d4 100%);
+}
+
+.glass-btn-secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.25s ease;
+}
+
+.glass-btn-secondary:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.submit-btn {
+  min-width: 120px;
+}
+
+/* 暗色模式 */
+.dark .scan-session-wrapper.enterprise {
+  background: rgba(22, 27, 34, 0.85);
+}
+
+.dark .barcode-card {
+  background: linear-gradient(135deg, #003087 0%, #0984e3 100%);
+}
+
+.dark .glass-btn-secondary {
+  background: rgba(48, 54, 61, 0.8);
+  color: #8b949e;
+  border-color: #30363d;
+}
+
+.dark .glass-btn-secondary:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: #3fb950;
+  color: #3fb950;
 }
 </style>

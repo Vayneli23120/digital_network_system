@@ -1,10 +1,20 @@
 <template>
   <div class="fault-detail-page">
-    <el-page-header @back="goBack" :title="t('faultDetailBack')">
-      <template #content>
-        <span class="page-title">{{ fault.fault_no || t('faultDetailTitle') }}</span>
-      </template>
-    </el-page-header>
+    <!-- 页面顶部导航条 -->
+    <section class="page-nav-bar">
+      <div class="nav-left">
+        <h1 class="page-title">{{ fault.fault_no || t('faultDetailTitle') }}</h1>
+        <el-tag :type="getStatusType(fault.status)" size="default" class="status-tag">
+          {{ getStatusText(fault.status) }}
+        </el-tag>
+      </div>
+      <div class="nav-right">
+        <button class="nav-action-btn secondary" @click="goBack">
+          <el-icon><ArrowLeft /></el-icon>
+          {{ t('actionBack') }}
+        </button>
+      </div>
+    </section>
 
     <el-row :gutter="20" style="margin-top: 20px">
       <!-- 左侧：故障信息 + 操作区 -->
@@ -84,7 +94,7 @@
             <!-- 指派按钮 -->
             <el-button
               v-if="canTransition('assigned')"
-              type="primary"
+              class="glass-btn-primary"
               @click="showAssignDialog = true"
             >
               <el-icon><UserFilled /></el-icon>
@@ -94,7 +104,7 @@
             <!-- 开始诊断按钮（指派后直接开始诊断，去掉接收步骤） -->
             <el-button
               v-if="canTransition('diagnosing')"
-              type="warning"
+              class="glass-btn-warning"
               @click="startDiagnosing"
             >
               <el-icon><Search /></el-icon>
@@ -104,7 +114,7 @@
             <!-- 技术处理（无备件） -->
             <el-button
               v-if="canTransition('resolving')"
-              type="info"
+              class="glass-btn-info"
               @click="showResolveDialog = true"
             >
               <el-icon><Document /></el-icon>
@@ -114,7 +124,7 @@
             <!-- 转维修（需备件） -->
             <el-button
               v-if="canTransition('transferred')"
-              type="warning"
+              class="glass-btn-warning"
               @click="showTransferDialog = true"
             >
               <el-icon><Tools /></el-icon>
@@ -124,7 +134,7 @@
             <!-- 确认解决（维修完成需人工确认） -->
             <el-button
               v-if="canTransition('resolved')"
-              type="success"
+              class="glass-btn-success"
               @click="showResolveDialog = true"
             >
               <el-icon><CircleCheck /></el-icon>
@@ -134,7 +144,7 @@
             <!-- 关闭 -->
             <el-button
               v-if="canTransition('closed')"
-              type="info"
+              class="glass-btn-info"
               @click="closeFaultSubmit"
             >
               <el-icon><Lock /></el-icon>
@@ -803,7 +813,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled } from '@element-plus/icons-vue'
+import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft } from '@element-plus/icons-vue'
 import {
   getFaultDetail,
   updateFault as updateFaultApi,
@@ -1771,9 +1781,87 @@ onUnmounted(() => {
   margin: 0 auto;
 }
 
+/* ===== 页面顶部导航条 ===== */
+.page-nav-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.06);
+  margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
+}
+
+.page-nav-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #00b894, #55efc4, #0984e3);
+}
+
+.nav-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+}
+
 .page-title {
-  font-size: 18px;
-  font-weight: bold;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.status-tag {
+  font-weight: 500;
+}
+
+.nav-right {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+}
+
+.nav-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+}
+
+.nav-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+  padding: 8px 12px;
+}
+
+.nav-action-btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
 }
 
 .card-header-flex {
@@ -1968,6 +2056,83 @@ onUnmounted(() => {
   gap: 10px;
   flex-wrap: wrap;
   padding: 16px 0;
+}
+
+/* 玻璃渐变按钮样式 */
+.glass-btn-primary {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+  background: linear-gradient(135deg, #00d9a5 0%, #6af7d4 100%);
+}
+
+.glass-btn-warning {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(251, 191, 36, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-warning:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(251, 191, 36, 0.35);
+}
+
+.glass-btn-success {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-success:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+}
+
+.glass-btn-info {
+  background: linear-gradient(135deg, #636e72 0%, #b2bec3 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(99, 110, 114, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-info:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(99, 110, 114, 0.35);
+}
+
+.glass-btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #f87171 100%);
+  border: none;
+  color: white;
+  border-radius: 8px;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25);
+  transition: all 0.25s ease;
+}
+
+.glass-btn-danger:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(239, 68, 68, 0.35);
 }
 
 /* 诊断区域 */
@@ -2434,5 +2599,48 @@ onUnmounted(() => {
   .note-actions .el-button-group {
     flex-wrap: wrap;
   }
+}
+
+/* 暗色模式 */
+.dark .page-nav-bar {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(48, 54, 61, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .page-nav-bar::before {
+  background: linear-gradient(90deg, #3fb950, #55efc4, #58a6ff);
+}
+
+.dark .page-title {
+  color: #f0f6fc;
+}
+
+.dark .nav-action-btn {
+  background: linear-gradient(135deg, #3fb950 0%, #55efc4 100%);
+}
+
+.dark .nav-action-btn.secondary {
+  background: rgba(48, 54, 61, 0.8);
+  color: #8b949e;
+  border-color: #30363d;
+}
+
+.dark .nav-action-btn.secondary:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: #3fb950;
+  color: #3fb950;
+}
+
+.dark .glass-btn-primary {
+  background: linear-gradient(135deg, #3fb950 0%, #55efc4 100%);
+}
+
+.dark .glass-btn-warning {
+  background: linear-gradient(135deg, #d29922 0%, #e3b341 100%);
+}
+
+.dark .glass-btn-info {
+  background: linear-gradient(135deg, #636e72 0%, #95a5a6 100%);
 }
 </style>

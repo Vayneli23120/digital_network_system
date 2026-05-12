@@ -36,33 +36,37 @@ class DeviceCreate(BaseModel):
     name: str
     ip: str
     model: Optional[str] = None
-    serial_number: Optional[str] = None
     location: Optional[str] = None
+    device_type: str = "other"
     role: str = "access"
     status: str = "online"
     vendor: Optional[str] = None
     purchase_cost: float = 0
     credential_group: str = "default"
+    modules: Optional[List[dict]] = None  # [{"type": "main", "serial_number": "SN001"}]
 
 
 class DeviceUpdate(BaseModel):
     ip: Optional[str] = None
     model: Optional[str] = None
-    serial_number: Optional[str] = None
     location: Optional[str] = None
+    device_type: Optional[str] = None
     role: Optional[str] = None
     status: Optional[str] = None
     vendor: Optional[str] = None
     purchase_cost: Optional[float] = None
     credential_group: Optional[str] = None
     name: Optional[str] = None
+    modules: Optional[List[dict]] = None
 
 
 @router.get("")
-async def list_devices(status: Optional[str] = None, role: Optional[str] = None, skip: int = 0, limit: int = 200, db: Session = Depends(get_db)):
+async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
+                        device_type: Optional[str] = None, skip: int = 0, limit: int = 200,
+                        db: Session = Depends(get_db)):
     """获取设备列表"""
     from .device_service import list_devices as svc_list_devices
-    return svc_list_devices(db, status=status, role=role, skip=skip, limit=limit)
+    return svc_list_devices(db, status=status, role=role, device_type=device_type, skip=skip, limit=limit)
 
 
 @router.get("/export")
@@ -82,7 +86,7 @@ async def export_devices():
         ws.title = "Devices"
 
         # 表头
-        headers = ["name", "ip", "model", "serial_number", "location", "role", "status", "credential_group", "vendor", "purchase_cost"]
+        headers = ["name", "ip", "model", "serial_number", "location", "device_type", "role", "status", "credential_group", "vendor", "purchase_cost"]
         ws.append(headers)
 
         # 数据
@@ -93,6 +97,7 @@ async def export_devices():
                 device.model or "",
                 device.serial_number or "",
                 device.location or "",
+                device.device_type or "other",
                 device.role or "",
                 device.status or "",
                 device.credential_group or "default",
@@ -172,6 +177,7 @@ async def import_devices(file: UploadFile = File(...)):
                     status=device_data.get("status", "online"),
                     credential_group=device_data.get("credential_group", "default"),
                     vendor=device_data.get("vendor", ""),
+                    device_type=device_data.get("device_type", "other"),
                     purchase_cost=device_data.get("purchase_cost", 0)
                 )
                 db.add(device)

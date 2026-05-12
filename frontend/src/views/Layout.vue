@@ -60,7 +60,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation } from '@element-plus/icons-vue'
+import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation, Sort } from '@element-plus/icons-vue'
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -148,6 +148,7 @@ const sidebarGroups = computed(() => {
         label: t('groupSpare'),
         items: [
           { path: '/spare-parts', text: t('menuSpareParts'), icon: Box },
+          { path: '/movements', text: t('menuMovements'), icon: Sort },
           { path: '/scrap-inventory', text: t('menuScrapInventory'), icon: Delete },
         ]
       },
@@ -176,7 +177,7 @@ watch(route, (newRoute) => {
     activeTopTab.value = 'devices'
   } else if (path.startsWith('/console') || path.startsWith('/deploy') || path.startsWith('/templates') || path.startsWith('/credentials') || path.startsWith('/compliance') || path.startsWith('/tool-logs')) {
     activeTopTab.value = 'config'
-  } else if (path.startsWith('/spare') || path.startsWith('/scrap')) {
+  } else if (path.startsWith('/spare') || path.startsWith('/scrap') || path.startsWith('/movements')) {
     activeTopTab.value = 'spare'
   } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users') || path.startsWith('/notifications')) {
     activeTopTab.value = 'system'

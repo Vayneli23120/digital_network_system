@@ -1,10 +1,27 @@
 <template>
   <div class="maintenance-detail-page">
-    <el-page-header @back="goBack" :title="t('maintDetailBack')">
-      <template #content>
-        <span class="page-title">{{ maintenance.maint_no || t('maintDetailTitle') }}</span>
-      </template>
-    </el-page-header>
+    <!-- 页面顶部导航条 -->
+    <section class="page-nav-bar">
+      <div class="nav-left">
+        <h1 class="page-title">{{ maintenance.maint_no || t('maintDetailTitle') }}</h1>
+        <el-tag :type="getStatusTagClass(statusInfo.status)" size="default" class="status-tag">
+          {{ statusInfo.status_label }}
+        </el-tag>
+        <el-tag :type="getPriorityTagClass(statusInfo.priority)" size="small" class="priority-tag">
+          {{ statusInfo.priority }}
+        </el-tag>
+      </div>
+      <div class="nav-right">
+        <button class="nav-action-btn secondary" @click="goBack">
+          <el-icon><ArrowLeft /></el-icon>
+          {{ t('actionBack') }}
+        </button>
+        <button class="nav-action-btn" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'" @click="openEditDialog">
+          <el-icon><Edit /></el-icon>
+          {{ t('actionEdit') }}
+        </button>
+      </div>
+    </section>
 
     <!-- V2 左右布局 -->
     <div class="maint-header">
@@ -762,7 +779,7 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select, Plus } from '@element-plus/icons-vue'
+import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select, Plus, ArrowLeft } from '@element-plus/icons-vue'
 import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
@@ -1716,17 +1733,95 @@ onMounted(async () => {
   padding: 0;
 }
 
-.maintenance-detail-page .el-page-header {
+/* ===== 页面顶部导航条 ===== */
+.page-nav-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.06);
   margin-bottom: 16px;
+  position: relative;
+  overflow: hidden;
 }
 
-.maintenance-detail-page :deep(.el-page-header) {
-  margin-right: 0;
+.page-nav-bar::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, #00b894, #55efc4, #0984e3);
+}
+
+.nav-left {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
 }
 
 .page-title {
-  font-size: 18px;
-  font-weight: bold;
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.status-tag {
+  font-weight: 500;
+}
+
+.priority-tag {
+  margin-left: 0;
+}
+
+.nav-right {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  color: white;
+  border: none;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+}
+
+.nav-action-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+}
+
+.nav-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-default);
+  box-shadow: none;
+  padding: 8px 12px;
+}
+
+.nav-action-btn.secondary:hover {
+  background: var(--bg-hover);
+  color: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.maintenance-detail-page .el-page-header {
+  margin-bottom: 16px;
 }
 
 /* V2 左右布局 */
@@ -2051,11 +2146,28 @@ onMounted(async () => {
   justify-content: center;
   gap: 8px;
   transition: all 0.2s;
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  border: none;
+  color: white;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
 }
 
 .flow-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+}
+
+/* 特殊按钮颜色 */
+.el-button--primary.flow-btn {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+}
+
+.el-button--warning.flow-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
+}
+
+.el-button--success.flow-btn {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
 }
 
 .flow-tip, .verify-tip {
@@ -3050,5 +3162,36 @@ onMounted(async () => {
 /* 暗色模式 */
 .dark .suggest-icon {
   background: rgba(0, 184, 148, 0.15);
+}
+
+/* 暗色模式 page-nav-bar */
+.dark .page-nav-bar {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(48, 54, 61, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+.dark .page-nav-bar::before {
+  background: linear-gradient(90deg, #3fb950, #55efc4, #58a6ff);
+}
+
+.dark .page-title {
+  color: #f0f6fc;
+}
+
+.dark .nav-action-btn {
+  background: linear-gradient(135deg, #3fb950 0%, #55efc4 100%);
+}
+
+.dark .nav-action-btn.secondary {
+  background: rgba(48, 54, 61, 0.8);
+  color: #8b949e;
+  border-color: #30363d;
+}
+
+.dark .nav-action-btn.secondary:hover {
+  background: rgba(63, 185, 80, 0.15);
+  border-color: #3fb950;
+  color: #3fb950;
 }
 </style>

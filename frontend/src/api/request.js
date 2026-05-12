@@ -12,6 +12,11 @@ api.interceptors.request.use(config => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  // 同时传递当前用户名作为备用
+  const currentUser = localStorage.getItem('currentUser')
+  if (currentUser) {
+    config.headers['X-User'] = currentUser
+  }
   return config
 })
 
