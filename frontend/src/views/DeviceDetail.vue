@@ -232,7 +232,7 @@
     </div>
 
     <!-- 编辑设备对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('editDeviceTitle')" width="600px">
+    <el-dialog v-model="showEditDialog" :title="t('editDeviceTitle')" width="600px" append-to-body draggable align-center>
       <el-form :model="editForm" label-width="100px">
         <el-form-item :label="t('deviceName')"><el-input v-model="editForm.name" :disabled="true" /></el-form-item>
         <el-form-item :label="t('deviceIp')"><el-input v-model="editForm.ip" /></el-form-item>
@@ -262,13 +262,13 @@
     </el-dialog>
 
     <!-- 查看配置对话框 -->
-    <el-dialog v-model="showConfigDialog" :title="t('backupConfigContent')" width="800px">
+    <el-dialog v-model="showConfigDialog" :title="t('backupConfigContent')" width="800px" append-to-body draggable align-center>
       <el-card v-if="configContent"><pre class="config-content">{{ configContent }}</pre></el-card>
       <el-empty v-else :description="t('backupNoConfig')" />
     </el-dialog>
 
     <!-- 添加故障记录对话框 -->
-    <el-dialog v-model="showFaultDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="500px">
+    <el-dialog v-model="showFaultDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="500px" append-to-body draggable align-center>
       <el-form :model="faultForm" label-width="100px">
         <el-form-item :label="t('faultSeverity')" required>
           <el-select v-model="faultForm.severity">
@@ -288,7 +288,7 @@
     </el-dialog>
 
     <!-- 添加维修记录对话框 -->
-    <el-dialog v-model="showMaintDialog" :title="editMode ? t('maintEditRecord') : t('maintAddRecord')" width="600px">
+    <el-dialog v-model="showMaintDialog" :title="editMode ? t('maintEditRecord') : t('maintAddRecord')" width="600px" append-to-body draggable align-center>
       <el-form :model="maintForm" label-width="120px">
         <el-form-item :label="t('maintType')" required>
           <el-select v-model="maintForm.maint_type">
