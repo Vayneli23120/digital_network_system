@@ -111,9 +111,9 @@ const sidebarGroups = computed(() => {
         items: [
           { path: '/', text: t('menuDashboard'), icon: DataBoard },
           { path: '/monitor-screen', text: t('menuMonitorScreen'), icon: Monitor },
-          { path: '/device-health', text: t('menuDeviceHealth') || '设备健康', icon: TrendCharts },
-          { path: '/ai-analysis', text: t('menuAIAnalysis') || 'AI分析中心', icon: Cpu },
-          { path: '/workflows', text: t('menuWorkflows') || '自动化工作流', icon: Operation },
+          { path: '/device-health', text: t('menuDeviceHealth'), icon: TrendCharts },
+          { path: '/ai-analysis', text: t('menuAIAnalysis'), icon: Cpu },
+          { path: '/workflows', text: t('menuWorkflows'), icon: Operation },
         ]
       }
     ],

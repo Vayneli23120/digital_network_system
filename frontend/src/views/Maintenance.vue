@@ -429,7 +429,7 @@
         </el-table>
 
         <!-- 工时成本 -->
-        <el-divider content-position="left">{{ t('maintCostSection') || '工时成本' }}</el-divider>
+        <el-divider content-position="left">{{ t('maintCostSection') }}</el-divider>
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item :label="t('maintLaborHours')">
