@@ -374,13 +374,29 @@
             style="width: 280px"
             @change="addSparePartToForm"
             clearable
-          />
+          >
+            <el-option
+              v-for="part in sparePartOptions"
+              :key="part.id"
+              :label="`${part.serial_number} - ${part.name}`"
+              :value="part.id"
+            >
+              <div style="display: flex; gap: 8px; align-items: center">
+                <span style="color: #409EFF; font-weight: 500">{{ part.serial_number }}</span>
+                <span>{{ part.part_number }}</span>
+                <span style="color: #606266">{{ part.name }}</span>
+              </div>
+            </el-option>
+          </el-select>
           <el-button type="primary" size="small" @click="openScanDialog">
             <el-icon><Aim /></el-icon>
             {{ t('maintScanAddSpare') }}
           </el-button>
         </div>
         <el-table v-if="maintForm.spare_parts.length > 0" :data="maintForm.spare_parts" size="small" border style="margin-top: 8px">
+          <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
+            <template #default="{ row }"><span style="color: #409EFF">{{ row.serial_number || '-' }}</span></template>
+          </el-table-column>
           <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
           <el-table-column prop="name" :label="t('maintColName')" />
           <el-table-column prop="quantity" :label="t('maintColQuantity')" width="70">
@@ -473,7 +489,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document, Edit, Delete, View, ArrowRight, Refresh, CircleCheck, SuccessFilled, WarningFilled, Warning, Connection } from '@element-plus/icons-vue'
-import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, getPartList, createMovement, getPartBySerialNumber, transitionMaintenanceStatus } from '@/api'
+import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, searchInStockParts, createMovement, getPartBySerialNumber, transitionMaintenanceStatus } from '@/api'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime, dayjs } from '@/utils/time'
@@ -684,8 +700,17 @@ const searchSpareParts = async (query) => {
   if (!query || query.length < 1) { sparePartOptions.value = []; return }
   spareLoading.value = true
   try {
-    const result = await getPartList({ search: query, limit: 20 })
-    sparePartOptions.value = result.items || []
+    // 使用 search-in-stock API 搜索库存中的备件实例（维修出库需要实例）
+    const result = await searchInStockParts(query)
+    sparePartOptions.value = (result.items || []).map(item => ({
+      id: item.instance_id,  // 备件实例ID
+      part_id: item.id,      // 备件型号ID
+      part_number: item.part_number,
+      name: item.name,
+      serial_number: item.serial_number,
+      unit_price: item.unit_price,
+      quantity_in_stock: item.quantity_in_stock || 0
+    }))
   } catch (e) { ElMessage.error(t('maintSearchFailed')) }
   finally { spareLoading.value = false }
 }
@@ -718,9 +743,23 @@ const addSparePartToForm = () => {
   if (!selectedSparePart.value) return
   const part = sparePartOptions.value.find(p => p.id === selectedSparePart.value)
   if (!part) return
-  const existing = maintForm.value.spare_parts.find(p => p.part_id === part.id)
-  if (existing) { existing.quantity += 1 }
-  else { maintForm.value.spare_parts.push({ part_id: part.id, part_number: part.part_number, name: part.name, unit_price: part.unit_price || 0, quantity: 1 }) }
+  // 检查是否已添加该序列号的备件
+  const existing = maintForm.value.spare_parts.find(p => p.serial_number === part.serial_number)
+  if (existing) {
+    existing.quantity += 1
+    ElMessage.info(`${part.name} ${t('maintPartQtyAdded')}`)
+  } else {
+    maintForm.value.spare_parts.push({
+      part_id: part.part_id,      // 备件型号ID
+      instance_id: part.id,       // 备件实例ID
+      part_number: part.part_number,
+      name: part.name,
+      serial_number: part.serial_number,
+      unit_price: part.unit_price || 0,
+      quantity: 1
+    })
+    ElMessage.success(`${t('maintPartAdded')}: ${part.name}`)
+  }
   updatePartsCost(); selectedSparePart.value = null
 }
 
