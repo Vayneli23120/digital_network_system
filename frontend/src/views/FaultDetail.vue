@@ -89,71 +89,13 @@
             </div>
           </div>
 
-          <!-- 可执行操作 -->
-          <div class="action-buttons">
-            <!-- 指派按钮 -->
-            <el-button
-              v-if="canTransition('assigned')"
-              class="glass-btn-primary"
-              @click="showAssignDialog = true"
-            >
-              <el-icon><UserFilled /></el-icon>
-              {{ t('faultAssignTo') }}
-            </el-button>
-
-            <!-- 开始诊断按钮（指派后直接开始诊断，去掉接收步骤） -->
-            <el-button
-              v-if="canTransition('diagnosing')"
-              class="glass-btn-warning"
-              @click="startDiagnosing"
-            >
-              <el-icon><Search /></el-icon>
-              {{ t('faultStartDiagnose') }}
-            </el-button>
-
-            <!-- 技术处理（无备件） -->
-            <el-button
-              v-if="canTransition('resolving')"
-              class="glass-btn-info"
-              @click="showResolveDialog = true"
-            >
-              <el-icon><Document /></el-icon>
-              {{ t('faultTechResolve') }}
-            </el-button>
-
-            <!-- 转维修（需备件） -->
-            <el-button
-              v-if="canTransition('transferred')"
-              class="glass-btn-warning"
-              @click="showTransferDialog = true"
-            >
-              <el-icon><Tools /></el-icon>
-              {{ t('faultTransferMaintenance') }}
-            </el-button>
-
-            <!-- 确认解决（维修完成需人工确认） -->
-            <el-button
-              v-if="canTransition('resolved')"
-              class="glass-btn-success"
-              @click="showResolveDialog = true"
-            >
-              <el-icon><CircleCheck /></el-icon>
-              {{ t('faultConfirmResolve') }}
-            </el-button>
-
-            <!-- 关闭 -->
-            <el-button
-              v-if="canTransition('closed')"
-              class="glass-btn-info"
-              @click="closeFaultSubmit"
-            >
-              <el-icon><Lock /></el-icon>
-              {{ t('actionClose') }}
-            </el-button>
+          <!-- 可执行操作（简化版，主要操作在工作日志区域） -->
+          <div class="action-buttons-simple" v-if="fault.status !== 'closed'">
+            <span class="action-hint">{{ t('faultActionHint') }}</span>
           </div>
         </el-card>
 
-        <!-- 工作日志/诊断记录（ServiceNow Notes风格） -->
+        <!-- 工作日志/诊断记录（ServiceNow Activity风格 - 整合操作按钮） -->
         <el-card class="work-notes-card" style="margin-top: 20px">
           <template #header>
             <div class="card-header-flex">
@@ -164,7 +106,7 @@
             </div>
           </template>
 
-          <!-- 添加新日志（故障未关闭时可添加） -->
+          <!-- 添加新日志 + 操作按钮整合 -->
           <div class="add-note-section" v-if="fault.status !== 'closed'">
             <el-input
               v-model="newNoteContent"
@@ -174,22 +116,44 @@
               resize="none"
             />
             <div class="note-actions">
-              <el-button-group>
-                <!-- 仅在 diagnosing 状态显示解决和转维修按钮 -->
-                <el-button v-if="fault.status === 'diagnosing'" type="success" @click="submitNoteAndResolve" :disabled="!newNoteContent">
+              <!-- 状态变更操作按钮（诊断状态下显示） -->
+              <div class="state-change-actions" v-if="fault.status === 'diagnosing'">
+                <el-button type="success" @click="submitNoteAndResolve" class="action-btn-with-note">
                   <el-icon><CircleCheck /></el-icon>
                   {{ t('faultNoteResolve') }}
                 </el-button>
-                <el-button v-if="fault.status === 'diagnosing'" type="warning" @click="submitNoteAndTransfer" :disabled="!newNoteContent">
+                <el-button type="warning" @click="submitNoteAndTransfer" class="action-btn-with-note">
                   <el-icon><Tools /></el-icon>
                   {{ t('faultNoteTransfer') }}
                 </el-button>
-                <!-- 所有非closed状态都可以添加日志 -->
-                <el-button type="primary" @click="submitNoteOnly" :disabled="!newNoteContent">
-                  <el-icon><Plus /></el-icon>
-                  {{ t('faultNoteAdd') }}
+              </div>
+              <!-- 其他状态的快速操作按钮 -->
+              <div class="quick-actions" v-if="fault.status !== 'diagnosing'">
+                <el-button v-if="canTransition('assigned')" type="primary" @click="showAssignDialog = true">
+                  <el-icon><UserFilled /></el-icon>
+                  {{ t('faultAssignTo') }}
                 </el-button>
-              </el-button-group>
+                <el-button v-if="canTransition('diagnosing')" type="warning" @click="startDiagnosing">
+                  <el-icon><Search /></el-icon>
+                  {{ t('faultStartDiagnose') }}
+                </el-button>
+                <el-button v-if="canTransition('resolved')" type="success" @click="showResolveDialog = true">
+                  <el-icon><CircleCheck /></el-icon>
+                  {{ t('faultConfirmResolve') }}
+                </el-button>
+                <el-button v-if="canTransition('closed')" type="info" @click="closeFaultSubmit">
+                  <el-icon><Lock /></el-icon>
+                  {{ t('actionClose') }}
+                </el-button>
+              </div>
+              <!-- 仅添加日志按钮（始终显示） -->
+              <el-button type="default" @click="submitNoteOnly" :disabled="!newNoteContent" class="add-note-btn">
+                <el-icon><Plus /></el-icon>
+                {{ t('faultNoteAdd') }}
+              </el-button>
+            </div>
+            <div class="action-tip" v-if="fault.status === 'diagnosing'">
+              {{ t('faultDiagnosingTip') }}
             </div>
           </div>
 
@@ -1048,26 +1012,20 @@ const submitNoteOnly = async () => {
 
 // 添加日志并技术解决
 const submitNoteAndResolve = async () => {
-  if (!newNoteContent.value) return
   try {
-    // 先保存诊断内容
-    await diagnoseFault(fault.value.id, { diagnosis_text: newNoteContent.value })
-    // 再解决故障
-    await resolveFault(fault.value.id, newNoteContent.value)
-    // 更新本地状态
-    fault.value.status = 'resolved'
-    fault.value.resolution = newNoteContent.value
-    fault.value.resolved_at = new Date().toISOString()
-    // 添加日志
-    workNotes.value.push({
-      author: localStorage.getItem('currentUser') || fault.value.assigned_to,
-      content: `故障解决：${newNoteContent.value}`,
-      created_at: new Date().toISOString(),
-      note_type: 'resolved'
-    })
-    newNoteContent.value = ''
-    ElMessage.success(t('faultResolveSuccess'))
-    loadFault()
+    // 如果有日志内容，先保存诊断内容
+    if (newNoteContent.value) {
+      await diagnoseFault(fault.value.id, { diagnosis_text: newNoteContent.value })
+      // 添加日志
+      workNotes.value.push({
+        author: localStorage.getItem('currentUser') || fault.value.assigned_to,
+        content: newNoteContent.value,
+        created_at: new Date().toISOString(),
+        note_type: 'diagnosis'
+      })
+    }
+    // 解决故障（直接打开解决对话框）
+    showResolveDialog.value = true
   } catch (e) {
     ElMessage.error(t('faultResolveFailed'))
   }
@@ -1075,9 +1033,11 @@ const submitNoteAndResolve = async () => {
 
 // 添加日志并转维修
 const submitNoteAndTransfer = async () => {
-  if (!newNoteContent.value) return
-  // 保存诊断内容，打开转维修对话框
-  transferForm.value.diagnosis_text = newNoteContent.value
+  // 如果有日志内容，保存到转维修表单
+  if (newNoteContent.value) {
+    transferForm.value.diagnosis_text = newNoteContent.value
+  }
+  // 打开转维修对话框
   showTransferDialog.value = true
 }
 
@@ -2493,12 +2453,51 @@ onUnmounted(() => {
 }
 
 .add-note-section .el-textarea {
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .note-actions {
   display: flex;
-  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.state-change-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn-with-note {
+  font-weight: 600;
+}
+
+.quick-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.add-note-btn {
+  margin-left: auto;
+}
+
+.action-tip {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #909399;
+  background: #f5f7fa;
+  padding: 6px 12px;
+  border-radius: 4px;
+}
+
+.action-buttons-simple {
+  padding: 12px;
+  text-align: center;
+}
+
+.action-hint {
+  font-size: 13px;
+  color: #909399;
 }
 
 .notes-timeline {
