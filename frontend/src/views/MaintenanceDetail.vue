@@ -410,7 +410,7 @@
             <el-icon><Setting /></el-icon>
             {{ t('maintBasicInfo') }}
           </div>
-          <el-form :model="editForm" label-width="80px">
+          <el-form :model="editForm" label-width="70px">
             <el-form-item :label="t('maintType')" required>
               <el-select v-model="editForm.maint_type" style="width: 200px">
                 <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
@@ -429,7 +429,7 @@
             {{ t('maintDiagnosisSection') }}
             <el-tag v-if="editForm.diagnosis_text" type="success" size="small" class="section-badge">{{ t('maintDiagnosisFilled') }}</el-tag>
           </div>
-          <el-form :model="editForm" label-width="80px">
+          <el-form :model="editForm" label-width="70px">
             <el-form-item :label="t('maintDiagnosisText')">
               <el-input v-model="editForm.diagnosis_text" type="textarea" :rows="2" :placeholder="t('maintDiagnosisPlaceholder')" />
             </el-form-item>
@@ -457,7 +457,7 @@
             <el-icon><Box /></el-icon>
             {{ t('maintSparePartsSection') }}
           </div>
-          <el-form :model="editForm" label-width="80px">
+          <el-form :model="editForm" label-width="70px">
             <el-form-item :label="t('maintSparePartsLabel')">
               <div class="spare-parts-section">
                 <!-- 扫码功能条 -->
@@ -543,7 +543,7 @@
         <el-icon><RefreshRight /></el-icon>
         {{ t('maintReturnPartsSection') }}
       </div>
-      <el-form :model="editForm" label-width="80px">
+      <el-form :model="editForm" label-width="70px">
         <el-form-item :label="t('maintReturnPartsLabel')">
           <div class="return-parts-section">
             <!-- 扫码功能条 -->
@@ -677,7 +677,7 @@
         <el-tag v-if="editForm.verification_result === 'passed'" type="success" size="small" class="section-badge">{{ t('maintVerificationPassed') }}</el-tag>
         <el-tag v-if="editForm.verification_result === 'failed'" type="danger" size="small" class="section-badge">{{ t('maintVerificationFailed') }}</el-tag>
       </div>
-      <el-form :model="editForm" label-width="80px">
+      <el-form :model="editForm" label-width="70px">
         <el-form-item :label="t('maintVerificationResult')">
           <el-select v-model="editForm.verification_result" style="width: 150px" clearable @change="handleVerificationResultChange">
             <el-option :label="t('maintVerificationPassed')" value="passed" />
@@ -697,7 +697,7 @@
         <el-icon><Document /></el-icon>
         {{ t('maintCostDescSection') }}
       </div>
-      <el-form :model="editForm" label-width="80px">
+      <el-form :model="editForm" label-width="70px">
         <el-form-item :label="t('maintLaborHours')">
           <el-input-number v-model="editForm.labor_hours" :min="0" :precision="1" />
         </el-form-item>
@@ -2710,17 +2710,17 @@ onMounted(async () => {
 
 .spare-search {
   display: flex;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .selected-parts {
-  margin-top: 12px;
+  margin-top: 6px;
 }
 
 .parts-summary {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: 6px;
+  padding: 6px 10px;
   background: #f5f7fa;
   border-radius: 4px;
   text-align: right;
@@ -2760,12 +2760,12 @@ onMounted(async () => {
 
 /* 返回件显示样式 */
 .return-parts-display {
-  margin-bottom: 20px;
+  margin-bottom: 10px;
 }
 
 .return-tip {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: 6px;
+  padding: 4px 8px;
   background: #fdf6ec;
   border-radius: 4px;
   color: #909399;
@@ -2780,8 +2780,8 @@ onMounted(async () => {
 .return-scan-area {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
+  gap: 8px;
+  margin-bottom: 6px;
 }
 
 .return-scan-tip {
@@ -2811,30 +2811,30 @@ onMounted(async () => {
 }
 
 .return-manual-area {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .return-manual-row {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 6px;
+  margin-bottom: 6px;
 }
 
 .return-manual-tip {
   font-size: 12px;
   color: var(--el-text-color-secondary);
-  padding: 4px 8px;
+  padding: 3px 6px;
   background: var(--el-fill-color-light);
   border-radius: 4px;
 }
 
 .return-parts-table {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .scrap-label {
-  margin-left: 8px;
+  margin-left: 6px;
   font-size: 12px;
   color: #909399;
 }
@@ -2844,8 +2844,8 @@ onMounted(async () => {
 }
 
 .return-tip-form {
-  margin-top: 10px;
-  padding: 8px 12px;
+  margin-top: 6px;
+  padding: 4px 8px;
   background: #fdf6ec;
   border-radius: 4px;
   color: #909399;
@@ -2853,7 +2853,7 @@ onMounted(async () => {
 }
 
 .no-return-tip {
-  margin-top: 8px;
+  margin-top: 6px;
 }
 
 .cell-primary {
@@ -2951,13 +2951,21 @@ onMounted(async () => {
   margin: 0 auto;
 }
 
+.edit-dialog-content .el-form-item {
+  margin-bottom: 8px;
+}
+
+.edit-dialog-content .el-form-item__label {
+  font-size: 13px;
+}
+
 /* Section 卡片化 */
 .form-section {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  padding: 12px;
-  margin-bottom: 12px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
   transition: all 0.2s;
 }
 
@@ -2968,12 +2976,12 @@ onMounted(async () => {
 .form-section-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 14px;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -2985,11 +2993,11 @@ onMounted(async () => {
 .scan-action-bar {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
+  gap: 8px;
+  padding: 6px 10px;
   background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
   border-radius: var(--radius-md);
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .scan-action-bar.return {
