@@ -13,6 +13,22 @@
           <el-icon><ArrowLeft /></el-icon>
           {{ t('actionBack') }}
         </button>
+        <button v-if="canEdit" class="nav-action-btn" @click="showEditDialog = true">
+          <el-icon><Edit /></el-icon>
+          {{ t('actionEdit') }}
+        </button>
+        <el-dropdown v-if="canEdit" trigger="click" @command="handleMoreAction">
+          <button class="nav-action-btn secondary">
+            <el-icon><MoreFilled /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="delete" :icon="Delete">
+                {{ t('actionDelete') }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </section>
 
@@ -213,20 +229,6 @@
 
           <el-divider v-if="fault.resolution">{{ t('faultResolution') }}</el-divider>
           <p v-if="fault.resolution" class="description">{{ fault.resolution }}</p>
-        </el-card>
-
-        <!-- 其他操作（接收后才可编辑） -->
-        <el-card style="margin-top: 20px" v-if="canEdit">
-          <el-space>
-            <el-button type="primary" @click="showEditDialog = true">
-              <el-icon><Edit /></el-icon>
-              {{ t('actionEdit') }}
-            </el-button>
-            <el-button type="danger" @click="deleteFaultSubmit">
-              <el-icon><Delete /></el-icon>
-              {{ t('actionDelete') }}
-            </el-button>
-          </el-space>
         </el-card>
 
         <!-- 关联的维修单信息（完整版） -->
@@ -799,7 +801,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft } from '@element-plus/icons-vue'
+import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft, MoreFilled } from '@element-plus/icons-vue'
 import {
   getFaultDetail,
   updateFault as updateFaultApi,
@@ -1596,6 +1598,22 @@ const loadFault = async () => {
 
 const goBack = () => {
   router.push('/faults')
+}
+
+// 更多操作下拉菜单
+const handleMoreAction = async (command) => {
+  if (command === 'delete') {
+    try {
+      await ElMessageBox.confirm(
+        t('faultDeleteConfirmMsg'),
+        t('msgConfirm'),
+        { type: 'warning' }
+      )
+      deleteFaultSubmit()
+    } catch {
+      // 用户取消
+    }
+  }
 }
 
 // 指派负责人
