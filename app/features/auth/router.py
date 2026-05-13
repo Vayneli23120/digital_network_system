@@ -83,6 +83,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
+    username: Optional[str] = None  # 返回数据库中的标准用户名
 
 
 class PasswordChange(BaseModel):
