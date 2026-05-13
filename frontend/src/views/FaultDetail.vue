@@ -491,7 +491,7 @@
     <el-dialog v-model="showAssignDialog" :title="t('faultAssignTo')" width="400px">
       <el-form :model="assignForm" label-width="100px">
         <el-form-item :label="t('faultAssignTo')" required>
-          <el-select v-model="assignForm.assigned_to" :placeholder="t('faultAssignPlaceholder')">
+          <el-select v-model="assignForm.assigned_to" :placeholder="t('faultAssignPlaceholder')" filterable clearable>
             <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
           </el-select>
         </el-form-item>
@@ -530,7 +530,7 @@
           <el-input v-model="transferForm.maintenance_description" type="textarea" :rows="3" :placeholder="t('maintDescriptionPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('faultMaintenanceOwner')">
-          <el-select v-model="transferForm.maintenance_owner" :placeholder="t('faultMaintenanceOwnerPlaceholder')">
+          <el-select v-model="transferForm.maintenance_owner" :placeholder="t('faultMaintenanceOwnerPlaceholder')" filterable clearable>
             <el-option :label="`${t('faultDefaultInherit')} (${fault.assigned_to || '-'})`" value="" />
             <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
           </el-select>

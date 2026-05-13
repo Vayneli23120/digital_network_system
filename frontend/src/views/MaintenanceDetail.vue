@@ -293,13 +293,16 @@
             <el-icon><User /></el-icon>
             {{ t('maintAssignBtn') }}
           </div>
-          <el-input
+          <el-select
             v-model="assignForm.owner"
             :placeholder="t('maintOwnerPlaceholder')"
+            filterable
+            clearable
             style="margin-top: 12px"
           >
             <template #prefix><el-icon><User /></el-icon></template>
-          </el-input>
+            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+          </el-select>
           <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
             {{ t('maintAssignBtn') }}
           </el-button>
@@ -777,7 +780,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Aim, Edit, Delete, Setting, Box, RefreshRight, Document, InfoFilled, Operation, Coin, Monitor, Switch, User, Clock, Timer, CircleCheck, CircleClose, MoreFilled, Search, WarningFilled, SuccessFilled, Select, Plus, ArrowLeft } from '@element-plus/icons-vue'
-import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance } from '@/api'
+import { getMaintenances, getMaintenanceDetail, updateMaintenance, deleteMaintenance, getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts, transitionMaintenanceStatus, getMaintenanceEvents, assignMaintenance, getUsers } from '@/api'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
@@ -813,6 +816,7 @@ const statusInfo = ref({
 const events = ref([])
 const showAssignDialog = ref(false)
 const assignForm = ref({ owner: '' })
+const users = ref([])  // 用户列表
 
 // 备件相关
 const sparePartOptions = ref([])
@@ -1717,6 +1721,13 @@ const cancelSuggest = () => {
 
 onMounted(async () => {
   await loadMaintenance()
+  // 加载用户列表
+  try {
+    const usersData = await getUsers()
+    users.value = usersData.items || []
+  } catch (e) {
+    console.error('Failed to load users:', e)
+  }
   // 如果URL参数有 edit=true，自动打开编辑对话框
   if (route.query.edit === 'true') {
     openEditDialog()
