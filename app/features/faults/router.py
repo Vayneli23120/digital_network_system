@@ -29,7 +29,7 @@ router = APIRouter(prefix="/api/faults", tags=["faults"])
 FAULT_VALID_TRANSITIONS = {
     'open': ['assigned', 'closed'],
     'assigned': ['diagnosing', 'reassigned', 'closed'],  # 直接开始诊断
-    'diagnosing': ['resolving', 'transferred', 'closed'],
+    'diagnosing': ['resolving', 'transferred', 'reassigned', 'closed'],  # 支持转单
     'resolving': ['resolved', 'closed'],
     'transferred': ['resolved', 'closed'],  # 维修完成需人工确认
     'resolved': ['closed'],
@@ -44,6 +44,7 @@ FAULT_STATUS_LABELS = {
     'transferred': '已转维修',
     'resolved': '已解决',
     'closed': '已关闭',
+    'reassigned': '已转单',
     'investigating': '调查中',  # 兼容旧状态
 }
 

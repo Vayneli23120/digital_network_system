@@ -126,6 +126,10 @@
                   <el-icon><Tools /></el-icon>
                   {{ t('faultNoteTransfer') }}
                 </el-button>
+                <el-button type="primary" @click="showReassignDialog = true" class="action-btn-with-note">
+                  <el-icon><UserFilled /></el-icon>
+                  {{ t('faultReassign') }}
+                </el-button>
               </div>
               <!-- 其他状态的快速操作按钮 -->
               <div class="quick-actions" v-if="fault.status !== 'diagnosing'">
@@ -463,6 +467,24 @@
       <template #footer>
         <el-button @click="showAssignDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="assignFault">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 转单对话框 -->
+    <el-dialog v-model="showReassignDialog" :title="t('faultReassign')" width="400px">
+      <el-form :model="reassignForm" label-width="100px">
+        <el-form-item :label="t('faultReassignTo')" required>
+          <el-select v-model="reassignForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable>
+            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('faultReassignReason')">
+          <el-input v-model="reassignForm.reason" type="textarea" :rows="2" :placeholder="t('faultReassignReasonPlaceholder')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showReassignDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="reassignFault">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -818,9 +840,11 @@ const showResolveDialog = ref(false)
 const showTransferDialog = ref(false)
 const showEditDialog = ref(false)
 const showMaintEditDialog = ref(false)  // 维修编辑对话框
+const showReassignDialog = ref(false)  // 转单对话框
 
 // 表单
 const assignForm = ref({ assigned_to: '' })
+const reassignForm = ref({ new_owner: '', reason: '' })
 const resolveForm = ref({ resolution: '' })
 const transferForm = ref({ diagnosis_text: '', maintenance_description: '', estimated_parts: '', maintenance_owner: '' })
 const diagnosisForm = ref({ diagnosis_result: 'tech_resolve', diagnosis_text: '' })
@@ -1586,6 +1610,33 @@ const assignFaultSubmit = async () => {
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     ElMessage.error(error.response?.data?.detail || t('faultAssignFailed'))
+  }
+}
+
+// 转单
+const reassignFault = async () => {
+  if (!reassignForm.value.new_owner) {
+    ElMessage.warning(t('faultAssignRequired'))
+    return
+  }
+  try {
+    await assignFault(fault.value.id, reassignForm.value.new_owner)
+    // 如果有转单原因，添加到工作日志
+    if (reassignForm.value.reason) {
+      workNotes.value.push({
+        author: localStorage.getItem('currentUser') || 'System',
+        content: `转单给 ${reassignForm.value.new_owner}，原因: ${reassignForm.value.reason}`,
+        created_at: new Date().toISOString(),
+        note_type: 'reassigned'
+      })
+    }
+    ElMessage.success(t('faultReassignSuccess'))
+    showReassignDialog.value = false
+    reassignForm.value = { new_owner: '', reason: '' }
+    loadFault()
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || t('faultReassignFailed'))
   }
 }
 
