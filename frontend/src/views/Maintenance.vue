@@ -381,9 +381,10 @@
               :label="`${part.serial_number} - ${part.name}`"
               :value="part.id"
             >
-              <div style="display: flex; gap: 8px; align-items: center">
-                <span style="color: #409EFF; font-weight: 500">{{ part.serial_number }}</span>
-                <span>{{ part.part_number }}</span>
+              <div style="display: flex; gap: 8px; align-items: center; font-size: 12px">
+                <span style="color: #409EFF; font-weight: 500; width: 100px">{{ part.serial_number }}</span>
+                <span style="color: #67C23A; width: 70px" v-if="part.po_number">PO: {{ part.po_number }}</span>
+                <span style="width: 80px">{{ part.part_number }}</span>
                 <span style="color: #606266">{{ part.name }}</span>
               </div>
             </el-option>
@@ -396,6 +397,9 @@
         <el-table v-if="maintForm.spare_parts.length > 0" :data="maintForm.spare_parts" size="small" border style="margin-top: 8px">
           <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
             <template #default="{ row }"><span style="color: #409EFF">{{ row.serial_number || '-' }}</span></template>
+          </el-table-column>
+          <el-table-column prop="po_number" :label="t('sparePoNumber')" width="100">
+            <template #default="{ row }">{{ row.po_number || '-' }}</template>
           </el-table-column>
           <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
           <el-table-column prop="name" :label="t('maintColName')" />
@@ -708,7 +712,9 @@ const searchSpareParts = async (query) => {
       part_number: item.part_number,
       name: item.name,
       serial_number: item.serial_number,
+      po_number: item.po_number,  // PO号（跟随备件整个生命周期）
       unit_price: item.unit_price,
+      location: item.location,
       quantity_in_stock: item.quantity_in_stock || 0
     }))
   } catch (e) { ElMessage.error(t('maintSearchFailed')) }
@@ -732,8 +738,22 @@ const openScanDialog = () => { scanDialogVisible.value = true }
 const onScanSessionComplete = async (result) => {
   for (const item of result.items) {
     const existing = maintForm.value.spare_parts.find(p => p.serial_number === item.serial_number)
-    if (existing) { existing.quantity += 1; ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`) }
-    else { maintForm.value.spare_parts.push({ part_id: item.part_id, part_number: item.part_number, name: item.name, serial_number: item.serial_number, unit_price: item.unit_price || 0, quantity: 1, is_from_scan: true }); ElMessage.success(`${t('maintPartAdded')}: ${item.name}`) }
+    if (existing) {
+      existing.quantity += 1
+      ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`)
+    } else {
+      maintForm.value.spare_parts.push({
+        part_id: item.part_id,
+        part_number: item.part_number,
+        name: item.name,
+        serial_number: item.serial_number,
+        po_number: item.po_number,  // 扫码也保留PO号
+        unit_price: item.unit_price || 0,
+        quantity: 1,
+        is_from_scan: true
+      })
+      ElMessage.success(`${t('maintPartAdded')}: ${item.name}`)
+    }
   }
   updatePartsCost(); scanDialogVisible.value = false
   ElMessage.success(`${t('maintAddedCount')} ${result.items.length} ${t('maintPartAdded')}`)
@@ -755,7 +775,9 @@ const addSparePartToForm = () => {
       part_number: part.part_number,
       name: part.name,
       serial_number: part.serial_number,
+      po_number: part.po_number,  // PO号（跟随备件整个生命周期）
       unit_price: part.unit_price || 0,
+      location: part.location,
       quantity: 1
     })
     ElMessage.success(`${t('maintPartAdded')}: ${part.name}`)
@@ -866,14 +888,34 @@ const addMaintenance = async () => {
     const device = devices.value.find(d => d.id === maintForm.value.device_id)
     const combinedParts = [...maintForm.value.spare_parts.map(p => ({ ...p, is_return: false })), ...maintForm.value.return_parts.map(p => ({ ...p, is_return: true }))]
     await createMaintenance({ ...maintForm.value, device_name: device?.name, parts_replaced: JSON.stringify(combinedParts) })
+    // 备件出库：关联到设备，保留PO号等信息
     for (const part of maintForm.value.spare_parts) {
       if (part.part_id && !part.is_from_scan) {
-        await createMovement({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity, serial_number: part.serial_number, reason: `${t('spareReasonMaintenanceReplace')} - ${maintForm.value.maint_type}`, operator: 'Web', reference: device?.name })
+        await createMovement({
+          part_id: part.part_id,
+          movement_type: 'out',
+          quantity: part.quantity,
+          serial_number: part.serial_number,
+          reason: `${t('spareReasonMaintenanceReplace')} - ${maintForm.value.maint_type}`,
+          operator: 'Web',
+          reference: device?.name,
+          target_device_id: maintForm.value.device_id  // 关联目标设备，PO号等信息会保留在实例中
+        })
       }
     }
+    // 返回件入库：记录来源设备
     for (const part of maintForm.value.return_parts) {
       if (part.scrap_in && part.part_id) {
-        await createMovement({ part_id: part.part_id, movement_type: 'scrap_in', quantity: part.quantity, serial_number: part.serial_number, reason: t('spareReasonReturnPartScrap'), operator: 'Web', reference: device?.name })
+        await createMovement({
+          part_id: part.part_id,
+          movement_type: 'scrap_in',
+          quantity: part.quantity,
+          serial_number: part.serial_number,
+          reason: t('spareReasonReturnPartScrap'),
+          operator: 'Web',
+          reference: device?.name,
+          source_device_id: maintForm.value.device_id  // 记录来源设备
+        })
       }
     }
     ElMessage.success(t('maintAddSuccess')); showAddDialog.value = false; resetForm(); loadMaintenances()

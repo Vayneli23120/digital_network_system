@@ -155,6 +155,7 @@ async def api_search_in_stock_instances(
             "name": part.name if part else None,
             "part_number": part.part_number if part else None,
             "serial_number": inst.serial_number,
+            "po_number": inst.po_number,  # PO号（跟随备件整个生命周期）
             "unit_price": float(inst.unit_price) if inst.unit_price else (float(part.unit_price) if part and part.unit_price else 0),
             "status": inst.status,
             "location": inst.location,
