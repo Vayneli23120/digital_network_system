@@ -402,7 +402,7 @@
     </div>
 
     <!-- 编辑维修对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('maintDetailEdit')" width="1100px" class="edit-maint-dialog">
+    <el-dialog v-model="showEditDialog" :title="t('maintDetailEdit')" width="720px" append-to-body draggable align-center class="edit-maint-dialog">
       <div class="edit-dialog-content">
         <!-- 基础信息 Section -->
         <div class="form-section">
@@ -431,7 +431,7 @@
           </div>
           <el-form :model="editForm" label-width="80px">
             <el-form-item :label="t('maintDiagnosisText')">
-              <el-input v-model="editForm.diagnosis_text" type="textarea" :rows="3" :placeholder="t('maintDiagnosisPlaceholder')" />
+              <el-input v-model="editForm.diagnosis_text" type="textarea" :rows="2" :placeholder="t('maintDiagnosisPlaceholder')" />
             </el-form-item>
             <el-form-item :label="t('maintDiagnosisResult')">
               <el-select v-model="editForm.diagnosis_result" style="width: 200px" clearable>
@@ -481,7 +481,7 @@
                 remote
                 :remote-method="searchSpareParts"
                 :loading="spareLoading"
-                style="width: 300px"
+                style="width: 200px"
                 @change="addSparePartToEditForm"
               >
                 <el-option
@@ -507,20 +507,20 @@
 
             <div class="selected-parts" v-if="editForm.spare_parts.length > 0">
               <el-table :data="editForm.spare_parts" size="small" border>
-                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="150">
+                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
                   <template #default="{ row }">{{ row.serial_number || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="part_number" :label="t('maintColModel')" width="150" />
-                <el-table-column prop="name" :label="t('maintColName')" width="150" />
-                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="80">
+                <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
+                <el-table-column prop="name" :label="t('maintColName')" min-width="100" />
+                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
                   <template #default="{ row }">
                     <el-input-number v-model="row.quantity" :min="1" size="small" @change="updateEditPartsCost" />
                   </template>
                 </el-table-column>
-                <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
+                <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="70">
                   <template #default="{ row }">{{ formatCurrency(row.unit_price) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('colOperation')" width="50">
+                <el-table-column :label="t('colOperation')" width="40">
                   <template #default="{ row, $index }">
                     <el-button type="danger" size="small" link class="delete-btn-icon" @click="removeEditSparePart($index)">
                       <el-icon><Delete /></el-icon>
@@ -559,11 +559,11 @@
             </div>
 
             <!-- 手动输入查询 -->
-            <div class="return-manual-query" style="margin-top: 12px">
+            <div class="return-manual-query" style="margin-top: 8px">
               <el-input
                 v-model="returnScanInput"
                 :placeholder="t('maintDetailReturnManualPlaceholder')"
-                style="width: 200px"
+                style="width: 150px"
                 @keyup.enter="scanReturnPart"
                 clearable
               >
@@ -612,7 +612,7 @@
                   remote
                   :remote-method="searchReturnParts"
                   :loading="spareLoading"
-                  style="width: 180px"
+                  style="width: 140px"
                   clearable
                   @change="onReturnPartSelect"
                 >
@@ -623,38 +623,35 @@
                     :value="part.id"
                   />
                 </el-select>
-                <el-input v-model="returnPartSerial" :placeholder="t('maintReturnSerialPlaceholder')" style="width: 120px" />
-                <el-input v-model="returnPartNumber" :placeholder="t('maintReturnModelManual')" style="width: 130px" />
-                <el-input v-model="returnPartName" :placeholder="t('maintReturnNameDefault')" style="width: 130px" />
+                <el-input v-model="returnPartSerial" :placeholder="t('maintReturnSerialPlaceholder')" style="width: 100px" />
+                <el-input v-model="returnPartNumber" :placeholder="t('maintReturnModelManual')" style="width: 100px" />
+                <el-input v-model="returnPartName" :placeholder="t('maintReturnNameDefault')" style="width: 100px" />
               </div>
               <div class="return-manual-row">
-                <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 90px" />
+                <el-input-number v-model="returnPartQty" :min="1" size="small" style="width: 70px" />
                 <el-checkbox v-model="returnPartScrap" :disabled="!selectedReturnPart">{{ t('maintReturnScrapLabel') }}</el-checkbox>
                 <el-button type="primary" size="small" :disabled="!returnPartSerial" @click="addReturnPart">{{ t('actionAdd') }}</el-button>
               </div>
-              <div class="return-manual-tip">{{ t('maintReturnNotFoundTip') }}</div>
             </div>
 
             <div class="return-parts-table" v-if="editForm.return_parts.length > 0">
               <el-table :data="editForm.return_parts" size="small" border>
-                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="150">
+                <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
                   <template #default="{ row }">{{ row.serial_number || '-' }}</template>
                 </el-table-column>
-                <el-table-column prop="part_number" :label="t('maintColModel')" width="150" />
-                <el-table-column prop="name" :label="t('maintColName')" width="150" />
-                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="80">
+                <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
+                <el-table-column prop="name" :label="t('maintColName')" min-width="100" />
+                <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
                   <template #default="{ row, $index }">
                     <el-input-number v-model="row.quantity" :min="1" size="small" />
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('maintReturnScrapLabel')" width="120">
+                <el-table-column :label="t('maintReturnScrapLabel')" width="90">
                   <template #default="{ row }">
                     <el-checkbox v-model="row.scrap_in" :disabled="!row.part_id" />
-                    <span class="scrap-label" v-if="row.part_id && !row.scrap_in">{{ t('maintReturnNoScrap') }}</span>
-                    <span class="scrap-label no-id" v-if="!row.part_id">{{ t('maintReturnNoPartId') }}</span>
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('colOperation')" width="50">
+                <el-table-column :label="t('colOperation')" width="40">
                   <template #default="{ row, $index }">
                     <el-button type="danger" size="small" link class="delete-btn-icon" @click="removeReturnPart($index)">
                       <el-icon><Delete /></el-icon>
@@ -711,7 +708,7 @@
           <el-input v-model="editForm.vendor" />
         </el-form-item>
         <el-form-item :label="t('maintDesc')" required>
-          <el-input v-model="editForm.description" type="textarea" :rows="4" />
+          <el-input v-model="editForm.description" type="textarea" :rows="2" />
         </el-form-item>
       </el-form>
     </div>
@@ -2950,7 +2947,7 @@ onMounted(async () => {
 
 /* ===== 编辑对话框样式 ===== */
 .edit-dialog-content {
-  max-width: 980px;
+  max-width: 680px;
   margin: 0 auto;
 }
 
@@ -2958,9 +2955,9 @@ onMounted(async () => {
 .form-section {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 20px;
-  margin-bottom: 20px;
+  border-radius: var(--radius-md);
+  padding: 12px;
+  margin-bottom: 12px;
   transition: all 0.2s;
 }
 
@@ -2975,8 +2972,8 @@ onMounted(async () => {
   font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 16px;
-  padding-bottom: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 6px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
@@ -2988,11 +2985,11 @@ onMounted(async () => {
 .scan-action-bar {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
+  gap: 10px;
+  padding: 8px 12px;
   background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
   border-radius: var(--radius-md);
-  margin-bottom: 16px;
+  margin-bottom: 10px;
 }
 
 .scan-action-bar.return {
