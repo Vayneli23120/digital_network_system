@@ -833,6 +833,7 @@ async def create_maintenance(maint_data: dict):
 
         maint = MaintenanceRecord(**filtered_data)
         db.add(maint)
+        db.flush()  # 先 flush 获取自增 ID
 
         # 创建事件记录
         event = MaintenanceEvent(
