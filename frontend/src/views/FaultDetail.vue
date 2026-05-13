@@ -50,7 +50,7 @@
           <div class="maintenance-branch" v-if="fault.status === 'transferred' && maintenanceInfo">
             <div class="branch-indicator">
               <div class="branch-arrow">↘</div>
-              <div class="branch-label">{{ t('faultMaintenanceBranch') || '转维修' }}</div>
+              <div class="branch-label">{{ t('faultMaintenanceBranch') }}</div>
             </div>
             <div class="maintenance-status-flow">
               <div
@@ -60,7 +60,7 @@
                   <el-icon v-if="['verifying', 'completed'].includes(maintenanceInfo.status)"><Check /></el-icon>
                   <span v-else>M1</span>
                 </div>
-                <div class="maint-step-label">{{ t('maintStatusRepairing') || '维修中' }}</div>
+                <div class="maint-step-label">{{ t('maintStatusRepairing') }}</div>
               </div>
               <div class="maint-step-line" :class="{ completed: ['verifying', 'completed'].includes(maintenanceInfo.status) }"></div>
               <div
@@ -70,7 +70,7 @@
                   <el-icon v-if="maintenanceInfo.status === 'completed'"><Check /></el-icon>
                   <span v-else>M2</span>
                 </div>
-                <div class="maint-step-label">{{ t('maintStatusVerifying') || '验证中' }}</div>
+                <div class="maint-step-label">{{ t('maintStatusVerifying') }}</div>
               </div>
               <div class="maint-step-line" :class="{ completed: maintenanceInfo.status === 'completed' }"></div>
               <div
@@ -80,12 +80,12 @@
                   <el-icon v-if="maintenanceInfo.status === 'completed'"><Check /></el-icon>
                   <span v-else>M3</span>
                 </div>
-                <div class="maint-step-label">{{ t('maintStatusCompleted') || '维修完成' }}</div>
+                <div class="maint-step-label">{{ t('maintStatusCompleted') }}</div>
               </div>
             </div>
             <div class="branch-return" v-if="maintenanceInfo.status === 'completed'">
               <div class="branch-arrow">↗</div>
-              <div class="branch-label">{{ t('faultReturnToResolve') || '待确认解决' }}</div>
+              <div class="branch-label">{{ t('faultReturnToResolve') }}</div>
             </div>
           </div>
 
@@ -754,7 +754,7 @@
         <div class="edit-section">
           <div class="section-title">
             <el-icon><Coin /></el-icon>
-            {{ t('maintCostDescSection') || '工时成本' }}
+            {{ t('maintCostDescSection') }}
           </div>
           <el-form :model="maintEditForm" label-width="80px">
             <el-row :gutter="20">

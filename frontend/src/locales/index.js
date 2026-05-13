@@ -301,6 +301,7 @@ export const languages = {
 
     // 操作
     actionRefresh: '刷新数据',
+    actionBack: '返回',
     actionAdd: '添加',
     actionEdit: '编辑',
     actionDelete: '删除',
@@ -1650,6 +1651,9 @@ export const languages = {
     maintProgressCancelled: '0%',
 
     // ===== 半自动状态机相关 =====
+    // 基础信息
+    maintBasicInfo: '基础信息',
+
     // 诊断信息
     maintDiagnosisSection: '诊断信息',
     maintDiagnosisFilled: '已填写',
@@ -1677,6 +1681,9 @@ export const languages = {
     maintVerifyPassed: '是否通过',
     maintVerifyPassedYes: '已通过验证',
     maintVerifyPassedNo: '未通过验证',
+
+    // 成本与描述
+    maintCostDescSection: '成本与描述',
 
     // 状态建议
     maintSuggestStatusTitle: '状态变更建议',
@@ -2608,6 +2615,7 @@ export const languages = {
 
     // 操作
     actionRefresh: 'Refresh Data',
+    actionBack: 'Back',
     actionAdd: 'Add',
     actionEdit: 'Edit',
     actionDelete: 'Delete',
@@ -3948,6 +3956,9 @@ export const languages = {
     maintProgressCancelled: '0%',
 
     // ===== Semi-Auto State Machine =====
+    // Basic Info
+    maintBasicInfo: 'Basic Info',
+
     // Diagnosis
     maintDiagnosisSection: 'Diagnosis',
     maintDiagnosisFilled: 'Filled',
@@ -3975,6 +3986,9 @@ export const languages = {
     maintVerifyPassed: 'Passed?',
     maintVerifyPassedYes: 'Verification Passed',
     maintVerifyPassedNo: 'Verification Not Passed',
+
+    // Cost & Description
+    maintCostDescSection: 'Cost & Description',
 
     // Status Suggestion
     maintSuggestStatusTitle: 'Status Change Suggestion',

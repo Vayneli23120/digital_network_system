@@ -229,18 +229,18 @@
         <div class="work-notes-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <div class="actions-card-header">
             <el-icon><Edit /></el-icon>
-            {{ t('maintWorkNotes') || '工作日志' }}
+            {{ t('maintWorkNotes') }}
           </div>
           <el-input
             v-model="newNote"
             type="textarea"
             :rows="3"
-            :placeholder="t('maintNotePlaceholder') || '添加工作进展记录...'"
+            :placeholder="t('maintNotePlaceholder')"
             class="note-input"
           />
           <el-button type="primary" size="default" class="note-submit-btn" @click="addWorkNote" :loading="addingNote">
             <el-icon><Plus /></el-icon>
-            {{ t('maintAddNote') || '添加日志' }}
+            {{ t('maintAddNote') }}
           </el-button>
         </div>
 
@@ -248,18 +248,18 @@
         <div class="flow-actions-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <div class="actions-card-header">
             <el-icon><Operation /></el-icon>
-            {{ t('maintFlowActions') || '流程操作' }}
+            {{ t('maintFlowActions') }}
           </div>
 
           <!-- 维修中状态：显示备件和提交验证按钮 -->
           <div class="flow-buttons" v-if="statusInfo.status === 'repairing'">
             <el-button type="primary" @click="openEditDialog" class="flow-btn">
               <el-icon><Box /></el-icon>
-              {{ t('maintAddSpare') || '添加备件' }}
+              {{ t('maintAddSpare') }}
             </el-button>
             <el-button type="warning" @click="openEditDialog" class="flow-btn">
               <el-icon><RefreshRight /></el-icon>
-              {{ t('maintAddReturn') || '入库返回件' }}
+              {{ t('maintAddReturn') }}
             </el-button>
             <el-button
               type="success"
@@ -268,10 +268,10 @@
               :disabled="!canSubmitVerification"
             >
               <el-icon><CircleCheck /></el-icon>
-              {{ t('maintSubmitVerification') || '提交验证' }}
+              {{ t('maintSubmitVerification') }}
             </el-button>
             <div class="flow-tip" v-if="!canSubmitVerification">
-              {{ t('maintSubmitTip') || '请先添加备件信息后再提交验证' }}
+              {{ t('maintSubmitTip') }}
             </div>
           </div>
 
@@ -279,10 +279,10 @@
           <div class="flow-buttons" v-if="statusInfo.status === 'verifying'">
             <el-button type="success" @click="verifyPass" class="flow-btn verify-btn">
               <el-icon><SuccessFilled /></el-icon>
-              {{ t('maintVerifyPass') || '验证通过' }}
+              {{ t('maintVerifyPass') }}
             </el-button>
             <div class="verify-tip">
-              {{ t('maintVerifyTip') || '设备已修复，运行一段时间确认无误后点击验证通过' }}
+              {{ t('maintVerifyTip') }}
             </div>
           </div>
         </div>
@@ -317,16 +317,16 @@
         <div class="events-timeline-card" v-if="events.length > 0">
           <div class="actions-card-header">
             <el-icon><Clock /></el-icon>
-            {{ t('maintTimeline') || '工作日志' }}
+            {{ t('maintTimeline') }}
             <el-tag v-if="maintenance.has_fault_work_notes" type="info" size="small" class="fault-notes-tag">
-              {{ t('maintIncludesFaultNotes') || '含故障诊断日志' }}
+              {{ t('maintIncludesFaultNotes') }}
             </el-tag>
           </div>
           <div class="timeline-list">
             <div class="timeline-item" v-for="(event, index) in events" :key="index" :class="[event.event_type, { 'from-fault': event.source === 'fault' }]">
               <!-- 故障来源标记 -->
               <div class="fault-source-badge" v-if="event.source === 'fault'">
-                <el-tag type="warning" size="small">{{ t('maintFromFault') || '来自故障' }}</el-tag>
+                <el-tag type="warning" size="small">{{ t('maintFromFault') }}</el-tag>
               </div>
               <div class="timeline-marker">
                 <el-icon v-if="event.event_type === 'created'"><Document /></el-icon>
@@ -408,7 +408,7 @@
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Setting /></el-icon>
-            {{ t('maintBasicInfo') || '基础信息' }}
+            {{ t('maintBasicInfo') }}
           </div>
           <el-form :model="editForm" label-width="80px">
             <el-form-item :label="t('maintType')" required>
@@ -426,7 +426,7 @@
         <div class="form-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <div class="form-section-title diagnosis">
             <el-icon><Search /></el-icon>
-            {{ t('maintDiagnosisSection') || '诊断信息' }}
+            {{ t('maintDiagnosisSection') }}
             <el-tag v-if="editForm.diagnosis_text" type="success" size="small" class="section-badge">{{ t('maintDiagnosisFilled') }}</el-tag>
           </div>
           <el-form :model="editForm" label-width="80px">
@@ -444,9 +444,9 @@
             <el-form-item>
               <el-button type="primary" @click="saveDiagnosis" :loading="savingDiagnosis">
                 <el-icon><Select /></el-icon>
-                {{ t('maintSaveDiagnosis') || '保存诊断' }}
+                {{ t('maintSaveDiagnosis') }}
               </el-button>
-              <span class="save-tip" v-if="statusInfo.status === 'created' || statusInfo.status === 'pending'">{{ t('maintDiagnosisAutoTransitionTip') || '保存后将自动进入诊断阶段' }}</span>
+              <span class="save-tip" v-if="statusInfo.status === 'created' || statusInfo.status === 'pending'">{{ t('maintDiagnosisAutoTransitionTip') }}</span>
             </el-form-item>
           </el-form>
         </div>
@@ -676,7 +676,7 @@
     <div class="form-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
       <div class="form-section-title verification">
         <el-icon><CircleCheck /></el-icon>
-        {{ t('maintVerificationSection') || '验证信息' }}
+        {{ t('maintVerificationSection') }}
         <el-tag v-if="editForm.verification_result === 'passed'" type="success" size="small" class="section-badge">{{ t('maintVerificationPassed') }}</el-tag>
         <el-tag v-if="editForm.verification_result === 'failed'" type="danger" size="small" class="section-badge">{{ t('maintVerificationFailed') }}</el-tag>
       </div>
@@ -698,7 +698,7 @@
     <div class="form-section">
       <div class="form-section-title">
         <el-icon><Document /></el-icon>
-        {{ t('maintCostDescSection') || '成本与描述' }}
+        {{ t('maintCostDescSection') }}
       </div>
       <el-form :model="editForm" label-width="80px">
         <el-form-item :label="t('maintLaborHours')">
@@ -1017,7 +1017,7 @@ const handleCancel = async () => {
 // 添加工作日志
 const addWorkNote = async () => {
   if (!newNote.value.trim()) {
-    ElMessage.warning(t('maintNotePlaceholder') || '请输入日志内容')
+    ElMessage.warning(t('maintNotePlaceholder'))
     return
   }
 
@@ -1027,12 +1027,12 @@ const addWorkNote = async () => {
       note: newNote.value,
       operator: 'Web'
     })
-    ElMessage.success(t('maintNoteAdded') || '工作日志已添加')
+    ElMessage.success(t('maintNoteAdded'))
     newNote.value = ''
     loadMaintenance()
   } catch (e) {
     const detail = e.response?.data?.detail || e.message
-    ElMessage.error(t('maintNoteFailed') || '添加日志失败: ' + detail)
+    ElMessage.error(t('maintNoteFailed') + ': ' + detail)
   } finally {
     addingNote.value = false
   }
@@ -1042,8 +1042,8 @@ const addWorkNote = async () => {
 const submitForVerification = async () => {
   try {
     await ElMessageBox.confirm(
-      t('maintSubmitConfirm') || '确认提交验证？提交后进入验证阶段，需要运行一段时间确认无误。',
-      t('msgConfirm') || '确认',
+      t('maintSubmitConfirm'),
+      t('msgConfirm'),
       { type: 'info' }
     )
 
@@ -1063,12 +1063,12 @@ const submitForVerification = async () => {
     const result = await api.post(`/maintenance/${maintenance.value.id}/submit-verification`, {
       operator: 'Web'
     })
-    ElMessage.success(t('maintSubmitted') || '已提交验证')
+    ElMessage.success(t('maintSubmitted'))
     loadMaintenance()
   } catch (e) {
     if (e !== 'cancel') {
       const detail = e.response?.data?.detail || e.message
-      ElMessage.error(t('maintSubmitFailed') || '提交验证失败: ' + detail)
+      ElMessage.error(t('maintSubmitFailed') + ': ' + detail)
     }
   }
 }
@@ -1077,20 +1077,20 @@ const submitForVerification = async () => {
 const verifyPass = async () => {
   try {
     await ElMessageBox.confirm(
-      t('maintVerifyConfirm') || '确认验证通过？设备运行正常，维修完成。',
-      t('msgConfirm') || '确认',
+      t('maintVerifyConfirm'),
+      t('msgConfirm'),
       { type: 'success' }
     )
 
     const result = await api.post(`/maintenance/${maintenance.value.id}/verify-pass`, {
       operator: 'Web'
     })
-    ElMessage.success(t('maintVerified') || '维修已完成')
+    ElMessage.success(t('maintVerified'))
     loadMaintenance()
   } catch (e) {
     if (e !== 'cancel') {
       const detail = e.response?.data?.detail || e.message
-      ElMessage.error(t('maintVerifyFailed') || '验证通过失败: ' + detail)
+      ElMessage.error(t('maintVerifyFailed') + ': ' + detail)
     }
   }
 }
@@ -1098,7 +1098,7 @@ const verifyPass = async () => {
 // 保存诊断信息
 const saveDiagnosis = async () => {
   if (!editForm.value.diagnosis_text) {
-    ElMessage.warning(t('maintDiagnosisPlaceholder') || '请输入诊断内容')
+    ElMessage.warning(t('maintDiagnosisPlaceholder'))
     return
   }
 
@@ -1117,16 +1117,16 @@ const saveDiagnosis = async () => {
         operator: 'Web',
         notes: '填写诊断信息后自动推进'
       })
-      ElMessage.success(t('maintDiagnosisSavedAndTransitioned') || '诊断信息已保存，状态已推进到诊断阶段')
+      ElMessage.success(t('maintDiagnosisSavedAndTransitioned'))
     } else {
-      ElMessage.success(t('maintDiagnosisSaved') || '诊断信息已保存')
+      ElMessage.success(t('maintDiagnosisSaved'))
     }
 
     // 刷新数据
     loadMaintenance()
   } catch (e) {
     const detail = e.response?.data?.detail || e.message
-    ElMessage.error(t('maintDiagnosisSaveFailed') || '保存诊断信息失败: ' + detail)
+    ElMessage.error(t('maintDiagnosisSaveFailed') + ': ' + detail)
   } finally {
     savingDiagnosis.value = false
   }
