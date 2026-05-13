@@ -425,7 +425,8 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
     return {
         "access_token": access_token,
         "token_type": "bearer",
-        "expires_in": config.security.jwt_access_token_expire_minutes * 60
+        "expires_in": config.security.jwt_access_token_expire_minutes * 60,
+        "username": user.username  # 返回数据库中的标准用户名
     }
 
 

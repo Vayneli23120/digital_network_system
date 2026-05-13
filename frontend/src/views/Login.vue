@@ -104,9 +104,9 @@ const handleLogin = async () => {
 
     const result = await login(loginForm)
 
-    // Store login state and username
+    // Store login state and username (use backend returned username for consistency)
     localStorage.setItem('isLoggedIn', 'true')
-    localStorage.setItem('currentUser', loginForm.username)
+    localStorage.setItem('currentUser', result.username || loginForm.username)
     localStorage.setItem('accessToken', result.access_token)
 
     ElMessage.success(t('loginSuccess'))
