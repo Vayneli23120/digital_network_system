@@ -237,6 +237,19 @@ async def get_maintenance(maint_id: int):
         # 故障工作日志放在最前面，然后是维修事件
         events = fault_work_notes + build_events_from_record(maintenance)
 
+        # 查询 MaintenanceEvent 表中的实际事件（包括 work_note）
+        db_events = db.query(MaintenanceEvent).filter(
+            MaintenanceEvent.maintenance_id == maint_id
+        ).order_by(MaintenanceEvent.event_time).all()
+
+        for e in db_events:
+            events.append({
+                "event_type": e.event_type,
+                "event_time": e.event_time.isoformat() if e.event_time else None,
+                "operator": e.operator or "System",
+                "notes": e.notes or ""
+            })
+
         # 按时间排序，最新的在最上面
         events.sort(key=lambda e: e.get('event_time') or '', reverse=True)
 
