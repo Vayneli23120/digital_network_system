@@ -1724,7 +1724,7 @@ onMounted(async () => {
   // 加载用户列表
   try {
     const usersData = await getUsers()
-    users.value = usersData.items || []
+    users.value = Array.isArray(usersData) ? usersData : (usersData.items || [])
   } catch (e) {
     console.error('Failed to load users:', e)
   }

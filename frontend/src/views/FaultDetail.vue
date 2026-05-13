@@ -1602,7 +1602,7 @@ const loadFault = async () => {
 
     // 加载用户列表
     const usersData = await getUsers()
-    users.value = usersData.items || []
+    users.value = Array.isArray(usersData) ? usersData : (usersData.items || [])
   } catch (error) {
     ElMessage.error(t('faultDetailLoadFailed'))
   } finally {
