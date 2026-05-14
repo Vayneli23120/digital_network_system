@@ -513,8 +513,8 @@
     </el-dialog>
 
     <!-- 编辑故障对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="480px" append-to-body draggable align-center class="fault-edit-dialog">
-      <el-form :model="editForm" label-width="80px">
+    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="500px" append-to-body draggable align-center class="fault-edit-dialog">
+      <el-form :model="editForm" label-width="90px">
         <el-form-item :label="t('faultAssignTo')">
           <el-select v-model="editForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable style="width: 100%">
             <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
