@@ -513,66 +513,45 @@
     </el-dialog>
 
     <!-- 编辑故障对话框 -->
-    <!-- 编辑故障对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="520px" append-to-body draggable align-center class="fault-edit-dialog">
-      <div class="edit-dialog-content">
-        <!-- 负责人变更（转单） -->
-        <div class="form-section" v-if="fault.status === 'diagnosing'">
-          <div class="form-section-title">
-            <el-icon><UserFilled /></el-icon>
-            {{ t('faultOwnerSection') }}
-          </div>
-          <el-form :model="editForm" label-width="70px">
-            <el-form-item :label="t('faultCurrentOwner')">
-              <span class="current-value">{{ fault.assigned_to || '-' }}</span>
-            </el-form-item>
-            <el-form-item :label="t('faultNewOwner')">
-              <el-select v-model="editForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable>
-                <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('faultReassignReason')">
-              <el-input v-model="editForm.reassign_reason" type="textarea" :rows="2" :placeholder="t('faultReassignReasonPlaceholder')" />
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 故障基本信息 -->
-        <div class="form-section">
-          <div class="form-section-title">
-            <el-icon><WarningFilled /></el-icon>
-            {{ t('faultDetailInfo') }}
-          </div>
-          <el-form :model="editForm" label-width="70px">
-            <el-form-item :label="t('faultLevel')">
-              <el-select v-model="editForm.severity" style="width: 150px">
-                <el-option :label="t('dashCritical')" value="critical" />
-                <el-option :label="t('dashMajor')" value="major" />
-                <el-option :label="t('dashMinor')" value="minor" />
-                <el-option :label="t('dashWarning')" value="warning" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('faultType')">
-              <el-select v-model="editForm.fault_type" style="width: 150px" clearable>
-                <el-option :label="t('faultTypeHardware')" value="hardware" />
-                <el-option :label="t('faultTypeSoftware')" value="software" />
-                <el-option :label="t('faultTypeConfig')" value="config" />
-                <el-option :label="t('faultTypeNetwork')" value="network" />
-                <el-option :label="t('faultTypeOther')" value="other" />
-              </el-select>
-            </el-form-item>
-            <el-form-item :label="t('faultDowntimeMinutes')">
-              <el-input-number v-model="editForm.downtime_minutes" :min="0" style="width: 120px" />
-            </el-form-item>
-            <el-form-item :label="t('faultImpact')">
-              <el-input v-model="editForm.impact" type="textarea" :rows="2" />
-            </el-form-item>
-            <el-form-item :label="t('faultDescription')">
-              <el-input v-model="editForm.description" type="textarea" :rows="3" />
-            </el-form-item>
-          </el-form>
-        </div>
-      </div>
+    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="480px" append-to-body draggable align-center class="fault-edit-dialog">
+      <el-form :model="editForm" label-width="80px">
+        <el-form-item :label="t('faultAssignTo')">
+          <el-select v-model="editForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable style="width: 100%">
+            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+          </el-select>
+          <div class="form-tip" v-if="fault.assigned_to">{{ t('faultCurrentOwner') }}: {{ fault.assigned_to }}</div>
+        </el-form-item>
+        <el-form-item :label="t('faultLevel')">
+          <el-select v-model="editForm.severity" style="width: 100%">
+            <el-option :label="t('dashCritical')" value="critical" />
+            <el-option :label="t('dashMajor')" value="major" />
+            <el-option :label="t('dashMinor')" value="minor" />
+            <el-option :label="t('dashWarning')" value="warning" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('faultType')">
+          <el-select v-model="editForm.fault_type" clearable style="width: 100%">
+            <el-option :label="t('faultTypeHardware')" value="hardware" />
+            <el-option :label="t('faultTypeSoftware')" value="software" />
+            <el-option :label="t('faultTypeConfig')" value="config" />
+            <el-option :label="t('faultTypeNetwork')" value="network" />
+            <el-option :label="t('faultTypeOther')" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('faultDowntime')">
+          <el-input-number v-model="editForm.downtime_minutes" :min="0" style="width: 120px" />
+          <span class="unit-text">{{ t('faultMinutes') }}</span>
+        </el-form-item>
+        <el-form-item :label="t('faultImpact')">
+          <el-input v-model="editForm.impact" type="textarea" :rows="2" />
+        </el-form-item>
+        <el-form-item :label="t('faultDescription')">
+          <el-input v-model="editForm.description" type="textarea" :rows="3" />
+        </el-form-item>
+        <el-form-item :label="t('faultWorkNotes')">
+          <el-input v-model="editForm.work_note" type="textarea" :rows="2" :placeholder="t('faultNotePlaceholder')" />
+        </el-form-item>
+      </el-form>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="updateFaultSubmit">{{ t('actionConfirm') }}</el-button>
@@ -863,8 +842,8 @@ const editForm = ref({
   downtime_minutes: 0,
   impact: '',
   description: '',
-  new_owner: '',  // 转单新负责人
-  reassign_reason: ''  // 转单原因
+  new_owner: '',  // 新负责人（转单）
+  work_note: ''   // 工作日志/备注
 })
 
 // 维修编辑相关
@@ -1740,20 +1719,13 @@ const closeFaultSubmit = async () => {
 // 更新故障
 const updateFaultSubmit = async () => {
   try {
-    // 如果选择了新负责人，执行转单
+    // 1. 如果选择了新负责人且不同于当前负责人，执行转单
     if (editForm.value.new_owner && editForm.value.new_owner !== fault.value.assigned_to) {
       await assignFault(fault.value.id, editForm.value.new_owner)
-      // 添加转单日志
-      if (editForm.value.reassign_reason) {
-        workNotes.value.push({
-          author: localStorage.getItem('currentUser') || 'System',
-          content: `转单给 ${editForm.value.new_owner}，原因: ${editForm.value.reassign_reason}`,
-          created_at: new Date().toISOString(),
-          note_type: 'reassigned'
-        })
-      }
+      // 后端会自动发送通知给新负责人
     }
-    // 更新故障基本信息
+
+    // 2. 更新故障基本信息
     await updateFaultApi(fault.value.id, {
       severity: editForm.value.severity,
       fault_type: editForm.value.fault_type,
@@ -1761,10 +1733,23 @@ const updateFaultSubmit = async () => {
       impact: editForm.value.impact,
       description: editForm.value.description
     })
+
+    // 3. 如果有工作日志内容，添加到工作日志
+    if (editForm.value.work_note && editForm.value.work_note.trim()) {
+      try {
+        await api.post(`/faults/${fault.value.id}/work-note`, {
+          note: editForm.value.work_note.trim(),
+          author: localStorage.getItem('currentUser') || 'Web'
+        })
+      } catch (e) {
+        console.error('Failed to add work note:', e)
+      }
+    }
+
     ElMessage.success(t('faultUpdateSuccess'))
     showEditDialog.value = false
     editForm.value.new_owner = ''
-    editForm.value.reassign_reason = ''
+    editForm.value.work_note = ''
     loadFault()
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
@@ -1816,46 +1801,20 @@ onUnmounted(() => {
 }
 
 /* ===== 编辑对话框样式 ===== */
-.fault-edit-dialog .edit-dialog-content {
-  max-width: 480px;
-  margin: 0 auto;
-}
-
-.fault-edit-dialog .form-section {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  padding: 10px;
-  margin-bottom: 10px;
-}
-
-.fault-edit-dialog .form-section-title {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.fault-edit-dialog .form-section-title .el-icon {
-  color: var(--color-gb);
-}
-
 .fault-edit-dialog .el-form-item {
-  margin-bottom: 8px;
+  margin-bottom: 12px;
 }
 
-.fault-edit-dialog .el-form-item__label {
-  font-size: 13px;
-}
-
-.fault-edit-dialog .current-value {
+.fault-edit-dialog .form-tip {
+  font-size: 12px;
   color: var(--text-secondary);
-  font-weight: 500;
+  margin-top: 4px;
+}
+
+.fault-edit-dialog .unit-text {
+  margin-left: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 /* ===== 页面顶部导航条 ===== */

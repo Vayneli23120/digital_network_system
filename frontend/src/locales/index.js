@@ -1405,9 +1405,8 @@ export const languages = {
     faultReassignSuccess: '转单成功',
     faultReassignFailed: '转单失败',
     faultAssignRequired: '请选择负责人',
-    faultOwnerSection: '负责人变更',
     faultCurrentOwner: '当前负责人',
-    faultNewOwner: '新负责人',
+    faultDowntime: '停机时间',
 
     // 维修进度
     maintProgress: '维修进度',
@@ -3649,9 +3648,8 @@ export const languages = {
     faultReassignSuccess: 'Reassigned successfully',
     faultReassignFailed: 'Reassign failed',
     faultAssignRequired: 'Please select an owner',
-    faultOwnerSection: 'Owner Change',
     faultCurrentOwner: 'Current Owner',
-    faultNewOwner: 'New Owner',
+    faultDowntime: 'Downtime',
     maintProgress: 'Maintenance Progress',
     maintPriority: 'Priority',
     faultAcceptFault: 'Accept Fault',
