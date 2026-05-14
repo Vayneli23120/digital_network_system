@@ -36,43 +36,66 @@
     </el-card>
 
     <!-- 添加/编辑模板对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('tplEdit') : t('tplNew')" width="800px">
-      <el-form :model="templateForm" label-width="100px">
-        <el-form-item :label="t('tplName')" required>
-          <el-input v-model="templateForm.name" :placeholder="t('tplNamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('tplDescription')">
-          <el-input v-model="templateForm.description" :placeholder="t('tplDescriptionPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('tplContent')" required>
-          <el-input
-            v-model="templateForm.template_content"
-            type="textarea"
-            :rows="15"
-            :placeholder="t('tplContentPlaceholder')"
-            class="template-editor"
-          />
-        </el-form-item>
-        <el-form-item :label="t('tplVariables')">
-          <el-input
-            v-model="templateForm.variables"
-            type="textarea"
-            :rows="3"
-            :placeholder="t('tplVariablesPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('tplVarHelp')">
-          <el-alert type="info" :closable="false">
-            <p>{{ t('tplAvailableVars') }}</p>
-            <ul>
-              <li><code>{{ hostname }}</code> - {{ t('tplVarHostname') }}</li>
-              <li><code>{{ ip }}</code> - {{ t('tplVarIp') }}</li>
-              <li><code>{{ location }}</code> - {{ t('tplVarLocation') }}</li>
-              <li><code>{{ now }}</code> - {{ t('tplVarNow') }}</li>
-              <li><code>{{ now_str }}</code> - {{ t('tplVarNowStr') }}</li>
-            </ul>
-          </el-alert>
-        </el-form-item>
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('tplEdit') : t('tplNew')" width="800px" append-to-body draggable align-center class="template-dialog">
+      <el-form :model="templateForm" label-width="90px" size="default">
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('tplBasicSection') }}</span>
+          </div>
+          <el-form-item :label="t('tplName')" required>
+            <el-input v-model="templateForm.name" :placeholder="t('tplNamePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('tplDescription')">
+            <el-input v-model="templateForm.description" :placeholder="t('tplDescriptionPlaceholder')" />
+          </el-form-item>
+        </div>
+
+        <!-- 模板内容 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Edit /></el-icon>
+            <span>{{ t('tplContentSection') }}</span>
+          </div>
+          <el-form-item :label="t('tplContent')" required>
+            <el-input
+              v-model="templateForm.template_content"
+              type="textarea"
+              :rows="12"
+              :placeholder="t('tplContentPlaceholder')"
+              class="template-editor"
+            />
+          </el-form-item>
+        </div>
+
+        <!-- 变量配置 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Setting /></el-icon>
+            <span>{{ t('tplVariablesSection') }}</span>
+          </div>
+          <el-form-item :label="t('tplVariables')">
+            <el-input
+              v-model="templateForm.variables"
+              type="textarea"
+              :rows="3"
+              :placeholder="t('tplVariablesPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item :label="t('tplVarHelp')">
+            <el-alert type="info" :closable="false">
+              <p>{{ t('tplAvailableVars') }}</p>
+              <ul>
+                <li><code>{{ hostname }}</code> - {{ t('tplVarHostname') }}</li>
+                <li><code>{{ ip }}</code> - {{ t('tplVarIp') }}</li>
+                <li><code>{{ location }}</code> - {{ t('tplVarLocation') }}</li>
+                <li><code>{{ now }}</code> - {{ t('tplVarNow') }}</li>
+                <li><code>{{ now_str }}</code> - {{ t('tplVarNowStr') }}</li>
+              </ul>
+            </el-alert>
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
@@ -94,6 +117,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Document, Edit, Setting } from '@element-plus/icons-vue'
 import { getTemplates, createTemplate as createTemplateApi, getTemplate, updateTemplate as updateTemplateApi, deleteTemplate as deleteTemplateApi } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
@@ -274,6 +298,45 @@ onMounted(() => {
 .dark .template-content {
   background: #1e1e1e;
   color: #d4d4d4;
+}
+
+/* 对话框样式 */
+.template-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.template-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.template-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.template-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
+/* 暗黑模式 */
+.dark .template-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+.dark .template-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .template-dialog .section-header .el-icon {
+  color: #58a6ff;
 }
 
 ul {

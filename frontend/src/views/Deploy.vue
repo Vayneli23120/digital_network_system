@@ -245,8 +245,8 @@
     </el-row>
 
     <!-- 变量说明对话框 -->
-    <el-dialog v-model="showVariableHelp" :title="t('deployVariableDialog')" width="800px">
-      <el-table :data="allVariables" style="width: 100%">
+    <el-dialog v-model="showVariableHelp" :title="t('deployVariableDialog')" width="800px" append-to-body draggable align-center class="deploy-help-dialog">
+      <el-table :data="allVariables" style="width: 100%" stripe>
         <el-table-column prop="key" :label="t('deployVariableName')" width="200" />
         <el-table-column prop="description" :label="t('deployDescription')" />
         <el-table-column prop="example" :label="t('deployExampleValue')" width="200" />

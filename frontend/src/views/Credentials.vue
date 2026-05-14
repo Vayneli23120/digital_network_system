@@ -36,41 +36,56 @@
     </el-card>
 
     <!-- 添加/编辑凭证组对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('credEdit') : t('credNew')" width="600px">
-      <el-form :model="credentialForm" label-width="120px">
-        <el-form-item :label="t('credGroupName')" required>
-          <el-input v-model="credentialForm.name" :placeholder="t('credGroupNamePlaceholder')" :disabled="editMode" />
-        </el-form-item>
-        <el-form-item :label="t('credDescription')">
-          <el-input v-model="credentialForm.description" :placeholder="t('credDescriptionPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('credSshUsername')" required>
-          <el-input v-model="credentialForm.username" :placeholder="t('credUsernamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('credSshPassword')" required :required="!editMode">
-          <el-input
-            v-model="credentialForm.password"
-            type="password"
-            show-password
-            :placeholder="editMode ? t('credPasswordEditPlaceholder') : t('credPasswordPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item :label="t('credEnablePassword')">
-          <el-input
-            v-model="credentialForm.enable_password"
-            type="password"
-            show-password
-            :placeholder="t('credEnablePasswordPlaceholder')"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-alert type="info" :closable="false">
-            <template #title>
-              <p>{{ t('credEncryptInfo') }}</p>
-              <p>{{ t('credRequiredInfo') }}</p>
-            </template>
-          </el-alert>
-        </el-form-item>
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('credEdit') : t('credNew')" width="600px" append-to-body draggable align-center class="credential-dialog">
+      <el-form :model="credentialForm" label-width="100px" size="default">
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Key /></el-icon>
+            <span>{{ t('credBasicSection') }}</span>
+          </div>
+          <el-form-item :label="t('credGroupName')" required>
+            <el-input v-model="credentialForm.name" :placeholder="t('credGroupNamePlaceholder')" :disabled="editMode" />
+          </el-form-item>
+          <el-form-item :label="t('credDescription')">
+            <el-input v-model="credentialForm.description" :placeholder="t('credDescriptionPlaceholder')" />
+          </el-form-item>
+        </div>
+
+        <!-- SSH认证 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Lock /></el-icon>
+            <span>{{ t('credSshSection') }}</span>
+          </div>
+          <el-form-item :label="t('credSshUsername')" required>
+            <el-input v-model="credentialForm.username" :placeholder="t('credUsernamePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('credSshPassword')" :required="!editMode">
+            <el-input
+              v-model="credentialForm.password"
+              type="password"
+              show-password
+              :placeholder="editMode ? t('credPasswordEditPlaceholder') : t('credPasswordPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item :label="t('credEnablePassword')">
+            <el-input
+              v-model="credentialForm.enable_password"
+              type="password"
+              show-password
+              :placeholder="t('credEnablePasswordPlaceholder')"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-alert type="info" :closable="false">
+              <template #title>
+                <p>{{ t('credEncryptInfo') }}</p>
+                <p>{{ t('credRequiredInfo') }}</p>
+              </template>
+            </el-alert>
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
@@ -83,6 +98,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Key, Lock } from '@element-plus/icons-vue'
 import { getCredentials, createCredential as createCredentialApi, getCredential, updateCredential as updateCredentialApi, deleteCredential as deleteCredentialApi } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -230,5 +246,44 @@ onMounted(() => {
 <style scoped>
 .credentials-page {
   padding: 0;
+}
+
+/* 对话框样式 */
+.credential-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.credential-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.credential-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.credential-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
+/* 暗黑模式 */
+.dark .credential-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+.dark .credential-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .credential-dialog .section-header .el-icon {
+  color: #58a6ff;
 }
 </style>

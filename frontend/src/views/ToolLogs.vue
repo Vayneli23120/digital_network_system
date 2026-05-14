@@ -127,49 +127,68 @@
       </div>
     </div>
 
-    <!-- Detail Modal -->
-    <div class="modal-overlay" v-if="showDetailDialog" @click="showDetailDialog = false">
-      <div class="modal modal-lg" @click.stop>
-        <div class="modal-hd">
-          <span class="modal-title">{{ t('toolDetailTitle') }}</span>
-          <button class="modal-close" @click="showDetailDialog = false">×</button>
-        </div>
-        <div class="modal-body" v-loading="detailLoading">
+    <!-- Detail Dialog -->
+    <el-dialog v-model="showDetailDialog" :title="t('toolDetailTitle')" width="700px" append-to-body draggable align-center class="tool-detail-dialog">
+      <div v-loading="detailLoading">
+        <!-- 基本信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><InfoFilled /></el-icon>
+            <span>{{ t('toolBasicInfo') }}</span>
+          </div>
           <div class="detail-grid">
-            <div class="detail-row">
-              <label>{{ t('toolDetailToolType') }}</label>
-              <span class="tag tag-blue">{{ selectedLog?.tool_type }}</span>
-            </div>
-            <div class="detail-row">
-              <label>{{ t('toolDetailStatus') }}</label>
-              <span :class="['tag', getStatusTag(selectedLog?.status)]">{{ selectedLog?.status }}</span>
-            </div>
-            <div class="detail-row">
-              <label>{{ t('toolDetailTime') }}</label>
-              <span class="mono">{{ formatDateTime(selectedLog?.timestamp) }}</span>
-            </div>
-            <div class="detail-row">
-              <label>{{ t('toolDetailDuration') }}</label>
-              <span class="mono">{{ selectedLog?.duration_ms ? selectedLog.duration_ms + 'ms' : '-' }}</span>
-            </div>
-            <div class="detail-row full">
+            <el-row :gutter="16">
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailToolType') }}</label>
+                  <el-tag type="primary" size="small">{{ selectedLog?.tool_type }}</el-tag>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailStatus') }}</label>
+                  <el-tag :type="getStatusTagType(selectedLog?.status)" size="small">{{ selectedLog?.status }}</el-tag>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailTime') }}</label>
+                  <span class="mono-text">{{ formatDateTime(selectedLog?.timestamp) }}</span>
+                </div>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16" style="margin-top: 12px">
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailDuration') }}</label>
+                  <span class="mono-text">{{ selectedLog?.duration_ms ? selectedLog.duration_ms + 'ms' : '-' }}</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailTarget') }}</label>
+                  <span class="mono-text">{{ selectedLog?.target || '-' }}</span>
+                </div>
+              </el-col>
+              <el-col :span="8">
+                <div class="detail-item">
+                  <label>{{ t('toolDetailOperator') }}</label>
+                  <span>{{ selectedLog?.created_by || '-' }}</span>
+                </div>
+              </el-col>
+            </el-row>
+            <div class="detail-item full-width" style="margin-top: 12px">
               <label>{{ t('toolDetailAction') }}</label>
               <span>{{ selectedLog?.operation }}</span>
             </div>
-            <div class="detail-row">
-              <label>{{ t('toolDetailTarget') }}</label>
-              <span class="mono">{{ selectedLog?.target || '-' }}</span>
-            </div>
-            <div class="detail-row">
-              <label>{{ t('toolDetailOperator') }}</label>
-              <span>{{ selectedLog?.created_by || '-' }}</span>
-            </div>
           </div>
+        </div>
 
-          <!-- Log Content -->
-          <div class="section-title" v-if="selectedLog?.log_content">
-            <span class="section-marker"></span>
-            {{ t('toolDetailContent') }}
+        <!-- 日志内容 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('toolDetailContent') }}</span>
           </div>
           <div class="log-content" v-if="selectedLog?.log_content">
             <pre>{{ selectedLog.log_content }}</pre>
@@ -179,22 +198,22 @@
             <span>{{ t('toolNoContent') }}</span>
           </div>
         </div>
-        <div class="modal-ft">
-          <button class="btn btn-ghost" @click="showDetailDialog = false">{{ t('actionClose') }}</button>
-          <button class="btn btn-primary" @click="copyLogContent" v-if="selectedLog?.log_content">
-            <el-icon><CopyDocument /></el-icon>
-            {{ t('toolCopyLog') }}
-          </button>
-        </div>
       </div>
-    </div>
+      <template #footer>
+        <el-button @click="showDetailDialog = false">{{ t('actionClose') }}</el-button>
+        <el-button type="primary" @click="copyLogContent" v-if="selectedLog?.log_content">
+          <el-icon><CopyDocument /></el-icon>
+          {{ t('toolCopyLog') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Delete, Search, Document, CopyDocument } from '@element-plus/icons-vue'
+import { Refresh, Delete, Search, Document, CopyDocument, InfoFilled } from '@element-plus/icons-vue'
 import { getToolLogs, getToolLogStats, cleanupToolLogs, getToolLogDetail } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -262,6 +281,11 @@ const showDetail = async (row) => {
 const getStatusTag = (status) => {
   const map = { success: 'tag-green', failed: 'tag-red', running: 'tag-yellow' }
   return map[status] || 'tag-gray'
+}
+
+const getStatusTagType = (status) => {
+  const map = { success: 'success', failed: 'danger', running: 'warning' }
+  return map[status] || 'info'
 }
 
 const formatDateTime = (datetimeStr) => {
@@ -593,130 +617,65 @@ onMounted(() => {
   gap: 8px;
 }
 
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 31, 92, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
+/* 详情对话框样式 */
+.tool-detail-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
 }
-
-.modal {
-  background: var(--surface);
-  border-radius: var(--radius-modal);
-  max-width: 720px;
-  width: 90%;
-  box-shadow: var(--shadow-modal);
-}
-
-.modal-lg {
-  max-width: 900px;
-}
-
-.modal-hd {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 24px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.modal-close {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 18px;
-  color: var(--ink3);
-  cursor: pointer;
-}
-
-.modal-close:hover {
-  background: var(--color-gb-ghost);
-}
-
-.modal-body {
-  padding: 20px 24px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.modal-ft {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 14px 24px;
-  border-top: 1px solid var(--border);
-}
-
-/* Detail Grid */
-.detail-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  margin-bottom: 20px;
-}
-
-.detail-row {
+.tool-detail-dialog .section-header {
   display: flex;
   align-items: center;
   gap: 8px;
-}
-
-.detail-row.full {
-  grid-column: 1 / -1;
-}
-
-.detail-row label {
-  min-width: 80px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink3);
-}
-
-.detail-row span {
   font-size: 13px;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
 }
-
-.mono {
+.tool-detail-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.tool-detail-dialog .detail-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tool-detail-dialog .detail-item label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+.tool-detail-dialog .detail-item span {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+.tool-detail-dialog .detail-item.full-width {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.tool-detail-dialog .detail-item.full-width label {
+  min-width: 80px;
+}
+.tool-detail-dialog .mono-text {
   font-family: var(--font-mono);
 }
 
-/* Section Title */
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--ink3);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  margin-bottom: 12px;
+/* 暗黑模式 */
+.dark .tool-detail-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
 }
-
-.section-marker {
-  width: 3px;
-  height: 14px;
-  background: var(--color-gy);
-  border-radius: 2px;
+.dark .tool-detail-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .tool-detail-dialog .section-header .el-icon {
+  color: #58a6ff;
 }
 
 /* Log Content */

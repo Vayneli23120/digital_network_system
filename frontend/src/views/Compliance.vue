@@ -73,17 +73,32 @@
     </el-card>
 
     <!-- 运行检查对话框 -->
-    <el-dialog v-model="checkDialogVisible" :title="t('complianceRunDialogTitle')" width="600px">
-      <el-form :model="checkForm" label-width="100px">
-        <el-form-item :label="t('complianceDeviceName')" required>
-          <el-input v-model="checkForm.device_name" />
-        </el-form-item>
-        <el-form-item :label="t('complianceDeviceIp')">
-          <el-input v-model="checkForm.device_ip" />
-        </el-form-item>
-        <el-form-item :label="t('complianceConfigText')" required>
-          <el-input v-model="checkForm.config_text" type="textarea" :rows="10" :placeholder="t('complianceConfigPlaceholder')" />
-        </el-form-item>
+    <el-dialog v-model="checkDialogVisible" :title="t('complianceRunDialogTitle')" width="600px" append-to-body draggable align-center class="compliance-dialog">
+      <el-form :model="checkForm" label-width="90px" size="default">
+        <!-- 设备信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Connection /></el-icon>
+            <span>{{ t('complianceDeviceSection') }}</span>
+          </div>
+          <el-form-item :label="t('complianceDeviceName')" required>
+            <el-input v-model="checkForm.device_name" />
+          </el-form-item>
+          <el-form-item :label="t('complianceDeviceIp')">
+            <el-input v-model="checkForm.device_ip" />
+          </el-form-item>
+        </div>
+
+        <!-- 配置内容 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('complianceConfigSection') }}</span>
+          </div>
+          <el-form-item :label="t('complianceConfigText')" required>
+            <el-input v-model="checkForm.config_text" type="textarea" :rows="10" :placeholder="t('complianceConfigPlaceholder')" />
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="checkDialogVisible = false">{{ t('actionCancel') }}</el-button>
@@ -96,6 +111,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Connection, Document } from '@element-plus/icons-vue'
 import { getCheckItems, runComplianceCheck } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
@@ -149,4 +165,43 @@ onMounted(loadChecks)
 
 <style scoped>
 .stats-row { margin: var(--gap-md) 0; }
+
+/* 对话框样式 */
+.compliance-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.compliance-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.compliance-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.compliance-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
+/* 暗黑模式 */
+.dark .compliance-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+.dark .compliance-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .compliance-dialog .section-header .el-icon {
+  color: #58a6ff;
+}
 </style>
