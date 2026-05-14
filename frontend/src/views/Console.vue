@@ -84,11 +84,60 @@
       </div>
     </div>
 
-    <!-- Tips for Config Deploy -->
+    <!-- Tips for SSH Deploy -->
     <div class="info-tip-card" v-if="connected">
       <el-icon><InfoFilled /></el-icon>
-      <span>{{ t('consoleDeployTip') }}</span>
+      <span>{{ t('consoleSshDeployTip') }}</span>
       <router-link to="/deploy" class="tip-link">{{ t('consoleGoToDeploy') }}</router-link>
+    </div>
+
+    <!-- Serial Config Push Panel -->
+    <div class="panel config-push-panel" v-if="connected">
+      <div class="panel-hd">
+        <span class="panel-title">{{ t('consoleSerialPushTitle') }}</span>
+      </div>
+      <div class="panel-body">
+        <el-row :gutter="16">
+          <el-col :span="8">
+            <div class="form-row">
+              <label class="form-label">{{ t('consoleConfigTemplate') }}</label>
+              <select class="fselect" v-model="selectedTemplate">
+                <option value="">{{ t('consoleSelectTemplate') }}</option>
+                <option v-for="template in templates" :key="template.id" :value="template.id">
+                  {{ template.name }}
+                </option>
+              </select>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="form-row">
+              <label class="form-label">{{ t('consoleConfigFile') }}</label>
+              <select class="fselect" v-model="selectedBackup">
+                <option value="">{{ t('consoleSelectBackup') }}</option>
+                <option v-for="backup in backups" :key="backup.id" :value="backup.id">
+                  {{ backup.device_name }} - {{ formatTime(backup.backup_time) }}
+                </option>
+              </select>
+            </div>
+          </el-col>
+          <el-col :span="8">
+            <div class="form-row buttons-inline">
+              <button class="btn btn-primary" @click="pushConfigViaSerial" :disabled="isPushing || (!selectedTemplate && !selectedBackup)">
+                <el-icon><Upload /></el-icon>
+                {{ isPushing ? t('consolePushing') : t('consolePushConfig') }}
+              </button>
+            </div>
+          </el-col>
+        </el-row>
+
+        <!-- Push Progress -->
+        <div class="push-progress" v-if="isPushing">
+          <div class="progress-bar">
+            <div class="progress-fill" :style="{ width: pushProgress + '%' }"></div>
+          </div>
+          <span class="progress-text">{{ pushProgress }}% - {{ pushStep }}</span>
+        </div>
+      </div>
     </div>
 
     <!-- Console Terminal -->
@@ -136,10 +185,11 @@
 </template>
 
 <script setup>
-import { ref, onUnmounted, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled } from '@element-plus/icons-vue'
+import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled, Upload } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
+import { getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
 
 const { t } = useI18n()
 
@@ -162,9 +212,26 @@ const terminalLines = ref([])
 const manualCommand = ref('')
 const selectedPort = ref('')
 
+// Config push
+const templates = ref([])
+const backups = ref([])
+const selectedTemplate = ref('')
+const selectedBackup = ref('')
+const isPushing = ref(false)
+const pushProgress = ref(0)
+const pushStep = ref('')
+
 // ReadableStream controller for async reading
 let readLoopPromise = null
 let abortController = null
+
+// Format time
+const formatTime = (datetimeStr) => {
+  if (!datetimeStr) return ''
+  try {
+    return new Date(datetimeStr).toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  } catch { return datetimeStr }
+}
 
 // Add line to terminal
 const addLine = (text, type = 'output') => {
@@ -324,6 +391,91 @@ const clearTerminal = () => {
   terminalLines.value = []
 }
 
+// Push config via serial
+const pushConfigViaSerial = async () => {
+  if (!connected.value) {
+    ElMessage.warning(t('consoleConnectSerialFirst'))
+    return
+  }
+
+  if (!selectedTemplate.value && !selectedBackup.value) {
+    ElMessage.warning(t('consoleSelectConfigOrTemplate'))
+    return
+  }
+
+  isPushing.value = true
+  pushProgress.value = 0
+  pushStep.value = t('consolePreparePush')
+
+  let configContent = ''
+
+  try {
+    // Get config content
+    if (selectedBackup.value) {
+      const data = await getBackupContent(selectedBackup.value)
+      configContent = data.content || ''
+    } else if (selectedTemplate.value) {
+      const data = await getTemplate(selectedTemplate.value)
+      configContent = data.template_content || ''
+    }
+
+    if (!configContent) {
+      throw new Error(t('consoleGetConfigFailed'))
+    }
+
+    // Parse commands (skip comments and empty lines)
+    const commands = configContent.split('\n')
+      .map(line => line.trim())
+      .filter(line => line && !line.startsWith('!') && !line.startsWith('#'))
+
+    addLine(t('consolePushStart') + ` (${commands.length} ${t('consoleCommands')})`, 'info')
+
+    // Step 1: Wake up
+    pushStep.value = t('consoleWakeDevice')
+    pushProgress.value = 5
+    await sendCommand('\r', 0.5)
+    await sendCommand('\r', 0.5)
+
+    // Step 2: Enter enable mode
+    pushStep.value = t('consoleEnterEnableMode')
+    pushProgress.value = 10
+    await sendCommand('enable', 1)
+
+    // Step 3: Enter config mode
+    pushStep.value = t('consoleEnterConfigMode')
+    pushProgress.value = 15
+    await sendCommand('configure terminal', 1)
+
+    // Step 4: Send config commands
+    for (let i = 0; i < commands.length; i++) {
+      pushStep.value = `${t('consoleExecuteCommand')} ${i + 1}/${commands.length}`
+      pushProgress.value = 15 + Math.floor((i / commands.length) * 70)
+      await sendCommand(commands[i], 0.3)
+    }
+
+    // Step 5: Exit config mode
+    pushStep.value = t('consoleExitConfigMode')
+    pushProgress.value = 90
+    await sendCommand('end', 1)
+
+    // Step 6: Save config
+    pushStep.value = t('consoleSaveConfig')
+    pushProgress.value = 95
+    await sendCommand('write memory', 2)
+
+    pushStep.value = t('consolePushComplete')
+    pushProgress.value = 100
+    addLine(t('consolePushSuccess'), 'success')
+    ElMessage.success(t('consolePushSuccess'))
+
+  } catch (err) {
+    addLine(t('consolePushFailed') + ': ' + err.message, 'error')
+    ElMessage.error(t('consolePushFailed') + ': ' + err.message)
+  }
+
+  isPushing.value = false
+}
+
 // Download log
 const downloadLog = () => {
   const log = terminalLines.value.map(l => `[${l.time}] ${l.text}`).join('\n')
@@ -335,6 +487,19 @@ const downloadLog = () => {
   a.click()
   URL.revokeObjectURL(url)
 }
+
+// Load templates and backups on mount
+onMounted(async () => {
+  try {
+    const templateData = await getTemplates()
+    templates.value = templateData.items || templateData || []
+
+    const backupData = await getBackups({ limit: 50 })
+    backups.value = backupData.items || backupData.backups || []
+  } catch (err) {
+    console.error('Failed to load templates/backups:', err)
+  }
+})
 
 // Cleanup on unmount
 onUnmounted(async () => {
@@ -705,6 +870,42 @@ onUnmounted(async () => {
 
 .tip-link:hover {
   color: var(--color-gb);
+}
+
+/* Config Push Panel */
+.config-push-panel {
+  margin-bottom: var(--gap-md);
+}
+
+.push-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+}
+
+.push-progress .progress-bar {
+  flex: 1;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.push-progress .progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--color-gb), var(--color-gb-mid));
+  transition: width 0.3s;
+}
+
+.push-progress .progress-text {
+  font-size: 12px;
+  font-family: var(--font-mono);
+  color: var(--ink2);
+  min-width: 120px;
 }
 
 /* Responsive */
