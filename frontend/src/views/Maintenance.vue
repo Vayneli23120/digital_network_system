@@ -222,7 +222,7 @@
           <template #default="{ row }">
             <div :class="['status-badge', row.status]">
               <span class="status-dot"></span>
-              <span class="status-text">{{ row.status_label || getStatusLabel(row.status) }}</span>
+              <span class="status-text">{{ getStatusLabel(row.status) }}</span>
             </div>
           </template>
         </el-table-column>
