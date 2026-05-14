@@ -142,10 +142,6 @@
                   <el-icon><Tools /></el-icon>
                   {{ t('faultNoteTransfer') }}
                 </el-button>
-                <el-button type="primary" @click="showReassignDialog = true" class="action-btn-with-note">
-                  <el-icon><UserFilled /></el-icon>
-                  {{ t('faultReassign') }}
-                </el-button>
               </div>
               <!-- 其他状态的快速操作按钮 -->
               <div class="quick-actions" v-if="fault.status !== 'diagnosing'">
@@ -472,24 +468,6 @@
       </template>
     </el-dialog>
 
-    <!-- 转单对话框 -->
-    <el-dialog v-model="showReassignDialog" :title="t('faultReassign')" width="400px">
-      <el-form :model="reassignForm" label-width="100px">
-        <el-form-item :label="t('faultReassignTo')" required>
-          <el-select v-model="reassignForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable>
-            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('faultReassignReason')">
-          <el-input v-model="reassignForm.reason" type="textarea" :rows="2" :placeholder="t('faultReassignReasonPlaceholder')" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showReassignDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="reassignFault">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 技术处理/解决对话框 -->
     <el-dialog v-model="showResolveDialog" :title="t('faultTechResolve')" width="500px">
       <el-form :model="resolveForm" label-width="100px">
@@ -535,35 +513,66 @@
     </el-dialog>
 
     <!-- 编辑故障对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="600px">
-      <el-form :model="editForm" label-width="120px">
-        <el-form-item :label="t('faultLevel')" required>
-          <el-select v-model="editForm.severity">
-            <el-option :label="`${t('dashCritical')} (Critical)`" value="critical" />
-            <el-option :label="`${t('dashMajor')} (Major)`" value="major" />
-            <el-option :label="`${t('dashMinor')} (Minor)`" value="minor" />
-            <el-option :label="`${t('dashWarning')} (Warning)`" value="warning" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('faultType')">
-          <el-select v-model="editForm.fault_type" clearable>
-            <el-option :label="t('faultTypeHardware')" value="hardware" />
-            <el-option :label="t('faultTypeSoftware')" value="software" />
-            <el-option :label="t('faultTypeConfig')" value="config" />
-            <el-option :label="t('faultTypeNetwork')" value="network" />
-            <el-option :label="t('faultTypeOther')" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('faultDowntimeMinutes')">
-          <el-input-number v-model="editForm.downtime_minutes" :min="0" />
-        </el-form-item>
-        <el-form-item :label="t('faultImpact')">
-          <el-input v-model="editForm.impact" type="textarea" :rows="2" />
-        </el-form-item>
-        <el-form-item :label="t('faultDescription')" required>
-          <el-input v-model="editForm.description" type="textarea" :rows="4" />
-        </el-form-item>
-      </el-form>
+    <!-- 编辑故障对话框 -->
+    <el-dialog v-model="showEditDialog" :title="t('faultEditRecord')" width="520px" append-to-body draggable align-center class="fault-edit-dialog">
+      <div class="edit-dialog-content">
+        <!-- 负责人变更（转单） -->
+        <div class="form-section" v-if="fault.status === 'diagnosing'">
+          <div class="form-section-title">
+            <el-icon><UserFilled /></el-icon>
+            {{ t('faultOwnerSection') }}
+          </div>
+          <el-form :model="editForm" label-width="70px">
+            <el-form-item :label="t('faultCurrentOwner')">
+              <span class="current-value">{{ fault.assigned_to || '-' }}</span>
+            </el-form-item>
+            <el-form-item :label="t('faultNewOwner')">
+              <el-select v-model="editForm.new_owner" :placeholder="t('faultAssignPlaceholder')" filterable clearable>
+                <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultReassignReason')">
+              <el-input v-model="editForm.reassign_reason" type="textarea" :rows="2" :placeholder="t('faultReassignReasonPlaceholder')" />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 故障基本信息 -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><WarningFilled /></el-icon>
+            {{ t('faultDetailInfo') }}
+          </div>
+          <el-form :model="editForm" label-width="70px">
+            <el-form-item :label="t('faultLevel')">
+              <el-select v-model="editForm.severity" style="width: 150px">
+                <el-option :label="t('dashCritical')" value="critical" />
+                <el-option :label="t('dashMajor')" value="major" />
+                <el-option :label="t('dashMinor')" value="minor" />
+                <el-option :label="t('dashWarning')" value="warning" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultType')">
+              <el-select v-model="editForm.fault_type" style="width: 150px" clearable>
+                <el-option :label="t('faultTypeHardware')" value="hardware" />
+                <el-option :label="t('faultTypeSoftware')" value="software" />
+                <el-option :label="t('faultTypeConfig')" value="config" />
+                <el-option :label="t('faultTypeNetwork')" value="network" />
+                <el-option :label="t('faultTypeOther')" value="other" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultDowntimeMinutes')">
+              <el-input-number v-model="editForm.downtime_minutes" :min="0" style="width: 120px" />
+            </el-form-item>
+            <el-form-item :label="t('faultImpact')">
+              <el-input v-model="editForm.impact" type="textarea" :rows="2" />
+            </el-form-item>
+            <el-form-item :label="t('faultDescription')">
+              <el-input v-model="editForm.description" type="textarea" :rows="3" />
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="updateFaultSubmit">{{ t('actionConfirm') }}</el-button>
@@ -801,7 +810,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft, MoreFilled } from '@element-plus/icons-vue'
+import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft, MoreFilled, WarningFilled } from '@element-plus/icons-vue'
 import {
   getFaultDetail,
   updateFault as updateFaultApi,
@@ -842,11 +851,9 @@ const showResolveDialog = ref(false)
 const showTransferDialog = ref(false)
 const showEditDialog = ref(false)
 const showMaintEditDialog = ref(false)  // 维修编辑对话框
-const showReassignDialog = ref(false)  // 转单对话框
 
 // 表单
 const assignForm = ref({ assigned_to: '' })
-const reassignForm = ref({ new_owner: '', reason: '' })
 const resolveForm = ref({ resolution: '' })
 const transferForm = ref({ diagnosis_text: '', maintenance_description: '', estimated_parts: '', maintenance_owner: '' })
 const diagnosisForm = ref({ diagnosis_result: 'tech_resolve', diagnosis_text: '' })
@@ -855,7 +862,9 @@ const editForm = ref({
   fault_type: '',
   downtime_minutes: 0,
   impact: '',
-  description: ''
+  description: '',
+  new_owner: '',  // 转单新负责人
+  reassign_reason: ''  // 转单原因
 })
 
 // 维修编辑相关
@@ -1631,33 +1640,6 @@ const assignFaultSubmit = async () => {
   }
 }
 
-// 转单
-const reassignFault = async () => {
-  if (!reassignForm.value.new_owner) {
-    ElMessage.warning(t('faultAssignRequired'))
-    return
-  }
-  try {
-    await assignFault(fault.value.id, reassignForm.value.new_owner)
-    // 如果有转单原因，添加到工作日志
-    if (reassignForm.value.reason) {
-      workNotes.value.push({
-        author: localStorage.getItem('currentUser') || 'System',
-        content: `转单给 ${reassignForm.value.new_owner}，原因: ${reassignForm.value.reason}`,
-        created_at: new Date().toISOString(),
-        note_type: 'reassigned'
-      })
-    }
-    ElMessage.success(t('faultReassignSuccess'))
-    showReassignDialog.value = false
-    reassignForm.value = { new_owner: '', reason: '' }
-    loadFault()
-    window.dispatchEvent(new CustomEvent('fault-status-change'))
-  } catch (error) {
-    ElMessage.error(error.response?.data?.detail || t('faultReassignFailed'))
-  }
-}
-
 // 接收故障
 const acceptFaultSubmit = async () => {
   try {
@@ -1758,10 +1740,33 @@ const closeFaultSubmit = async () => {
 // 更新故障
 const updateFaultSubmit = async () => {
   try {
-    await updateFaultApi(fault.value.id, editForm.value)
+    // 如果选择了新负责人，执行转单
+    if (editForm.value.new_owner && editForm.value.new_owner !== fault.value.assigned_to) {
+      await assignFault(fault.value.id, editForm.value.new_owner)
+      // 添加转单日志
+      if (editForm.value.reassign_reason) {
+        workNotes.value.push({
+          author: localStorage.getItem('currentUser') || 'System',
+          content: `转单给 ${editForm.value.new_owner}，原因: ${editForm.value.reassign_reason}`,
+          created_at: new Date().toISOString(),
+          note_type: 'reassigned'
+        })
+      }
+    }
+    // 更新故障基本信息
+    await updateFaultApi(fault.value.id, {
+      severity: editForm.value.severity,
+      fault_type: editForm.value.fault_type,
+      downtime_minutes: editForm.value.downtime_minutes,
+      impact: editForm.value.impact,
+      description: editForm.value.description
+    })
     ElMessage.success(t('faultUpdateSuccess'))
     showEditDialog.value = false
+    editForm.value.new_owner = ''
+    editForm.value.reassign_reason = ''
     loadFault()
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     ElMessage.error(t('faultUpdateFailed'))
   }
@@ -1808,6 +1813,49 @@ onUnmounted(() => {
 .fault-detail-page {
   max-width: 1400px;
   margin: 0 auto;
+}
+
+/* ===== 编辑对话框样式 ===== */
+.fault-edit-dialog .edit-dialog-content {
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.fault-edit-dialog .form-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.fault-edit-dialog .form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.fault-edit-dialog .form-section-title .el-icon {
+  color: var(--color-gb);
+}
+
+.fault-edit-dialog .el-form-item {
+  margin-bottom: 8px;
+}
+
+.fault-edit-dialog .el-form-item__label {
+  font-size: 13px;
+}
+
+.fault-edit-dialog .current-value {
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 /* ===== 页面顶部导航条 ===== */
