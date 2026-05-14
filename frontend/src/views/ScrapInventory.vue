@@ -387,37 +387,51 @@
     </el-dialog>
 
     <!-- 入库对话框 -->
-    <el-dialog v-model="manualInDialogVisible" :title="t('spareStockIn')" width="500px">
-      <!-- 扫码枪入库 -->
-      <div class="scrap-in-scan-btn">
-        <el-button type="success" @click="openScrapInScanDialog">
+    <el-dialog v-model="manualInDialogVisible" :title="t('spareStockIn')" width="500px" append-to-body draggable align-center class="scrap-in-dialog">
+      <!-- 扫码入库 -->
+      <div class="form-section">
+        <div class="section-header">
           <el-icon><Aim /></el-icon>
-          {{ t('scrapScanGunStockIn') }}
-        </el-button>
-        <div class="scrap-out-scan-tip">{{ t('scrapScanGunTip') }}</div>
+          <span>{{ t('scrapScanSection') }}</span>
+        </div>
+        <div class="section-action-bar">
+          <el-button type="success" @click="openScrapInScanDialog">
+            <el-icon><Aim /></el-icon>
+            {{ t('scrapScanGunStockIn') }}
+          </el-button>
+          <span class="action-tip">{{ t('scrapScanGunTip') }}</span>
+        </div>
       </div>
 
-      <el-divider />
-
       <!-- 手动输入 -->
-      <div class="manual-title">{{ t('scrapManualInputLabel') }}</div>
-      <el-form :model="manualInForm" label-width="80px" style="margin-top: 12px">
-        <el-form-item :label="t('scrapPartsLabel')">
-          <el-input :value="currentManualPart?.name" disabled />
-        </el-form-item>
-        <el-form-item :label="t('spareSerialNumber')" required>
-          <el-input v-model="manualInForm.serial_number" :placeholder="t('scrapSerialScanPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('spareUnitPrice')">
-          <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" :placeholder="t('spareUnitPrice')" />
-        </el-form-item>
-        <el-form-item :label="t('scrapScrapReason')">
-          <el-input v-model="manualInForm.reason" type="textarea" :placeholder="t('scrapScrapReason')" />
-        </el-form-item>
-        <el-form-item :label="t('scrapRelatedMaintenance')">
-          <el-input v-model="manualInForm.reference" :placeholder="t('scrapReferenceMaintenanceNo')" />
-        </el-form-item>
-      </el-form>
+      <div class="form-section">
+        <div class="section-header">
+          <el-icon><Edit /></el-icon>
+          <span>{{ t('scrapManualInputSection') }}</span>
+        </div>
+        <el-form :model="manualInForm" label-width="80px" size="default">
+          <el-form-item :label="t('scrapPartsLabel')">
+            <el-input :value="currentManualPart?.name" disabled />
+          </el-form-item>
+          <el-form-item :label="t('spareSerialNumber')" required>
+            <el-input v-model="manualInForm.serial_number" :placeholder="t('scrapSerialScanPlaceholder')" />
+          </el-form-item>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item :label="t('spareUnitPrice')">
+                <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" style="width: 110px" />
+                <span class="unit-text">元</span>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item :label="t('scrapScrapReason')">
+            <el-input v-model="manualInForm.reason" type="textarea" :rows="2" :placeholder="t('scrapScrapReasonPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('scrapRelatedMaintenance')">
+            <el-input v-model="manualInForm.reference" :placeholder="t('scrapReferenceMaintenanceNo')" />
+          </el-form-item>
+        </el-form>
+      </div>
       <template #footer>
         <el-button @click="manualInDialogVisible = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="submitManualIn" :loading="manualInSubmitting">{{ t('spareConfirmIn') }}</el-button>
@@ -440,20 +454,29 @@
     </el-dialog>
 
     <!-- 报废出库对话框 -->
-    <el-dialog v-model="scrapOutDialogVisible" :title="t('scrapStockOut')" width="500px">
-      <div class="scrap-out-scan-btn">
-        <el-button type="danger" @click="openScrapOutScanDialog">
+    <el-dialog v-model="scrapOutDialogVisible" :title="t('scrapStockOut')" width="500px" append-to-body draggable align-center class="scrap-out-dialog">
+      <!-- 扫码报废 -->
+      <div class="form-section">
+        <div class="section-header">
           <el-icon><Aim /></el-icon>
-          {{ t('scrapScanGunStockOut') }}
-        </el-button>
-        <div class="scrap-out-scan-tip">{{ t('scrapScanGunStockOutTip') }}</div>
+          <span>{{ t('scrapScanSection') }}</span>
+        </div>
+        <div class="section-action-bar">
+          <el-button type="danger" @click="openScrapOutScanDialog">
+            <el-icon><Aim /></el-icon>
+            {{ t('scrapScanGunStockOut') }}
+          </el-button>
+          <span class="action-tip">{{ t('scrapScanGunStockOutTip') }}</span>
+        </div>
       </div>
 
-      <el-divider />
-
-      <div class="scrap-out-manual">
-        <div class="manual-title">{{ t('scrapManualInputLabel') }}</div>
-        <el-form :model="scrapOutForm" label-width="80px">
+      <!-- 手动报废 -->
+      <div class="form-section">
+        <div class="section-header">
+          <el-icon><Delete /></el-icon>
+          <span>{{ t('scrapManualOutSection') }}</span>
+        </div>
+        <el-form :model="scrapOutForm" label-width="80px" size="default">
           <el-form-item :label="t('scrapPartsLabel')">
             <el-input :value="currentScrapOutPart?.name" disabled />
           </el-form-item>
@@ -461,7 +484,7 @@
             <el-input v-model="scrapOutForm.serial_number" :placeholder="t('scrapSerialOutPlaceholder')" />
           </el-form-item>
           <el-form-item :label="t('spareStockOutReason')" required>
-            <el-input v-model="scrapOutForm.reason" type="textarea" :placeholder="t('scrapOutReasonPlaceholder')" />
+            <el-input v-model="scrapOutForm.reason" type="textarea" :rows="2" :placeholder="t('scrapOutReasonPlaceholder')" />
           </el-form-item>
         </el-form>
       </div>
@@ -489,7 +512,7 @@
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload } from '@element-plus/icons-vue'
+import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload, Edit, Delete } from '@element-plus/icons-vue'
 import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
@@ -2151,5 +2174,72 @@ onMounted(() => {
 
 .dark .manual-title {
   color: #8b949e;
+}
+
+/* ===== 入库/报废出库对话框样式 ===== */
+.scrap-in-dialog .form-section,
+.scrap-out-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.scrap-in-dialog .section-header,
+.scrap-out-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.scrap-in-dialog .section-header .el-icon,
+.scrap-out-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.scrap-in-dialog .section-action-bar,
+.scrap-out-dialog .section-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.scrap-in-dialog .action-tip,
+.scrap-out-dialog .action-tip {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+.scrap-in-dialog .unit-text,
+.scrap-out-dialog .unit-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+.scrap-in-dialog .el-form-item,
+.scrap-out-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
+/* 暗黑模式 */
+.dark .scrap-in-dialog .form-section,
+.dark .scrap-out-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+.dark .scrap-in-dialog .section-header,
+.dark .scrap-out-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .scrap-in-dialog .section-header .el-icon,
+.dark .scrap-out-dialog .section-header .el-icon {
+  color: #58a6ff;
+}
+.dark .scrap-in-dialog .action-tip,
+.dark .scrap-out-dialog .action-tip {
+  color: #6e7681;
 }
 </style>
