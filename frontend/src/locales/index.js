@@ -1535,7 +1535,6 @@ export const languages = {
     maintReturnNoScrap: '不入库',
     maintReturnNoPartId: '无备件ID',
     maintReturnNoPartsTip: '暂无返回件，请从上方手动录入换下来的坏件',
-    maintLaborHours: '人工工时 (小时)',
     maintLaborCost: '人工成本',
     maintVendor: '维修商',
     maintDesc: '维修描述',
