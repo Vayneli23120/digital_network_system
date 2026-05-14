@@ -163,32 +163,62 @@
     <!-- 新增备件对话框 -->
     <el-dialog v-model="showAddDialog" :title="t('spareNew')" width="480px" append-to-body draggable align-center class="spare-add-dialog">
       <el-form :model="addForm" label-width="80px" size="default">
-        <el-form-item :label="t('sparePartNumber')" required>
-          <el-input v-model="addForm.part_number" :placeholder="t('sparePartNumberPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('spareName')" required>
-          <el-input v-model="addForm.name" :placeholder="t('spareNamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('spareCategory')">
-          <el-select v-model="addForm.category" style="width: 100%">
-            <el-option :label="t('spareCategoryModule')" value="module" />
-            <el-option :label="t('spareCategoryPower')" value="power" />
-            <el-option :label="t('spareCategoryCable')" value="cable" />
-            <el-option :label="t('spareCategoryOther')" value="other" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('spareUnitPrice')">
-          <el-input-number v-model="addForm.unit_price" :min="0" :precision="2" style="width: 150px" />
-        </el-form-item>
-        <el-form-item :label="t('spareQuantity')">
-          <el-input-number v-model="addForm.quantity_in_stock" :min="0" style="width: 150px" />
-        </el-form-item>
-        <el-form-item :label="t('spareLocation')">
-          <el-input v-model="addForm.location" :placeholder="t('spareLocationPlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('spareDescription')">
-          <el-input v-model="addForm.description" type="textarea" :rows="2" />
-        </el-form-item>
+        <!-- 基础信息 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Box /></el-icon>
+            <span>{{ t('spareBasicSection') }}</span>
+          </div>
+          <el-form-item :label="t('sparePartNumber')" required>
+            <el-input v-model="addForm.part_number" :placeholder="t('sparePartNumberPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('spareName')" required>
+            <el-input v-model="addForm.name" :placeholder="t('spareNamePlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('spareCategory')">
+            <el-select v-model="addForm.category" style="width: 100%">
+              <el-option :label="t('spareCategoryModule')" value="module" />
+              <el-option :label="t('spareCategoryPower')" value="power" />
+              <el-option :label="t('spareCategoryCable')" value="cable" />
+              <el-option :label="t('spareCategoryOther')" value="other" />
+            </el-select>
+          </el-form-item>
+        </div>
+
+        <!-- 库存与成本 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Goods /></el-icon>
+            <span>{{ t('spareStockCostSection') }}</span>
+          </div>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item :label="t('spareUnitPrice')">
+                <el-input-number v-model="addForm.unit_price" :min="0" :precision="2" style="width: 110px" />
+                <span class="unit-text">元</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="t('spareQuantity')">
+                <el-input-number v-model="addForm.quantity_in_stock" :min="0" style="width: 110px" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item :label="t('spareLocation')">
+            <el-input v-model="addForm.location" :placeholder="t('spareLocationPlaceholder')" />
+          </el-form-item>
+        </div>
+
+        <!-- 备注 -->
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('spareDescSection') }}</span>
+          </div>
+          <el-form-item :label="t('spareDescription')">
+            <el-input v-model="addForm.description" type="textarea" :rows="2" />
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
@@ -201,7 +231,7 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Box, Goods, Money, Warning, CircleCheck, Search, Plus } from '@element-plus/icons-vue'
+import { Refresh, Box, Goods, Money, Warning, CircleCheck, Search, Plus, Document } from '@element-plus/icons-vue'
 import PartsTable from './spare-parts/PartsTable.vue'
 import PartDetailDialog from './spare-parts/PartDetailDialog.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -932,6 +962,37 @@ onMounted(() => {
   color: white;
 }
 
+/* ===== 新增备件对话框样式 ===== */
+.spare-add-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.spare-add-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.spare-add-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.spare-add-dialog .unit-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+.spare-add-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
 /* ===== 对话框样式 ===== */
 .spare-dialog :deep(.el-dialog__header) {
   border-bottom: 1px solid rgba(0, 48, 135, 0.08);
@@ -1191,6 +1252,19 @@ onMounted(() => {
 .dark .data-section :deep(.el-pager li.is-active) {
   background: linear-gradient(135deg, #3fb950, #55efc4);
   color: white;
+}
+
+/* 暗黑模式新增备件对话框 */
+.dark .spare-add-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+.dark .spare-add-dialog .section-header {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+.dark .spare-add-dialog .section-header .el-icon {
+  color: #58a6ff;
 }
 
 /* 暗黑模式对话框 */
