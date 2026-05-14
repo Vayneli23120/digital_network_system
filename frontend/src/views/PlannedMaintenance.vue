@@ -284,7 +284,7 @@
         <!-- 周期 -->
         <el-table-column prop="cycle_days" :label="t('pmPlanCycle')" width="100">
           <template #default="{ row }">
-            <span class="cycle-badge">{{ row.cycle_days }}天</span>
+            <span class="cycle-badge">{{ row.cycle_days }}{{ t('pmCycleDaysUnit') }}</span>
           </template>
         </el-table-column>
 
