@@ -511,8 +511,8 @@ defineExpose({ loadParts, parts })
   align-items: center;
   gap: 12px;
   padding: 12px 16px;
-  background: linear-gradient(135deg, #00b894 0%, #0984e3 100%);
-  border-radius: 8px;
+  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
+  border-radius: var(--radius-md);
   margin-bottom: 16px;
 }
 
@@ -524,7 +524,7 @@ defineExpose({ loadParts, parts })
   background: rgba(255,255,255,0.15);
   border-color: rgba(255,255,255,0.3);
   color: #fff;
-  font-weight: 500;
+  font-weight: 600;
   height: 36px;
   border-radius: 8px;
   transition: all 0.2s;
@@ -615,7 +615,7 @@ defineExpose({ loadParts, parts })
 
 /* 暗色模式 */
 .dark .scan-action-bar {
-  background: linear-gradient(135deg, #3fb950 0%, #58a6ff 100%);
+  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
 }
 
 .dark .scan-action-bar.out {
