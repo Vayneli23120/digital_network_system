@@ -942,8 +942,11 @@ export const languages = {
 
     // 维修记录扩展
     maintReplaceParts: '更换备件',
-    maintLaborHours: '人工工时 (小时)',
+    maintLaborHours: '人工工时',
+    maintHoursUnit: '小时',
     maintCostSection: '工时成本',
+    maintBasicSection: '基础信息',
+    maintDescPlaceholder: '请输入维修描述',
     maintCost: '维护成本',
     maintTotalCost: '总拥有成本 (TCO)',
     purchaseCost: '采购成本',
@@ -3271,7 +3274,10 @@ export const languages = {
     // Maintenance Extended
     maintReplaceParts: 'Replace Parts',
     maintLaborHours: 'Labor Hours',
+    maintHoursUnit: 'Hours',
     maintCostSection: 'Labor Cost',
+    maintBasicSection: 'Basic Info',
+    maintDescPlaceholder: 'Enter maintenance description',
     maintCost: 'Maintenance Cost',
     maintTotalCost: 'Total Cost of Ownership (TCO)',
     purchaseCost: 'Purchase Cost',

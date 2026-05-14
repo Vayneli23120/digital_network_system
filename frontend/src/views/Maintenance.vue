@@ -344,130 +344,141 @@
     </section>
 
     <!-- 添加/编辑维修记录对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="600px" append-to-body draggable align-center class="compact-dialog">
-      <el-form :model="maintForm" label-width="90px" size="default">
+    <!-- 添加/编辑维修记录对话框 -->
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="560px" append-to-body draggable align-center class="maint-add-dialog">
+      <el-form :model="maintForm" label-width="80px" size="default">
         <!-- 基础信息 -->
-        <el-form-item :label="t('faultDeviceLabel')" required>
-          <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
-            <el-option v-for="device in devices" :key="device.id" :label="device.name" :value="device.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('maintType')" required>
-          <el-select v-model="maintForm.maint_type" style="width: 180px">
-            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
-            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
-            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
-            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
-          </el-select>
-        </el-form-item>
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Document /></el-icon>
+            <span>{{ t('maintBasicSection') }}</span>
+          </div>
+          <el-form-item :label="t('faultDeviceLabel')" required>
+            <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
+              <el-option v-for="device in devices" :key="device.id" :label="device.name" :value="device.id" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('maintType')">
+            <el-select v-model="maintForm.maint_type" style="width: 100%">
+              <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
+              <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
+              <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
+              <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('maintDescription')" required>
+            <el-input v-model="maintForm.description" type="textarea" :rows="2" :placeholder="t('maintDescPlaceholder')" />
+          </el-form-item>
+        </div>
 
         <!-- 备件更换 -->
-        <el-divider content-position="left">{{ t('maintSparePartsSection') }}</el-divider>
-        <div class="spare-row">
-          <el-select
-            v-model="selectedSparePart"
-            :placeholder="t('maintSpareSearchPlaceholder')"
-            filterable
-            remote
-            :remote-method="searchSpareParts"
-            :loading="spareLoading"
-            style="width: 280px"
-            @change="addSparePartToForm"
-            clearable
-          >
-            <el-option
-              v-for="part in sparePartOptions"
-              :key="part.id"
-              :label="`${part.serial_number} - ${part.name}`"
-              :value="part.id"
-            >
-              <div style="display: flex; gap: 8px; align-items: center; font-size: 12px">
-                <span style="color: #409EFF; font-weight: 500; width: 100px">{{ part.serial_number }}</span>
-                <span style="color: #67C23A; width: 70px" v-if="part.po_number">PO: {{ part.po_number }}</span>
-                <span style="width: 80px">{{ part.part_number }}</span>
-                <span style="color: #606266">{{ part.name }}</span>
-              </div>
-            </el-option>
-          </el-select>
-          <el-button type="primary" size="small" @click="openScanDialog">
-            <el-icon><Aim /></el-icon>
-            {{ t('maintScanAddSpare') }}
-          </el-button>
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Box /></el-icon>
+            <span>{{ t('maintSparePartsSection') }}</span>
+          </div>
+          <div class="section-action-bar">
+            <el-select
+              v-model="selectedSparePart"
+              :placeholder="t('maintSpareSearchPlaceholder')"
+              filterable
+              remote
+              :remote-method="searchSpareParts"
+              :loading="spareLoading"
+              style="width: 200px"
+              @change="addSparePartToForm"
+              clearable
+            />
+            <el-button type="primary" size="small" @click="openScanDialog">
+              <el-icon><Aim /></el-icon>
+              {{ t('maintScanAddSpare') }}
+            </el-button>
+          </div>
+          <el-table v-if="maintForm.spare_parts.length > 0" :data="maintForm.spare_parts" size="small" border style="margin-top: 8px">
+            <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="100">
+              <template #default="{ row }"><span class="text-primary">{{ row.serial_number || '-' }}</span></template>
+            </el-table-column>
+            <el-table-column prop="po_number" :label="t('sparePoNumber')" width="80">
+              <template #default="{ row }">{{ row.po_number || '-' }}</template>
+            </el-table-column>
+            <el-table-column prop="part_number" :label="t('maintColModel')" width="90" />
+            <el-table-column prop="name" :label="t('maintColName')" min-width="80" />
+            <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
+              <template #default="{ row }">
+                <el-input-number v-model="row.quantity" :min="1" size="small" controls-position="right" style="width: 50px" @change="updatePartsCost" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('colOperation')" width="40">
+              <template #default="{ $index }">
+                <el-button type="danger" size="small" link @click="removeSparePart($index)"><el-icon><Delete /></el-icon></el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-form-item :label="t('maintPartsCost')">
+            <el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" style="width: 120px" />
+            <span class="unit-text">元</span>
+          </el-form-item>
         </div>
-        <el-table v-if="maintForm.spare_parts.length > 0" :data="maintForm.spare_parts" size="small" border style="margin-top: 8px">
-          <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
-            <template #default="{ row }"><span style="color: #409EFF">{{ row.serial_number || '-' }}</span></template>
-          </el-table-column>
-          <el-table-column prop="po_number" :label="t('sparePoNumber')" width="100">
-            <template #default="{ row }">{{ row.po_number || '-' }}</template>
-          </el-table-column>
-          <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
-          <el-table-column prop="name" :label="t('maintColName')" />
-          <el-table-column prop="quantity" :label="t('maintColQuantity')" width="70">
-            <template #default="{ row }">
-              <el-input-number v-model="row.quantity" :min="1" size="small" controls-position="right" @change="updatePartsCost" />
-            </template>
-          </el-table-column>
-          <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
-            <template #default="{ row }">¥{{ (row.unit_price || 0).toFixed(2) }}</template>
-          </el-table-column>
-          <el-table-column :label="t('colOperation')" width="50">
-            <template #default="{ $index }">
-              <el-button type="danger" size="small" link @click="removeSparePart($index)"><el-icon><Delete /></el-icon></el-button>
-            </template>
-          </el-table-column>
-        </el-table>
-        <el-form-item :label="t('maintPartsCost')">
-          <el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" style="width: 150px" />
-        </el-form-item>
 
         <!-- 返回件 -->
-        <el-divider content-position="left">{{ t('maintReturnPartsSection') }}</el-divider>
-        <div class="return-row">
-          <el-input
-            v-model="returnScanInput"
-            :placeholder="t('maintReturnScanPlaceholder')"
-            style="width: 200px"
-            @keyup.enter="scanReturnPart"
-            clearable
-          />
-          <el-button type="default" size="small" @click="scanReturnPart" :loading="returnScanLoading">{{ t('spareQuery') }}</el-button>
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><RefreshRight /></el-icon>
+            <span>{{ t('maintReturnPartsSection') }}</span>
+          </div>
+          <div class="section-action-bar">
+            <el-input
+              v-model="returnScanInput"
+              :placeholder="t('maintReturnScanPlaceholder')"
+              style="width: 160px"
+              @keyup.enter="scanReturnPart"
+              clearable
+            />
+            <el-button size="small" @click="scanReturnPart" :loading="returnScanLoading">{{ t('spareQuery') }}</el-button>
+          </div>
+          <el-table v-if="maintForm.return_parts.length > 0" :data="maintForm.return_parts" size="small" border style="margin-top: 8px">
+            <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="100">
+              <template #default="{ row }"><span class="text-primary">{{ row.serial_number || '-' }}</span></template>
+            </el-table-column>
+            <el-table-column prop="part_number" :label="t('maintColModel')" width="90" />
+            <el-table-column prop="name" :label="t('maintColName')" min-width="80" />
+            <el-table-column :label="t('maintReturnScrap')" width="70">
+              <template #default="{ row }">
+                <el-checkbox v-model="row.scrap_in" size="small" />
+              </template>
+            </el-table-column>
+            <el-table-column :label="t('colOperation')" width="40">
+              <template #default="{ $index }">
+                <el-button type="danger" size="small" link @click="removeReturnPart($index)"><el-icon><Delete /></el-icon></el-button>
+              </template>
+            </el-table-column>
+          </el-table>
         </div>
-        <el-table v-if="maintForm.return_parts.length > 0" :data="maintForm.return_parts" size="small" border style="margin-top: 8px">
-          <el-table-column prop="part_number" :label="t('maintColModel')" width="100" />
-          <el-table-column prop="name" :label="t('maintColName')" />
-          <el-table-column :label="t('maintReturnScrap')" width="80">
-            <template #default="{ row }">
-              <el-checkbox v-model="row.scrap_in" size="small" />
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('colOperation')" width="50">
-            <template #default="{ $index }">
-              <el-button type="danger" size="small" link @click="removeReturnPart($index)"><el-icon><Delete /></el-icon></el-button>
-            </template>
-          </el-table-column>
-        </el-table>
 
         <!-- 工时成本 -->
-        <el-divider content-position="left">{{ t('maintCostSection') }}</el-divider>
-        <el-row :gutter="16">
-          <el-col :span="12">
-            <el-form-item :label="t('maintLaborHours')">
-              <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-          <el-col :span="12">
-            <el-form-item :label="t('maintLaborCost')">
-              <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" style="width: 100%" />
-            </el-form-item>
-          </el-col>
-        </el-row>
-        <el-form-item :label="t('maintVendor')">
-          <el-input v-model="maintForm.vendor" />
-        </el-form-item>
-        <el-form-item :label="t('maintDescription')" required>
-          <el-input v-model="maintForm.description" type="textarea" :rows="2" />
-        </el-form-item>
+        <div class="form-section">
+          <div class="section-header">
+            <el-icon><Coin /></el-icon>
+            <span>{{ t('maintCostSection') }}</span>
+          </div>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item :label="t('maintLaborHours')">
+                <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" style="width: 90px" />
+                <span class="unit-text">{{ t('maintHoursUnit') }}</span>
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item :label="t('maintLaborCost')">
+                <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" style="width: 90px" />
+                <span class="unit-text">元</span>
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item :label="t('maintVendor')">
+            <el-input v-model="maintForm.vendor" style="width: 200px" />
+          </el-form-item>
+        </div>
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
@@ -1400,6 +1411,46 @@ onMounted(() => { loadMaintenances(); loadDevices() })
 .dark .spare-tip { background: rgba(13, 17, 23, 0.6); color: #8b949e; }
 .dark .return-manual-tip { background: rgba(13, 17, 23, 0.6); color: #8b949e; }
 .dark .return-tip { background: rgba(13, 17, 23, 0.6); color: #8b949e; }
+
+/* 添加维修记录对话框样式 */
+.maint-add-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+  margin-bottom: 12px;
+}
+.maint-add-dialog .section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+.maint-add-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+.maint-add-dialog .section-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.maint-add-dialog .unit-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 4px;
+}
+.maint-add-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+.maint-add-dialog .el-form-item__label {
+  font-size: 13px;
+}
 
 /* 紧凑对话框样式 */
 .compact-dialog .el-form-item {
