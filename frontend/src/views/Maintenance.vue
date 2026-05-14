@@ -464,13 +464,13 @@
           <el-row :gutter="12">
             <el-col :span="12">
               <el-form-item :label="t('maintLaborHours')">
-                <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" style="width: 90px" />
+                <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" style="width: 100px" />
                 <span class="unit-text">{{ t('maintHoursUnit') }}</span>
               </el-form-item>
             </el-col>
             <el-col :span="12">
               <el-form-item :label="t('maintLaborCost')">
-                <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" style="width: 90px" />
+                <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" style="width: 100px" />
                 <span class="unit-text">元</span>
               </el-form-item>
             </el-col>
