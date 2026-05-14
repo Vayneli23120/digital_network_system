@@ -287,7 +287,7 @@
           <template #default="{ row }">
             <div :class="['sla-cell', { overdue: isOverdue(row), critical: isSlaCritical(row) }]">
               <el-icon v-if="isOverdue(row)" class="sla-icon"><Warning /></el-icon>
-              <span class="sla-text">{{ row.sla_remaining || '--' }}</span>
+              <span class="sla-text">{{ getSlaText(row.sla_remaining) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -504,17 +504,6 @@ const STATUS_COLORS = {
   'closed': 'info'
 }
 
-const STATUS_LABELS = {
-  'open': '待处理',
-  'assigned': '已指派',
-  'accepted': '已接收',
-  'diagnosing': '诊断中',
-  'resolving': '处理中',
-  'transferred': '已转修',
-  'resolved': '已解决',
-  'closed': '已关闭'
-}
-
 const STATUS_PERCENT = {
   'open': 10,
   'assigned': 20,
@@ -527,8 +516,27 @@ const STATUS_PERCENT = {
 }
 
 const getStatusColor = (status) => STATUS_COLORS[status] || 'info'
-const getStatusLabel = (status) => STATUS_LABELS[status] || status
+const getStatusLabel = (status) => {
+  const keyMap = {
+    'open': 'faultStatusOpen',
+    'assigned': 'faultStatusAssigned',
+    'accepted': 'faultStatusAccepted',
+    'diagnosing': 'faultStatusDiagnosing',
+    'resolving': 'faultStatusResolving',
+    'transferred': 'faultStatusTransferred',
+    'resolved': 'faultStatusResolved',
+    'closed': 'faultStatusClosed'
+  }
+  const key = keyMap[status]
+  return key ? t(key) : status
+}
 const getProgressPercent = (status) => STATUS_PERCENT[status] || 10
+
+const getSlaText = (slaRemaining) => {
+  if (!slaRemaining) return '--'
+  if (slaRemaining === '已超期' || slaRemaining === 'Overdue') return t('faultSlaOverdue')
+  return slaRemaining
+}
 
 // 优先级映射 (severity -> priority)
 const SEVERITY_TO_PRIORITY = {

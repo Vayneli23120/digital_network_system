@@ -286,7 +286,7 @@
           <template #default="{ row }">
             <div :class="['sla-cell', { overdue: isOverdue(row), critical: isSlaCritical(row) }]">
               <el-icon v-if="isOverdue(row)" class="sla-icon"><Warning /></el-icon>
-              <span class="sla-text">{{ row.sla_remaining || '--' }}</span>
+              <span class="sla-text">{{ getSlaText(row.sla_remaining) }}</span>
             </div>
           </template>
         </el-table-column>
@@ -575,13 +575,18 @@ const STATUS_COLORS = {
   'cancelled': 'danger'
 }
 
-const STATUS_LABELS = {
-  'created': '创建',
-  'diagnosing': '诊断',
-  'repairing': '维修',
-  'verifying': '验证',
-  'completed': '完成',
-  'cancelled': '取消'
+const getStatusColor = (status) => STATUS_COLORS[status] || 'info'
+const getStatusLabel = (status) => {
+  const keyMap = {
+    'created': 'maintStatusLabelCreated',
+    'diagnosing': 'maintStatusLabelDiagnosing',
+    'repairing': 'maintStatusLabelRepairing',
+    'verifying': 'maintStatusLabelVerifying',
+    'completed': 'maintStatusLabelCompleted',
+    'cancelled': 'maintStatusLabelCancelled'
+  }
+  const key = keyMap[status]
+  return key ? t(key) : status
 }
 
 const STATUS_PERCENT = {
@@ -593,9 +598,13 @@ const STATUS_PERCENT = {
   'cancelled': 0
 }
 
-const getStatusColor = (status) => STATUS_COLORS[status] || 'info'
-const getStatusLabel = (status) => STATUS_LABELS[status] || status
 const getProgressPercent = (status) => STATUS_PERCENT[status] || 20
+
+const getSlaText = (slaRemaining) => {
+  if (!slaRemaining) return '--'
+  if (slaRemaining === '已超期' || slaRemaining === 'Overdue') return t('maintSlaOverdue')
+  return slaRemaining
+}
 
 const getPriorityBadgeClass = (priority) => priority || 'P3'
 
