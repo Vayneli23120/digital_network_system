@@ -6,6 +6,10 @@
         <h1 class="page-title">{{ t('menuSpareParts') }}</h1>
       </div>
       <div class="nav-right">
+        <button class="nav-action-btn" @click="showAddDialog = true">
+          <el-icon><Plus /></el-icon>
+          <span>{{ t('spareNew') }}</span>
+        </button>
         <button class="nav-action-btn secondary" @click="refreshData" :disabled="loading">
           <el-icon><Refresh /></el-icon>
         </button>
@@ -155,16 +159,53 @@
 
     <!-- 备件详情对话框 -->
     <PartDetailDialog v-model="detailDialogVisible" :part="currentDetailPart" />
+
+    <!-- 新增备件对话框 -->
+    <el-dialog v-model="showAddDialog" :title="t('spareNew')" width="480px" append-to-body draggable align-center class="spare-add-dialog">
+      <el-form :model="addForm" label-width="80px" size="default">
+        <el-form-item :label="t('sparePartNumber')" required>
+          <el-input v-model="addForm.part_number" :placeholder="t('sparePartNumberPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('spareName')" required>
+          <el-input v-model="addForm.name" :placeholder="t('spareNamePlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('spareCategory')">
+          <el-select v-model="addForm.category" style="width: 100%">
+            <el-option :label="t('spareCategoryModule')" value="module" />
+            <el-option :label="t('spareCategoryPower')" value="power" />
+            <el-option :label="t('spareCategoryCable')" value="cable" />
+            <el-option :label="t('spareCategoryOther')" value="other" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('spareUnitPrice')">
+          <el-input-number v-model="addForm.unit_price" :min="0" :precision="2" style="width: 150px" />
+        </el-form-item>
+        <el-form-item :label="t('spareQuantity')">
+          <el-input-number v-model="addForm.quantity_in_stock" :min="0" style="width: 150px" />
+        </el-form-item>
+        <el-form-item :label="t('spareLocation')">
+          <el-input v-model="addForm.location" :placeholder="t('spareLocationPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('spareDescription')">
+          <el-input v-model="addForm.description" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="handleAddPart">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Refresh, Box, Goods, Money, Warning, CircleCheck, Search } from '@element-plus/icons-vue'
+import { Refresh, Box, Goods, Money, Warning, CircleCheck, Search, Plus } from '@element-plus/icons-vue'
 import PartsTable from './spare-parts/PartsTable.vue'
 import PartDetailDialog from './spare-parts/PartDetailDialog.vue'
 import { useI18n } from '@/composables/useI18n'
+import { createPart } from '@/api'
 
 const { t } = useI18n()
 
@@ -187,6 +228,18 @@ const lowStockFilter = ref(false)
 // 备件详情对话框
 const detailDialogVisible = ref(false)
 const currentDetailPart = ref(null)
+
+// 新增备件对话框
+const showAddDialog = ref(false)
+const addForm = ref({
+  part_number: '',
+  name: '',
+  category: 'other',
+  unit_price: 0,
+  quantity_in_stock: 0,
+  location: '',
+  description: ''
+})
 
 // 格式化价值显示
 const formatValue = (value) => {
@@ -235,6 +288,39 @@ const refreshData = () => {
 const showPartDetail = (row) => {
   currentDetailPart.value = row
   detailDialogVisible.value = true
+}
+
+// 新增备件
+const handleAddPart = async () => {
+  if (!addForm.value.part_number) {
+    ElMessage.warning(t('sparePartNumberRequired'))
+    return
+  }
+  if (!addForm.value.name) {
+    ElMessage.warning(t('spareNameRequired'))
+    return
+  }
+  try {
+    await createPart(addForm.value)
+    ElMessage.success(t('spareAddSuccess'))
+    showAddDialog.value = false
+    resetAddForm()
+    refreshData()
+  } catch (error) {
+    ElMessage.error(t('spareAddFailed') + ': ' + (error.response?.data?.detail || error.message))
+  }
+}
+
+const resetAddForm = () => {
+  addForm.value = {
+    part_number: '',
+    name: '',
+    category: 'other',
+    unit_price: 0,
+    quantity_in_stock: 0,
+    location: '',
+    description: ''
+  }
 }
 
 // 统计数据加载
