@@ -15,124 +15,80 @@
     </div>
 
     <!-- Connection Panel -->
-    <div class="grid2">
-      <div class="panel">
-        <div class="panel-hd">
-          <span class="panel-title">{{ t('consoleSerialConnection') }}</span>
-        </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleSerialDevice') }}</label>
-              <div class="port-selector">
-                <select class="fselect" v-model="selectedPort" :disabled="connected">
-                  <option value="">{{ t('consoleSelectSerialPlaceholder') }}</option>
-                  <option v-for="port in availablePorts" :key="port" :value="port">{{ port }}</option>
+    <div class="panel">
+      <div class="panel-hd">
+        <span class="panel-title">{{ t('consoleSerialConnection') }}</span>
+      </div>
+      <div class="panel-body">
+        <div class="form-grid">
+          <el-row :gutter="16">
+            <el-col :span="6">
+              <div class="form-row">
+                <label class="form-label">{{ t('consoleBaudRate') }}</label>
+                <select class="fselect" v-model="baudRate" :disabled="connected">
+                  <option :value="9600">9600</option>
+                  <option :value="19200">19200</option>
+                  <option :value="38400">38400</option>
+                  <option :value="57600">57600</option>
+                  <option :value="115200">115200</option>
                 </select>
-                <button class="btn btn-primary" @click="requestPort" :disabled="connected">
-                  <el-icon><Search /></el-icon>
-                  {{ t('consoleSelectSerial') }}
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="form-row">
+                <label class="form-label">{{ t('consoleDataBits') }}</label>
+                <select class="fselect" v-model="dataBits" :disabled="connected">
+                  <option :value="8">8</option>
+                  <option :value="7">7</option>
+                </select>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="form-row">
+                <label class="form-label">{{ t('consoleStopBits') }}</label>
+                <select class="fselect" v-model="stopBits" :disabled="connected">
+                  <option :value="1">1</option>
+                  <option :value="2">2</option>
+                </select>
+              </div>
+            </el-col>
+            <el-col :span="6">
+              <div class="form-row buttons-inline">
+                <button class="btn btn-success" @click="connectPort" :disabled="connected">
+                  <el-icon><Connection /></el-icon>
+                  {{ t('consoleConnect') }}
+                </button>
+                <button class="btn btn-danger" @click="disconnectPort" :disabled="!connected">
+                  <el-icon><SwitchButton /></el-icon>
+                  {{ t('consoleDisconnect') }}
                 </button>
               </div>
-            </div>
+            </el-col>
+          </el-row>
+        </div>
 
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleBaudRate') }}</label>
-              <select class="fselect" v-model="baudRate" :disabled="connected">
-                <option :value="9600">9600 ({{ t('consoleBaudRateDefault') }})</option>
-                <option :value="19200">19200</option>
-                <option :value="38400">38400</option>
-                <option :value="57600">57600</option>
-                <option :value="115200">115200</option>
-              </select>
-            </div>
+        <!-- Web Serial Support Check -->
+        <div class="serial-warning" v-if="!isSupported">
+          <el-icon><WarningFilled /></el-icon>
+          <span>{{ t('consoleSerialNotSupported') }}</span>
+        </div>
 
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleDataBits') }}</label>
-              <select class="fselect" v-model="dataBits" :disabled="connected">
-                <option :value="8">8</option>
-                <option :value="7">7</option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleStopBits') }}</label>
-              <select class="fselect" v-model="stopBits" :disabled="connected">
-                <option :value="1">1</option>
-                <option :value="2">2</option>
-              </select>
-            </div>
-
-            <div class="form-row buttons">
-              <button class="btn btn-success" @click="connectPort" :disabled="!selectedPort || connected">
-                <el-icon><Connection /></el-icon>
-                {{ t('consoleConnect') }}
-              </button>
-              <button class="btn btn-danger" @click="disconnectPort" :disabled="!connected">
-                <el-icon><SwitchButton /></el-icon>
-                {{ t('consoleDisconnect') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Web Serial Support Check -->
-          <div class="serial-warning" v-if="!isSupported">
-            <el-icon><WarningFilled /></el-icon>
-            <span>{{ t('consoleSerialNotSupported') }}</span>
-          </div>
+        <!-- Serial Port Selection -->
+        <div class="port-selection-area" v-if="isSupported && !connected">
+          <button class="btn btn-primary btn-lg" @click="requestPort">
+            <el-icon><Search /></el-icon>
+            {{ t('consoleSelectSerial') }}
+          </button>
+          <span class="port-tip">{{ t('consoleSelectSerialTip') }}</span>
         </div>
       </div>
+    </div>
 
-      <!-- Device & Config Selection -->
-      <div class="panel">
-        <div class="panel-hd">
-          <span class="panel-title">{{ t('consoleConfigDeploy') }}</span>
-        </div>
-        <div class="panel-body">
-          <div class="form-grid">
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleTargetDevice') }}</label>
-              <select class="fselect" v-model="selectedDevice">
-                <option value="">{{ t('consoleSelectDevice') }}</option>
-                <option v-for="device in devices" :key="device.id" :value="device.id">
-                  {{ device.name }} ({{ device.ip || 'N/A' }})
-                </option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleConfigTemplate') }}</label>
-              <select class="fselect" v-model="selectedTemplate">
-                <option value="">{{ t('consoleSelectTemplate') }}</option>
-                <option v-for="template in templates" :key="template.id" :value="template.id">
-                  {{ template.name }}
-                </option>
-              </select>
-            </div>
-
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleConfigFile') }}</label>
-              <select class="fselect" v-model="selectedBackup">
-                <option value="">{{ t('consoleSelectBackup') }}</option>
-                <option v-for="backup in backups" :key="backup.id" :value="backup.id">
-                  {{ backup.device_name }} - {{ formatShortTime(backup.backup_time) }}
-                </option>
-              </select>
-            </div>
-
-            <div class="form-row buttons">
-              <button class="btn btn-primary" @click="deployConfig" :disabled="!connected || isDeploying">
-                <el-icon><Upload /></el-icon>
-                {{ isDeploying ? t('consoleDeploying') : t('consoleStartDeploy') }}
-              </button>
-              <button class="btn btn-ghost" @click="loadConfigPreview" :disabled="!selectedBackup">
-                <el-icon><View /></el-icon>
-                {{ t('consolePreviewConfig') }}
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+    <!-- Tips for Config Deploy -->
+    <div class="info-tip-card" v-if="connected">
+      <el-icon><InfoFilled /></el-icon>
+      <span>{{ t('consoleDeployTip') }}</span>
+      <router-link to="/deploy" class="tip-link">{{ t('consoleGoToDeploy') }}</router-link>
     </div>
 
     <!-- Console Terminal -->
@@ -161,16 +117,8 @@
           </div>
         </div>
 
-        <!-- Progress -->
-        <div class="deploy-progress" v-if="isDeploying">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: deployProgress + '%' }"></div>
-          </div>
-          <span class="progress-text">{{ deployProgress }}% - {{ deployStep }}</span>
-        </div>
-
         <!-- Manual Input -->
-        <div class="terminal-input" v-if="connected && !isDeploying">
+        <div class="terminal-input" v-if="connected">
           <input
             class="command-input"
             v-model="manualCommand"
@@ -184,37 +132,13 @@
         </div>
       </div>
     </div>
-
-    <!-- Config Preview Modal -->
-    <div class="modal-overlay" v-if="showPreviewModal" @click="showPreviewModal = false">
-      <div class="modal modal-lg" @click.stop>
-        <div class="modal-hd">
-          <span class="modal-title">{{ t('consoleConfigPreview') }}</span>
-          <button class="modal-close" @click="showPreviewModal = false">×</button>
-        </div>
-        <div class="modal-body">
-          <pre class="config-preview">{{ configPreview }}</pre>
-        </div>
-        <div class="modal-ft">
-          <button class="btn btn-ghost" @click="showPreviewModal = false">{{ t('actionClose') }}</button>
-          <button class="btn btn-primary" @click="deployConfig; showPreviewModal = false" :disabled="!connected">
-            {{ t('consoleDirectDeploy') }}
-          </button>
-        </div>
-      </div>
-    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import {
-  Connection, Search, Upload, View, Delete, Download,
-  SwitchButton, WarningFilled
-} from '@element-plus/icons-vue'
-import { getDevices, getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
-import { formatShortTime } from '@/utils/time'
+import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -225,36 +149,18 @@ const port = ref(null)
 const reader = ref(null)
 const writer = ref(null)
 const connected = ref(false)
-const selectedPort = ref('')
-const availablePorts = ref([])
 
 // Serial settings
 const baudRate = ref(9600)
 const dataBits = ref(8)
 const stopBits = ref(1)
 
-// Device & config selection
-const devices = ref([])
-const templates = ref([])
-const backups = ref([])
-const selectedDevice = ref('')
-const selectedTemplate = ref('')
-const selectedBackup = ref('')
-
 // Terminal
 const terminalRef = ref(null)
 const commandInputRef = ref(null)
 const terminalLines = ref([])
 const manualCommand = ref('')
-
-// Deploy state
-const isDeploying = ref(false)
-const deployProgress = ref(0)
-const deployStep = ref('')
-
-// Preview
-const showPreviewModal = ref(false)
-const configPreview = ref('')
+const selectedPort = ref('')
 
 // ReadableStream controller for async reading
 let readLoopPromise = null
@@ -263,7 +169,7 @@ let abortController = null
 // Add line to terminal
 const addLine = (text, type = 'output') => {
   terminalLines.value.push({
-    time: dayjs().format('HH:mm:ss'),
+    time: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
     text,
     type
   })
@@ -413,107 +319,6 @@ const sendManualCommand = async () => {
   manualCommand.value = ''
 }
 
-// Deploy configuration
-const deployConfig = async () => {
-  if (!connected.value) {
-    ElMessage.warning(t('consoleConnectSerialFirst'))
-    return
-  }
-
-  if (!selectedBackup.value && !selectedTemplate.value) {
-    ElMessage.warning(t('consoleSelectConfigOrTemplate'))
-    return
-  }
-
-  isDeploying.value = true
-  deployProgress.value = 0
-  deployStep.value = t('consolePrepareDeploy')
-
-  let configContent = ''
-
-  try {
-    // Get config content
-    if (selectedBackup.value) {
-      const data = await getBackupContent(selectedBackup.value)
-      configContent = data.content || ''
-    } else if (selectedTemplate.value) {
-      const data = await getTemplate(selectedTemplate.value)
-      configContent = data.template_content || ''
-    }
-
-    if (!configContent) {
-      throw new Error(t('consoleGetConfigFailed'))
-    }
-
-    // Parse commands (skip comments and empty lines)
-    const commands = configContent.split('\n')
-      .map(line => line.trim())
-      .filter(line => line && !line.startsWith('!') && !line.startsWith('#'))
-
-    const totalSteps = commands.length + 5 // +5 for enter/exit/save
-
-    // Step 1: Wake up
-    deployStep.value = t('consoleWakeDevice')
-    deployProgress.value = 5
-    await sendCommand('\r', 0.5)
-    await sendCommand('\r', 0.5)
-
-    // Step 2: Enter enable mode
-    deployStep.value = t('consoleEnterEnableMode')
-    deployProgress.value = 10
-    await sendCommand('enable', 1)
-
-    // Step 3: Enter config mode
-    deployStep.value = t('consoleEnterConfigMode')
-    deployProgress.value = 15
-    await sendCommand('configure terminal', 1)
-
-    // Step 4: Send config commands
-    for (let i = 0; i < commands.length; i++) {
-      deployStep.value = `${t('consoleExecuteCommand')} ${i + 1}/${commands.length}`
-      deployProgress.value = 15 + Math.floor((i / commands.length) * 70)
-      await sendCommand(commands[i], 0.3)
-    }
-
-    // Step 5: Exit config mode
-    deployStep.value = t('consoleExitConfigMode')
-    deployProgress.value = 90
-    await sendCommand('end', 1)
-
-    // Step 6: Save config
-    deployStep.value = t('consoleSaveConfig')
-    deployProgress.value = 95
-    await sendCommand('write memory', 2)
-
-    deployStep.value = t('consoleDeployComplete')
-    deployProgress.value = 100
-    addLine(t('consoleDeploySuccess'), 'success')
-    ElMessage.success(t('consoleDeploySuccess'))
-
-  } catch (err) {
-    addLine(t('consoleDeployFailed') + ': ' + err.message, 'error')
-    ElMessage.error(t('consoleDeployFailed') + ': ' + err.message)
-  }
-
-  isDeploying.value = false
-}
-
-// Load config preview
-const loadConfigPreview = async () => {
-  if (!selectedBackup.value) {
-    ElMessage.warning(t('consoleSelectBackupFile'))
-    return
-  }
-
-  try {
-    const data = await getBackupContent(selectedBackup.value)
-    configPreview.value = data.content || t('consoleGetConfigFailed')
-    showPreviewModal.value = true
-  } catch (err) {
-    ElMessage.error(t('consoleLoadFailed') + ': ' + err.message)
-  }
-}
-
 // Clear terminal
 const clearTerminal = () => {
   terminalLines.value = []
@@ -526,26 +331,10 @@ const downloadLog = () => {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `console-log-${dayjs().format('YYYYMMDD-HHmmss')}.txt`
+  a.download = `console-log-${new Date().toISOString().slice(0, 19).replace(/[:-]/g, '')}.txt`
   a.click()
   URL.revokeObjectURL(url)
 }
-
-// Load data
-onMounted(async () => {
-  try {
-    const deviceData = await getDevices()
-    devices.value = deviceData.items || []
-
-    const templateData = await getTemplates()
-    templates.value = templateData.items || templateData || []
-
-    const backupData = await getBackups({ limit: 20 })
-    backups.value = backupData.items || backupData.backups || []
-  } catch (err) {
-    console.error('Failed to load data:', err)
-  }
-})
 
 // Cleanup on unmount
 onUnmounted(async () => {
@@ -861,129 +650,65 @@ onUnmounted(async () => {
   outline: none;
 }
 
-/* Deploy Progress */
-.deploy-progress {
+/* Buttons Inline */
+.buttons-inline {
   display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* Port Selection Area */
+.port-selection-area {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   gap: 12px;
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
+  padding: 24px;
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: var(--radius-md);
+  margin-top: 14px;
 }
 
-.progress-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
+.btn-lg {
+  padding: 12px 24px;
+  font-size: 14px;
 }
 
-.progress-fill {
-  height: 100%;
-  background: var(--color-gb);
-  transition: width 0.3s;
-}
-
-.progress-text {
+.port-tip {
   font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink2);
-  min-width: 120px;
-}
-
-/* Modal */
-.modal-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 31, 92, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 2000;
-}
-
-.modal {
-  background: var(--surface);
-  border-radius: var(--radius-modal);
-  max-width: 720px;
-  width: 90%;
-  box-shadow: var(--shadow-modal);
-}
-
-.modal-lg {
-  max-width: 900px;
-}
-
-.modal-hd {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 18px 24px;
-  border-bottom: 1px solid var(--border);
-}
-
-.modal-title {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--ink);
-}
-
-.modal-close {
-  width: 28px;
-  height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--bg);
-  border: none;
-  border-radius: var(--radius-sm);
-  font-size: 18px;
   color: var(--ink3);
-  cursor: pointer;
 }
 
-.modal-close:hover {
-  background: var(--color-gb-ghost);
-}
-
-.modal-body {
-  padding: 20px 24px;
-  max-height: 60vh;
-  overflow-y: auto;
-}
-
-.modal-ft {
+/* Info Tip Card */
+.info-tip-card {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
   gap: 8px;
-  padding: 14px 24px;
-  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+  background: rgba(9, 132, 227, 0.08);
+  border: 1px solid rgba(9, 132, 227, 0.2);
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--gap-md);
+  color: var(--ink2);
+  font-size: 13px;
 }
 
-.config-preview {
-  background: var(--bg);
-  padding: 16px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  color: var(--ink2);
-  white-space: pre-wrap;
-  word-break: break-all;
-  max-height: 400px;
-  overflow-y: auto;
+.info-tip-card .el-icon {
+  color: var(--color-gb-mid);
+}
+
+.tip-link {
+  color: var(--color-gb-mid);
+  font-weight: 500;
+  margin-left: 8px;
+}
+
+.tip-link:hover {
+  color: var(--color-gb);
 }
 
 /* Responsive */
 @media (max-width: 768px) {
-  .grid2 {
-    grid-template-columns: 1fr;
-  }
-
   .terminal {
     min-height: 200px;
   }
