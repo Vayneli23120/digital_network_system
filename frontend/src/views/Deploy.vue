@@ -234,6 +234,7 @@
               <!-- 操作按钮 -->
               <div class="form-section actions-section">
                 <button
+                  type="button"
                   class="nav-action-btn secondary preview-btn"
                   @click="previewDeploy"
                   :disabled="!canDeploy || !deployForm.dry_run"
@@ -243,6 +244,7 @@
                   {{ t('deployPreviewChange') }}
                 </button>
                 <button
+                  type="button"
                   class="nav-action-btn deploy-btn"
                   @click="confirmDeploy"
                   :disabled="!canDeploy"
