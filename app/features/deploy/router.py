@@ -62,13 +62,25 @@ async def preview_deploy(deploy_data: dict):
         # 为每个设备生成差异分析
         preview_results = []
         for device in devices:
-            # 获取当前配置（从最新备份）
+            # 获取当前配置（从最新备份文件，而非数据库快照）
             current_config = ""
             latest_backup = db.query(BackupRecord).filter(
                 BackupRecord.device_id == device.id
             ).order_by(BackupRecord.backup_time.desc()).first()
             if latest_backup:
-                current_config = latest_backup.config_snapshot or ""
+                # 优先从文件读取，数据库 snapshot 可能为空
+                backup_path = Path(latest_backup.backup_file)
+                if not backup_path.exists():
+                    backup_path = Path(f"./backups/{latest_backup.backup_file}")
+                if backup_path.exists():
+                    try:
+                        with open(backup_path, 'r', encoding='utf-8') as f:
+                            current_config = f.read()
+                    except Exception as e:
+                        logger.warning(f"读取备份文件失败 {backup_path}: {e}")
+                        current_config = latest_backup.config_snapshot or ""
+                else:
+                    current_config = latest_backup.config_snapshot or ""
 
             # 生成差异分析
             diff_result = ConfigDiffService.analyze_diff(current_config, config_content)
