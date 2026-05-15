@@ -12,6 +12,7 @@ from app.shared.database import get_db
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog
 from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
+from .napalm_service import get_napalm_service
 from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, DiffLine
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
@@ -466,9 +467,13 @@ async def execute_deploy(deploy_data: dict):
 
     请求体:
     {
-        "mode": "backup" | "template",
+        "mode": "backup" | "template" | "snippet",
+        "engine": "napalm" | "netmiko",  // 部署引擎，默认 napalm
+        "napalm_mode": "merge" | "replace",  // NAPALM 模式，默认 merge
         "backup_file": "备份文件路径",
         "template_id": 模板 ID,
+        "snippet": "配置片段内容",
+        "snippet_position": "smart" | "append" | "prepend" | "replace",
         "variables": {"变量名": "变量值"},
         "target_devices": [设备 ID 列表],
         "dry_run": false
@@ -478,6 +483,8 @@ async def execute_deploy(deploy_data: dict):
 
     try:
         mode = deploy_data.get('mode', 'backup')
+        engine = deploy_data.get('engine', 'napalm')  # napalm | netmiko，默认 napalm
+        napalm_mode = deploy_data.get('napalm_mode', 'merge')  # merge | replace
         target_device_ids = deploy_data.get('target_devices', [])
         variables = deploy_data.get('variables', {})
         dry_run = deploy_data.get('dry_run', False)
@@ -573,8 +580,15 @@ async def execute_deploy(deploy_data: dict):
         else:
             raise HTTPException(status_code=400, detail=f"不支持的部署模式：{mode}")
 
+        # 选择部署引擎
+        if engine == 'napalm':
+            deploy_service = get_napalm_service()
+            logger.info(f"使用 NAPALM 引擎部署 (mode={napalm_mode})")
+        else:
+            deploy_service = get_deploy_service()
+            logger.info(f"使用 Netmiko 引擎部署")
+
         # 执行部署
-        deploy_service = get_deploy_service()
         results = []
         success_count = 0
         failed_count = 0
@@ -588,12 +602,23 @@ async def execute_deploy(deploy_data: dict):
                 'credential_group': device.credential_group or 'default'
             }
 
-            result = deploy_service.deploy_to_device(
-                device=device_dict,
-                config=config_content,
-                credential_groups=credential_groups,
-                dry_run=dry_run
-            )
+            if engine == 'napalm':
+                # NAPALM 服务需要 napalm_mode 参数
+                result = deploy_service.deploy_to_device(
+                    device=device_dict,
+                    config=config_content,
+                    credential_groups=credential_groups,
+                    dry_run=dry_run,
+                    mode=napalm_mode
+                )
+            else:
+                # Netmiko 服务
+                result = deploy_service.deploy_to_device(
+                    device=device_dict,
+                    config=config_content,
+                    credential_groups=credential_groups,
+                    dry_run=dry_run
+                )
             results.append(result)
 
             if result.get('success'):
@@ -604,7 +629,10 @@ async def execute_deploy(deploy_data: dict):
         # 记录审计日志
         for device, result in zip(devices, results):
             action = "deploy_config_dry_run" if dry_run else "deploy_config"
-            details = f"部署模式：{mode}, 结果：{'成功' if result.get('success') else '失败'}"
+            engine_text = f"引擎:{engine}"
+            if engine == 'napalm':
+                engine_text += f"({napalm_mode})"
+            details = f"部署模式:{mode}, {engine_text}, 结果:{'成功' if result.get('success') else '失败'}"
 
             audit_log = AuditLog(
                 operator="Web",
@@ -633,6 +661,100 @@ async def execute_deploy(deploy_data: dict):
         db.rollback()
         logger.error(f"执行部署失败：{e}")
         raise HTTPException(status_code=500, detail=f"部署失败：{str(e)}")
+    finally:
+        db.close()
+
+
+@router.post("/rollback")
+async def rollback_deploy(rollback_data: dict):
+    """
+    回滚设备配置到上一版本（仅 NAPALM 支持）
+
+    请求体:
+    {
+        "target_devices": [设备 ID 列表]
+    }
+    """
+    db: Session = next(get_db())
+
+    try:
+        target_device_ids = rollback_data.get('target_devices', [])
+
+        if not target_device_ids:
+            raise HTTPException(status_code=400, detail="请选择至少一台设备")
+
+        # 获取设备列表
+        devices = db.query(Device).filter(Device.id.in_(target_device_ids)).all()
+        if not devices:
+            raise HTTPException(status_code=404, detail="未找到指定的设备")
+
+        # 获取凭证组列表
+        credential_groups_data = db.query(CredentialGroup).all()
+        credential_groups = [
+            {
+                'id': g.id,
+                'name': g.name,
+                'username': g.username,
+                'password': decrypt_password(g.password_encrypted),
+            }
+            for g in credential_groups_data
+        ]
+
+        # 使用 NAPALM 服务回滚
+        napalm_service = get_napalm_service()
+        results = []
+        success_count = 0
+        failed_count = 0
+
+        for device in devices:
+            device_dict = {
+                'id': device.id,
+                'name': device.name,
+                'ip': device.ip,
+                'device_type': 'cisco_ios',
+                'credential_group': device.credential_group or 'default'
+            }
+
+            result = napalm_service.rollback_device(
+                device=device_dict,
+                credential_groups=credential_groups
+            )
+            results.append(result)
+
+            if result.get('success'):
+                success_count += 1
+            else:
+                failed_count += 1
+
+        # 记录审计日志
+        for device, result in zip(devices, results):
+            audit_log = AuditLog(
+                operator="Web",
+                action="rollback_config",
+                target_type="device",
+                target_id=device.id,
+                details=f"配置回滚, 结果:{'成功' if result.get('success') else '失败'}"
+            )
+            db.add(audit_log)
+
+        db.commit()
+
+        return {
+            "success": True,
+            "results": results,
+            "summary": {
+                "total": len(devices),
+                "success": success_count,
+                "failed": failed_count
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"回滚配置失败：{e}")
+        raise HTTPException(status_code=500, detail=f"回滚失败：{str(e)}")
     finally:
         db.close()
 

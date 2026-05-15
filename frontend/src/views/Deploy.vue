@@ -83,6 +83,39 @@
                 </el-radio-group>
               </div>
 
+              <!-- 部署引擎选择 -->
+              <div class="form-section">
+                <div class="section-label">{{ t('deployEngine') }}</div>
+                <el-radio-group v-model="deployForm.engine" size="small">
+                  <el-radio-button label="napalm">
+                    <el-icon><Shield /></el-icon>
+                    {{ t('deployEngineNapalm') }}
+                    <el-tag type="success" size="small" effect="plain" class="engine-tag">{{ t('deployEngineNapalmTag') }}</el-tag>
+                  </el-radio-button>
+                  <el-radio-button label="netmiko">
+                    <el-icon><Connection /></el-icon>
+                    {{ t('deployEngineNetmiko') }}
+                    <el-tag type="info" size="small" effect="plain" class="engine-tag">{{ t('deployEngineNetmikoTag') }}</el-tag>
+                  </el-radio-button>
+                </el-radio-group>
+                <div v-if="deployForm.engine === 'napalm'" class="engine-tip safe">
+                  <el-icon><InfoFilled /></el-icon>
+                  {{ t('deployEngineNapalmTip') }}
+                </div>
+              </div>
+
+              <!-- NAPALM 模式选择 -->
+              <div v-if="deployForm.engine === 'napalm'" class="form-section">
+                <div class="section-label">{{ t('deployNapalmMode') }}</div>
+                <el-radio-group v-model="deployForm.napalm_mode" size="small">
+                  <el-radio-button label="merge">{{ t('deployNapalmMerge') }}</el-radio-button>
+                  <el-radio-button label="replace">{{ t('deployNapalmReplace') }}</el-radio-button>
+                </el-radio-group>
+                <div class="napalm-mode-tip">
+                  {{ deployForm.napalm_mode === 'merge' ? t('deployNapalmMergeTip') : t('deployNapalmReplaceTip') }}
+                </div>
+              </div>
+
               <!-- 备份文件选择 -->
               <div v-if="deployForm.mode === 'backup'" class="form-section">
                 <div class="section-label required">{{ t('deployBackupFile') }}</div>
@@ -675,6 +708,8 @@ const loading = ref(false)
 // 表单
 const deployForm = ref({
   mode: 'backup',
+  engine: 'napalm',  // napalm | netmiko，默认 napalm
+  napalm_mode: 'merge',  // merge | replace，默认 merge
   backup_file: '',
   template_id: '',
   snippet: '',
@@ -954,6 +989,8 @@ const previewDeploy = async () => {
 
   const deployData = {
     mode: deployForm.value.mode,
+    engine: deployForm.value.engine,
+    napalm_mode: deployForm.value.napalm_mode,
     backup_file: deployForm.value.backup_file,
     template_id: deployForm.value.template_id,
     snippet: deployForm.value.snippet,
@@ -1018,6 +1055,8 @@ const scheduleDeployTask = async () => {
 
   const deployData = {
     mode: deployForm.value.mode,
+    engine: deployForm.value.engine,
+    napalm_mode: deployForm.value.napalm_mode,
     backup_file: deployForm.value.backup_file,
     template_id: deployForm.value.template_id,
     snippet: deployForm.value.snippet,
@@ -1143,6 +1182,8 @@ const executeDeploy = async () => {
   try {
     const deployData = {
       mode: deployForm.value.mode,
+      engine: deployForm.value.engine,
+      napalm_mode: deployForm.value.napalm_mode,
       backup_file: deployForm.value.backup_file,
       template_id: deployForm.value.template_id,
       snippet: deployForm.value.snippet,
@@ -1616,6 +1657,45 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 5px;
+}
+
+/* Engine selection */
+.engine-tag {
+  margin-left: 6px;
+  font-size: 11px;
+}
+
+.engine-tip {
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.engine-tip.safe {
+  background: rgba(103, 194, 58, 0.1);
+  color: #67c23a;
+}
+
+.napalm-mode-tip {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  padding: 6px 10px;
+  background: var(--el-fill-color-light);
+  border-radius: 4px;
+}
+
+.deploy-page.dark .engine-tip.safe {
+  background: rgba(103, 194, 58, 0.15);
+  color: #85ce61;
+}
+
+.deploy-page.dark .napalm-mode-tip {
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .smart-mode-tip {
