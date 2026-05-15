@@ -59,6 +59,36 @@ async def preview_deploy(deploy_data: dict):
                     context.update(variables)
                     config_content = tmpl.render(**context)
 
+        elif mode == 'snippet':
+            # 配置片段模式：将片段追加到当前配置
+            snippet_content = deploy_data.get('snippet', '')
+            snippet_position = deploy_data.get('snippet_position', 'append')  # append, prepend, replace
+
+            # 先获取基础配置（从备份或模板）
+            base_config = ""
+            if deploy_data.get('base_backup_file'):
+                backup_path = Path(deploy_data['base_backup_file'])
+                if not backup_path.exists():
+                    backup_path = Path(f"./backups/{deploy_data['base_backup_file']}")
+                if backup_path.exists():
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        base_config = f.read()
+
+            # 应用变量替换到片段
+            if variables:
+                for key, value in variables.items():
+                    snippet_content = snippet_content.replace(f"{{{{{key}}}}}", str(value))
+
+            # 根据位置合并配置
+            if snippet_position == 'append':
+                config_content = base_config + "\n! \n! 新增配置片段\n" + snippet_content if base_config else snippet_content
+            elif snippet_position == 'prepend':
+                config_content = snippet_content + "\n! \n! 原有配置\n" + base_config if base_config else snippet_content
+            elif snippet_position == 'replace':
+                config_content = snippet_content
+            else:
+                config_content = snippet_content
+
         # 为每个设备生成差异分析
         preview_results = []
         for device in devices:
@@ -207,6 +237,39 @@ async def execute_deploy(deploy_data: dict):
             }
             context.update(variables)
             config_content = tmpl.render(**context)
+
+        elif mode == 'snippet':
+            # 配置片段模式
+            snippet_content = deploy_data.get('snippet', '')
+            if not snippet_content:
+                raise HTTPException(status_code=400, detail="请输入配置片段")
+
+            snippet_position = deploy_data.get('snippet_position', 'append')
+
+            # 应用变量替换
+            if variables:
+                for key, value in variables.items():
+                    snippet_content = snippet_content.replace(f"{{{{{key}}}}}", str(value))
+
+            # 如果需要基于现有配置
+            base_config = ""
+            if deploy_data.get('base_backup_file'):
+                backup_path = Path(deploy_data['base_backup_file'])
+                if not backup_path.exists():
+                    backup_path = Path(f"./backups/{deploy_data['base_backup_file']}")
+                if backup_path.exists():
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        base_config = f.read()
+
+            # 合并配置
+            if snippet_position == 'append':
+                config_content = base_config + "\n! \n! 新增配置片段\n" + snippet_content if base_config else snippet_content
+            elif snippet_position == 'prepend':
+                config_content = snippet_content + "\n! \n! 原有配置\n" + base_config if base_config else snippet_content
+            elif snippet_position == 'replace':
+                config_content = snippet_content
+            else:
+                config_content = snippet_content
 
         else:
             raise HTTPException(status_code=400, detail=f"不支持的部署模式：{mode}")

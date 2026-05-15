@@ -76,6 +76,10 @@
                     <el-icon><Files /></el-icon>
                     {{ t('deployUseTemplate') }}
                   </el-radio-button>
+                  <el-radio-button label="snippet">
+                    <el-icon><Edit /></el-icon>
+                    {{ t('deploySnippet') }}
+                  </el-radio-button>
                 </el-radio-group>
               </div>
 
@@ -126,6 +130,51 @@
                     </div>
                   </el-option>
                 </el-select>
+              </div>
+
+              <!-- 配置片段模式 -->
+              <div v-if="deployForm.mode === 'snippet'" class="form-section">
+                <div class="section-label required">{{ t('deploySnippetContent') }}</div>
+                <el-input
+                  v-model="deployForm.snippet"
+                  type="textarea"
+                  :rows="8"
+                  :placeholder="t('deploySnippetPlaceholder')"
+                  style="width: 100%"
+                  class="snippet-input"
+                />
+                <div class="section-desc">{{ t('deploySnippetTip') }}</div>
+
+                <!-- 片段位置 -->
+                <div class="section-label" style="margin-top: 12px;">{{ t('deploySnippetPosition') }}</div>
+                <el-radio-group v-model="deployForm.snippet_position" size="small">
+                  <el-radio-button label="append">{{ t('deploySnippetAppend') }}</el-radio-button>
+                  <el-radio-button label="prepend">{{ t('deploySnippetPrepend') }}</el-radio-button>
+                  <el-radio-button label="replace">{{ t('deploySnippetReplace') }}</el-radio-button>
+                </el-radio-group>
+
+                <!-- 基础配置选择（可选） -->
+                <div class="section-label" style="margin-top: 12px;">{{ t('deploySnippetBaseConfig') }}</div>
+                <el-select
+                  v-model="deployForm.base_backup_file"
+                  :placeholder="t('deploySelectBackupOptional')"
+                  style="width: 100%"
+                  clearable
+                >
+                  <el-option
+                    v-for="backup in backups"
+                    :key="backup.id"
+                    :label="`${backup.device_name} - ${backup.backup_file}`"
+                    :value="backup.backup_file"
+                  >
+                    <div class="backup-option">
+                      <span class="backup-name">{{ backup.device_name }}</span>
+                      <span class="backup-file">{{ backup.backup_file }}</span>
+                      <span class="backup-time">{{ formatDateTime(backup.backup_time) }}</span>
+                    </div>
+                  </el-option>
+                </el-select>
+                <div class="section-desc">{{ t('deploySnippetBaseTip') }}</div>
               </div>
 
               <!-- 目标设备 -->
@@ -580,7 +629,8 @@ import {
   Timer,
   Document,
   Files,
-  Calendar
+  Calendar,
+  Edit
 } from '@element-plus/icons-vue'
 import {
   getDevices,
@@ -621,6 +671,9 @@ const deployForm = ref({
   mode: 'backup',
   backup_file: '',
   template_id: '',
+  snippet: '',
+  snippet_position: 'append',
+  base_backup_file: '',
   target_devices: [],
   variables: [],
   dry_run: false
@@ -673,6 +726,9 @@ const canDeploy = computed(() => {
   if (deployForm.value.target_devices.length === 0) return false
   if (deployForm.value.mode === 'backup') {
     return !!deployForm.value.backup_file
+  }
+  if (deployForm.value.mode === 'snippet') {
+    return !!deployForm.value.snippet.trim()
   }
   return !!deployForm.value.template_id
 })
