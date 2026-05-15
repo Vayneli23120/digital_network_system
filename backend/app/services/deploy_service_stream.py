@@ -113,6 +113,7 @@ class DeployService:
 
     @staticmethod
     async def _apply_template_config(
+        db: Session,
         device,
         deploy_data: dict,
         cli_callback: Optional[Callable] = None,
@@ -149,6 +150,7 @@ class DeployService:
 
     @staticmethod
     async def _apply_backup_config(
+        db: Session,
         device,
         deploy_data: dict,
         cli_callback: Optional[Callable] = None,

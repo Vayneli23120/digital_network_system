@@ -298,8 +298,6 @@ async def run_deploy_task(task_id: str, deploy_data: dict, db: Session):
     """
     后台执行部署任务
     """
-    from app.services.deploy_service import DeployService
-
     task = deploy_tasks.get(task_id)
     if not task:
         return
@@ -347,7 +345,7 @@ async def execute_device(task_id: str, device_id: int, deploy_data: dict, db: Se
     """
     执行单个设备的部署
     """
-    from app.services.deploy_service import DeployService
+    from app.services.deploy_service_stream import DeployService
     from app.services.device_service import DeviceService
 
     try:

@@ -11,8 +11,10 @@ from app.api import deploy_stream, deploy_history
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup - create tables
+    from app.core.database import engine, Base
     Base.metadata.create_all(bind=engine)
+    print("Database tables created/updated")
     yield
     # Shutdown
 
@@ -34,8 +36,8 @@ app.add_middleware(
 )
 
 # Include routers
-app.include_router(deploy_stream.router)
-app.include_router(deploy_history.router)
+app.include_router(deploy_stream.router, prefix="/api")
+app.include_router(deploy_history.router, prefix="/api")
 
 
 @app.get("/health")
