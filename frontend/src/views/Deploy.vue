@@ -941,6 +941,9 @@ const previewDeploy = async () => {
     mode: deployForm.value.mode,
     backup_file: deployForm.value.backup_file,
     template_id: deployForm.value.template_id,
+    snippet: deployForm.value.snippet,
+    snippet_position: deployForm.value.snippet_position,
+    base_backup_file: deployForm.value.base_backup_file,
     target_devices: deployForm.value.target_devices,
     variables: {}
   }
@@ -997,6 +1000,9 @@ const scheduleDeployTask = async () => {
     mode: deployForm.value.mode,
     backup_file: deployForm.value.backup_file,
     template_id: deployForm.value.template_id,
+    snippet: deployForm.value.snippet,
+    snippet_position: deployForm.value.snippet_position,
+    base_backup_file: deployForm.value.base_backup_file,
     target_devices: deployForm.value.target_devices,
     variables: {}
   }
@@ -1080,6 +1086,9 @@ const executeDeploy = async () => {
       mode: deployForm.value.mode,
       backup_file: deployForm.value.backup_file,
       template_id: deployForm.value.template_id,
+      snippet: deployForm.value.snippet,
+      snippet_position: deployForm.value.snippet_position,
+      base_backup_file: deployForm.value.base_backup_file,
       target_devices: deployForm.value.target_devices,
       variables: {},
       dry_run: false,
