@@ -1399,6 +1399,8 @@ onMounted(() => {
 <style scoped>
 .deploy-page {
   padding: 0;
+  min-height: 100vh;
+  background: var(--bg-primary);
 }
 
 /* Dark mode support */
@@ -1407,6 +1409,7 @@ onMounted(() => {
   --panel-border: var(--border-default);
   --text-primary: var(--text-primary);
   --text-secondary: var(--text-secondary);
+  background: var(--bg-primary);
 }
 
 .deploy-page:not(.dark) {
@@ -1414,6 +1417,7 @@ onMounted(() => {
   --panel-border: #e4e7ed;
   --text-primary: #303133;
   --text-secondary: #606266;
+  background: var(--bg-primary);
 }
 
 /* Page nav bar */
@@ -1467,7 +1471,11 @@ onMounted(() => {
 }
 
 .nav-action-btn.secondary:hover {
-  background: #f5f7fa;
+  background: var(--el-fill-color-light);
+}
+
+.deploy-page.dark .nav-action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
 .nav-action-btn.danger {
