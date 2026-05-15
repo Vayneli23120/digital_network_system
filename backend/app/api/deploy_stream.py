@@ -501,6 +501,7 @@ async def preview_deploy(
         from app.services.config_diff_service import ConfigDiffService
         from app.services.device_service import DeviceService
         from app.models.template import ConfigTemplate
+        from app.models.backup import ConfigBackup
 
         device_ids = deploy_data.get("target_devices", [])
         mode = deploy_data.get("mode")
@@ -516,13 +517,15 @@ async def preview_deploy(
             if not device:
                 continue
 
-            # 获取当前配置（简化版本，实际应从设备SSH获取）
-            current_config = device.config_content or ""
+            # 获取当前配置（从最新备份获取）
+            latest_backup = db.query(ConfigBackup).filter(
+                ConfigBackup.device_id == device_id
+            ).order_by(ConfigBackup.backup_time.desc()).first()
+            current_config = latest_backup.config_content if latest_backup else ""
 
             # 获取新配置
             if mode == "backup":
                 # 从备份获取配置
-                from app.models.backup import ConfigBackup
                 backup_file = deploy_data.get("backup_file")
                 backup = db.query(ConfigBackup).filter(
                     ConfigBackup.backup_file == backup_file
@@ -549,6 +552,8 @@ async def preview_deploy(
                 "device_id": device_id,
                 "device_name": device.name,
                 "device_ip": device.ip,
+                "old_config": current_config,
+                "new_config": new_config,
                 "diff": {
                     "lines": [
                         {
@@ -577,6 +582,8 @@ async def preview_deploy(
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 
