@@ -16,30 +16,36 @@
       </div>
     </div>
 
-    <!-- 差异内容 -->
+    <!-- 差异内容 - 双栏布局 -->
     <div class="diff-content">
       <div class="diff-header">
         <div class="diff-title old">{{ t('diffCurrentConfig') }}</div>
         <div class="diff-title new">{{ t('diffNewConfig') }}</div>
       </div>
-      <div class="diff-body">
-        <div
-          v-for="(line, index) in displayLines"
-          :key="index"
-          class="diff-line"
-          :class="line.type"
-        >
-          <div class="line-number old">{{ line.oldLineNum || '' }}</div>
-          <div class="line-number new">{{ line.newLineNum || '' }}</div>
-          <div class="line-content">
-            <span v-if="line.type === 'added'" class="marker">+</span>
-            <span v-else-if="line.type === 'removed'" class="marker">-</span>
-            <span v-else class="marker"> </span>
-            <code class="code-content">{{ line.content }}</code>
+      <div class="diff-body-wrapper">
+        <!-- 当前配置列 -->
+        <div class="diff-column old-column">
+          <div
+            v-for="(line, index) in oldColumnLines"
+            :key="'old-'+index"
+            class="diff-cell"
+            :class="line.type"
+          >
+            <span class="line-num">{{ line.lineNum || '' }}</span>
+            <code class="line-content">{{ line.content }}</code>
           </div>
         </div>
-        <div v-if="displayLines.length === 0" class="diff-empty">
-          {{ t('diffEmpty') }}
+        <!-- 新配置列 -->
+        <div class="diff-column new-column">
+          <div
+            v-for="(line, index) in newColumnLines"
+            :key="'new-'+index"
+            class="diff-cell"
+            :class="line.type"
+          >
+            <span class="line-num">{{ line.lineNum || '' }}</span>
+            <code class="line-content">{{ line.content }}</code>
+          </div>
         </div>
       </div>
     </div>
@@ -81,137 +87,55 @@ const props = defineProps({
     type: Boolean,
     default: false
   },
-  // 新增：直接传入diff数据，用于片段模式
   diffData: {
     type: Object,
     default: null
   }
 })
 
-// 如果有diffData，直接使用；否则重新计算diff
-const displayLines = computed(() => {
-  if (props.diffData && props.diffData.lines) {
-    return props.diffData.lines
-  }
-  return computedDiffLines.value
-})
-
 const stats = computed(() => {
   if (props.diffData && props.diffData.stats) {
     return props.diffData.stats
   }
-  return computedStats.value
+  return { added: 0, removed: 0, modified: 0 }
 })
 
-// 计算差异（用于没有diffData的情况）
-const computedDiffLines = computed(() => {
-  const oldLines = props.oldConfig.split('\n')
-  const newLines = props.newConfig.split('\n')
+// 使用传入的diff数据构建两列显示
+const oldColumnLines = computed(() => {
+  if (!props.diffData || !props.diffData.lines) return []
 
-  const result = []
-  let oldLineNum = 0
-  let newLineNum = 0
-
-  const lcs = computeLCS(oldLines, newLines)
-
-  let oldIdx = 0
-  let newIdx = 0
-
-  for (const line of lcs) {
-    while (oldIdx < oldLines.length && oldLines[oldIdx] !== line) {
-      result.push({
-        type: 'removed',
-        content: oldLines[oldIdx],
-        oldLineNum: ++oldLineNum,
-        newLineNum: null
-      })
-      oldIdx++
+  const lines = []
+  props.diffData.lines.forEach(line => {
+    if (line.type === 'removed') {
+      lines.push({ type: 'removed', lineNum: line.old_line_num, content: line.content })
+    } else if (line.type === 'unchanged') {
+      lines.push({ type: 'unchanged', lineNum: line.old_line_num, content: line.content })
     }
-
-    while (newIdx < newLines.length && newLines[newIdx] !== line) {
-      result.push({
-        type: 'added',
-        content: newLines[newIdx],
-        oldLineNum: null,
-        newLineNum: ++newLineNum
-      })
-      newIdx++
+    // added行在old列显示为空行（保持对齐）
+    if (line.type === 'added') {
+      lines.push({ type: 'empty', lineNum: '', content: '' })
     }
-
-    if (line !== undefined) {
-      result.push({
-        type: 'unchanged',
-        content: line,
-        oldLineNum: ++oldLineNum,
-        newLineNum: ++newLineNum
-      })
-      oldIdx++
-      newIdx++
-    }
-  }
-
-  while (oldIdx < oldLines.length) {
-    result.push({
-      type: 'removed',
-      content: oldLines[oldIdx],
-      oldLineNum: ++oldLineNum,
-      newLineNum: null
-    })
-    oldIdx++
-  }
-
-  while (newIdx < newLines.length) {
-    result.push({
-      type: 'added',
-      content: newLines[newIdx],
-      oldLineNum: null,
-      newLineNum: ++newLineNum
-    })
-    newIdx++
-  }
-
-  return result
+  })
+  return lines
 })
 
-const computedStats = computed(() => {
-  return {
-    added: computedDiffLines.value.filter(l => l.type === 'added').length,
-    removed: computedDiffLines.value.filter(l => l.type === 'removed').length,
-    modified: computedDiffLines.value.filter(l => l.type === 'modified').length
-  }
+const newColumnLines = computed(() => {
+  if (!props.diffData || !props.diffData.lines) return []
+
+  const lines = []
+  props.diffData.lines.forEach(line => {
+    if (line.type === 'added') {
+      lines.push({ type: 'added', lineNum: line.new_line_num, content: line.content })
+    } else if (line.type === 'unchanged') {
+      lines.push({ type: 'unchanged', lineNum: line.new_line_num, content: line.content })
+    }
+    // removed行在new列显示为空行（保持对齐）
+    if (line.type === 'removed') {
+      lines.push({ type: 'empty', lineNum: '', content: '' })
+    }
+  })
+  return lines
 })
-
-function computeLCS(a, b) {
-  const m = a.length
-  const n = b.length
-  const dp = Array(m + 1).fill(null).map(() => Array(n + 1).fill(0))
-
-  for (let i = 1; i <= m; i++) {
-    for (let j = 1; j <= n; j++) {
-      if (a[i - 1] === b[j - 1]) {
-        dp[i][j] = dp[i - 1][j - 1] + 1
-      } else {
-        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1])
-      }
-    }
-  }
-
-  const lcs = []
-  let i = m, j = n
-  while (i > 0 && j > 0) {
-    if (a[i - 1] === b[j - 1]) {
-      lcs.unshift(a[i - 1])
-      i--
-      j--
-    } else if (dp[i - 1][j] > dp[i][j - 1]) {
-      i--
-    } else {
-      j--
-    }
-  }
-
-  return lcs
-}
 </script>
 
 <style scoped>
@@ -249,7 +173,7 @@ function computeLCS(a, b) {
   font-size: 13px;
 }
 
-/* 差异内容 */
+/* 差异内容 - 双栏布局 */
 .diff-content {
   border: 1px solid var(--border-default);
   border-radius: 8px;
@@ -270,9 +194,13 @@ function computeLCS(a, b) {
   color: var(--text-secondary);
 }
 
-.diff-title.old { border-right: 1px solid var(--border-default); }
+.diff-title.old {
+  border-right: 1px solid var(--border-default);
+}
 
-.diff-body {
+/* 双栏主体 */
+.diff-body-wrapper {
+  display: flex;
   max-height: 400px;
   overflow-y: auto;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
@@ -280,54 +208,50 @@ function computeLCS(a, b) {
   line-height: 1.6;
 }
 
-.diff-line {
-  display: flex;
-  min-height: 24px;
+.diff-column {
+  flex: 1;
+  min-width: 0;
 }
 
-.diff-line.added {
+.old-column {
+  border-right: 1px solid var(--border-default);
+}
+
+.diff-cell {
+  display: flex;
+  min-height: 24px;
+  padding: 2px 0;
+}
+
+.diff-cell.added {
   background: rgba(103, 194, 58, 0.08);
 }
 
-.diff-line.removed {
+.diff-cell.removed {
   background: rgba(245, 108, 108, 0.08);
 }
 
-.diff-line.unchanged {
+.diff-cell.unchanged {
   background: transparent;
 }
 
-.line-number {
-  width: 40px;
+.diff-cell.empty {
+  background: #f5f7fa;
+}
+
+.line-num {
+  width: 50px;
   padding: 2px 8px;
   text-align: right;
   color: #909399;
-  background: var(--el-fill-color-light);
-  border-right: 1px solid var(--border-default);
   flex-shrink: 0;
 }
 
 .line-content {
   flex: 1;
-  padding: 2px 12px;
-  display: flex;
-  gap: 8px;
+  padding: 2px 8px;
   white-space: pre;
   overflow-x: auto;
-}
-
-.marker {
-  width: 12px;
-  flex-shrink: 0;
-  font-weight: 600;
-}
-
-.diff-line.added .marker { color: #67c23a; }
-.diff-line.removed .marker { color: #f56c6c; }
-.diff-line.unchanged .marker { color: transparent; }
-
-.code-content {
-  color: var(--text-primary);
 }
 
 .diff-empty {
@@ -366,16 +290,19 @@ function computeLCS(a, b) {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.diff-viewer.dark .diff-header,
-.diff-viewer.dark .line-number {
+.diff-viewer.dark .diff-header {
   background: rgba(255, 255, 255, 0.05);
 }
 
-.diff-viewer.dark .diff-line.added {
+.diff-viewer.dark .diff-cell.added {
   background: rgba(103, 194, 58, 0.15);
 }
 
-.diff-viewer.dark .diff-line.removed {
+.diff-viewer.dark .diff-cell.removed {
   background: rgba(245, 108, 108, 0.15);
+}
+
+.diff-viewer.dark .diff-cell.empty {
+  background: rgba(0, 0, 0, 0.2);
 }
 </style>
