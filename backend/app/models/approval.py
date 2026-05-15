@@ -3,7 +3,7 @@
 """
 from datetime import datetime
 from enum import Enum as PyEnum
-from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Enum
+from sqlalchemy import Column, Integer, String, DateTime, Text, ForeignKey, JSON, Enum, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -115,7 +115,7 @@ class ApprovalPolicy(Base):
     default_approvers = Column(JSON, default=list)  # [user_id, user_id, ...]
 
     # 是否启用
-    is_active = Column(bool, default=True)
+    is_active = Column(Boolean, default=True)
 
     # 创建时间
     created_at = Column(DateTime, default=datetime.now)
@@ -154,13 +154,13 @@ class ApprovalNotification(Base):
     content = Column(Text)
 
     # 是否已发送
-    is_sent = Column(bool, default=False)
+    is_sent = Column(Boolean, default=False)
 
     # 发送时间
     sent_at = Column(DateTime, nullable=True)
 
     # 是否已读
-    is_read = Column(bool, default=False)
+    is_read = Column(Boolean, default=False)
 
     # 读取时间
     read_at = Column(DateTime, nullable=True)

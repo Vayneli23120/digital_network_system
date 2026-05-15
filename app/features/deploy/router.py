@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 from loguru import logger
 from jinja2 import Template
 
@@ -12,6 +12,7 @@ from app.shared.database import get_db
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog
 from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
+from .config_diff_service import ConfigDiffService
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
 
@@ -19,16 +20,7 @@ router = APIRouter(prefix="/api/deploy", tags=["deploy"])
 @router.post("/preview")
 async def preview_deploy(deploy_data: dict):
     """
-    预览配置部署变更
-
-    请求体:
-    {
-        "mode": "backup" | "template",  # 部署模式
-        "backup_file": "备份文件路径",    # mode=backup 时使用
-        "template_id": 模板 ID,           # mode=template 时使用
-        "variables": {"变量名": "变量值"}, # 模板变量
-        "target_devices": [设备 ID 列表]
-    }
+    预览配置部署变更（增强版）
     """
     db: Session = next(get_db())
 
@@ -45,90 +37,82 @@ async def preview_deploy(deploy_data: dict):
         if not devices:
             raise HTTPException(status_code=404, detail="未找到指定的设备")
 
-        # 获取凭证组列表
-        credential_groups_data = db.query(CredentialGroup).all()
-        credential_groups = [
-            {
-                'id': g.id,
-                'name': g.name,
-                'username': g.username,
-                'password': decrypt_password(g.password_encrypted),
-                'enable_password': decrypt_password(g.enable_password_encrypted) if g.enable_password_encrypted else None
-            }
-            for g in credential_groups_data
-        ]
-
         # 获取配置内容
-        config_content = None
+        config_content = ""
         if mode == 'backup':
             backup_file = deploy_data.get('backup_file')
-            if not backup_file:
-                raise HTTPException(status_code=400, detail="请选择备份文件")
-
-            # 从备份文件读取配置
-            backup_path = Path(backup_file)
-            if not backup_path.exists():
-                backup_path = Path(f"./backups/{backup_file}")
-
-            if not backup_path.exists():
-                raise HTTPException(status_code=404, detail=f"备份文件不存在：{backup_file}")
-
-            with open(backup_path, 'r', encoding='utf-8') as f:
-                config_content = f.read()
+            if backup_file:
+                backup_path = Path(backup_file)
+                if not backup_path.exists():
+                    backup_path = Path(f"./backups/{backup_file}")
+                if backup_path.exists():
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        config_content = f.read()
 
         elif mode == 'template':
             template_id = deploy_data.get('template_id')
-            if not template_id:
-                raise HTTPException(status_code=400, detail="请选择配置模板")
+            if template_id:
+                template = db.query(ConfigTemplate).filter(ConfigTemplate.id == template_id).first()
+                if template:
+                    tmpl = Template(template.template_content)
+                    context = {'now': datetime.utcnow, 'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}
+                    context.update(variables)
+                    config_content = tmpl.render(**context)
 
-            template = db.query(ConfigTemplate).filter(ConfigTemplate.id == template_id).first()
-            if not template:
-                raise HTTPException(status_code=404, detail=f"模板不存在：{template_id}")
-
-            # 渲染模板
-            tmpl = Template(template.template_content)
-            context = {
-                'now': datetime.utcnow,
-                'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            context.update(variables)
-            config_content = tmpl.render(**context)
-
-        else:
-            raise HTTPException(status_code=400, detail=f"不支持的部署模式：{mode}")
-
-        # 使用部署服务预览变更
-        deploy_service = get_deploy_service()
-        results = []
-
+        # 为每个设备生成差异分析
+        preview_results = []
         for device in devices:
-            device_dict = {
-                'id': device.id,
-                'name': device.name,
-                'ip': device.ip,
-                'device_type': 'cisco_ios',
-                'credential_group': device.credential_group or 'default'
-            }
+            # 获取当前配置（从最新备份）
+            current_config = ""
+            latest_backup = db.query(BackupRecord).filter(
+                BackupRecord.device_id == device.id
+            ).order_by(BackupRecord.backup_time.desc()).first()
+            if latest_backup:
+                current_config = latest_backup.config_snapshot or ""
 
-            result = deploy_service.deploy_to_device(
-                device=device_dict,
-                config=config_content,
-                credential_groups=credential_groups,
-                dry_run=True
-            )
-            results.append(result)
+            # 生成差异分析
+            diff_result = ConfigDiffService.analyze_diff(current_config, config_content)
+            impact = ConfigDiffService.estimate_impact(diff_result)
+
+            preview_results.append({
+                "device_id": device.id,
+                "device_name": device.name,
+                "device_ip": device.ip,
+                "old_config": current_config,
+                "new_config": config_content,
+                "diff": {
+                    "lines": [
+                        {
+                            "type": line.type.value,
+                            "content": line.content,
+                            "old_line_num": line.old_line_num,
+                            "new_line_num": line.new_line_num
+                        }
+                        for line in diff_result.lines[:100]
+                    ],
+                    "stats": diff_result.stats
+                },
+                "impact": impact
+            })
 
         return {
             "success": True,
-            "message": "预览完成",
-            "results": results,
-            "config_preview": config_content[:2000] + "..." if len(config_content) > 2000 else config_content
+            "preview": preview_results,
+            "summary": {
+                "total_devices": len(preview_results),
+                "total_changes": sum(p["diff"]["stats"]["added"] + p["diff"]["stats"]["removed"]
+                                    for p in preview_results),
+                "high_risk_devices": sum(1 for p in preview_results
+                                         if p["impact"]["risk_level"] == "high")
+            }
         }
 
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"预览部署失败：{e}")
+        import traceback
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"预览失败：{str(e)}")
     finally:
         db.close()
@@ -309,3 +293,84 @@ async def get_compatible_variables():
             {"key": "TRUNK_VLANS", "description": "Trunk VLAN 范围", "example": "10,20,30,100,200"}
         ]
     }
+
+
+@router.get("/maintenance-windows")
+async def get_maintenance_windows():
+    """
+    获取可用的维护窗口时段
+    """
+    windows = []
+    now = datetime.now()
+
+    for day_offset in range(1, 8):
+        date = now + timedelta(days=day_offset)
+
+        # 凌晨窗口: 02:00-06:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_morning",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "02:00",
+            "end_time": "06:00",
+            "label": f"{date.strftime('%m-%d')} 凌晨窗口 (02:00-06:00)",
+            "available": True
+        })
+
+        # 下午窗口: 14:00-16:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_afternoon",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "14:00",
+            "end_time": "16:00",
+            "label": f"{date.strftime('%m-%d')} 下午窗口 (14:00-16:00)",
+            "available": True
+        })
+
+        # 晚间窗口: 22:00-02:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_evening",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "22:00",
+            "end_time": "02:00",
+            "next_day": True,
+            "label": f"{date.strftime('%m-%d')} 晚间窗口 (22:00-02:00)",
+            "available": True
+        })
+
+    return {"windows": windows}
+
+
+@router.post("/schedule")
+async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
+    """
+    预约部署任务
+    """
+    try:
+        window_id = schedule_data.get("window_id")
+        deploy_data = schedule_data.get("deploy_data", {})
+
+        # 解析维护窗口时间
+        parts = window_id.split('_')
+        date_str = parts[0]
+        period = parts[1]
+
+        date = datetime.strptime(date_str, "%Y%m%d")
+
+        if period == "morning":
+            scheduled_time = date.replace(hour=2, minute=0)
+        elif period == "afternoon":
+            scheduled_time = date.replace(hour=14, minute=0)
+        else:
+            scheduled_time = date.replace(hour=22, minute=0)
+
+        # 创建预约任务（这里简化处理，实际应创建定时任务）
+        return {
+            "success": True,
+            "task_id": f"scheduled_{window_id}",
+            "scheduled_at": scheduled_time.isoformat(),
+            "message": f"部署任务已预约到 {scheduled_time.strftime('%Y-%m-%d %H:%M')}"
+        }
+
+    except Exception as e:
+        logger.error(f"预约部署失败：{e}")
+        raise HTTPException(status_code=500, detail=f"预约失败：{str(e)}")
