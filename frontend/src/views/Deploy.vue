@@ -575,7 +575,7 @@
                 :disabled="!window.available"
                 class="window-option"
               >
-                <div class="window-label">{{ window.label }}</div>
+                <div class="window-label">{{ getWindowLabel(window) }}</div>
                 <div class="window-time">{{ window.start_time }} - {{ window.end_time }}</div>
               </el-radio-button>
             </el-radio-group>
@@ -1046,6 +1046,45 @@ const getRiskLevelText = (level) => {
     high: t('diffRiskHigh')
   }
   return texts[level] || level
+}
+
+// 维护窗口标签生成
+const getWindowLabel = (window) => {
+  const dateStr = window.date ? window.date.slice(5) : ''  // 取 MM-DD
+  const periodLabels = {
+    morning: t('deployWindowMorning'),
+    afternoon: t('deployWindowAfternoon'),
+    evening: t('deployWindowEvening')
+  }
+  const periodText = periodLabels[window.period] || window.period
+  return `${dateStr} ${periodText} (${window.start_time}-${window.end_time})`
+}
+
+// 变量描述生成
+const getVariableDescription = (key) => {
+  const descriptions = {
+    HOSTNAME: t('varDescHostname'),
+    ENABLE_SECRET: t('varDescEnableSecret'),
+    ADMIN_USERNAME: t('varDescAdminUsername'),
+    ADMIN_PASSWORD: t('varDescAdminPassword'),
+    DOMAIN_NAME: t('varDescDomainName'),
+    MGMT_VLAN_ID: t('varDescMgmtVlanId'),
+    MGMT_IP: t('varDescMgmtIp'),
+    MGMT_NETMASK: t('varDescMgmtNetmask'),
+    DEFAULT_GATEWAY: t('varDescDefaultGateway'),
+    SNMP_COMMUNITY: t('varDescSnmpCommunity'),
+    LOCATION: t('varDescLocation'),
+    CONTACT: t('varDescContact'),
+    NTP_SERVER: t('varDescNtpServer'),
+    SYSLOG_SERVER: t('varDescSyslogServer'),
+    DEFAULT_ROUTE: t('varDescDefaultRoute'),
+    OSPF_ROUTER_ID: t('varDescOspfRouterId'),
+    ACCESS_PORT_RANGE: t('varDescAccessPortRange'),
+    UPLINK_PORT: t('varDescUplinkPort'),
+    BUSINESS_VLAN_LIST: t('varDescBusinessVlanList'),
+    TRUNK_VLANS: t('varDescTrunkVlans')
+  }
+  return descriptions[key] || key
 }
 
 // 执行部署

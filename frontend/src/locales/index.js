@@ -1297,6 +1297,33 @@ export const languages = {
     deployApprovalRequester: '申请人',
     deployApprovalTime: '申请时间',
 
+    // 维护窗口
+    deployWindowMorning: '凌晨窗口',
+    deployWindowAfternoon: '下午窗口',
+    deployWindowEvening: '晚间窗口',
+
+    // 变量描述
+    varDescHostname: '设备主机名',
+    varDescEnableSecret: 'Enable 密码',
+    varDescAdminUsername: '管理员用户名',
+    varDescAdminPassword: '管理员密码',
+    varDescDomainName: '域名',
+    varDescMgmtVlanId: '管理 VLAN ID',
+    varDescMgmtIp: '管理 IP 地址',
+    varDescMgmtNetmask: '管理子网掩码',
+    varDescDefaultGateway: '默认网关',
+    varDescSnmpCommunity: 'SNMP 团体名',
+    varDescLocation: '设备位置',
+    varDescContact: '联系人邮箱',
+    varDescNtpServer: 'NTP 服务器',
+    varDescSyslogServer: 'Syslog 服务器',
+    varDescDefaultRoute: '默认路由下一跳',
+    varDescOspfRouterId: 'OSPF Router ID',
+    varDescAccessPortRange: '接入端口范围',
+    varDescUplinkPort: '上联端口',
+    varDescBusinessVlanList: '业务 VLAN 列表',
+    varDescTrunkVlans: 'Trunk VLAN 范围',
+
     // Phase 3: 配置差异与影响分析
     deployPreviewDialog: '配置变更预览',
     deployImpactAnalysis: '变更影响分析',
@@ -3755,6 +3782,33 @@ export const languages = {
     deployApprovalInfo: 'This deployment requires approval before execution',
     deployApprovalRequester: 'Requester',
     deployApprovalTime: 'Request Time',
+
+    // Maintenance Windows
+    deployWindowMorning: 'Early Morning Window',
+    deployWindowAfternoon: 'Afternoon Window',
+    deployWindowEvening: 'Evening Window',
+
+    // Variable Descriptions
+    varDescHostname: 'Device Hostname',
+    varDescEnableSecret: 'Enable Password',
+    varDescAdminUsername: 'Admin Username',
+    varDescAdminPassword: 'Admin Password',
+    varDescDomainName: 'Domain Name',
+    varDescMgmtVlanId: 'Management VLAN ID',
+    varDescMgmtIp: 'Management IP Address',
+    varDescMgmtNetmask: 'Management Subnet Mask',
+    varDescDefaultGateway: 'Default Gateway',
+    varDescSnmpCommunity: 'SNMP Community',
+    varDescLocation: 'Device Location',
+    varDescContact: 'Contact Email',
+    varDescNtpServer: 'NTP Server',
+    varDescSyslogServer: 'Syslog Server',
+    varDescDefaultRoute: 'Default Route Next Hop',
+    varDescOspfRouterId: 'OSPF Router ID',
+    varDescAccessPortRange: 'Access Port Range',
+    varDescUplinkPort: 'Uplink Port',
+    varDescBusinessVlanList: 'Business VLAN List',
+    varDescTrunkVlans: 'Trunk VLAN Range',
 
     // Incident Management
     faultTitle: 'Incident Records',

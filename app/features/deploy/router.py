@@ -619,7 +619,6 @@ async def execute_deploy(deploy_data: dict):
 
         return {
             "success": True,
-            "message": f"部署完成：{success_count} 成功，{failed_count} 失败",
             "results": results,
             "summary": {
                 "total": len(devices),
@@ -641,30 +640,30 @@ async def execute_deploy(deploy_data: dict):
 @router.get("/compatible-variables")
 async def get_compatible_variables():
     """
-    获取所有兼容的变量列表和说明
+    获取所有兼容的变量列表
     """
     return {
         "variables": [
-            {"key": "HOSTNAME", "description": "设备主机名", "example": "SW-Access-01"},
-            {"key": "ENABLE_SECRET", "description": "Enable 密码", "example": "YourPassword123"},
-            {"key": "ADMIN_USERNAME", "description": "管理员用户名", "example": "admin"},
-            {"key": "ADMIN_PASSWORD", "description": "管理员密码", "example": "YourAdminPass"},
-            {"key": "DOMAIN_NAME", "description": "域名", "example": "company.local"},
-            {"key": "MGMT_VLAN_ID", "description": "管理 VLAN ID", "example": "100"},
-            {"key": "MGMT_IP", "description": "管理 IP 地址", "example": "192.168.1.10"},
-            {"key": "MGMT_NETMASK", "description": "管理子网掩码", "example": "255.255.255.0"},
-            {"key": "DEFAULT_GATEWAY", "description": "默认网关", "example": "192.168.1.1"},
-            {"key": "SNMP_COMMUNITY", "description": "SNMP 团体名", "example": "public"},
-            {"key": "LOCATION", "description": "设备位置", "example": "Building-A-Floor-2"},
-            {"key": "CONTACT", "description": "联系人邮箱", "example": "network-admin@company.com"},
-            {"key": "NTP_SERVER", "description": "NTP 服务器", "example": "10.0.0.1"},
-            {"key": "SYSLOG_SERVER", "description": "Syslog 服务器", "example": "10.0.0.2"},
-            {"key": "DEFAULT_ROUTE", "description": "默认路由下一跳", "example": "10.0.0.1"},
-            {"key": "OSPF_ROUTER_ID", "description": "OSPF Router ID", "example": "1.1.1.1"},
-            {"key": "ACCESS_PORT_RANGE", "description": "接入端口范围", "example": "GigabitEthernet1/0/1-48"},
-            {"key": "UPLINK_PORT", "description": "上联端口", "example": "TenGigabitEthernet1/1/1"},
-            {"key": "BUSINESS_VLAN_LIST", "description": "业务 VLAN 列表", "example": "10,20,30,100"},
-            {"key": "TRUNK_VLANS", "description": "Trunk VLAN 范围", "example": "10,20,30,100,200"}
+            {"key": "HOSTNAME", "example": "SW-Access-01"},
+            {"key": "ENABLE_SECRET", "example": "YourPassword123"},
+            {"key": "ADMIN_USERNAME", "example": "admin"},
+            {"key": "ADMIN_PASSWORD", "example": "YourAdminPass"},
+            {"key": "DOMAIN_NAME", "example": "company.local"},
+            {"key": "MGMT_VLAN_ID", "example": "100"},
+            {"key": "MGMT_IP", "example": "192.168.1.10"},
+            {"key": "MGMT_NETMASK", "example": "255.255.255.0"},
+            {"key": "DEFAULT_GATEWAY", "example": "192.168.1.1"},
+            {"key": "SNMP_COMMUNITY", "example": "public"},
+            {"key": "LOCATION", "example": "Building-A-Floor-2"},
+            {"key": "CONTACT", "example": "network-admin@company.com"},
+            {"key": "NTP_SERVER", "example": "10.0.0.1"},
+            {"key": "SYSLOG_SERVER", "example": "10.0.0.2"},
+            {"key": "DEFAULT_ROUTE", "example": "10.0.0.1"},
+            {"key": "OSPF_ROUTER_ID", "example": "1.1.1.1"},
+            {"key": "ACCESS_PORT_RANGE", "example": "GigabitEthernet1/0/1-48"},
+            {"key": "UPLINK_PORT", "example": "TenGigabitEthernet1/1/1"},
+            {"key": "BUSINESS_VLAN_LIST", "example": "10,20,30,100"},
+            {"key": "TRUNK_VLANS", "example": "10,20,30,100,200"}
         ]
     }
 
@@ -686,7 +685,7 @@ async def get_maintenance_windows():
             "date": date.strftime("%Y-%m-%d"),
             "start_time": "02:00",
             "end_time": "06:00",
-            "label": f"{date.strftime('%m-%d')} 凌晨窗口 (02:00-06:00)",
+            "period": "morning",  # 前端根据此生成国际化标签
             "available": True
         })
 
@@ -696,7 +695,7 @@ async def get_maintenance_windows():
             "date": date.strftime("%Y-%m-%d"),
             "start_time": "14:00",
             "end_time": "16:00",
-            "label": f"{date.strftime('%m-%d')} 下午窗口 (14:00-16:00)",
+            "period": "afternoon",
             "available": True
         })
 
@@ -707,7 +706,7 @@ async def get_maintenance_windows():
             "start_time": "22:00",
             "end_time": "02:00",
             "next_day": True,
-            "label": f"{date.strftime('%m-%d')} 晚间窗口 (22:00-02:00)",
+            "period": "evening",
             "available": True
         })
 
@@ -741,10 +740,9 @@ async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
         return {
             "success": True,
             "task_id": f"scheduled_{window_id}",
-            "scheduled_at": scheduled_time.isoformat(),
-            "message": f"部署任务已预约到 {scheduled_time.strftime('%Y-%m-%d %H:%M')}"
+            "scheduled_at": scheduled_time.isoformat()
         }
 
     except Exception as e:
         logger.error(f"预约部署失败：{e}")
-        raise HTTPException(status_code=500, detail=f"预约失败：{str(e)}")
+        raise HTTPException(status_code=500, detail=f"Scheduling failed: {str(e)}")
