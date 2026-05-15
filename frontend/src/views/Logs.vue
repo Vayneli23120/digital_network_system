@@ -107,6 +107,8 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { getLogs, getLogFiles, getLogFileContent, searchLogs, clearOldLogs } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -173,7 +175,7 @@ const getLevelType = (level) => {
 }
 
 // 加载日志
-const loadLogs = async () => {
+const loadLogs = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
@@ -181,49 +183,70 @@ const loadLogs = async () => {
       level: logLevel.value || undefined,
       limit: logLimit.value
     }
-    const res = await getLogs(params)
+    const res = await cachedRequest(
+      () => getLogs(params),
+      'logs',
+      params,
+      { forceRefresh: force }
+    )
     logList.value = res.items || []
     total.value = res.total || 0
   } catch (error) {
-    ElMessage.error(t('logLoadFailed') + '：' + (error.response?.data?.detail || error.message))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('logLoadFailed') + '：' + (error.response?.data?.detail || error.message))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 // 搜索日志
-const searchLogsFunc = async () => {
+const searchLogsFunc = debounce(async () => {
   if (!searchKeyword.value.trim()) {
     loadLogs()
     return
   }
   loading.value = true
   try {
-    const res = await searchLogs(searchKeyword.value, {
-      days: timeRange.value,
-      level: logLevel.value || undefined
-    })
+    const res = await cachedRequest(
+      () => searchLogs(searchKeyword.value, {
+        days: timeRange.value,
+        level: logLevel.value || undefined
+      }),
+      'logs_search',
+      { keyword: searchKeyword.value, days: timeRange.value, level: logLevel.value },
+      { forceRefresh: true }
+    )
     logList.value = res.items || []
     total.value = res.total || 0
   } catch (error) {
-    ElMessage.error(t('logSearchFailed') + '：' + error.message)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('logSearchFailed') + '：' + error.message)
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 // 加载日志文件列表
-const loadLogFiles = async () => {
+const loadLogFiles = debounce(async (force = false) => {
   filesLoading.value = true
   try {
-    const res = await getLogFiles({ days: timeRange.value })
+    const res = await cachedRequest(
+      () => getLogFiles({ days: timeRange.value }),
+      'log_files',
+      { days: timeRange.value },
+      { forceRefresh: force }
+    )
     logFiles.value = res.items || []
   } catch (error) {
-    ElMessage.error(t('logFilesLoadFailed') + '：' + error.message)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('logFilesLoadFailed') + '：' + error.message)
+    }
   } finally {
     filesLoading.value = false
   }
-}
+}, 300)
 
 // 查看日志文件内容
 const viewLogFile = async (filename) => {
@@ -244,7 +267,7 @@ const viewLogFile = async (filename) => {
 
 // 刷新日志
 const refreshLogs = () => {
-  loadLogs()
+  loadLogs(true)
 }
 
 // 切换实时刷新

@@ -517,6 +517,8 @@ import { getPartList, createMovement, getMovements, getPartBySerialNumber } from
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -596,12 +598,22 @@ const scrapInScanSessionRef = ref(null)
 const scrapInScanItems = ref([])
 
 // 加载报废库存（按序列号跟踪有序列号的，按数量跟踪无序列号的）
-const loadScrapItems = async () => {
+const loadScrapItems = debounce(async (force = false) => {
   loading.value = true
   try {
     // 查询所有报废入库和报废出库记录
-    const scrapInResult = await getMovements({ movement_type: 'scrap_in', limit: 200 })
-    const scrapOutResult = await getMovements({ movement_type: 'scrap_out', limit: 200 })
+    const scrapInResult = await cachedRequest(
+      () => getMovements({ movement_type: 'scrap_in', limit: 200 }),
+      'scrap_in_movements',
+      { movement_type: 'scrap_in', limit: 200 },
+      { forceRefresh: force }
+    )
+    const scrapOutResult = await cachedRequest(
+      () => getMovements({ movement_type: 'scrap_out', limit: 200 }),
+      'scrap_out_movements',
+      { movement_type: 'scrap_out', limit: 200 },
+      { forceRefresh: force }
+    )
     const scrapInMovements = scrapInResult.items || []
     const scrapOutMovements = scrapOutResult.items || []
 
@@ -716,11 +728,13 @@ const loadScrapItems = async () => {
     scrapItems.value = items
     updateStats(scrapInMovements, scrapOutMovements)
   } catch (e) {
-    ElMessage.error(t('scrapLoadFailed') + '：' + (e.response?.data?.detail || e.message))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('scrapLoadFailed') + '：' + (e.response?.data?.detail || e.message))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 // 更新统计（基于净库存）
 const updateStats = (scrapInMovements, scrapOutMovements) => {
@@ -739,12 +753,22 @@ const updateStats = (scrapInMovements, scrapOutMovements) => {
 }
 
 // 加载报废历史（包含报废入库和报废出库）
-const loadHistory = async () => {
+const loadHistory = debounce(async (force = false) => {
   historyLoading.value = true
   try {
     // 查询报废入库和报废出库记录
-    const scrapInResult = await getMovements({ movement_type: 'scrap_in', limit: 200 })
-    const scrapOutResult = await getMovements({ movement_type: 'scrap_out', limit: 200 })
+    const scrapInResult = await cachedRequest(
+      () => getMovements({ movement_type: 'scrap_in', limit: 200 }),
+      'scrap_in_movements',
+      { movement_type: 'scrap_in', limit: 200 },
+      { forceRefresh: force }
+    )
+    const scrapOutResult = await cachedRequest(
+      () => getMovements({ movement_type: 'scrap_out', limit: 200 }),
+      'scrap_out_movements',
+      { movement_type: 'scrap_out', limit: 200 },
+      { forceRefresh: force }
+    )
     const allRecords = [...(scrapInResult.items || []), ...(scrapOutResult.items || [])]
 
     // 按时间排序
@@ -755,17 +779,19 @@ const loadHistory = async () => {
     historyItems.value = allRecords.slice(start, start + 50)
     historyTotal.value = allRecords.length
   } catch (e) {
-    ElMessage.error(t('scrapHistoryLoadFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('scrapHistoryLoadFailed'))
+    }
   } finally {
     historyLoading.value = false
   }
-}
+}, 300)
 
 // 重置筛选
 const resetFilters = () => {
   search.value = ''
   category.value = ''
-  loadScrapItems()
+  loadScrapItems(true)
 }
 
 // 显示报废详情（该备件的报废入库和出库历史）
@@ -807,10 +833,12 @@ const submitScrapFromScan = async () => {
         })
       }
     }
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
     ElMessage.success(t('scrapScrapInItems', { count: scanItems.value.length }))
     scanDialogVisible.value = false
-    loadScrapItems()
-    loadHistory()
+    loadScrapItems(true)
+    loadHistory(true)
   } catch (e) {
     ElMessage.error(t('scrapScrapInFailed') + '：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -903,10 +931,12 @@ const submitManualScrap = async () => {
       reference: manualForm.reference
     })
 
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
     ElMessage.success(t('scrapScrapInSuccess'))
     manualDialogVisible.value = false
-    loadScrapItems()
-    loadHistory()
+    loadScrapItems(true)
+    loadHistory(true)
   } catch (e) {
     ElMessage.error(t('scrapScrapInFailed') + '：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -943,10 +973,12 @@ const submitManualIn = async () => {
       reason: manualInForm.reason || t('scrapScrapIn'),
       reference: manualInForm.reference
     })
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
     ElMessage.success(t('scrapScrapInSuccess'))
     manualInDialogVisible.value = false
-    loadScrapItems()
-    loadHistory()
+    loadScrapItems(true)
+    loadHistory(true)
   } catch (e) {
     ElMessage.error(t('scrapStockInFailed') + '：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -1016,10 +1048,12 @@ const submitScrapOut = async () => {
       reason: scrapOutForm.reason,
       reference: ''
     })
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
     ElMessage.success(t('scrapScrapOutSuccess'))
     scrapOutDialogVisible.value = false
-    loadScrapItems()
-    loadHistory()
+    loadScrapItems(true)
+    loadHistory(true)
   } catch (e) {
     ElMessage.error(t('scrapStockOutFailed') + '：' + (e.response?.data?.detail || e.message))
   } finally {
@@ -1048,13 +1082,15 @@ const onScrapOutScanComplete = async (result) => {
   }
 
   if (scrapOutCount > 0) {
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
     ElMessage.success(t('scrapScrapOutItems', { count: scrapOutCount }))
   }
 
   scrapOutScanDialogVisible.value = false
   scrapOutDialogVisible.value = false
-  loadScrapItems()
-  loadHistory()
+  loadScrapItems(true)
+  loadHistory(true)
 }
 
 // 打开报废入库扫码对话框
@@ -1070,11 +1106,13 @@ const onScrapInScanComplete = async (result) => {
     return
   }
 
+  clearCache('scrap_in_movements')
+  clearCache('scrap_out_movements')
   ElMessage.success(t('scrapScrapInItems', { count: itemCount }))
   scrapInScanDialogVisible.value = false
   manualInDialogVisible.value = false
-  loadScrapItems()
-  loadHistory()
+  loadScrapItems(true)
+  loadHistory(true)
 }
 
 onMounted(() => {

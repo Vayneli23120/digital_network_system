@@ -77,6 +77,8 @@
 import { ref, computed, onMounted, nextTick } from 'vue'
 import { joinScanSession, addScanItem, getScanSession } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -110,7 +112,7 @@ const parseScanContent = (content) => {
 }
 
 // 加入会话
-const joinSession = async () => {
+const joinSession = debounce(async () => {
   error.value = ''
   successMsg.value = ''
 
@@ -121,14 +123,24 @@ const joinSession = async () => {
   }
 
   try {
-    const result = await joinScanSession({ session_code: code })
+    const result = await cachedRequest(
+      () => joinScanSession({ session_code: code }),
+      'scan_session_join',
+      { code },
+      { forceRefresh: true }
+    )
     sessionCode.value = code
     sessionType.value = result.session_type
     joined.value = true
     successMsg.value = t('scannerJoinedSession')
 
     // 获取已有项目
-    const sessionData = await getScanSession(code)
+    const sessionData = await cachedRequest(
+      () => getScanSession(code),
+      'scan_session',
+      { code },
+      { forceRefresh: true }
+    )
     scannedItems.value = sessionData.items || []
 
     // 聚焦到序列号输入框
@@ -136,12 +148,14 @@ const joinSession = async () => {
       serialInput.value?.focus()
     })
   } catch (e) {
-    error.value = e.response?.data?.detail || t('scannerJoinFailed')
+    if (e.name !== 'CanceledError') {
+      error.value = e.response?.data?.detail || t('scannerJoinFailed')
+    }
   }
-}
+}, 300)
 
 // 扫描序列号
-const scanSerial = async () => {
+const scanSerial = debounce(async () => {
   error.value = ''
   successMsg.value = ''
 
@@ -149,7 +163,12 @@ const scanSerial = async () => {
   if (!sn) return
 
   try {
-    const result = await addScanItem(sessionCode.value, sn, 1)
+    const result = await cachedRequest(
+      () => addScanItem(sessionCode.value, sn, 1),
+      'scan_item_add',
+      { code: sessionCode.value, sn },
+      { forceRefresh: true }
+    )
 
     // 添加到列表
     const existing = scannedItems.value.find(i => i.serial_number === sn)
@@ -174,9 +193,11 @@ const scanSerial = async () => {
       serialInput.value?.focus()
     })
   } catch (e) {
-    error.value = e.response?.data?.detail || t('scannerScanFailed')
+    if (e.name !== 'CanceledError') {
+      error.value = e.response?.data?.detail || t('scannerScanFailed')
+    }
   }
-}
+}, 300)
 
 // 移除项目
 const removeItem = (sn) => {

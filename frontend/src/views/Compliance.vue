@@ -114,6 +114,8 @@ import { ElMessage } from 'element-plus'
 import { Connection, Document } from '@element-plus/icons-vue'
 import { getCheckItems, runComplianceCheck } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -127,17 +129,24 @@ const checkForm = reactive({ device_name: '', device_ip: '', config_text: '' })
 const categoryType = (cat) => ({ security: 'danger', availability: 'warning', compliance: 'info' }[cat] || '')
 const severityType = (sev) => ({ critical: 'danger', high: 'warning', medium: 'info', low: '' }[sev] || '')
 
-const loadChecks = async () => {
+const loadChecks = debounce(async (force = false) => {
   loading.value = true
   try {
-    const { data } = await getCheckItems()
+    const { data } = await cachedRequest(
+      () => getCheckItems(),
+      'complianceCheckItems',
+      {},
+      { forceRefresh: force }
+    )
     checkItems.value = data
   } catch (e) {
-    ElMessage.error(t('complianceLoadCheckItemsFailed') + '：' + (e.response?.data?.detail || e.message))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('complianceLoadCheckItemsFailed') + '：' + (e.response?.data?.detail || e.message))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const showCheckDialog = () => {
   checkForm.device_name = ''

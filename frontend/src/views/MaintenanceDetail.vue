@@ -785,6 +785,8 @@ import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -1188,9 +1190,9 @@ const searchSpareParts = async (query) => {
 }
 
 // 加载初始备件列表（不自动加载，用户需输入搜索）
-const loadInitialSpareParts = async () => {
+const loadInitialSpareParts = debounce(async (force = false) => {
   sparePartOptions.value = []
-}
+}, 300)
 
 // 添加备件到编辑表单
 const addSparePartToEditForm = () => {
@@ -1460,12 +1462,17 @@ const updateEditPartsCost = () => {
   )
 }
 
-const loadMaintenance = async () => {
+const loadMaintenance = debounce(async (force = false) => {
   loading.value = true
   try {
     const maintId = route.params.id
     // 使用新的 getMaintenanceDetail API 获取详情
-    const data = await getMaintenanceDetail(maintId)
+    const data = await cachedRequest(
+      () => getMaintenanceDetail(maintId),
+      'maintenance_detail',
+      { id: maintId },
+      { forceRefresh: force }
+    )
     maintenance.value = data
 
     // 设置状态信息
@@ -1553,7 +1560,7 @@ const loadMaintenance = async () => {
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const openEditDialog = async () => {
   await loadInitialSpareParts()

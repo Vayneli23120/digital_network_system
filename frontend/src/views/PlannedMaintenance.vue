@@ -562,6 +562,8 @@ import {
 } from '@/api'
 import { formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -622,23 +624,35 @@ const getPlanTypeText = (type) => {
 
 const loadStats = async () => {
   try {
-    const data = await getPlannedMaintenanceStats()
+    const data = await cachedRequest(
+      () => getPlannedMaintenanceStats(),
+      'plannedMaintenanceStats',
+      {},
+      { forceRefresh: false }
+    )
     stats.value = data
   } catch (e) {
     console.error(t('pmMsgLoadStatsFailed'), e)
   }
 }
 
-const loadPlans = async () => {
+const loadPlans = debounce(async (force = false) => {
   try {
-    const data = await getMaintenancePlans()
+    const data = await cachedRequest(
+      () => getMaintenancePlans(),
+      'plannedMaintenancePlans',
+      {},
+      { forceRefresh: force }
+    )
     plans.value = data.items || []
   } catch (e) {
-    ElMessage.error(t('pmMsgLoadPlansFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('pmMsgLoadPlansFailed'))
+    }
   }
-}
+}, 300)
 
-const loadTasks = async () => {
+const loadTasks = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
@@ -649,14 +663,21 @@ const loadTasks = async () => {
       params.start_date = dateRange.value[0]
       params.end_date = dateRange.value[1]
     }
-    const data = await getMaintenanceTasks(params)
+    const data = await cachedRequest(
+      () => getMaintenanceTasks(params),
+      'plannedMaintenanceTasks',
+      params,
+      { forceRefresh: force }
+    )
     tasks.value = data.items || []
   } catch (e) {
-    ElMessage.error(t('pmMsgLoadTasksFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('pmMsgLoadTasksFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const loadDevices = async () => {
   try {
@@ -692,10 +713,12 @@ const createPlan = async () => {
       ...planForm.value,
       device_name: device?.name
     })
+    clearCache('plannedMaintenancePlans')
+    clearCache('plannedMaintenanceStats')
     ElMessage.success(t('pmMsgPlanCreateSuccess'))
     showPlanDialog.value = false
     resetPlanForm()
-    loadPlans()
+    loadPlans(true)
     loadStats()
   } catch (e) {
     ElMessage.error(t('pmMsgPlanCreateFailed') + ': ' + (e.response?.data?.detail || e.message))
@@ -721,11 +744,12 @@ const editPlan = (row) => {
 const updatePlan = async () => {
   try {
     await updateMaintenancePlan(planForm.value.id, planForm.value)
+    clearCache('plannedMaintenancePlans')
     ElMessage.success(t('pmMsgPlanUpdateSuccess'))
     showPlanDialog.value = false
     editMode.value = false
     resetPlanForm()
-    loadPlans()
+    loadPlans(true)
   } catch (e) {
     ElMessage.error(t('pmMsgPlanUpdateFailed'))
   }
@@ -735,8 +759,10 @@ const deletePlan = async (row) => {
   try {
     await ElMessageBox.confirm(`${t('pmMsgConfirmDeletePlan')} "${row.name}" ?`, t('pmMsgConfirmDelete'), { type: 'warning' })
     await deletePlanApi(row.id)
+    clearCache('plannedMaintenancePlans')
+    clearCache('plannedMaintenanceStats')
     ElMessage.success(t('pmMsgPlanDeleteSuccess'))
-    loadPlans()
+    loadPlans(true)
     loadStats()
   } catch (e) {
     if (e !== 'cancel') ElMessage.error(t('pmMsgPlanDeleteFailed'))

@@ -246,6 +246,8 @@ import { ElMessage } from 'element-plus'
 import { Refresh, Warning, Monitor, Calendar, Document } from '@element-plus/icons-vue'
 import { getAIDashboard, getAIHistory, getFaults, getDevices, analyzeFaultAI, analyzeHealthAI } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -283,26 +285,40 @@ const filteredHistory = computed(() => {
 })
 
 // Methods
-const refreshDashboard = async () => {
+const refreshDashboard = debounce(async (force = false) => {
   try {
-    dashboard.value = await getAIDashboard()
+    dashboard.value = await cachedRequest(
+      () => getAIDashboard(),
+      'ai_dashboard',
+      {},
+      { forceRefresh: force }
+    )
     providers.value = dashboard.value.providers_available || []
   } catch (error) {
-    console.error('Failed to fetch dashboard:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch dashboard:', error)
+    }
   }
-}
+}, 300)
 
-const fetchHistory = async () => {
+const fetchHistory = debounce(async (force = false) => {
   try {
     historyLoading.value = true
-    const res = await getAIHistory({ limit: 50 })
+    const res = await cachedRequest(
+      () => getAIHistory({ limit: 50 }),
+      'ai_history',
+      { limit: 50 },
+      { forceRefresh: force }
+    )
     history.value = res.history || []
   } catch (error) {
-    console.error('Failed to fetch history:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch history:', error)
+    }
   } finally {
     historyLoading.value = false
   }
-}
+}, 300)
 
 const fetchActiveFaults = async () => {
   try {

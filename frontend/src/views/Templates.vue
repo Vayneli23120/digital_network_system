@@ -121,6 +121,8 @@ import { Document, Edit, Setting } from '@element-plus/icons-vue'
 import { getTemplates, createTemplate as createTemplateApi, getTemplate, updateTemplate as updateTemplateApi, deleteTemplate as deleteTemplateApi } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -143,17 +145,24 @@ const templateForm = ref({
 
 const formatDateTime = (date) => dayjs(date).format('YYYY-MM-DD HH:mm')
 
-const loadTemplates = async () => {
+const loadTemplates = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getTemplates()
+    const data = await cachedRequest(
+      () => getTemplates(),
+      'templates',
+      {},
+      { forceRefresh: force }
+    )
     templates.value = data.items || []
   } catch (error) {
-    ElMessage.error(t('tplLoadFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('tplLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const viewTemplate = async (id) => {
   try {
@@ -200,10 +209,11 @@ const createTemplate = async () => {
       variables: JSON.stringify(variables)
     })
 
+    clearCache('templates')
     ElMessage.success(t('tplCreateSuccess'))
     showAddDialog.value = false
     resetForm()
-    loadTemplates()
+    loadTemplates(true)
   } catch (error) {
     ElMessage.error(t('tplCreateFailed'))
   }
@@ -227,12 +237,13 @@ const updateTemplate = async () => {
       variables: JSON.stringify(variables)
     })
 
+    clearCache('templates')
     ElMessage.success(t('tplUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     currentTemplate.value = null
     resetForm()
-    loadTemplates()
+    loadTemplates(true)
   } catch (error) {
     ElMessage.error(t('tplUpdateFailed'))
   }
@@ -247,8 +258,9 @@ const deleteTemplate = async (id) => {
     })
 
     await deleteTemplateApi(id)
+    clearCache('templates')
     ElMessage.success(t('tplDeleteSuccess'))
-    loadTemplates()
+    loadTemplates(true)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(t('tplDeleteFailed'))

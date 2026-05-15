@@ -439,6 +439,8 @@ import { Search, Plus, Refresh, Document, Clock, CircleCheck, SuccessFilled, Arr
 import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
 import { formatDateTime, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { debounce } from '@/utils/requestManager.js'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -684,19 +686,27 @@ const filterFaults = () => {
   filteredFaults.value = result
 }
 
-const loadFaults = async () => {
+const loadFaults = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getFaults({ limit: 500 })
+    const params = { limit: 500 }
+    const data = await cachedRequest(
+      () => getFaults(params),
+      'faults',
+      params,
+      { forceRefresh: force }
+    )
     faults.value = (data.items || [])
     total.value = data.total || faults.value.length
     filterFaults()
   } catch (error) {
-    ElMessage.error(t('faultLoadFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('faultLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const loadDevices = async () => {
   try {
@@ -723,10 +733,11 @@ const addFault = async () => {
       status: faultForm.value.assigned_to ? 'assigned' : 'open'
     }
     await createFault(data)
+    clearCache('faults')  // 清除缓存
     ElMessage.success(t('faultAddSuccess'))
     showAddDialog.value = false
     resetForm()
-    loadFaults()
+    loadFaults(true)  // 强制刷新
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     ElMessage.error(t('faultAddFailed'))
@@ -757,11 +768,12 @@ const updateFault = async () => {
       ...faultForm.value,
       device_name: device?.name
     })
+    clearCache('faults')  // 清除缓存
     ElMessage.success(t('faultUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     resetForm()
-    loadFaults()
+    loadFaults(true)  // 强制刷新
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     ElMessage.error(t('faultUpdateFailed'))
@@ -776,8 +788,9 @@ const deleteFaultRecord = async (row) => {
       { type: 'warning' }
     )
     await deleteFault(row.id)
+    clearCache('faults')  // 清除缓存
     ElMessage.success(t('faultDeleteSuccess'))
-    loadFaults()
+    loadFaults(true)  // 强制刷新
     window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) {
     if (error !== 'cancel') {

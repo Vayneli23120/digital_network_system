@@ -76,6 +76,8 @@ import { ElMessage } from 'element-plus'
 import { Bell, Warning, Tools, InfoFilled, Delete } from '@element-plus/icons-vue'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, getUnreadCount } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -85,11 +87,16 @@ const loading = ref(false)
 const filterType = ref('all')
 const unreadCount = ref(0)
 
-const loadNotifications = async () => {
+const loadNotifications = debounce(async (force = false) => {
   loading.value = true
   try {
     const unreadOnly = filterType.value === 'unread'
-    const res = await getNotifications(unreadOnly)
+    const res = await cachedRequest(
+      () => getNotifications(unreadOnly),
+      'notifications',
+      { filter: filterType.value },
+      { forceRefresh: force }
+    )
     let items = res.items || []
 
     // 按类型筛选
@@ -99,11 +106,13 @@ const loadNotifications = async () => {
 
     notifications.value = items
   } catch (e) {
-    ElMessage.error(t('notifLoadFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('notifLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const loadUnreadCount = async () => {
   try {
@@ -121,6 +130,7 @@ const markRead = async (id) => {
     if (notif) notif.read = true
     unreadCount.value = Math.max(0, unreadCount.value - 1)
     ElMessage.success(t('notifMarkedRead'))
+    clearCache('notifications')
   } catch (e) {
     ElMessage.error(t('notifMarkFailed'))
   }
@@ -132,6 +142,7 @@ const markAllRead = async () => {
     notifications.value.forEach(n => n.read = true)
     unreadCount.value = 0
     ElMessage.success(t('notifAllMarkedRead'))
+    clearCache('notifications')
   } catch (e) {
     ElMessage.error(t('notifMarkFailed'))
   }
@@ -142,6 +153,7 @@ const deleteNotif = async (id) => {
     await deleteNotification(id)
     notifications.value = notifications.value.filter(n => n.id !== id)
     ElMessage.success(t('notifDeleted'))
+    clearCache('notifications')
   } catch (e) {
     ElMessage.error(t('notifDeleteFailed'))
   }

@@ -234,6 +234,8 @@ import { Aim, InfoFilled, Edit } from '@element-plus/icons-vue'
 import { getPartList, createPart, updatePart, getPartStats, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import ScanSession from '@/components/ScanSession.vue'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const emit = defineEmits(['show-detail', 'stats-loaded'])
@@ -291,7 +293,7 @@ const manualOutForm = reactive({
 const scanOutDialogVisible = ref(false)
 const scanOutSessionRef = ref(null)
 
-const loadParts = async () => {
+const loadParts = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
@@ -300,15 +302,28 @@ const loadParts = async () => {
       low_stock: props.externalLowStock || false,
       limit: 200
     }
-    const result = await getPartList(params)
+    const result = await cachedRequest(
+      () => getPartList(params),
+      'spareParts',
+      params,
+      { forceRefresh: force }
+    )
     parts.value = result.items || []
-    emit('stats-loaded', await getPartStats())
+    const stats = await cachedRequest(
+      () => getPartStats(),
+      'sparePartsStats',
+      {},
+      { forceRefresh: force }
+    )
+    emit('stats-loaded', stats)
   } catch (e) {
-    ElMessage.error(t('spareLoadFailed') + ': ' + (e.response?.data?.detail || e.message))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('spareLoadFailed') + ': ' + (e.response?.data?.detail || e.message))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const showAddDialog = () => {
   isEdit.value = false
@@ -320,13 +335,15 @@ const savePart = async () => {
   try {
     if (isEdit.value) {
       await updatePart(editId.value, form)
+      clearCache('spareParts')
       ElMessage.success(t('msgUpdatedSuccess'))
     } else {
       await createPart(form)
+      clearCache('spareParts')
       ElMessage.success(t('msgCreatedSuccess'))
     }
     dialogVisible.value = false
-    loadParts()
+    loadParts(true)
   } catch (e) {
     ElMessage.error(t('msgOpFailed') + ': ' + (e.response?.data?.detail || e.message))
   }
@@ -355,9 +372,11 @@ const submitManualIn = async () => {
   manualInSubmitting.value = true
   try {
     const result = await manualStockIn(currentManualPart.value.id, manualInForm)
+    clearCache('spareParts')
+    clearCache('sparePartsStats')
     ElMessage.success(result.message || t('spareStockIn') + t('msgSuccess'))
     manualInDialogVisible.value = false
-    loadParts()
+    loadParts(true)
   } catch (e) {
     ElMessage.error(t('spareStockIn') + t('msgFailed') + ': ' + (e.response?.data?.detail || e.message))
   } finally {
@@ -416,9 +435,11 @@ const submitManualOut = async () => {
       destination: manualOutForm.destination,
       notes: manualOutForm.notes
     })
+    clearCache('spareParts')
+    clearCache('sparePartsStats')
     ElMessage.success(result.message || t('spareStockOut') + t('msgSuccess'))
     manualOutDialogVisible.value = false
-    loadParts()
+    loadParts(true)
   } catch (e) {
     ElMessage.error(t('spareStockOut') + t('msgFailed') + ': ' + (e.response?.data?.detail || e.message))
   } finally {

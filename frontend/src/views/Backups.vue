@@ -292,6 +292,7 @@ import { getBackups, getBackupContent, getBackupDiff, batchBackup, getDevices } 
 import { Search, Download, Refresh, Document, WarningFilled, CircleCheck, Clock, View, DocumentCopy, Connection, Warning } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
 
 const { t } = useI18n()
 
@@ -420,14 +421,21 @@ const filterBackups = () => {
   filteredBackups.value = result
 }
 
-const loadBackups = async () => {
+const loadBackups = async (force = false) => {
   loading.value = true
   try {
-    const data = await getBackups()
+    const data = await cachedRequest(
+      () => getBackups(),
+      'backups',
+      {},
+      { forceRefresh: force }
+    )
     backups.value = data.items || []
     filterBackups()
   } catch (error) {
-    ElMessage.error(t('backupLoadRecordsFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('backupLoadRecordsFailed'))
+    }
   } finally {
     loading.value = false
   }
@@ -481,9 +489,10 @@ const doBatchBackup = async () => {
 
   try {
     await batchBackup(selectedDeviceIds.value, 'Web')
+    clearCache('backups')
     ElMessage.success(t('backupBatchComplete'))
     showBatchBackupDialog.value = false
-    loadBackups()
+    loadBackups(true)
   } catch (error) {
     ElMessage.error(t('backupBatchFailed'))
   }

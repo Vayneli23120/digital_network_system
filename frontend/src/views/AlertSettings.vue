@@ -86,6 +86,8 @@ import { ref, reactive, onMounted, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { getAlertSettings, saveAlertSettings, testAlertChannel } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -117,17 +119,24 @@ watch([() => form.email_enabled, () => form.wechat_enabled, () => form.dingtalk_
   if (form.dingtalk_enabled) form.channels.push('dingtalk')
 })
 
-const loadSettings = async () => {
+const loadSettings = debounce(async (force = false) => {
   loading.value = true
   try {
-    const res = await getAlertSettings()
+    const res = await cachedRequest(
+      () => getAlertSettings(),
+      'alert_settings',
+      {},
+      { forceRefresh: force }
+    )
     Object.assign(form, res)
   } catch (e) {
-    ElMessage.error(t('msgLoadSettingsFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('msgLoadSettingsFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const saveSettings = async () => {
   saving.value = true
@@ -149,6 +158,7 @@ const saveSettings = async () => {
       dingtalk_webhook_url: form.dingtalk_webhook_url,
       dingtalk_secret: form.dingtalk_secret,
     })
+    clearCache('alert_settings')
     ElMessage.success(t('msgSaveSuccess'))
   } catch (e) {
     ElMessage.error(t('msgSaveFailed') + '：' + (e.response?.data?.detail || e.message))

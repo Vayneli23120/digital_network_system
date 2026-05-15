@@ -344,6 +344,8 @@ import {
 } from '@/api'
 import { formatDate, formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -410,22 +412,30 @@ const goBack = () => {
   router.push('/planned-maintenance')
 }
 
-const loadTask = async () => {
+const loadTask = debounce(async (force = false) => {
   try {
     const taskId = route.params.id
-    const data = await getMaintenanceTask(taskId)
+    const data = await cachedRequest(
+      () => getMaintenanceTask(taskId),
+      'maintenance_task',
+      { id: taskId },
+      { forceRefresh: force }
+    )
     task.value = data
   } catch (error) {
-    ElMessage.error(t('taskDetailMsgLoadFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('taskDetailMsgLoadFailed'))
+    }
   }
-}
+}, 300)
 
 const startTask = async () => {
   try {
     await ElMessageBox.confirm(t('taskDetailMsgConfirmStart'), t('taskDetailMsgStartTitle'), { type: 'info' })
     await startMaintenanceTask(task.value.id)
+    clearCache('maintenance_task')
     ElMessage.success(t('taskDetailMsgStartSuccess'))
-    loadTask()
+    loadTask(true)
   } catch (e) {
     if (e !== 'cancel') ElMessage.error(t('taskDetailMsgStartFailed'))
   }
@@ -437,6 +447,7 @@ const skipTask = async () => {
       inputPlaceholder: t('taskDetailMsgSkipPlaceholder')
     })
     await skipMaintenanceTask(task.value.id, value || '')
+    clearCache('maintenance_task')
     ElMessage.success(t('taskDetailMsgSkipSuccess'))
     router.push('/planned-maintenance')
   } catch (e) {
@@ -448,6 +459,7 @@ const deleteTask = async () => {
   try {
     await ElMessageBox.confirm(`${t('taskDetailMsgDeleteConfirm')} "${task.value.task_no}" ?`, t('taskDetailMsgDeleteTitle'), { type: 'warning' })
     await deleteMaintenanceTask(task.value.id)
+    clearCache('maintenance_task')
     ElMessage.success(t('taskDetailMsgDeleteSuccess'))
     router.push('/planned-maintenance')
   } catch (e) {
@@ -456,34 +468,48 @@ const deleteTask = async () => {
 }
 
 // 搜索备件
-const searchParts = async (query) => {
+const searchParts = debounce(async (query) => {
   if (!query || query.length < 1) {
     partOptions.value = []
     return
   }
   partsLoading.value = true
   try {
-    const result = await getPartList({ search: query, limit: 20 })
+    const result = await cachedRequest(
+      () => getPartList({ search: query, limit: 20 }),
+      'part_list',
+      { search: query, limit: 20 },
+      { forceRefresh: true }
+    )
     partOptions.value = result.items || []
   } catch (e) {
-    console.error(t('maintSearchFailed'), e)
+    if (e.name !== 'CanceledError') {
+      console.error(t('maintSearchFailed'), e)
+    }
   } finally {
     partsLoading.value = false
   }
-}
+}, 300)
 
 // 加载初始备件列表
-const loadInitialParts = async () => {
+const loadInitialParts = debounce(async (force = false) => {
   partsLoading.value = true
   try {
-    const result = await getPartList({ limit: 50 })
+    const result = await cachedRequest(
+      () => getPartList({ limit: 50 }),
+      'part_list',
+      { limit: 50 },
+      { forceRefresh: force }
+    )
     partOptions.value = result.items || []
   } catch (e) {
-    console.error(t('spareLoadFailed'), e)
+    if (e.name !== 'CanceledError') {
+      console.error(t('spareLoadFailed'), e)
+    }
   } finally {
     partsLoading.value = false
   }
-}
+}, 300)
 
 // 添加备件到完成表单
 const addPartToComplete = () => {
@@ -579,7 +605,7 @@ const openCompleteDialog = async () => {
   returnPartQty.value = 1
   returnPartScrap.value = true
   partOptions.value = []
-  await loadInitialParts()
+  await loadInitialParts(true)
   showCompleteDialog.value = true
 }
 
@@ -624,9 +650,11 @@ const completeTask = async () => {
       }
     }
 
+    clearCache('maintenance_task')
+    clearCache('part_list')
     ElMessage.success(t('pmMsgTaskCompleteSuccess'))
     showCompleteDialog.value = false
-    loadTask()
+    loadTask(true)
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || t('pmMsgTaskCompleteFailed'))
   }

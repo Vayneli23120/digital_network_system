@@ -80,6 +80,8 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { Bell, Warning, Tools, InfoFilled } from '@element-plus/icons-vue'
 import { getNotifications } from '@/api'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const props = defineProps({
   darkMode: {
@@ -111,17 +113,24 @@ const toggleDropdown = async () => {
   }
 }
 
-const loadNotifications = async () => {
+const loadNotifications = debounce(async (force = false) => {
   loading.value = true
   try {
-    const res = await getNotifications(false)  // false = all, true = unread_only
+    const res = await cachedRequest(
+      () => getNotifications(false),
+      'notifications_dropdown',
+      {},
+      { forceRefresh: force }
+    )
     notifications.value = res.items || []
   } catch (e) {
-    console.error('Failed to load notifications:', e)
+    if (e.name !== 'CanceledError') {
+      console.error('Failed to load notifications:', e)
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const handleItemClick = async (notif) => {
   // 先关闭下拉面板

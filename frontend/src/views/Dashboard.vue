@@ -427,6 +427,7 @@ import { ElMessage } from 'element-plus'
 import { getDashboardSummary } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -607,10 +608,15 @@ const costTrendMax = computed(() => Math.max(...costTrend.value.total, 1))
 // Top fault devices — from API
 const faultDeviceList = ref([])
 
-const loadFaultDeviceList = async () => {
+const loadFaultDeviceList = async (force = false) => {
   try {
-    const res = await fetch('/api/dashboard/top-fault-devices?days=30&limit=5')
-    const data = await res.json()
+    const res = await cachedRequest(
+      () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5'),
+      'dashboardTopFaultDevices',
+      {},
+      { forceRefresh: force }
+    )
+    const data = res
     const max = Math.max(...data.map(d => d.count), 1)
     faultDeviceList.value = data.map(d => ({
       device_id: d.device_id,
@@ -632,9 +638,14 @@ const refreshData = async () => {
   ElMessage.success(t('dashDataRefreshed'))
 }
 
-const loadDashboardData = async () => {
+const loadDashboardData = async (force = false) => {
   try {
-    const data = await getDashboardSummary()
+    const data = await cachedRequest(
+      () => getDashboardSummary(),
+      'dashboard',
+      {},
+      { forceRefresh: force }
+    )
     stats.value = data
     recentBackups.value = data.backups?.recent || []
     nextTick(() => {
@@ -643,13 +654,18 @@ const loadDashboardData = async () => {
     })
     // Load cost trend
     try {
-      const trendRes = await fetch('/api/dashboard/cost-trend?months=6')
-      costTrend.value = await trendRes.json()
+      const trendRes = await cachedRequest(
+        () => fetch('/api/dashboard/cost-trend?months=6'),
+        'dashboardCostTrend',
+        {},
+        { forceRefresh: force }
+      )
+      costTrend.value = trendRes
     } catch (err) {
       console.error('Failed to load cost trend:', err)
     }
     // Load top fault devices
-    await loadFaultDeviceList()
+    await loadFaultDeviceList(force)
   } catch (error) {
     ElMessage.error(t('dashLoadFailed'))
   }

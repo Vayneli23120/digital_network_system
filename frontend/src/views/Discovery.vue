@@ -94,6 +94,8 @@ import { ElMessage } from 'element-plus'
 import { Search, Refresh } from '@element-plus/icons-vue'
 import { pingSweep, getDiscoveryCapabilities, createDevice } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -133,14 +135,21 @@ const startPingSweep = async () => {
   }
 }
 
-const loadCapabilities = async () => {
+const loadCapabilities = debounce(async (force = false) => {
   try {
-    await getDiscoveryCapabilities()
+    await cachedRequest(
+      () => getDiscoveryCapabilities(),
+      'discovery_capabilities',
+      {},
+      { forceRefresh: force }
+    )
     ElMessage.info(t('discoveryMsgCapabilityUpdated'))
   } catch (error) {
-    ElMessage.error(t('discoveryMsgCapabilityFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('discoveryMsgCapabilityFailed'))
+    }
   }
-}
+}, 300)
 
 const importDevice = (device) => {
   selectedDevice.value = device

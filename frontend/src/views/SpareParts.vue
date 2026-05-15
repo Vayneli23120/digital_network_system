@@ -236,6 +236,8 @@ import PartsTable from './spare-parts/PartsTable.vue'
 import PartDetailDialog from './spare-parts/PartDetailDialog.vue'
 import { useI18n } from '@/composables/useI18n'
 import { createPart } from '@/api'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 

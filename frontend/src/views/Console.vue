@@ -85,23 +85,24 @@
     </div>
 
     <!-- Tips for SSH Deploy -->
-    <div class="info-tip-card" v-if="connected">
+    <div class="info-tip-card">
       <el-icon><InfoFilled /></el-icon>
       <span>{{ t('consoleSshDeployTip') }}</span>
       <router-link to="/deploy" class="tip-link">{{ t('consoleGoToDeploy') }}</router-link>
     </div>
 
     <!-- Serial Config Push Panel -->
-    <div class="panel config-push-panel" v-if="connected">
+    <div class="panel config-push-panel">
       <div class="panel-hd">
         <span class="panel-title">{{ t('consoleSerialPushTitle') }}</span>
+        <el-tag v-if="!connected" type="warning" size="small">{{ t('consoleConnectRequired') }}</el-tag>
       </div>
       <div class="panel-body">
         <el-row :gutter="16">
           <el-col :span="8">
             <div class="form-row">
               <label class="form-label">{{ t('consoleConfigTemplate') }}</label>
-              <select class="fselect" v-model="selectedTemplate">
+              <select class="fselect" v-model="selectedTemplate" :disabled="!connected">
                 <option value="">{{ t('consoleSelectTemplate') }}</option>
                 <option v-for="template in templates" :key="template.id" :value="template.id">
                   {{ template.name }}
@@ -112,7 +113,7 @@
           <el-col :span="8">
             <div class="form-row">
               <label class="form-label">{{ t('consoleConfigFile') }}</label>
-              <select class="fselect" v-model="selectedBackup">
+              <select class="fselect" v-model="selectedBackup" :disabled="!connected">
                 <option value="">{{ t('consoleSelectBackup') }}</option>
                 <option v-for="backup in backups" :key="backup.id" :value="backup.id">
                   {{ backup.device_name }} - {{ formatTime(backup.backup_time) }}
@@ -190,6 +191,8 @@ import { ElMessage } from 'element-plus'
 import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled, Upload } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
 import { getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -491,13 +494,25 @@ const downloadLog = () => {
 // Load templates and backups on mount
 onMounted(async () => {
   try {
-    const templateData = await getTemplates()
+    const templateData = await cachedRequest(
+      () => getTemplates(),
+      'templates',
+      {},
+      { forceRefresh: false }
+    )
     templates.value = templateData.items || templateData || []
 
-    const backupData = await getBackups({ limit: 50 })
+    const backupData = await cachedRequest(
+      () => getBackups({ limit: 50 }),
+      'backups',
+      { limit: 50 },
+      { forceRefresh: false }
+    )
     backups.value = backupData.items || backupData.backups || []
   } catch (err) {
-    console.error('Failed to load templates/backups:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load templates/backups:', err)
+    }
   }
 })
 

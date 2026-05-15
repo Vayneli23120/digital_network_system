@@ -150,6 +150,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh } from '@element-plus/icons-vue'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 import {
   getUsers, createUser as createUserApi, updateUser as updateUserApi,
   deleteUser as deleteUserApi, getRoles
@@ -212,27 +214,41 @@ const passwordRules = {
 }
 
 // 加载用户列表
-const loadUsers = async () => {
+const loadUsers = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getUsers()
+    const data = await cachedRequest(
+      () => getUsers(),
+      'users',
+      {},
+      { forceRefresh: force }
+    )
     users.value = data || []
   } catch (e) {
-    ElMessage.error(t('userLoadFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('userLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 // 加载角色列表
-const loadRoles = async () => {
+const loadRoles = debounce(async (force = false) => {
   try {
-    const data = await getRoles()
+    const data = await cachedRequest(
+      () => getRoles(),
+      'roles',
+      {},
+      { forceRefresh: force }
+    )
     roles.value = data || []
   } catch (e) {
-    console.error(t('userRoleLoadFailed'), e)
+    if (e.name !== 'CanceledError') {
+      console.error(t('userRoleLoadFailed'), e)
+    }
   }
-}
+}, 300)
 
 // 创建用户
 const createUser = async () => {
@@ -242,10 +258,11 @@ const createUser = async () => {
   submitting.value = true
   try {
     await createUserApi(addForm.value)
+    clearCache('users')
     ElMessage.success(t('userCreateSuccess'))
     showAddDialog.value = false
     addForm.value = { username: '', full_name: '', email: '', password: '', role_ids: [], is_active: true }
-    loadUsers()
+    loadUsers(true)
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || t('userCreateFailed'))
   } finally {
@@ -279,9 +296,10 @@ const updateUser = async () => {
       role_ids: editForm.value.role_ids,
       is_active: editForm.value.is_active
     })
+    clearCache('users')
     ElMessage.success(t('userUpdateSuccess'))
     showEditDialog.value = false
-    loadUsers()
+    loadUsers(true)
   } catch (e) {
     ElMessage.error(e.response?.data?.detail || t('userUpdateFailed'))
   } finally {
@@ -324,8 +342,9 @@ const deleteUserConfirm = async (user) => {
       type: 'warning'
     })
     await deleteUserApi(user.id)
+    clearCache('users')
     ElMessage.success(t('userDeleteSuccess'))
-    loadUsers()
+    loadUsers(true)
   } catch (e) {
     if (e !== 'cancel') {
       ElMessage.error(e.response?.data?.detail || t('userDeleteFailed'))

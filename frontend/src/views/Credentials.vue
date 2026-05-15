@@ -102,6 +102,8 @@ import { Key, Lock } from '@element-plus/icons-vue'
 import { getCredentials, createCredential as createCredentialApi, getCredential, updateCredential as updateCredentialApi, deleteCredential as deleteCredentialApi } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -122,17 +124,24 @@ const credentialForm = ref({
   enable_password: ''
 })
 
-const loadCredentials = async () => {
+const loadCredentials = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getCredentials()
+    const data = await cachedRequest(
+      () => getCredentials(),
+      'credentials',
+      {},
+      { forceRefresh: force }
+    )
     credentials.value = data.items || []
   } catch (error) {
-    ElMessage.error(t('credLoadFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('credLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const editCredential = async (id) => {
   try {
@@ -167,10 +176,11 @@ const createCredential = async () => {
       enable_password: credentialForm.value.enable_password || undefined
     })
 
+    clearCache('credentials')
     ElMessage.success(t('credCreateSuccess'))
     showAddDialog.value = false
     resetForm()
-    loadCredentials()
+    loadCredentials(true)
   } catch (error) {
     ElMessage.error(t('credCreateFailed'))
   }
@@ -199,12 +209,13 @@ const updateCredential = async () => {
 
     await updateCredentialApi(currentCredentialId.value, updateData)
 
+    clearCache('credentials')
     ElMessage.success(t('credUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
     currentCredentialId.value = null
     resetForm()
-    loadCredentials()
+    loadCredentials(true)
   } catch (error) {
     ElMessage.error(t('credUpdateFailed'))
   }
@@ -219,8 +230,9 @@ const deleteCredential = async (id) => {
     })
 
     await deleteCredentialApi(id)
+    clearCache('credentials')
     ElMessage.success(t('credDeleteSuccess'))
-    loadCredentials()
+    loadCredentials(true)
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(t('credDeleteFailed'))

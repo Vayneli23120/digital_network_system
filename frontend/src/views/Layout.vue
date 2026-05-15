@@ -65,6 +65,8 @@ import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
 import { getUnreadCount } from '@/api'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const route = useRoute()
 const router = useRouter()
@@ -82,25 +84,38 @@ const showSearchOverlay = ref(false)
 // Fault badge - count of unprocessed faults
 const faultBadge = ref(0)
 
-const loadFaultBadge = async () => {
+const loadFaultBadge = debounce(async (force = false) => {
   try {
-    const res = await fetch('/api/faults?status=open&status=investigating&limit=100')
-    const data = await res.json()
-    faultBadge.value = data.items?.filter(f => f.status === 'open' || f.status === 'investigating').length || 0
+    const res = await cachedRequest(
+      () => fetch('/api/faults?status=open&status=investigating&limit=100').then(r => r.json()),
+      'layout_fault_badge',
+      {},
+      { forceRefresh: force, ttl: 60 }
+    )
+    faultBadge.value = res.items?.filter(f => f.status === 'open' || f.status === 'investigating').length || 0
   } catch (err) {
-    console.error('Failed to load fault badge:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load fault badge:', err)
+    }
   }
-}
+}, 300)
 
 // Notification unread count
-const loadUnreadNotifCount = async () => {
+const loadUnreadNotifCount = debounce(async (force = false) => {
   try {
-    const res = await getUnreadCount()
+    const res = await cachedRequest(
+      () => getUnreadCount(),
+      'layout_unread_count',
+      {},
+      { forceRefresh: force, ttl: 30 }
+    )
     unreadNotifCount.value = res.unread_count || 0
   } catch (err) {
-    console.error('Failed to load notification count:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load notification count:', err)
+    }
   }
-}
+}, 300)
 
 // Sidebar groups (organized by domain - no overlap)
 const sidebarGroups = computed(() => {

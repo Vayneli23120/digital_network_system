@@ -811,6 +811,8 @@ import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -1494,10 +1496,15 @@ const verifyMaintPass = async () => {
   }
 }
 
-const loadMaintenanceInfo = async () => {
+const loadMaintenanceInfo = debounce(async () => {
   if (!fault.value.maintenance_id) return
   try {
-    const result = await api.get(`/maintenance/${fault.value.maintenance_id}`)
+    const result = await cachedRequest(
+      () => api.get(`/maintenance/${fault.value.maintenance_id}`),
+      'maintenance_info',
+      { id: fault.value.maintenance_id },
+      { forceRefresh: true }
+    )
     maintenanceInfo.value = result
     // 解析备件列表
     if (result.parts_replaced) {
@@ -1511,9 +1518,11 @@ const loadMaintenanceInfo = async () => {
       }
     }
   } catch (e) {
-    console.error('Failed to load maintenance info:', e)
+    if (e.name !== 'CanceledError') {
+      console.error('Failed to load maintenance info:', e)
+    }
   }
-}
+}, 300)
 
 const goToMaintenance = () => {
   // 直接打开编辑对话框，不跳转
@@ -1530,10 +1539,15 @@ const getDiagnosisResultText = (result) => {
   return t(keys[result]) || result
 }
 
-const loadFault = async () => {
+const loadFault = debounce(async (force = false) => {
   try {
     const faultId = route.params.id
-    const data = await getFaultDetail(faultId)
+    const data = await cachedRequest(
+      () => getFaultDetail(faultId),
+      'fault_detail',
+      { id: faultId },
+      { forceRefresh: force }
+    )
     fault.value = data
 
     // 初始化诊断表单
@@ -1556,8 +1570,13 @@ const loadFault = async () => {
 
     // 加载设备信息
     if (data.device_id) {
-      const devices = await getDevices()
-      device.value = (devices.items || []).find(d => d.id === data.device_id)
+      const devicesData = await cachedRequest(
+        () => getDevices(),
+        'devices',
+        {},
+        { forceRefresh: false }
+      )
+      device.value = (devicesData.items || []).find(d => d.id === data.device_id)
     }
 
     // 加载关联的维修单信息
@@ -1582,7 +1601,7 @@ const loadFault = async () => {
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const goBack = () => {
   router.push('/faults')

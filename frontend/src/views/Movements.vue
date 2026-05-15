@@ -134,6 +134,8 @@ import { Refresh, Search } from '@element-plus/icons-vue'
 import { getMovements, getMovementDetail } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 import MovementDetailDialog from './spare-parts/MovementDetailDialog.vue'
 
 const { t } = useI18n()
@@ -170,7 +172,7 @@ const getMovementTypeText = (type) => {
   return texts[type] || type
 }
 
-const loadMovements = async () => {
+const loadMovements = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
@@ -182,15 +184,22 @@ const loadMovements = async () => {
       end_date: filter.end_date || undefined,
       operator: filter.operator || undefined
     }
-    const result = await getMovements(params)
+    const result = await cachedRequest(
+      () => getMovements(params),
+      'movements',
+      params,
+      { forceRefresh: force }
+    )
     movements.value = result.items || []
     total.value = result.total || 0
   } catch (e) {
-    ElMessage.error(t('msgLoadFailed'))
+    if (e.name !== 'CanceledError') {
+      ElMessage.error(t('msgLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const resetFilter = () => {
   filter.keyword = ''

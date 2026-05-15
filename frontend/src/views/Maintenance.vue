@@ -509,6 +509,8 @@ import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 import { formatDateTime, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { debounce } from '@/utils/requestManager.js'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
 
 const router = useRouter()
 const { t } = useI18n()
@@ -886,15 +888,25 @@ const filterMaintenances = () => {
   filteredMaintenances.value = result
 }
 
-const loadMaintenances = async () => {
+const loadMaintenances = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getMaintenances({ limit: 500 })
+    const params = { limit: 500 }
+    const data = await cachedRequest(
+      () => getMaintenances(params),
+      'maintenance',
+      params,
+      { forceRefresh: force }
+    )
     maintenances.value = data.items || []; total.value = data.total || maintenances.value.length
     filterMaintenances()
-  } catch (error) { ElMessage.error(t('maintLoadFailed')) }
+  } catch (error) {
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('maintLoadFailed'))
+    }
+  }
   finally { loading.value = false }
-}
+}, 300)
 
 const loadDevices = async () => {
   try { const data = await getDevices(); devices.value = data.items || [] }
@@ -938,7 +950,7 @@ const addMaintenance = async () => {
         })
       }
     }
-    ElMessage.success(t('maintAddSuccess')); showAddDialog.value = false; resetForm(); loadMaintenances()
+    ElMessage.success(t('maintAddSuccess')); clearCache('maintenance'); showAddDialog.value = false; resetForm(); loadMaintenances(true)
   } catch (error) { ElMessage.error(`${t('maintAddFailed')}: ${error.response?.data?.detail || error.message}`) }
 }
 
@@ -953,14 +965,14 @@ const updateMaintenance = async () => {
   try {
     const device = devices.value.find(d => d.id === maintForm.value.device_id)
     await updateMaintenanceApi(maintForm.value.id, { ...maintForm.value, device_name: device?.name, parts_replaced: JSON.stringify(maintForm.value.spare_parts) })
-    ElMessage.success(t('maintUpdateSuccess')); showAddDialog.value = false; editMode.value = false; resetForm(); loadMaintenances()
+    ElMessage.success(t('maintUpdateSuccess')); clearCache('maintenance'); showAddDialog.value = false; editMode.value = false; resetForm(); loadMaintenances(true)
   } catch (error) { ElMessage.error(t('maintUpdateFailed')) }
 }
 
 const deleteMaintenance = async (row) => {
   try {
     await ElMessageBox.confirm(`${t('maintConfirmDeletePrompt')} "${row.maint_no}"?`, t('msgConfirmDelete'), { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'warning' })
-    await deleteMaintenanceApi(row.id); ElMessage.success(t('maintDeleteSuccess')); loadMaintenances()
+    await deleteMaintenanceApi(row.id); clearCache('maintenance'); ElMessage.success(t('maintDeleteSuccess')); loadMaintenances(true)
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('maintDeleteFailed')) }
 }
 

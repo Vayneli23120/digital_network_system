@@ -80,6 +80,8 @@ import { Search, Connection, Document, Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -157,7 +159,7 @@ const totalResults = computed(() => {
 
 const formatDate = (dateStr) => dayjs(dateStr).format('MM-DD HH:mm')
 
-const handleSearch = async () => {
+const handleSearch = debounce(async () => {
   if (!searchQuery.value.trim()) {
     searchResults.value = { devices: [], templates: [], backups: [] }
     return
@@ -170,13 +172,21 @@ const handleSearch = async () => {
     const query = searchQuery.value.trim()
 
     // Search devices
-    const devicesRes = await fetch(`/api/devices?search=${encodeURIComponent(query)}&limit=5`)
-    const devicesData = await devicesRes.json()
+    const devicesData = await cachedRequest(
+      () => fetch(`/api/devices?search=${encodeURIComponent(query)}&limit=5`).then(r => r.json()),
+      `search_devices_${query}`,
+      { query },
+      { ttl: 30 }
+    )
     searchResults.value.devices = devicesData.items || []
 
     // Search templates
-    const templatesRes = await fetch(`/api/templates`)
-    const templatesData = await templatesRes.json()
+    const templatesData = await cachedRequest(
+      () => fetch(`/api/templates`).then(r => r.json()),
+      'search_templates',
+      {},
+      { ttl: 120 }
+    )
     const allTemplates = templatesData.items || templatesData || []
     searchResults.value.templates = allTemplates
       .filter(t => t.name?.toLowerCase().includes(query.toLowerCase()) ||
@@ -184,19 +194,25 @@ const handleSearch = async () => {
       .slice(0, 5)
 
     // Search backups
-    const backupsRes = await fetch(`/api/backups?limit=20`)
-    const backupsData = await backupsRes.json()
+    const backupsData = await cachedRequest(
+      () => fetch('/api/backups?limit=20').then(r => r.json()),
+      'search_backups',
+      {},
+      { ttl: 60 }
+    )
     const allBackups = backupsData.items || backupsData.backups || []
     searchResults.value.backups = allBackups
       .filter(b => b.device_name?.toLowerCase().includes(query.toLowerCase()))
       .slice(0, 5)
 
   } catch (err) {
-    console.error('Search failed:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Search failed:', err)
+    }
   }
 
   searchLoading.value = false
-}
+}, 300)
 
 const focusSearch = () => {
   searchInputRef.value?.focus()

@@ -321,6 +321,8 @@ import { Connection, Download, Upload, Picture } from '@element-plus/icons-vue'
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -374,31 +376,45 @@ const calculateMaintCost = () => {
   return device.value.recent_maintenances.reduce((sum, m) => sum + (parseFloat(m.parts_cost) || 0) + (parseFloat(m.labor_cost) || 0), 0)
 }
 
-const loadDevice = async () => {
+const loadDevice = debounce(async (force = false) => {
   loading.value = true
   try {
-    const data = await getDeviceDetail(route.params.id)
+    const data = await cachedRequest(
+      () => getDeviceDetail(route.params.id),
+      'device_detail',
+      { id: route.params.id },
+      { forceRefresh: force }
+    )
     device.value = data
     editForm.value = { ...data }
   } catch (error) {
-    ElMessage.error(t('msgDeviceDetailFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('msgDeviceDetailFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
-const loadDeviceInventory = async () => {
+const loadDeviceInventory = debounce(async (force = false) => {
   if (!route.params.id) return
   inventoryLoading.value = true
   try {
-    const data = await getDeviceInventory(route.params.id)
+    const data = await cachedRequest(
+      () => getDeviceInventory(route.params.id),
+      'device_inventory',
+      { id: route.params.id },
+      { forceRefresh: force }
+    )
     deviceInventory.value = data.items || []
   } catch (error) {
-    ElMessage.error(t('msgDeviceInventoryFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('msgDeviceInventoryFailed'))
+    }
   } finally {
     inventoryLoading.value = false
   }
-}
+}, 300)
 
 watch(activeTab, (newTab) => { if (newTab === 'inventory') loadDeviceInventory() })
 
@@ -408,7 +424,8 @@ const backupNow = async () => {
     const { backupDevice } = await import('@/api')
     await backupDevice(route.params.id, 'Web')
     ElMessage.success(t('msgBackupSuccessShort'))
-    loadDevice()
+    clearCache('device_detail')
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgBackupFailed')) }
 }
 const openConsoleDeploy = () => { ElMessage.info(t('msgConsoleDev')) }
@@ -425,24 +442,26 @@ const viewConfig = async (backupId) => {
   } catch (error) { ElMessage.error(t('msgConfigLoadFailed')) }
 }
 
-const handlePhotoUploadSuccess = () => { ElMessage.success(t('msgPhotoUploadSuccess')); loadDevice() }
+const handlePhotoUploadSuccess = () => { ElMessage.success(t('msgPhotoUploadSuccess')); clearCache('device_detail'); loadDevice(true) }
 const handlePhotoUploadError = () => { ElMessage.error(t('msgPhotoUploadFailed')) }
 const deletePhoto = async (photoId) => {
   try {
     await ElMessageBox.confirm(t('confirmDeletePhoto'), t('msgConfirmDelete'), { type: 'warning' })
     const api = await import('@/api')
     await api.deletePhoto(route.params.id, photoId)
+    clearCache('device_detail')
     ElMessage.success(t('msgPhotoDeleteSuccess'))
-    loadDevice()
+    loadDevice(true)
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgPhotoDeleteFailed')) }
 }
 
 const updateDevice = async () => {
   try {
     await updateDeviceApi(route.params.id, editForm.value)
+    clearCache('device_detail')
     ElMessage.success(t('msgDeviceUpdateSuccess'))
     showEditDialog.value = false
-    loadDevice()
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgDeviceUpdateFailed')) }
 }
 
@@ -450,6 +469,8 @@ const confirmDeleteDevice = async () => {
   try {
     await ElMessageBox.confirm(t('confirmDeleteDevice'), t('msgConfirmDelete'), { type: 'warning' })
     await deleteDevice(route.params.id)
+    clearCache('devices')
+    clearCache('device_detail')
     ElMessage.success(t('msgDeviceDeleteSuccess'))
     router.push('/devices')
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgDeviceDeleteFailed')) }
@@ -459,9 +480,10 @@ const openFaultDialog = () => { editMode.value = false; faultForm.value = { seve
 const addFault = async () => {
   try {
     await createFault({ device_id: device.value.id, device_name: device.value.name, ...faultForm.value, status: 'open' })
+    clearCache('device_detail')
     ElMessage.success(t('msgFaultAddSuccess'))
     showFaultDialog.value = false
-    loadDevice()
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgFaultAddFailed')) }
 }
 const editFaultInDetail = (row) => {
@@ -472,18 +494,20 @@ const editFaultInDetail = (row) => {
 const updateFaultInDetail = async () => {
   try {
     await updateFault(faultForm.value.id, faultForm.value)
+    clearCache('device_detail')
     ElMessage.success(t('msgFaultUpdateSuccess'))
     showFaultDialog.value = false
     editMode.value = false
-    loadDevice()
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgFaultUpdateFailed')) }
 }
 const closeFaultInDetail = async (row) => {
   try {
     await ElMessageBox.confirm(t('faultCloseConfirm', { id: row.fault_no }), t('faultCloseTitle'), { type: 'warning' })
     await updateFault(row.id, { status: 'closed' })
+    clearCache('device_detail')
     ElMessage.success(t('msgFaultCloseSuccess'))
-    loadDevice()
+    loadDevice(true)
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgFaultCloseFailed')) }
 }
 
@@ -491,9 +515,10 @@ const openMaintDialog = () => { editMode.value = false; maintForm.value = { main
 const addMaintenance = async () => {
   try {
     await createMaintenance({ device_id: device.value.id, device_name: device.value.name, ...maintForm.value })
+    clearCache('device_detail')
     ElMessage.success(t('msgMaintAddSuccess'))
     showMaintDialog.value = false
-    loadDevice()
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgMaintAddFailed')) }
 }
 const editMaintInDetail = (row) => {
@@ -504,18 +529,20 @@ const editMaintInDetail = (row) => {
 const updateMaintInDetail = async () => {
   try {
     await updateMaintenance(maintForm.value.id, maintForm.value)
+    clearCache('device_detail')
     ElMessage.success(t('msgMaintUpdateSuccess'))
     showMaintDialog.value = false
     editMode.value = false
-    loadDevice()
+    loadDevice(true)
   } catch (error) { ElMessage.error(t('msgMaintUpdateFailed')) }
 }
 const deleteMaintInDetail = async (maintId) => {
   try {
     await ElMessageBox.confirm(t('confirmDeleteMaint'), t('msgConfirmDelete'), { type: 'warning' })
     await deleteMaintenance(maintId)
+    clearCache('device_detail')
     ElMessage.success(t('msgMaintDeleteSuccess'))
-    loadDevice()
+    loadDevice(true)
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 

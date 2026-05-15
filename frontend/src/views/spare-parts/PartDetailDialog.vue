@@ -43,6 +43,7 @@ import { ElMessage } from 'element-plus'
 import { getPartInstances } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
 
 const { t } = useI18n()
 
@@ -79,10 +80,16 @@ watch(() => props.modelValue, async (val) => {
   if (val && props.part) {
     loading.value = true
     try {
-      const result = await getPartInstances(props.part.id)
+      const result = await cachedRequest(
+        () => getPartInstances(props.part.id),
+        `part_instances_${props.part.id}`,
+        { part_id: props.part.id }
+      )
       instances.value = result.instances || []
     } catch (e) {
-      ElMessage.error(t('msgLoadFailed') + '：' + (e.response?.data?.detail || e.message))
+      if (e.name !== 'CanceledError') {
+        ElMessage.error(t('msgLoadFailed') + '：' + (e.response?.data?.detail || e.message))
+      }
     } finally {
       loading.value = false
     }

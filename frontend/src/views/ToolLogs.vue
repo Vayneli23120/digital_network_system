@@ -216,6 +216,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Delete, Search, Document, CopyDocument, InfoFilled } from '@element-plus/icons-vue'
 import { getToolLogs, getToolLogStats, cleanupToolLogs, getToolLogDetail } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -243,7 +245,7 @@ const loadStats = async () => {
   }
 }
 
-const loadLogs = async () => {
+const loadLogs = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
@@ -253,15 +255,22 @@ const loadLogs = async () => {
       status: filterStatus.value || undefined,
       keyword: searchKeyword.value || undefined,
     }
-    const res = await getToolLogs(params)
+    const res = await cachedRequest(
+      () => getToolLogs(params),
+      'logs',
+      params,
+      { forceRefresh: force }
+    )
     logList.value = res.items || res || []
     total.value = res.total || logList.value.length
   } catch (error) {
-    ElMessage.error(t('msgLoadFailed') + '：' + (error.response?.data?.detail || error.message))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('msgLoadFailed') + '：' + (error.response?.data?.detail || error.message))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const showDetail = async (row) => {
   showDetailDialog.value = true
@@ -299,8 +308,9 @@ const cleanupLogs = async () => {
   try {
     await ElMessageBox.confirm(t('msgCleanupConfirm'), t('msgConfirmDelete'), { type: 'warning' })
     await cleanupToolLogs(30)
+    clearCache('logs')
     ElMessage.success(t('msgCleanupComplete'))
-    loadLogs()
+    loadLogs(true)
     loadStats()
   } catch (error) {
     if (error !== 'cancel') {

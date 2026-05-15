@@ -15,20 +15,31 @@
         </div>
       </div>
       <div class="nav-right">
-        <button class="nav-action-btn" @click="showAddDialog = true">
-          <el-icon><Plus /></el-icon>
-          <span>{{ t('deviceAdd') }}</span>
-        </button>
-        <el-dropdown split-button class="nav-action-btn export" @click="exportDevices">
-          <el-icon><Upload /></el-icon>
-          <span>{{ t('actionExport') }}</span>
-          <template #dropdown>
-            <el-dropdown-menu>
-              <el-dropdown-item @click="exportDevices">{{ t('deviceExcelExport') }}</el-dropdown-item>
-              <el-dropdown-item @click="showImportDialog = true">{{ t('deviceExcelImport') }}</el-dropdown-item>
-            </el-dropdown-menu>
-          </template>
-        </el-dropdown>
+        <div class="btn-group">
+          <button class="nav-action-btn" @click="showAddDialog = true">
+            <el-icon><Plus /></el-icon>
+            <span>{{ t('deviceAdd') }}</span>
+          </button>
+          <el-dropdown class="nav-action-dropdown" trigger="click">
+            <button class="nav-action-btn export">
+              <el-icon><Upload /></el-icon>
+              <span>{{ t('actionExport') }}</span>
+              <el-icon class="dropdown-arrow"><ArrowDown /></el-icon>
+            </button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="exportDevices">
+                  <el-icon><Upload /></el-icon>
+                  {{ t('deviceExcelExport') }}
+                </el-dropdown-item>
+                <el-dropdown-item @click="showImportDialog = true">
+                  <el-icon><Download /></el-icon>
+                  {{ t('deviceExcelImport') }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
+        </div>
         <button class="nav-action-btn secondary" @click="loadDevices" :disabled="loading">
           <el-icon><Refresh /></el-icon>
         </button>
@@ -52,9 +63,9 @@
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ stats.online }} 在线</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', '')"><span class="indicator-dot"></span>{{ stats.offline }} 离线</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', '')"><span class="indicator-dot"></span>{{ stats.maintenance }} 维护</span>
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ stats.online }} {{ t('statusOnline') }}</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', '')"><span class="indicator-dot"></span>{{ stats.offline }} {{ t('statusOffline') }}</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', '')"><span class="indicator-dot"></span>{{ stats.maintenance }} {{ t('statusMaintenance') }}</span>
           </div>
         </div>
         <!-- UCE -->
@@ -71,9 +82,9 @@
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ uceStats.online }} 在线</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'uce')"><span class="indicator-dot"></span>{{ uceStats.offline }} 离线</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'uce')"><span class="indicator-dot"></span>{{ uceStats.maintenance }} 维护</span>
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ uceStats.online }} {{ t('statusOnline') }}</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'uce')"><span class="indicator-dot"></span>{{ uceStats.offline }} {{ t('statusOffline') }}</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'uce')"><span class="indicator-dot"></span>{{ uceStats.maintenance }} {{ t('statusMaintenance') }}</span>
           </div>
         </div>
         <!-- AP -->
@@ -90,9 +101,9 @@
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ apStats.online }} 在线</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'ap')"><span class="indicator-dot"></span>{{ apStats.offline }} 离线</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'ap')"><span class="indicator-dot"></span>{{ apStats.maintenance }} 维护</span>
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ apStats.online }} {{ t('statusOnline') }}</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'ap')"><span class="indicator-dot"></span>{{ apStats.offline }} {{ t('statusOffline') }}</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'ap')"><span class="indicator-dot"></span>{{ apStats.maintenance }} {{ t('statusMaintenance') }}</span>
           </div>
         </div>
         <!-- 办公室交换机 -->
@@ -109,9 +120,9 @@
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ officeSwitchStats.online }} 在线</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.offline }} 离线</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.maintenance }} 维护</span>
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ officeSwitchStats.online }} {{ t('statusOnline') }}</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.offline }} {{ t('statusOffline') }}</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.maintenance }} {{ t('statusMaintenance') }}</span>
           </div>
         </div>
         <!-- 数据中心网络设备 -->
@@ -128,9 +139,9 @@
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ datacenterStats.online }} 在线</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.offline }} 离线</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.maintenance }} 维护</span>
+            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ datacenterStats.online }} {{ t('statusOnline') }}</span>
+            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.offline }} {{ t('statusOffline') }}</span>
+            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.maintenance }} {{ t('statusMaintenance') }}</span>
           </div>
         </div>
       </div>
@@ -419,9 +430,11 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, Connection, Location, Warning, Box, Close } from '@element-plus/icons-vue'
+import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, ArrowDown, Connection, Location, Warning, Box, Close } from '@element-plus/icons-vue'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { debounce, throttle } from '@/utils/requestManager.js'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -732,19 +745,26 @@ const handleSelectionChange = (selection) => {
   selectedDevices.value = selection.map(d => d.id)
 }
 
-const loadDevices = async () => {
+const loadDevices = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = { skip: (currentPage.value - 1) * pageSize.value, limit: pageSize.value }
-    const data = await getDevices(params)
+    const data = await cachedRequest(
+      () => getDevices(params),
+      'devices',
+      params,
+      { forceRefresh: force }
+    )
     devices.value = data.items || []
     total.value = data.total || 0
   } catch (error) {
-    ElMessage.error(t('msgDeviceListFailed'))
+    if (error.name !== 'CanceledError') {
+      ElMessage.error(t('msgDeviceListFailed'))
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const loadCredentialGroups = async () => {
   try {
@@ -814,10 +834,11 @@ const updateDevice = async () => {
       modules: newDevice.value.modules
     }
     await updateDeviceApi(newDevice.value.id, updateData)
+    clearCache('devices')  // 清除缓存
     ElMessage.success(t('msgDeviceUpdateSuccess'))
     showAddDialog.value = false
     editMode.value = false
-    loadDevices()
+    loadDevices(true)  // 强制刷新
   } catch (error) {
     ElMessage.error(t('msgDeviceUpdateFailed'))
     ElMessage.error(error.response?.data?.detail || t('msgDeviceUpdateFailed'))
@@ -833,8 +854,9 @@ const deleteDevice = async (row) => {
     })
 
     await deleteDeviceApi(row.id)
+    clearCache('devices')  // 清除缓存
     ElMessage.success(t('msgDeviceDeleteSuccess'))
-    loadDevices()
+    loadDevices(true)  // 强制刷新
   } catch (error) {
     if (error !== 'cancel') {
       ElMessage.error(t('msgDeviceDeleteFailed'))
@@ -845,9 +867,10 @@ const deleteDevice = async (row) => {
 const addDevice = async () => {
   try {
     await createDevice(newDevice.value)
+    clearCache('devices')  // 清除缓存
     ElMessage.success(t('msgDeviceAddSuccess'))
     showAddDialog.value = false
-    loadDevices()
+    loadDevices(true)  // 强制刷新
   } catch (error) {
     ElMessage.error(t('msgDeviceAddFailed'))
   }
@@ -1042,25 +1065,34 @@ onMounted(() => {
   align-items: center;
 }
 
+/* 按钮组 - 统一风格 */
+.btn-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .nav-action-btn {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #0984e3 0%, #74b9ff 100%);
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
   color: white;
   border: none;
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.25s ease;
-  box-shadow: 0 2px 8px rgba(9, 132, 227, 0.25);
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+  height: 36px;
+  white-space: nowrap;
 }
 
 .nav-action-btn:hover {
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(9, 132, 227, 0.35);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
 }
 
 .nav-action-btn.secondary {
@@ -1077,17 +1109,38 @@ onMounted(() => {
   border-color: var(--accent-primary);
 }
 
+/* Export 按钮 - 与 Add Device 完全一致 */
 .nav-action-btn.export {
-  background: rgba(255, 255, 255, 0.9);
-  color: var(--text-secondary);
-  border: 1px solid var(--border-default);
-  box-shadow: none;
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
 }
 
 .nav-action-btn.export:hover {
-  background: var(--bg-hover);
-  color: var(--accent-primary);
-  border-color: var(--accent-primary);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
+}
+
+.nav-action-btn.export .dropdown-arrow {
+  margin-left: 4px;
+  font-size: 12px;
+  opacity: 0.8;
+}
+
+/* 下拉菜单容器样式 */
+.nav-action-dropdown {
+  display: flex;
+}
+
+.nav-action-dropdown :deep(.el-dropdown-menu__item) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-action-dropdown :deep(.el-dropdown-menu__item .el-icon) {
+  font-size: 14px;
 }
 
 .nav-action-btn:disabled {
@@ -1565,7 +1618,13 @@ onMounted(() => {
 
 .dark .page-title { color: #f0f6fc; }
 
-.dark .nav-action-btn { background: linear-gradient(135deg, #0984e3, #74b9ff); }
+.dark .nav-action-btn {
+  background: linear-gradient(135deg, #00b894, #55efc4);
+}
+
+.dark .nav-action-btn.export {
+  background: linear-gradient(135deg, #00b894, #55efc4);
+}
 
 .dark .nav-action-btn.secondary {
   background: rgba(48, 54, 61, 0.8);
@@ -1619,8 +1678,10 @@ onMounted(() => {
 .dark .enterprise-tree-table :deep(td.el-table__cell) { border-bottom-color: rgba(48, 54, 61, 0.3); }
 .dark .enterprise-tree-table :deep(.el-table__row:hover > td) { background: rgba(88, 166, 255, 0.08) !important; }
 
-.dark .enterprise-tree-table :deep(.layer-row > td) { background: rgba(48, 54, 61, 0.2) !important; }
-.dark .enterprise-tree-table :deep(.type-row > td) { background: rgba(48, 54, 61, 0.15) !important; }
+.dark .enterprise-tree-table :deep(.layer-row) { background: rgba(22, 27, 34, 0.95) !important; }
+.dark .enterprise-tree-table :deep(.layer-row > td) { background: rgba(22, 27, 34, 0.95) !important; border-bottom-color: rgba(48, 54, 61, 0.5); }
+.dark .enterprise-tree-table :deep(.type-row) { background: rgba(13, 17, 23, 0.7) !important; }
+.dark .enterprise-tree-table :deep(.type-row > td) { background: rgba(13, 17, 23, 0.7) !important; border-bottom-color: rgba(48, 54, 61, 0.4); }
 
 .dark .layer-icon.datacenter { background: rgba(88, 166, 255, 0.2); color: #58a6ff; }
 .dark .layer-icon.wifi { background: rgba(63, 185, 80, 0.2); color: #3fb950; }

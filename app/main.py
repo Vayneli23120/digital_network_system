@@ -51,7 +51,7 @@ from .features.ai.router import router as ai_router
 from .features.workflows.router import router as workflow_router
 from .features.notifications.router import router as notifications_router
 from .shared.middleware.auth_middleware import auth_middleware
-from .shared.middleware.rate_limiter import RateLimitMiddleware
+from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
 
 config = get_config()
 

@@ -204,6 +204,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus } from '@element-plus/icons-vue'
 import { getWorkflowRules, getWorkflowStats, getWorkflowTriggers, getWorkflowActions, initWorkflowDefaults, toggleWorkflowRule, createWorkflowRule, updateWorkflowRule, deleteWorkflowRule, testWorkflowTrigger } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -240,55 +242,87 @@ const filteredRules = computed(() => {
 })
 
 // Methods
-const fetchRules = async () => {
+const fetchRules = debounce(async (force = false) => {
   try {
     loading.value = true
-    const res = await getWorkflowRules()
+    const res = await cachedRequest(
+      () => getWorkflowRules(),
+      'workflow_rules',
+      {},
+      { forceRefresh: force }
+    )
     rules.value = res.rules || []
   } catch (error) {
-    console.error('Failed to fetch rules:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch rules:', error)
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
-const fetchStats = async () => {
+const fetchStats = debounce(async (force = false) => {
   try {
-    const res = await getWorkflowStats()
+    const res = await cachedRequest(
+      () => getWorkflowStats(),
+      'workflow_stats',
+      {},
+      { forceRefresh: force }
+    )
     stats.value = res.rules || {}
     triggerTypes.value = { triggers: res.triggers_available || [], trigger_info: {} }
     actionTypes.value = { actions: res.actions_available || [], action_info: {} }
   } catch (error) {
-    console.error('Failed to fetch stats:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch stats:', error)
+    }
   }
-}
+}, 300)
 
-const fetchTriggerTypes = async () => {
+const fetchTriggerTypes = debounce(async (force = false) => {
   try {
-    triggerTypes.value = await getWorkflowTriggers()
+    triggerTypes.value = await cachedRequest(
+      () => getWorkflowTriggers(),
+      'workflow_triggers',
+      {},
+      { forceRefresh: force }
+    )
   } catch (error) {
-    console.error('Failed to fetch trigger types:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch trigger types:', error)
+    }
   }
-}
+}, 300)
 
-const fetchActionTypes = async () => {
+const fetchActionTypes = debounce(async (force = false) => {
   try {
-    actionTypes.value = await getWorkflowActions()
+    actionTypes.value = await cachedRequest(
+      () => getWorkflowActions(),
+      'workflow_actions',
+      {},
+      { forceRefresh: force }
+    )
   } catch (error) {
-    console.error('Failed to fetch action types:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch action types:', error)
+    }
   }
-}
+}, 300)
 
 const initDefaultRules = async () => {
   try {
     initing.value = true
     const res = await initWorkflowDefaults()
+    clearCache('workflow_rules')
+    clearCache('workflow_stats')
     ElMessage.success(`初始化完成: ${res.created_count} 条规则`)
-    await fetchRules()
-    await fetchStats()
+    await fetchRules(true)
+    await fetchStats(true)
   } catch (error) {
-    ElMessage.error('初始化失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('初始化失败')
+      console.error(error)
+    }
   } finally {
     initing.value = false
   }
@@ -298,10 +332,13 @@ const toggleRule = async (rule) => {
   try {
     const res = await toggleWorkflowRule(rule.id)
     rule.is_active = res.is_active
+    clearCache('workflow_rules')
     ElMessage.success(res.is_active ? '规则已启用' : '规则已禁用')
   } catch (error) {
-    ElMessage.error('操作失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('操作失败')
+      console.error(error)
+    }
   }
 }
 
@@ -369,6 +406,7 @@ const saveRule = async () => {
         priority: ruleForm.value.priority,
         is_active: ruleForm.value.is_active
       })
+      clearCache('workflow_rules')
       ElMessage.success('规则更新成功')
     } else {
       // Create
@@ -382,14 +420,17 @@ const saveRule = async () => {
         priority: ruleForm.value.priority,
         is_active: ruleForm.value.is_active
       })
+      clearCache('workflow_rules')
       ElMessage.success('规则创建成功')
     }
 
     ruleDialogVisible.value = false
-    await fetchRules()
+    await fetchRules(true)
   } catch (error) {
-    ElMessage.error('保存失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('保存失败')
+      console.error(error)
+    }
   } finally {
     saving.value = false
   }
@@ -402,10 +443,11 @@ const deleteRule = async (rule) => {
     })
 
     await deleteWorkflowRule(rule.id)
+    clearCache('workflow_rules')
     ElMessage.success('删除成功')
-    await fetchRules()
+    await fetchRules(true)
   } catch (error) {
-    if (error !== 'cancel') {
+    if (error !== 'cancel' && error.name !== 'CanceledError') {
       ElMessage.error('删除失败')
       console.error(error)
     }

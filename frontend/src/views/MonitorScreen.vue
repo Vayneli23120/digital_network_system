@@ -381,6 +381,8 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const router = useRouter()
 const route = useRoute()
@@ -570,9 +572,9 @@ const closeUploadDialog = () => {
 // Methods
 const refreshData = async () => {
   loading.value = true
-  await Promise.all([loadFloorPlans(), loadStats(), loadOfflineAlerts()])
+  await Promise.all([loadFloorPlans(true), loadStats(true), loadOfflineAlerts(true)])
   if (selectedPlanId.value) {
-    await loadPlanNodes(selectedPlanId.value)
+    await loadPlanNodes(selectedPlanId.value, true)
   }
   loading.value = false
   ElMessage.success(t('msgDataRefreshed'))
@@ -588,10 +590,10 @@ const deletePlan = async () => {
     if (res.ok) {
       ElMessage.success(t('monitorScreenPlanDeleted'))
       // 重新加载列表并选择第一个
-      await loadFloorPlans()
+      await loadFloorPlans(true)
       selectedPlanId.value = floorPlans.value[0]?.id || null
       if (selectedPlanId.value) {
-        await loadPlanNodes(selectedPlanId.value)
+        await loadPlanNodes(selectedPlanId.value, true)
       }
     } else {
       const data = await res.json()
@@ -602,49 +604,74 @@ const deletePlan = async () => {
   }
 }
 
-const loadFloorPlans = async () => {
+const loadFloorPlans = debounce(async (force = false) => {
   try {
-    const res = await fetch('/api/floor-plans')
-    const data = await res.json()
+    const data = await cachedRequest(
+      () => fetch('/api/floor-plans').then(r => r.json()),
+      'monitor_floor_plans',
+      {},
+      { forceRefresh: force, ttl: 120 }
+    )
     floorPlans.value = data.items || []
     if (floorPlans.value.length > 0 && !selectedPlanId.value) {
       selectedPlanId.value = floorPlans.value[0].id
-      await loadPlanNodes(selectedPlanId.value)
+      await loadPlanNodes(selectedPlanId.value, force)
     }
   } catch (err) {
-    console.error('Failed to load floor plans:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load floor plans:', err)
+    }
   }
-}
+}, 300)
 
-const loadPlanNodes = async (planId) => {
+const loadPlanNodes = debounce(async (planId, force = false) => {
   try {
-    const res = await fetch(`/api/floor-plans/${planId}/nodes`)
-    const data = await res.json()
+    const data = await cachedRequest(
+      () => fetch(`/api/floor-plans/${planId}/nodes`).then(r => r.json()),
+      `monitor_nodes_${planId}`,
+      { planId },
+      { forceRefresh: force, ttl: 60 }
+    )
     nodes.value = data.items || []
     imageLoaded.value = false
   } catch (err) {
-    console.error('Failed to load nodes:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load nodes:', err)
+    }
   }
-}
+}, 300)
 
-const loadStats = async () => {
+const loadStats = debounce(async (force = false) => {
   try {
-    const res = await fetch('/api/monitor-screen/stats')
-    stats.value = await res.json()
+    const data = await cachedRequest(
+      () => fetch('/api/monitor-screen/stats').then(r => r.json()),
+      'monitor_stats',
+      {},
+      { forceRefresh: force, ttl: 30 }
+    )
+    stats.value = data
   } catch (err) {
-    console.error('Failed to load stats:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load stats:', err)
+    }
   }
-}
+}, 300)
 
-const loadOfflineAlerts = async () => {
+const loadOfflineAlerts = debounce(async (force = false) => {
   try {
-    const res = await fetch('/api/monitor-screen/offline-alerts')
-    const data = await res.json()
+    const data = await cachedRequest(
+      () => fetch('/api/monitor-screen/offline-alerts').then(r => r.json()),
+      'monitor_offline_alerts',
+      {},
+      { forceRefresh: force, ttl: 60 }
+    )
     offlineAlerts.value = data.items || []
   } catch (err) {
-    console.error('Failed to load offline alerts:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load offline alerts:', err)
+    }
   }
-}
+}, 300)
 
 const startCreateNode = async () => {
   if (!selectedPlanId.value) return
@@ -654,11 +681,17 @@ const startCreateNode = async () => {
 
   // Load available devices
   try {
-    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/available-devices`)
-    const data = await res.json()
+    const data = await cachedRequest(
+      () => fetch(`/api/floor-plans/${selectedPlanId.value}/available-devices`).then(r => r.json()),
+      `monitor_available_devices_${selectedPlanId.value}`,
+      { planId: selectedPlanId.value },
+      { ttl: 60 }
+    )
     availableDevices.value = data.items || []
   } catch (err) {
-    console.error('Failed to load available devices:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load available devices:', err)
+    }
   }
 }
 
@@ -700,7 +733,7 @@ const confirmCreateNode = async () => {
     const data = await res.json()
     if (res.ok) {
       ElMessage.success(data.message || t('msgSaveSuccess'))
-      await loadPlanNodes(selectedPlanId.value)
+      await loadPlanNodes(selectedPlanId.value, true)
     } else {
       ElMessage.error(data.detail || 'Failed')
     }
@@ -714,11 +747,18 @@ const confirmCreateNode = async () => {
 const showNodeDetail = async (node) => {
   highlightedNodeId.value = node.id
   try {
-    const res = await fetch(`/api/monitor-screen/device/${node.device_id}/detail`)
-    nodeDetail.value = await res.json()
+    const data = await cachedRequest(
+      () => fetch(`/api/monitor-screen/device/${node.device_id}/detail`).then(r => r.json()),
+      `monitor_device_detail_${node.device_id}`,
+      { deviceId: node.device_id },
+      { ttl: 30 }
+    )
+    nodeDetail.value = data
     showDetailDialog.value = true
   } catch (err) {
-    console.error('Failed to load device detail:', err)
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load device detail:', err)
+    }
   }
 }
 
@@ -745,7 +785,7 @@ const deleteNodeFromPlan = async () => {
       if (res.ok) {
         ElMessage.success(t('msgSaveSuccess'))
         showDetailDialog.value = false
-        await loadPlanNodes(selectedPlanId.value)
+        await loadPlanNodes(selectedPlanId.value, true)
       }
     }
   } catch {
@@ -779,7 +819,7 @@ const uploadFloorPlan = async () => {
     if (res.ok) {
       ElMessage.success(data.message || t('msgSaveSuccess'))
       closeUploadDialog()
-      await loadFloorPlans()
+      await loadFloorPlans(true)
     } else {
       ElMessage.error(data.detail || t('monitorScreenUploadFailed'))
     }
@@ -799,11 +839,11 @@ const handleRouteParams = async () => {
   const deviceId = route.query.device_id
   if (deviceId) {
     // 等待数据加载
-    await loadFloorPlans()
-    await loadStats()
-    await loadOfflineAlerts()
+    await loadFloorPlans(true)
+    await loadStats(true)
+    await loadOfflineAlerts(true)
     if (selectedPlanId.value) {
-      await loadPlanNodes(selectedPlanId.value)
+      await loadPlanNodes(selectedPlanId.value, true)
     }
 
     // 找到对应的节点并高亮

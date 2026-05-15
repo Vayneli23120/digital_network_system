@@ -192,6 +192,8 @@ import { Refresh, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { getHealthDashboard, getHealthDevices, calculateAllHealth as calcAllHealth, calculateDeviceHealth as calcDeviceHealth, getDeviceHealthHistory } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
+import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -235,29 +237,43 @@ const filteredDevices = computed(() => {
 })
 
 // Methods
-const fetchDashboard = async () => {
+const fetchDashboard = debounce(async (force = false) => {
   try {
-    dashboard.value = await getHealthDashboard()
+    dashboard.value = await cachedRequest(
+      () => getHealthDashboard(),
+      'health_dashboard',
+      {},
+      { forceRefresh: force }
+    )
 
     // Initialize charts after data loaded
     await nextTick()
     initCharts()
   } catch (error) {
-    console.error('Failed to fetch dashboard:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch dashboard:', error)
+    }
   }
-}
+}, 300)
 
-const fetchRiskDevices = async () => {
+const fetchRiskDevices = debounce(async (force = false) => {
   try {
     loading.value = true
-    const res = await getHealthDevices({ limit: 100 })
+    const res = await cachedRequest(
+      () => getHealthDevices({ limit: 100 }),
+      'health_devices',
+      { limit: 100 },
+      { forceRefresh: force }
+    )
     devices.value = res.items || []
   } catch (error) {
-    console.error('Failed to fetch devices:', error)
+    if (error.name !== 'CanceledError') {
+      console.error('Failed to fetch devices:', error)
+    }
   } finally {
     loading.value = false
   }
-}
+}, 300)
 
 const calculateAllHealth = async () => {
   try {
@@ -267,11 +283,13 @@ const calculateAllHealth = async () => {
     ElMessage.success(`计算完成: ${res.total} 个设备`)
 
     // Refresh data
-    await fetchDashboard()
-    await fetchRiskDevices()
+    await fetchDashboard(true)
+    await fetchRiskDevices(true)
   } catch (error) {
-    ElMessage.error('批量计算失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('批量计算失败')
+      console.error(error)
+    }
   } finally {
     calculating.value = false
   }
@@ -283,21 +301,30 @@ const calculateDeviceHealth = async (deviceId) => {
     ElMessage.success(`健康评分: ${res.health_score}, 风险等级: ${res.risk_level}`)
 
     // Refresh list
-    await fetchRiskDevices()
+    await fetchRiskDevices(true)
   } catch (error) {
-    ElMessage.error('计算失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('计算失败')
+      console.error(error)
+    }
   }
 }
 
 const viewDeviceHealth = async (deviceId) => {
   try {
-    const res = await getDeviceHealthHistory(deviceId)
+    const res = await cachedRequest(
+      () => getDeviceHealthHistory(deviceId),
+      'health_history',
+      { deviceId },
+      { forceRefresh: true }
+    )
     selectedDeviceHistory.value = res.history || []
     historyDialogVisible.value = true
   } catch (error) {
-    ElMessage.error('获取历史失败')
-    console.error(error)
+    if (error.name !== 'CanceledError') {
+      ElMessage.error('获取历史失败')
+      console.error(error)
+    }
   }
 }
 

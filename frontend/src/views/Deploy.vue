@@ -278,6 +278,7 @@ import {
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { cachedRequest } from '@/utils/cache.js'
 
 const { t } = useI18n()
 
@@ -314,7 +315,12 @@ const canDeploy = computed(() => {
 
 const loadDevices = async () => {
   try {
-    const data = await getDevices()
+    const data = await cachedRequest(
+      () => getDevices(),
+      'devices',
+      {},
+      { forceRefresh: false }
+    )
     devices.value = data.items || []
   } catch (error) {
     ElMessage.error(t('deployLoadDeviceFailed'))
@@ -323,7 +329,12 @@ const loadDevices = async () => {
 
 const loadBackups = async () => {
   try {
-    const data = await getBackups({ limit: 50 })
+    const data = await cachedRequest(
+      () => getBackups({ limit: 50 }),
+      'backups',
+      { limit: 50 },
+      { forceRefresh: false }
+    )
     backups.value = data.items || []
   } catch (error) {
     ElMessage.error(t('deployLoadBackupFailed'))
@@ -332,7 +343,12 @@ const loadBackups = async () => {
 
 const loadTemplates = async () => {
   try {
-    const data = await getTemplates()
+    const data = await cachedRequest(
+      () => getTemplates(),
+      'templates',
+      {},
+      { forceRefresh: false }
+    )
     templates.value = data.items || []
   } catch (error) {
     ElMessage.error(t('deployLoadTemplateFailed'))
