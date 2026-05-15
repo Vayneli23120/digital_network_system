@@ -1618,6 +1618,15 @@ onMounted(() => {
   white-space: nowrap;
 }
 
+.deploy-page.dark .smart-mode-tip {
+  background: rgba(144, 147, 153, 0.15);
+}
+
+.deploy-page.dark .smart-mode-tip .tip-icon,
+.deploy-page.dark .smart-mode-tip .tip-text {
+  color: #a6a9ad;
+}
+
 .mode-radio-group {
   display: flex;
   width: 100%;
