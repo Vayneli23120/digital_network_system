@@ -154,10 +154,8 @@
                   <el-radio-button label="replace">{{ t('deploySnippetReplace') }}</el-radio-button>
                 </el-radio-group>
                 <div v-if="deployForm.snippet_position === 'smart'" class="smart-mode-tip">
-                  <el-tag type="info" size="small">
-                    <el-icon><InfoFilled /></el-icon>
-                    {{ t('deploySmartModeTip') }}
-                  </el-tag>
+                  <el-icon class="tip-icon"><InfoFilled /></el-icon>
+                  <span class="tip-text">{{ t('deploySmartModeTip') }}</span>
                 </div>
 
                 <!-- 基础配置选择（可选） -->
@@ -1599,14 +1597,25 @@ onMounted(() => {
 
 .smart-mode-tip {
   margin-top: 8px;
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  background: rgba(144, 147, 153, 0.1);
+  border-radius: 4px;
+  white-space: nowrap;
 }
 
-.smart-mode-tip .el-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.smart-mode-tip .tip-icon {
+  color: #909399;
+  flex-shrink: 0;
+}
+
+.smart-mode-tip .tip-text {
+  color: #909399;
+  font-size: 12px;
   white-space: nowrap;
-  flex-wrap: nowrap;
 }
 
 .mode-radio-group {
