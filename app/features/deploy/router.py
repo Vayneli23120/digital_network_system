@@ -12,7 +12,7 @@ from app.shared.database import get_db
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog
 from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
-from .config_diff_service import ConfigDiffService
+from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, DiffLine
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
 
