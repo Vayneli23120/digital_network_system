@@ -213,6 +213,15 @@ export function getCompatibleVariables() {
   return api.get('/deploy/compatible-variables')
 }
 
+// Phase 3: 维护窗口和预约部署
+export function getMaintenanceWindows() {
+  return api.get('/deploy/maintenance-windows')
+}
+
+export function scheduleDeploy(data) {
+  return api.post('/deploy/schedule', data)
+}
+
 // 日志管理
 export function getLogs(params) {
   return api.get('/logs', { params })

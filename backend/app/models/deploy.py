@@ -31,6 +31,10 @@ class DeployTask(Base):
     completed_at = Column(DateTime, nullable=True)
     elapsed_seconds = Column(Integer, default=0)
 
+    # Phase 3: 维护窗口
+    scheduled_at = Column(DateTime, nullable=True)
+    maintenance_window = Column(String(50), nullable=True)
+
     # 摘要信息
     total_devices = Column(Integer, default=0)
     success_count = Column(Integer, default=0)

@@ -486,3 +486,205 @@ async def execute_device(task_id: str, device_id: int, deploy_data: dict, db: Se
         await DeployTaskManager.device_completed(
             task_id, device_id, False, str(e)
         )
+
+
+@router.post("/preview")
+async def preview_deploy(
+    deploy_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    预览部署变更：生成配置差异分析
+    """
+    try:
+        from app.services.config_diff_service import ConfigDiffService
+        from app.services.device_service import DeviceService
+        from app.models.template import ConfigTemplate
+
+        device_ids = deploy_data.get("target_devices", [])
+        mode = deploy_data.get("mode")
+
+        if not device_ids:
+            raise HTTPException(status_code=400, detail="未选择目标设备")
+
+        preview_results = []
+
+        for device_id in device_ids:
+            # 获取设备信息
+            device = DeviceService.get_device(db, device_id)
+            if not device:
+                continue
+
+            # 获取当前配置（简化版本，实际应从设备SSH获取）
+            current_config = device.config_content or ""
+
+            # 获取新配置
+            if mode == "backup":
+                # 从备份获取配置
+                from app.models.backup import ConfigBackup
+                backup_file = deploy_data.get("backup_file")
+                backup = db.query(ConfigBackup).filter(
+                    ConfigBackup.backup_file == backup_file
+                ).first()
+                new_config = backup.config_content if backup else ""
+            else:
+                # 从模板获取配置
+                template_id = deploy_data.get("template_id")
+                template = db.query(ConfigTemplate).filter(
+                    ConfigTemplate.id == template_id
+                ).first()
+                new_config = template.content if template else ""
+
+            # 应用变量替换
+            variables = deploy_data.get("variables", {})
+            for key, value in variables.items():
+                new_config = new_config.replace(f"{{{{{key}}}}}", value)
+
+            # 生成差异分析
+            diff_result = ConfigDiffService.analyze_diff(current_config, new_config)
+            impact = ConfigDiffService.estimate_impact(diff_result)
+
+            preview_results.append({
+                "device_id": device_id,
+                "device_name": device.name,
+                "device_ip": device.ip,
+                "diff": {
+                    "lines": [
+                        {
+                            "type": line.type.value,
+                            "content": line.content,
+                            "old_line_num": line.old_line_num,
+                            "new_line_num": line.new_line_num
+                        }
+                        for line in diff_result.lines[:100]  # 限制返回行数
+                    ],
+                    "stats": diff_result.stats
+                },
+                "impact": impact
+            })
+
+        return {
+            "success": True,
+            "preview": preview_results,
+            "summary": {
+                "total_devices": len(preview_results),
+                "total_changes": sum(p["diff"]["stats"]["added"] + p["diff"]["stats"]["removed"]
+                                    for p in preview_results),
+                "high_risk_devices": sum(1 for p in preview_results
+                                         if p["impact"]["risk_level"] == "high")
+            }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/maintenance-windows")
+async def get_maintenance_windows(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    获取可用的维护窗口时段
+    """
+    from datetime import datetime, timedelta
+
+    # 生成未来7天的维护窗口选项
+    windows = []
+    now = datetime.now()
+
+    for day_offset in range(1, 8):
+        date = now + timedelta(days=day_offset)
+
+        # 上午窗口: 02:00-06:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_morning",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "02:00",
+            "end_time": "06:00",
+            "label": f"{date.strftime('%m-%d')} {current_user.t('maintWindowMorning')}",
+            "available": True
+        })
+
+        # 下午窗口: 14:00-16:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_afternoon",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "14:00",
+            "end_time": "16:00",
+            "label": f"{date.strftime('%m-%d')} {current_user.t('maintWindowAfternoon')}",
+            "available": True
+        })
+
+        # 晚间窗口: 22:00-02:00
+        windows.append({
+            "id": f"{date.strftime('%Y%m%d')}_evening",
+            "date": date.strftime("%Y-%m-%d"),
+            "start_time": "22:00",
+            "end_time": "02:00",
+            "next_day": True,
+            "label": f"{date.strftime('%m-%d')} {current_user.t('maintWindowEvening')}",
+            "available": True
+        })
+
+    return {"windows": windows}
+
+
+@router.post("/schedule")
+async def schedule_deploy(
+    schedule_data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    预约部署任务
+    """
+    try:
+        from datetime import datetime
+        from app.models.deploy import DeployTask
+
+        window_id = schedule_data.get("window_id")
+        deploy_data = schedule_data.get("deploy_data")
+
+        # 解析维护窗口时间
+        # window_id 格式: YYYYMMDD_morning/afternoon/evening
+        parts = window_id.split('_')
+        date_str = parts[0]
+        period = parts[1]
+
+        date = datetime.strptime(date_str, "%Y%m%d")
+
+        if period == "morning":
+            scheduled_time = date.replace(hour=2, minute=0)
+        elif period == "afternoon":
+            scheduled_time = date.replace(hour=14, minute=0)
+        else:  # evening
+            scheduled_time = date.replace(hour=22, minute=0)
+
+        # 创建预约任务
+        task_id = str(uuid.uuid4())
+        task = DeployTask(
+            id=task_id,
+            status="scheduled",
+            mode=deploy_data.get("mode"),
+            backup_file=deploy_data.get("backup_file"),
+            template_id=deploy_data.get("template_id"),
+            is_production=deploy_data.get("is_production", False),
+            parallel_limit=deploy_data.get("parallel_limit", 1),
+            variables=deploy_data.get("variables", {}),
+            created_by=current_user.id,
+            scheduled_at=scheduled_time
+        )
+
+        db.add(task)
+        db.commit()
+
+        return {
+            "success": True,
+            "task_id": task_id,
+            "scheduled_at": scheduled_time.isoformat(),
+            "message": f"部署任务已预约到 {scheduled_time.strftime('%Y-%m-%d %H:%M')}"
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

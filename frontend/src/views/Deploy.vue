@@ -398,6 +398,152 @@
       </el-row>
     </section>
 
+    <!-- 配置差异预览对话框 -->
+    <el-dialog
+      v-model="showPreviewDialog"
+      :title="t('deployPreviewDialog')"
+      width="90%"
+      top="5vh"
+      destroy-on-close
+      align-center
+    >
+      <el-skeleton v-if="previewLoading" :rows="10" animated />
+
+      <div v-else class="preview-content">
+        <!-- 影响分析摘要 -->
+        <div class="impact-summary">
+          <div class="impact-header">
+            <el-icon><WarningFilled /></el-icon>
+            <span>{{ t('deployImpactAnalysis') }}</span>
+          </div>
+          <div class="impact-stats">
+            <div class="impact-item">
+              <span class="impact-label">{{ t('diffTotalChanges') }}</span>
+              <span class="impact-value">{{ impactAnalysis.totalChanges }}</span>
+            </div>
+            <div class="impact-item">
+              <span class="impact-label">{{ t('diffAffectedServices') }}</span>
+              <span class="impact-value">
+                {{ impactAnalysis.affectedServices.length > 0
+                  ? impactAnalysis.affectedServices.join(', ')
+                  : t('diffNoServices') }}
+              </span>
+            </div>
+            <div class="impact-item">
+              <span class="impact-label">{{ t('diffEstimatedDowntime') }}</span>
+              <span class="impact-value">{{ impactAnalysis.estimatedDowntime }}s</span>
+            </div>
+            <div class="impact-item">
+              <span class="impact-label">{{ t('diffRiskLevel') }}</span>
+              <el-tag :type="getRiskLevelType(impactAnalysis.riskLevel)" size="large">
+                {{ getRiskLevelText(impactAnalysis.riskLevel) }}
+              </el-tag>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设备选择 -->
+        <div class="device-selector">
+          <span class="selector-label">{{ t('diffSelectDevice') }}:</span>
+          <el-select v-model="selectedPreviewDevice" style="width: 300px">
+            <el-option
+              v-for="result in previewResults"
+              :key="result.device_id"
+              :label="`${result.device_name} (${result.device_ip})`"
+              :value="result"
+            />
+          </el-select>
+        </div>
+
+        <!-- 设备差异 -->
+        <div v-if="selectedPreviewDevice" class="device-diff">
+          <div class="diff-device-header">
+            <div class="device-info">
+              <h4>{{ selectedPreviewDevice.device_name }}</h4>
+              <span class="device-ip">{{ selectedPreviewDevice.device_ip }}</span>
+            </div>
+            <el-tag
+              :type="getRiskLevelType(selectedPreviewDevice.impact?.risk_level)"
+              size="small"
+            >
+              {{ getRiskLevelText(selectedPreviewDevice.impact?.risk_level) }}
+            </el-tag>
+          </div>
+
+          <DiffViewer
+            v-if="selectedPreviewDevice.diff"
+            :old-config="selectedPreviewDevice.old_config || ''"
+            :new-config="selectedPreviewDevice.new_config || ''"
+            :is-dark="isDark"
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showPreviewDialog = false">
+            {{ t('actionClose') }}
+          </el-button>
+          <el-button type="primary" @click="openScheduleDialog">
+            <el-icon><Calendar /></el-icon>
+            {{ t('deploySchedule') }}
+          </el-button>
+          <el-button type="success" @click="confirmDeployFromPreview">
+            <el-icon><Upload /></el-icon>
+            {{ t('deployStart') }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
+    <!-- 维护窗口预约对话框 -->
+    <el-dialog
+      v-model="showScheduleDialog"
+      :title="t('deployScheduleDialog')"
+      width="600px"
+      align-center
+    >
+      <div class="schedule-content">
+        <p class="schedule-desc">{{ t('deployScheduleDesc') }}</p>
+
+        <el-form label-position="top">
+          <el-form-item :label="t('deploySelectWindow')">
+            <el-radio-group v-model="selectedWindow" class="window-options">
+              <el-radio-button
+                v-for="window in maintenanceWindows"
+                :key="window.id"
+                :label="window.id"
+                :disabled="!window.available"
+                class="window-option"
+              >
+                <div class="window-label">{{ window.label }}</div>
+                <div class="window-time">{{ window.start_time }} - {{ window.end_time }}</div>
+              </el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+        </el-form>
+
+        <div v-if="isScheduled" class="schedule-confirmation">
+          <el-alert
+            :title="t('deployScheduledConfirm', { time: scheduledTime })"
+            type="success"
+            :closable="false"
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <div class="dialog-footer">
+          <el-button @click="showScheduleDialog = false">
+            {{ t('actionCancel') }}
+          </el-button>
+          <el-button type="primary" @click="scheduleDeployTask">
+            {{ t('deployConfirmSchedule') }}
+          </el-button>
+        </div>
+      </template>
+    </el-dialog>
+
     <!-- 变量说明对话框 -->
     <el-dialog
       v-model="showVariableHelp"
@@ -431,7 +577,8 @@ import {
   Loading,
   Timer,
   Document,
-  Files
+  Files,
+  Calendar
 } from '@element-plus/icons-vue'
 import {
   getDevices,
@@ -440,12 +587,15 @@ import {
   getTemplate,
   previewDeploy as previewDeployApi,
   executeDeploy as executeDeployApi,
-  getCompatibleVariables
+  getCompatibleVariables,
+  getMaintenanceWindows,
+  scheduleDeploy
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
+import DiffViewer from '@/components/DiffViewer.vue'
 
 const { t } = useI18n()
 
@@ -493,6 +643,28 @@ const approvalInfo = ref(null)
 const showApprovalDialog = ref(false)
 const approvalComment = ref('')
 const rejectionReason = ref('')
+
+// Phase 3: 配置差异预览
+const previewResults = ref([])
+const showPreviewDialog = ref(false)
+const previewLoading = ref(false)
+const selectedPreviewDevice = ref(null)
+
+// Phase 3: 维护窗口
+const maintenanceWindows = ref([])
+const selectedWindow = ref(null)
+const showScheduleDialog = ref(false)
+const isScheduled = ref(false)
+const scheduledTime = ref(null)
+
+// Phase 3: 影响分析
+const impactAnalysis = ref({
+  totalChanges: 0,
+  affectedServices: [],
+  estimatedDowntime: 0,
+  riskLevel: 'low',
+  highRiskDevices: 0
+})
 
 // 计算属性
 const canDeploy = computed(() => {
@@ -718,13 +890,90 @@ const previewDeploy = async () => {
     if (v.key) deployData.variables[v.key] = v.value
   })
 
+  previewLoading.value = true
+  showPreviewDialog.value = true
+
   try {
     const result = await previewDeployApi(deployData)
+    previewResults.value = result.preview || []
+    selectedPreviewDevice.value = previewResults.value[0] || null
+
+    // 更新影响分析
+    impactAnalysis.value = {
+      totalChanges: result.summary?.total_changes || 0,
+      highRiskDevices: result.summary?.high_risk_devices || 0,
+      affectedServices: [...new Set(previewResults.value.flatMap(p => p.impact?.affected_services || []))],
+      estimatedDowntime: Math.max(...previewResults.value.map(p => p.impact?.estimated_downtime_seconds || 0)),
+      riskLevel: result.summary?.high_risk_devices > 0 ? 'high' :
+                 result.summary?.total_changes > 20 ? 'medium' : 'low'
+    }
+
     ElMessage.success(t('deployPreviewSuccess'))
-    // 预览结果显示在配置面板
   } catch (error) {
     ElMessage.error(t('deployPreviewFailed'))
+    showPreviewDialog.value = false
+  } finally {
+    previewLoading.value = false
   }
+}
+
+// 加载维护窗口
+const loadMaintenanceWindows = async () => {
+  try {
+    const data = await getMaintenanceWindows()
+    maintenanceWindows.value = data.windows || []
+  } catch (error) {
+    console.error('Load maintenance windows failed:', error)
+  }
+}
+
+// 预约部署
+const scheduleDeployTask = async () => {
+  if (!selectedWindow.value) {
+    ElMessage.warning(t('deploySelectWindow'))
+    return
+  }
+
+  const deployData = {
+    mode: deployForm.value.mode,
+    backup_file: deployForm.value.backup_file,
+    template_id: deployForm.value.template_id,
+    target_devices: deployForm.value.target_devices,
+    variables: {}
+  }
+
+  deployForm.value.variables.forEach(v => {
+    if (v.key) deployData.variables[v.key] = v.value
+  })
+
+  try {
+    const result = await scheduleDeploy({
+      window_id: selectedWindow.value,
+      deploy_data: deployData
+    })
+
+    isScheduled.value = true
+    scheduledTime.value = result.scheduled_at
+    showScheduleDialog.value = false
+    ElMessage.success(t('deployScheduled'))
+  } catch (error) {
+    ElMessage.error(t('deployScheduleFailed'))
+  }
+}
+
+// 获取风险等级标签
+const getRiskLevelType = (level) => {
+  const types = { low: 'success', medium: 'warning', high: 'danger' }
+  return types[level] || 'info'
+}
+
+const getRiskLevelText = (level) => {
+  const texts = {
+    low: t('diffRiskLow'),
+    medium: t('diffRiskMedium'),
+    high: t('diffRiskHigh')
+  }
+  return texts[level] || level
 }
 
 // 执行部署
@@ -999,11 +1248,24 @@ const startApprovedDeployment = async () => {
   // 这里简化处理，直接显示执行状态
 }
 
+// 打开预约对话框
+const openScheduleDialog = () => {
+  showPreviewDialog.value = false
+  showScheduleDialog.value = true
+}
+
+// 从预览确认部署
+const confirmDeployFromPreview = async () => {
+  showPreviewDialog.value = false
+  await confirmDeploy()
+}
+
 onMounted(() => {
   loadDevices()
   loadBackups()
   loadTemplates()
   loadCompatibleVariables()
+  loadMaintenanceWindows()
 })
 </script>
 
@@ -1585,5 +1847,144 @@ onMounted(() => {
 @keyframes rotating {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
+}
+
+/* Preview Dialog Styles */
+.preview-content {
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.impact-summary {
+  background: linear-gradient(135deg, var(--el-fill-color-light) 0%, rgba(0, 184, 148, 0.05) 100%);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  border: 1px solid var(--border-default);
+}
+
+.impact-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+
+.impact-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.impact-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.impact-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.impact-value {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.device-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+}
+
+.selector-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.device-diff {
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.diff-device-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--el-fill-color-light);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.diff-device-header .device-info h4 {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.diff-device-header .device-ip {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* Schedule Dialog Styles */
+.schedule-content {
+  padding: 10px 0;
+}
+
+.schedule-desc {
+  margin-bottom: 20px;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+.window-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+}
+
+.window-option {
+  width: 100%;
+}
+
+.window-option :deep(.el-radio-button__inner) {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  padding: 12px 16px;
+}
+
+.window-label {
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.window-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.schedule-confirmation {
+  margin-top: 20px;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
 }
 </style>

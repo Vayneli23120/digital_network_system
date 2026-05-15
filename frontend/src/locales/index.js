@@ -1283,6 +1283,44 @@ export const languages = {
     deployApprovalRequester: '申请人',
     deployApprovalTime: '申请时间',
 
+    // Phase 3: 配置差异与影响分析
+    deployPreviewDialog: '配置变更预览',
+    deployImpactAnalysis: '变更影响分析',
+    deployScheduleDialog: '预约维护窗口',
+    deployScheduleDesc: '选择维护窗口时段进行部署预约，系统将在指定时间自动执行部署。',
+    deploySelectWindow: '选择维护窗口',
+    deploySchedule: '预约部署',
+    deployScheduled: '部署任务已预约',
+    deployScheduleFailed: '预约部署失败',
+    deployConfirmSchedule: '确认预约',
+    deployScheduledConfirm: '部署已预约到 {time}',
+
+    // 差异对比
+    diffAdded: '新增',
+    diffRemoved: '删除',
+    diffModified: '修改',
+    diffUnchanged: '未变更',
+    diffCurrentConfig: '当前配置',
+    diffNewConfig: '新配置',
+    diffEmpty: '无配置差异',
+    diffLegendAdded: '新增行',
+    diffLegendRemoved: '删除行',
+    diffLegendModified: '修改行',
+    diffTotalChanges: '变更总数',
+    diffAffectedServices: '受影响服务',
+    diffNoServices: '无服务影响',
+    diffEstimatedDowntime: '预计停机时间',
+    diffRiskLevel: '风险等级',
+    diffRiskLow: '低',
+    diffRiskMedium: '中',
+    diffRiskHigh: '高',
+    diffSelectDevice: '选择设备查看差异',
+
+    // 维护窗口
+    maintWindowMorning: '凌晨窗口 (02:00-06:00)',
+    maintWindowAfternoon: '下午窗口 (14:00-16:00)',
+    maintWindowEvening: '晚间窗口 (22:00-02:00)',
+
     // 故障管理
     faultTitle: '故障记录',
     faultStatsTitle: '故障统计',
