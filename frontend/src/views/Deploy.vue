@@ -1591,10 +1591,12 @@ onMounted(() => {
 .mode-radio-group {
   display: flex;
   width: 100%;
+  flex-wrap: nowrap;
 }
 
 .mode-radio-group :deep(.el-radio-button) {
   flex: 1;
+  min-width: 0;
 }
 
 .mode-radio-group :deep(.el-radio-button__inner) {
@@ -1603,6 +1605,9 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 6px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Options styling */
