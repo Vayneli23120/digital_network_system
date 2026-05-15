@@ -102,26 +102,28 @@ const stats = computed(() => {
 
 // 解析差异数据，生成左右两列的显示
 const parsedDiff = computed(() => {
-  if (!props.diffData || !props.diffData.lines) {
-    // 如果没有diffData，直接按行对比
+  if (!props.diffData || !props.diffData.lines || props.diffData.lines.length === 0) {
+    // 如果没有diffData或lines为空，直接按行对比
     const oldLines = props.oldConfig.split('\n').filter(l => l)
     const newLines = props.newConfig.split('\n').filter(l => l)
     return { oldLines, newLines, addedLines: [], removedLines: [] }
   }
 
   const lines = props.diffData.lines
-  const oldLineMap = new Map() // lineNum -> content
-  const newLineMap = new Map() // lineNum -> content
   const addedSet = new Set()   // 新增的行号
   const removedSet = new Set() // 删除的行号
 
+  // 收集所有新增和删除的行号
   lines.forEach(line => {
-    if (line.type === 'removed' && line.old_line_num) {
-      oldLineMap.set(line.old_line_num, { content: line.content, type: 'removed' })
-      removedSet.add(line.old_line_num)
-    } else if (line.type === 'added' && line.new_line_num) {
-      newLineMap.set(line.new_line_num, { content: line.content, type: 'added' })
-      addedSet.add(line.new_line_num)
+    if (line.type === 'removed' || line.type === 'REMOVED') {
+      if (line.old_line_num && line.old_line_num > 0) {
+        removedSet.add(line.old_line_num)
+      }
+    }
+    if (line.type === 'added' || line.type === 'ADDED') {
+      if (line.new_line_num && line.new_line_num > 0) {
+        addedSet.add(line.new_line_num)
+      }
     }
   })
 
