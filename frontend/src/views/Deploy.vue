@@ -813,7 +813,12 @@ const loadTemplates = debounce(async (force = false) => {
 
 const loadCompatibleVariables = async () => {
   try {
-    const data = await getCompatibleVariables()
+    const data = await cachedRequest(
+      () => getCompatibleVariables(),
+      'compatibleVariables',
+      {},
+      { ttl: 300000 }  // 缓存 5 分钟
+    )
     allVariables.value = data.variables || []
   } catch (error) {
     // Silent fail
@@ -827,7 +832,12 @@ const loadTemplateVariables = async (templateId) => {
   }
 
   try {
-    const data = await getTemplate(templateId)
+    const data = await cachedRequest(
+      () => getTemplate(templateId),
+      'template',
+      { id: templateId },
+      { ttl: 60000 }  // 缓存 1 分钟
+    )
     if (data.variables) {
       try {
         const vars = typeof data.variables === 'string'
@@ -987,7 +997,12 @@ const previewDeploy = async () => {
 // 加载维护窗口
 const loadMaintenanceWindows = async () => {
   try {
-    const data = await getMaintenanceWindows()
+    const data = await cachedRequest(
+      () => getMaintenanceWindows(),
+      'maintenanceWindows',
+      {},
+      { ttl: 300000 }  // 缓存 5 分钟
+    )
     maintenanceWindows.value = data.windows || []
   } catch (error) {
     console.error('Load maintenance windows failed:', error)

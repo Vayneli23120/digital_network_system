@@ -18,9 +18,9 @@ class TieredRateLimiter:
 
     def __init__(self):
         # GET 请求：较宽松，适合频繁刷新
-        self.get_limiter = RateLimiter(max_requests=120, window_seconds=60)
+        self.get_limiter = RateLimiter(max_requests=180, window_seconds=60)
         # POST/PUT/DELETE：中等严格
-        self.write_limiter = RateLimiter(max_requests=30, window_seconds=60)
+        self.write_limiter = RateLimiter(max_requests=40, window_seconds=60)
         # 认证相关：严格限制
         self.auth_limiter = RateLimiter(max_requests=10, window_seconds=60)
 
