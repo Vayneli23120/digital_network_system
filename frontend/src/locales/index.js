@@ -3734,6 +3734,8 @@ export const languages = {
     deployActualMode: 'Actual deploy',
     deployPreviewTip: 'Preview mode only shows config changes, will not actually modify device config',
     deployPreviewChange: 'Preview Changes',
+    deployPreviewDialog: 'Config Change Preview',
+    deployImpactAnalysis: 'Change Impact Analysis',
     deployConfirmDeploy: 'Confirm Deploy',
     deployImmediateDeploy: 'Deploy Now',
     deployPreviewResult: 'Deploy Preview/Result',
