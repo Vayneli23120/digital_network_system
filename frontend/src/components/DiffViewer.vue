@@ -244,19 +244,27 @@ const newLines = computed(() => parsedDiff.value.newLines)
 }
 
 .diff-cell.added {
-  background: rgba(103, 194, 58, 0.08);
+  background: rgba(103, 194, 58, 0.25);
+  border-left: 3px solid #67c23a;
 }
 
 .diff-cell.removed {
-  background: rgba(245, 108, 108, 0.08);
+  background: rgba(245, 108, 108, 0.25);
+  border-left: 3px solid #f56c6c;
 }
 
 .diff-cell.unchanged {
   background: transparent;
 }
 
-.diff-cell.empty {
-  background: #f5f7fa;
+.diff-cell.added .line-content {
+  color: #2e7d32;
+  font-weight: 500;
+}
+
+.diff-cell.removed .line-content {
+  color: #c62828;
+  font-weight: 500;
 }
 
 .line-num {
