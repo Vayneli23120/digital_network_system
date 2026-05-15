@@ -124,12 +124,211 @@ async def preview_deploy(deploy_data: dict):
 
                 # 构建新配置（确保换行符处理正确）
                 current_config_normalized = current_config.rstrip('\n')
+                current_config_lines = current_config_normalized.splitlines()
 
                 if snippet_position == 'replace':
-                    # 替换模式：对比当前配置和片段
+                    # 替换模式：片段完全替换原配置
                     diff_result = ConfigDiffService.analyze_diff(current_config, snippet_content)
                     impact = ConfigDiffService.estimate_impact(diff_result)
                     new_config = snippet_content
+                elif snippet_position == 'smart':
+                    # 智能模式：识别命令类型，原地替换/删除
+                    new_config_lines = current_config_lines.copy()
+                    diff_lines = []
+                    removed_lines = []  # 记录被删除的行号
+
+                    snippet_lines = snippet_content.splitlines()
+                    for snippet_line in snippet_lines:
+                        snippet_line_stripped = snippet_line.strip()
+
+                        # 检查是否是 "no xxx" 删除命令
+                        if snippet_line_stripped.startswith('no '):
+                            # 提取要删除的命令关键字
+                            target_cmd = snippet_line_stripped[3:].strip()  # 去掉 "no "
+                            cmd_keyword = target_cmd.split()[0] if target_cmd.split() else target_cmd
+
+                            # 在原配置中查找匹配的行并删除
+                            found_and_removed = False
+                            for idx, orig_line in enumerate(current_config_lines):
+                                orig_stripped = orig_line.strip()
+                                # 匹配：行以该命令关键字开头
+                                if orig_stripped.startswith(cmd_keyword) or orig_stripped == target_cmd:
+                                    # 检查是否已被删除（避免重复）
+                                    line_num = idx + 1
+                                    if line_num not in removed_lines:
+                                        removed_lines.append(line_num)
+                                        # 在新配置中标记删除（用空行占位或直接移除）
+                                        # 这里采用直接移除的方式
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.REMOVED,
+                                            content=orig_line,
+                                            old_line_num=line_num,
+                                            new_line_num=None
+                                        ))
+                                        found_and_removed = True
+                            if not found_and_removed:
+                                # 未找到对应配置，no 命令本身作为新增显示
+                                pass  # 不显示，因为删除不存在的配置没有实际效果
+
+                        # 检查是否是可替换的单行命令
+                        elif snippet_line_stripped.startswith('hostname '):
+                            # hostname 替换
+                            for idx, orig_line in enumerate(current_config_lines):
+                                if orig_line.strip().startswith('hostname '):
+                                    line_num = idx + 1
+                                    if line_num not in removed_lines:
+                                        removed_lines.append(line_num)
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.REMOVED,
+                                            content=orig_line,
+                                            old_line_num=line_num,
+                                            new_line_num=None
+                                        ))
+                                        # 替换为新行
+                                        new_config_lines[idx] = snippet_line
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.ADDED,
+                                            content=snippet_line,
+                                            old_line_num=None,
+                                            new_line_num=line_num
+                                        ))
+                                    break
+                            else:
+                                # 未找到原 hostname，添加到末尾
+                                new_config_lines.append(snippet_line)
+                                new_line_num = len(new_config_lines)
+                                diff_lines.append(DiffLine(
+                                    type=DiffType.ADDED,
+                                    content=snippet_line,
+                                    old_line_num=None,
+                                    new_line_num=new_line_num
+                                ))
+
+                        elif snippet_line_stripped.startswith('ntp server '):
+                            # ntp server 替换（可能有多个，替换第一个或添加）
+                            replaced = False
+                            for idx, orig_line in enumerate(current_config_lines):
+                                if orig_line.strip().startswith('ntp server '):
+                                    line_num = idx + 1
+                                    if line_num not in removed_lines:
+                                        removed_lines.append(line_num)
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.REMOVED,
+                                            content=orig_line,
+                                            old_line_num=line_num,
+                                            new_line_num=None
+                                        ))
+                                        new_config_lines[idx] = snippet_line
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.ADDED,
+                                            content=snippet_line,
+                                            old_line_num=None,
+                                            new_line_num=line_num
+                                        ))
+                                        replaced = True
+                                        break
+                            if not replaced:
+                                new_config_lines.append(snippet_line)
+                                new_line_num = len(new_config_lines)
+                                diff_lines.append(DiffLine(
+                                    type=DiffType.ADDED,
+                                    content=snippet_line,
+                                    old_line_num=None,
+                                    new_line_num=new_line_num
+                                ))
+
+                        elif snippet_line_stripped.startswith('snmp-server location '):
+                            # snmp-server location 替换
+                            replaced = False
+                            for idx, orig_line in enumerate(current_config_lines):
+                                if orig_line.strip().startswith('snmp-server location '):
+                                    line_num = idx + 1
+                                    if line_num not in removed_lines:
+                                        removed_lines.append(line_num)
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.REMOVED,
+                                            content=orig_line,
+                                            old_line_num=line_num,
+                                            new_line_num=None
+                                        ))
+                                        new_config_lines[idx] = snippet_line
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.ADDED,
+                                            content=snippet_line,
+                                            old_line_num=None,
+                                            new_line_num=line_num
+                                        ))
+                                        replaced = True
+                                        break
+                            if not replaced:
+                                new_config_lines.append(snippet_line)
+                                new_line_num = len(new_config_lines)
+                                diff_lines.append(DiffLine(
+                                    type=DiffType.ADDED,
+                                    content=snippet_line,
+                                    old_line_num=None,
+                                    new_line_num=new_line_num
+                                ))
+
+                        elif snippet_line_stripped.startswith('snmp-server contact '):
+                            # snmp-server contact 替换
+                            replaced = False
+                            for idx, orig_line in enumerate(current_config_lines):
+                                if orig_line.strip().startswith('snmp-server contact '):
+                                    line_num = idx + 1
+                                    if line_num not in removed_lines:
+                                        removed_lines.append(line_num)
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.REMOVED,
+                                            content=orig_line,
+                                            old_line_num=line_num,
+                                            new_line_num=None
+                                        ))
+                                        new_config_lines[idx] = snippet_line
+                                        diff_lines.append(DiffLine(
+                                            type=DiffType.ADDED,
+                                            content=snippet_line,
+                                            old_line_num=None,
+                                            new_line_num=line_num
+                                        ))
+                                        replaced = True
+                                        break
+                            if not replaced:
+                                new_config_lines.append(snippet_line)
+                                new_line_num = len(new_config_lines)
+                                diff_lines.append(DiffLine(
+                                    type=DiffType.ADDED,
+                                    content=snippet_line,
+                                    old_line_num=None,
+                                    new_line_num=new_line_num
+                                ))
+
+                        else:
+                            # 其他命令：直接追加到末尾（fallback）
+                            new_config_lines.append(snippet_line)
+                            new_line_num = len(new_config_lines)
+                            diff_lines.append(DiffLine(
+                                type=DiffType.ADDED,
+                                content=snippet_line,
+                                old_line_num=None,
+                                new_line_num=new_line_num
+                            ))
+
+                    # 构建最终新配置
+                    new_config = '\n'.join(new_config_lines)
+
+                    # 统计
+                    added_count = sum(1 for l in diff_lines if l.type == DiffType.ADDED)
+                    removed_count = sum(1 for l in diff_lines if l.type == DiffType.REMOVED)
+
+                    diff_result = ConfigDiffResult(
+                        old_config=current_config,
+                        new_config=new_config,
+                        lines=diff_lines,
+                        stats={"added": added_count, "removed": removed_count, "modified": 0, "unchanged": len(current_config_lines) - removed_count}
+                    )
+                    impact = ConfigDiffService.estimate_impact(diff_result)
+
                 elif snippet_position == 'append':
                     # 追加模式：片段在当前配置末尾
                     snippet_lines = snippet_content.splitlines()

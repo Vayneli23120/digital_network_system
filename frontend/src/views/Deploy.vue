@@ -148,10 +148,17 @@
                 <!-- 片段位置 -->
                 <div class="section-label" style="margin-top: 12px;">{{ t('deploySnippetPosition') }}</div>
                 <el-radio-group v-model="deployForm.snippet_position" size="small">
+                  <el-radio-button label="smart">{{ t('deploySnippetSmart') }}</el-radio-button>
                   <el-radio-button label="append">{{ t('deploySnippetAppend') }}</el-radio-button>
                   <el-radio-button label="prepend">{{ t('deploySnippetPrepend') }}</el-radio-button>
                   <el-radio-button label="replace">{{ t('deploySnippetReplace') }}</el-radio-button>
                 </el-radio-group>
+                <div v-if="deployForm.snippet_position === 'smart'" class="smart-mode-tip">
+                  <el-tag type="info" size="small">
+                    <el-icon><InfoFilled /></el-icon>
+                    {{ t('deploySmartModeTip') }}
+                  </el-tag>
+                </div>
 
                 <!-- 基础配置选择（可选） -->
                 <div class="section-label" style="margin-top: 12px;">{{ t('deploySnippetBaseConfig') }}</div>
@@ -673,7 +680,7 @@ const deployForm = ref({
   backup_file: '',
   template_id: '',
   snippet: '',
-  snippet_position: 'append',
+  snippet_position: 'smart',
   base_backup_file: '',
   target_devices: [],
   variables: [],
@@ -1530,6 +1537,16 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 5px;
+}
+
+.smart-mode-tip {
+  margin-top: 8px;
+}
+
+.smart-mode-tip .el-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .mode-radio-group {
