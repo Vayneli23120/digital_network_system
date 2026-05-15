@@ -112,16 +112,74 @@ async def preview_deploy(deploy_data: dict):
                 else:
                     current_config = latest_backup.config_snapshot or ""
 
-            # 生成差异分析
-            diff_result = ConfigDiffService.analyze_diff(current_config, config_content)
-            impact = ConfigDiffService.estimate_impact(diff_result)
+            # 片段模式特殊处理：只显示增量变更
+            if mode == 'snippet':
+                snippet_content = deploy_data.get('snippet', '').strip()
+                snippet_position = deploy_data.get('snippet_position', 'append')
+
+                # 应用变量替换
+                if variables:
+                    for key, value in variables.items():
+                        snippet_content = snippet_content.replace(f"{{{{{key}}}}}", str(value))
+
+                if snippet_position == 'replace':
+                    # 替换模式：对比当前配置和片段
+                    diff_result = ConfigDiffService.analyze_diff(current_config, snippet_content)
+                    impact = ConfigDiffService.estimate_impact(diff_result)
+                    new_config = snippet_content
+                else:
+                    # 追加/插入模式：只显示片段作为新增
+                    snippet_lines = snippet_content.splitlines()
+                    diff_lines = []
+                    for i, line in enumerate(snippet_lines, 1):
+                        diff_lines.append(DiffLine(
+                            type=DiffType.ADDED,
+                            content=line,
+                            old_line_num=None,
+                            new_line_num=i
+                        ))
+
+                    diff_result = ConfigDiffResult(
+                        old_config=current_config,
+                        new_config=snippet_content,
+                        lines=diff_lines,
+                        stats={"added": len(snippet_lines), "removed": 0, "modified": 0, "unchanged": 0}
+                    )
+                    impact = {
+                        "total_changes": len(snippet_lines),
+                        "is_breaking_change": False,
+                        "affected_services": [],
+                        "estimated_downtime_seconds": len(snippet_lines) * 2,
+                        "risk_level": "low"
+                    }
+                    # 检测影响的服务
+                    for line in snippet_lines:
+                        line_lower = line.lower()
+                        if 'vlan' in line_lower:
+                            impact["affected_services"].append("VLAN")
+                        if 'interface' in line_lower:
+                            impact["affected_services"].append("Interface")
+                        if 'ospf' in line_lower or 'bgp' in line_lower:
+                            impact["affected_services"].append("Routing")
+                        if 'ntp' in line_lower:
+                            impact["affected_services"].append("NTP")
+                        if 'snmp' in line_lower:
+                            impact["affected_services"].append("SNMP")
+                    impact["affected_services"] = list(set(impact["affected_services"]))
+
+                    new_config = current_config + "\n!\n! 追加配置\n" + snippet_content if snippet_position == 'append' else snippet_content + "\n!\n! 原有配置\n" + current_config
+            else:
+                # 其他模式：生成完整差异分析
+                diff_result = ConfigDiffService.analyze_diff(current_config, config_content)
+                impact = ConfigDiffService.estimate_impact(diff_result)
+                new_config = config_content
 
             preview_results.append({
                 "device_id": device.id,
                 "device_name": device.name,
                 "device_ip": device.ip,
                 "old_config": current_config,
-                "new_config": config_content,
+                "new_config": new_config,
                 "diff": {
                     "lines": [
                         {
