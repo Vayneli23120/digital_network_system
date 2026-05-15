@@ -3710,7 +3710,7 @@ export const languages = {
     deploySnippetAppend: 'Append to End',
     deploySnippetPrepend: 'Insert at Beginning',
     deploySnippetReplace: 'Full Replace',
-    deploySmartModeTip: 'Smart detection: hostname, ntp server, no xxx commands will be replaced/deleted in-place',
+    deploySmartModeTip: 'Auto replace: hostname, ntp, no xxx commands',
     deploySnippetBaseConfig: 'Base Config (Optional)',
     deploySelectBackupOptional: 'Select base backup file (optional)',
     deploySnippetBaseTip: 'Snippet will be appended/inserted to base config',

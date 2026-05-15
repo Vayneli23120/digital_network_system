@@ -1605,6 +1605,8 @@ onMounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
 
 .mode-radio-group {
