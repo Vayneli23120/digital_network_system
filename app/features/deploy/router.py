@@ -122,58 +122,94 @@ async def preview_deploy(deploy_data: dict):
                     for key, value in variables.items():
                         snippet_content = snippet_content.replace(f"{{{{{key}}}}}", str(value))
 
+                # 构建新配置（确保换行符处理正确）
+                current_config_normalized = current_config.rstrip('\n')
+
                 if snippet_position == 'replace':
                     # 替换模式：对比当前配置和片段
                     diff_result = ConfigDiffService.analyze_diff(current_config, snippet_content)
                     impact = ConfigDiffService.estimate_impact(diff_result)
                     new_config = snippet_content
-                else:
-                    # 追加/插入模式：只显示片段作为新增
+                elif snippet_position == 'append':
+                    # 追加模式：片段在当前配置末尾
                     snippet_lines = snippet_content.splitlines()
+                    current_config_lines = current_config_normalized.splitlines()
+                    current_line_count = len(current_config_lines)
+
+                    # 构建新配置：原配置 + 分隔行 + 片段
+                    separator = "\n!\n! 追加配置\n"
+                    new_config = current_config_normalized + separator + snippet_content
+
+                    # 计算片段在新配置中的起始行号
+                    # +1 for separator newline, +1 for "!", +1 for "! 追加配置"
+                    start_line = current_line_count + 3
+
                     diff_lines = []
-                    for i, line in enumerate(snippet_lines, 1):
+                    for i, line in enumerate(snippet_lines):
                         diff_lines.append(DiffLine(
                             type=DiffType.ADDED,
                             content=line,
                             old_line_num=None,
-                            new_line_num=i
+                            new_line_num=start_line + i
+                        ))
+
+                    # 创建 diff_result 用于后续统计
+                    diff_result = ConfigDiffResult(
+                        old_config=current_config,
+                        new_config=new_config,
+                        lines=diff_lines,
+                        stats={"added": len(snippet_lines), "removed": 0, "modified": 0, "unchanged": current_line_count}
+                    )
+                    impact = ConfigDiffService.estimate_impact(diff_result)
+                elif snippet_position == 'prepend':
+                    # 插入模式：片段在当前配置开头
+                    snippet_lines = snippet_content.splitlines()
+
+                    # 构建新配置：片段 + 分隔行 + 原配置
+                    separator = "!\n! 原有配置\n"
+                    new_config = snippet_content + "\n" + separator + current_config_normalized
+
+                    diff_lines = []
+                    # 片段行号从1开始
+                    for i, line in enumerate(snippet_lines):
+                        diff_lines.append(DiffLine(
+                            type=DiffType.ADDED,
+                            content=line,
+                            old_line_num=None,
+                            new_line_num=i + 1
                         ))
 
                     diff_result = ConfigDiffResult(
                         old_config=current_config,
-                        new_config=snippet_content,
+                        new_config=new_config,
                         lines=diff_lines,
-                        stats={"added": len(snippet_lines), "removed": 0, "modified": 0, "unchanged": 0}
+                        stats={"added": len(snippet_lines), "removed": 0, "modified": 0, "unchanged": len(current_config_normalized.splitlines())}
                     )
-                    impact = {
-                        "total_changes": len(snippet_lines),
-                        "is_breaking_change": False,
-                        "affected_services": [],
-                        "estimated_downtime_seconds": len(snippet_lines) * 2,
-                        "risk_level": "low"
-                    }
-                    # 检测影响的服务
-                    for line in snippet_lines:
-                        line_lower = line.lower()
-                        if 'vlan' in line_lower:
-                            impact["affected_services"].append("VLAN")
-                        if 'interface' in line_lower:
-                            impact["affected_services"].append("Interface")
-                        if 'ospf' in line_lower or 'bgp' in line_lower:
-                            impact["affected_services"].append("Routing")
-                        if 'ntp' in line_lower:
-                            impact["affected_services"].append("NTP")
-                        if 'snmp' in line_lower:
-                            impact["affected_services"].append("SNMP")
-                    impact["affected_services"] = list(set(impact["affected_services"]))
+                    impact = ConfigDiffService.estimate_impact(diff_result)
+                else:
+                    # 默认按追加处理
+                    snippet_lines = snippet_content.splitlines()
+                    current_config_lines = current_config_normalized.splitlines()
+                    current_line_count = len(current_config_lines)
+                    start_line = current_line_count + 3
 
-                    # 返回完整配置（基础+片段）用于显示对比
-                    if snippet_position == 'append':
-                        new_config = current_config + "\n!\n! 追加配置\n" + snippet_content
-                    elif snippet_position == 'prepend':
-                        new_config = snippet_content + "\n!\n! 原有配置\n" + current_config
-                    else:
-                        new_config = snippet_content
+                    diff_lines = []
+                    for i, line in enumerate(snippet_lines):
+                        diff_lines.append(DiffLine(
+                            type=DiffType.ADDED,
+                            content=line,
+                            old_line_num=None,
+                            new_line_num=start_line + i
+                        ))
+                    new_config = current_config_normalized + "\n!\n! 追加配置\n" + snippet_content
+
+                    diff_result = ConfigDiffResult(
+                        old_config=current_config,
+                        new_config=new_config,
+                        lines=diff_lines,
+                        stats={"added": len(snippet_lines), "removed": 0, "modified": 0, "unchanged": current_line_count}
+                    )
+                    impact = ConfigDiffService.estimate_impact(diff_result)
             else:
                 # 其他模式：生成完整差异分析
                 diff_result = ConfigDiffService.analyze_diff(current_config, config_content)
