@@ -16,7 +16,7 @@
       </div>
     </div>
 
-    <!-- 差异内容 - 双栏布局 -->
+    <!-- 差异内容 - 双栏布局显示完整配置 -->
     <div class="diff-content">
       <div class="diff-header">
         <div class="diff-title old">{{ t('diffCurrentConfig') }}</div>
@@ -26,24 +26,24 @@
         <!-- 当前配置列 -->
         <div class="diff-column old-column">
           <div
-            v-for="(line, index) in oldColumnLines"
+            v-for="(line, index) in oldLines"
             :key="'old-'+index"
             class="diff-cell"
-            :class="line.type"
+            :class="line.class"
           >
-            <span class="line-num">{{ line.lineNum || '' }}</span>
+            <span class="line-num">{{ line.lineNum }}</span>
             <code class="line-content">{{ line.content }}</code>
           </div>
         </div>
         <!-- 新配置列 -->
         <div class="diff-column new-column">
           <div
-            v-for="(line, index) in newColumnLines"
+            v-for="(line, index) in newLines"
             :key="'new-'+index"
             class="diff-cell"
-            :class="line.type"
+            :class="line.class"
           >
-            <span class="line-num">{{ line.lineNum || '' }}</span>
+            <span class="line-num">{{ line.lineNum }}</span>
             <code class="line-content">{{ line.content }}</code>
           </div>
         </div>
@@ -61,8 +61,8 @@
         <span>{{ t('diffLegendRemoved') }}</span>
       </div>
       <div class="legend-item">
-        <span class="legend-color modified"></span>
-        <span>{{ t('diffLegendModified') }}</span>
+        <span class="legend-color unchanged"></span>
+        <span>{{ t('diffLegendUnchanged') }}</span>
       </div>
     </div>
   </div>
@@ -100,42 +100,62 @@ const stats = computed(() => {
   return { added: 0, removed: 0, modified: 0 }
 })
 
-// 使用传入的diff数据构建两列显示
-const oldColumnLines = computed(() => {
-  if (!props.diffData || !props.diffData.lines) return []
+// 解析差异数据，生成左右两列的显示
+const parsedDiff = computed(() => {
+  if (!props.diffData || !props.diffData.lines) {
+    // 如果没有diffData，直接按行对比
+    const oldLines = props.oldConfig.split('\n').filter(l => l)
+    const newLines = props.newConfig.split('\n').filter(l => l)
+    return { oldLines, newLines, addedLines: [], removedLines: [] }
+  }
 
-  const lines = []
-  props.diffData.lines.forEach(line => {
-    if (line.type === 'removed') {
-      lines.push({ type: 'removed', lineNum: line.old_line_num, content: line.content })
-    } else if (line.type === 'unchanged') {
-      lines.push({ type: 'unchanged', lineNum: line.old_line_num, content: line.content })
-    }
-    // added行在old列显示为空行（保持对齐）
-    if (line.type === 'added') {
-      lines.push({ type: 'empty', lineNum: '', content: '' })
+  const lines = props.diffData.lines
+  const oldLineMap = new Map() // lineNum -> content
+  const newLineMap = new Map() // lineNum -> content
+  const addedSet = new Set()   // 新增的行号
+  const removedSet = new Set() // 删除的行号
+
+  lines.forEach(line => {
+    if (line.type === 'removed' && line.old_line_num) {
+      oldLineMap.set(line.old_line_num, { content: line.content, type: 'removed' })
+      removedSet.add(line.old_line_num)
+    } else if (line.type === 'added' && line.new_line_num) {
+      newLineMap.set(line.new_line_num, { content: line.content, type: 'added' })
+      addedSet.add(line.new_line_num)
     }
   })
-  return lines
-})
 
-const newColumnLines = computed(() => {
-  if (!props.diffData || !props.diffData.lines) return []
-
-  const lines = []
-  props.diffData.lines.forEach(line => {
-    if (line.type === 'added') {
-      lines.push({ type: 'added', lineNum: line.new_line_num, content: line.content })
-    } else if (line.type === 'unchanged') {
-      lines.push({ type: 'unchanged', lineNum: line.new_line_num, content: line.content })
-    }
-    // removed行在new列显示为空行（保持对齐）
-    if (line.type === 'removed') {
-      lines.push({ type: 'empty', lineNum: '', content: '' })
-    }
+  // 构建oldLines（当前配置）
+  const oldConfigLines = props.oldConfig.split('\n')
+  const oldResult = []
+  oldConfigLines.forEach((content, idx) => {
+    const lineNum = idx + 1
+    const isRemoved = removedSet.has(lineNum)
+    oldResult.push({
+      content,
+      lineNum,
+      class: isRemoved ? 'removed' : 'unchanged'
+    })
   })
-  return lines
+
+  // 构建newLines（新配置）
+  const newConfigLines = props.newConfig.split('\n')
+  const newResult = []
+  newConfigLines.forEach((content, idx) => {
+    const lineNum = idx + 1
+    const isAdded = addedSet.has(lineNum)
+    newResult.push({
+      content,
+      lineNum,
+      class: isAdded ? 'added' : 'unchanged'
+    })
+  })
+
+  return { oldLines: oldResult, newLines: newResult }
 })
+
+const oldLines = computed(() => parsedDiff.value.oldLines)
+const newLines = computed(() => parsedDiff.value.newLines)
 </script>
 
 <style scoped>

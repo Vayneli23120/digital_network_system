@@ -1317,6 +1317,7 @@ export const languages = {
     diffLegendAdded: '新增行',
     diffLegendRemoved: '删除行',
     diffLegendModified: '修改行',
+    diffLegendUnchanged: '未变更',
     diffTotalChanges: '变更总数',
     diffAffectedServices: '受影响服务',
     diffNoServices: '无服务影响',
