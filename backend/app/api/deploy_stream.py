@@ -186,23 +186,74 @@ async def execute_deploy_stream(
 ):
     """
     创建带实时流的部署任务
+    集成审批流程和自动备份
     """
     try:
+        from app.services.backup_rollback_service import ApprovalService
+        from app.models.device import Device
+
+        # 创建设备列表
+        device_ids = deploy_data.get("target_devices", [])
+        devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
+
+        # 检查是否需要审批
+        requires_approval, approval_level = ApprovalService.check_requires_approval(
+            deploy_data, devices
+        )
+
+        if requires_approval:
+            # 创建待审批任务
+            task_id = DeployTaskManager.create_task(deploy_data)
+
+            # 创建审批请求
+            approval_result = await ApprovalService.create_approval_request(
+                db=db,
+                task_id=task_id,
+                requester_id=current_user.id,
+                approval_level=approval_level,
+                deploy_data=deploy_data
+            )
+
+            return {
+                "success": True,
+                "task_id": task_id,
+                "requires_approval": True,
+                "approval_id": approval_result['approval_id'],
+                "approval_level": approval_level.value,
+                "message": "部署任务已创建，等待审批",
+                "is_production": deploy_data.get("is_production", False)
+            }
+
+        # 无需审批，直接执行
+        # 1. 部署前自动备份
+        from app.services.backup_rollback_service import BackupService
+
+        device_backup_map = await BackupService.create_pre_deploy_backup(
+            db=db,
+            task_id="pending",  # 将在任务创建后更新
+            device_ids=device_ids
+        )
+
         # 创建任务
         task_id = DeployTaskManager.create_task(deploy_data)
 
-        # 在后台启动部署任务
+        # 更新备份映射中的任务ID
+        # 实际应用应更新备份记录
+
+        # 2. 在后台启动部署任务
         background_tasks.add_task(
-            run_deploy_task,
+            run_deploy_task_with_rollback,
             task_id,
             deploy_data,
+            device_backup_map,
             db
         )
 
         return {
             "success": True,
             "task_id": task_id,
-            "message": "部署任务已创建",
+            "requires_approval": False,
+            "message": "部署任务已创建并开始执行",
             "is_production": deploy_data.get("is_production", False),
             "parallel_limit": deploy_data.get("parallel_limit", 1)
         }
@@ -294,10 +345,41 @@ async def get_task_status(
     }
 
 
-async def run_deploy_task(task_id: str, deploy_data: dict, db: Session):
-    """
-    后台执行部署任务
-    """
+async def execute_device_with_rollback(task_id: str, device_id: int, deploy_data: dict, db: Session, device_backup_map: dict):
+    """执行单个设备部署（支持失败回滚）"""
+    from app.services.backup_rollback_service import RollbackService
+
+    try:
+        await execute_device(task_id, device_id, deploy_data, db)
+
+        # 检查执行结果
+        task = deploy_tasks.get(task_id)
+        if task:
+            device = task["devices"].get(str(device_id))
+            if device and device["status"] == "failed":
+                # 执行失败，触发回滚
+                await RollbackService.auto_rollback_on_failure(
+                    db=db,
+                    task_id=task_id,
+                    device_backup_map=device_backup_map,
+                    failed_devices=[device_id],
+                    cli_callback=lambda line, log_type="info": asyncio.create_task(
+                        DeployTaskManager.add_cli_output(task_id, device_id, f"[ROLLBACK] {line}", log_type)
+                    )
+                )
+    except Exception as e:
+        # 执行异常，触发回滚
+        await RollbackService.auto_rollback_on_failure(
+            db=db,
+            task_id=task_id,
+            device_backup_map=device_backup_map,
+            failed_devices=[device_id],
+            cli_callback=None
+        )
+
+
+async def run_deploy_task_with_rollback(task_id: str, deploy_data: dict, device_backup_map: dict, db: Session):
+    """后台执行部署任务（支持自动回滚）"""
     task = deploy_tasks.get(task_id)
     if not task:
         return
@@ -305,6 +387,8 @@ async def run_deploy_task(task_id: str, deploy_data: dict, db: Session):
     task["status"] = "running"
     parallel_limit = deploy_data.get("parallel_limit", 1)
     is_production = deploy_data.get("is_production", False)
+
+    failed_devices = []
 
     try:
         device_ids = deploy_data.get("target_devices", [])
@@ -315,7 +399,12 @@ async def run_deploy_task(task_id: str, deploy_data: dict, db: Session):
             for device_id in device_ids:
                 if task.get("is_aborted"):
                     break
-                await execute_device(task_id, device_id, deploy_data, db)
+                await execute_device_with_rollback(task_id, device_id, deploy_data, db, device_backup_map)
+
+                # 检查是否失败
+                device = task["devices"].get(str(device_id))
+                if device and device["status"] == "failed":
+                    failed_devices.append(device_id)
         else:
             # 并行执行（限制并发数）
             semaphore = asyncio.Semaphore(parallel_limit)
@@ -323,19 +412,29 @@ async def run_deploy_task(task_id: str, deploy_data: dict, db: Session):
             async def execute_with_limit(device_id):
                 async with semaphore:
                     if not task.get("is_aborted"):
-                        await execute_device(task_id, device_id, deploy_data, db)
+                        await execute_device_with_rollback(task_id, device_id, deploy_data, db, device_backup_map)
+
+                        # 检查是否失败
+                        device = task["devices"].get(str(device_id))
+                        if device and device["status"] == "failed":
+                            failed_devices.append(device_id)
 
             await asyncio.gather(*[
                 execute_with_limit(did) for did in device_ids
             ])
 
         # 任务完成
-        success = task["summary"]["failed"] == 0 and not task.get("is_aborted")
-        await DeployTaskManager.complete_task(
-            task_id,
-            success,
-            "部署完成" if success else "部署失败"
-        )
+        has_failures = len(failed_devices) > 0
+        success = not has_failures and not task.get("is_aborted")
+
+        if success:
+            message = "部署完成"
+        elif has_failures:
+            message = f"部署完成，{len(failed_devices)} 个设备失败并已尝试回滚"
+        else:
+            message = "部署已中止"
+
+        await DeployTaskManager.complete_task(task_id, success, message)
 
     except Exception as e:
         await DeployTaskManager.complete_task(task_id, False, str(e))

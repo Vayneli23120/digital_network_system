@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 from app.core.database import engine, Base
-from app.api import deploy_stream, deploy_history
+from app.api import deploy_stream, deploy_history, deploy_approval
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.add_middleware(
 # Include routers
 app.include_router(deploy_stream.router, prefix="/api")
 app.include_router(deploy_history.router, prefix="/api")
+app.include_router(deploy_approval.router, prefix="/api")
 
 
 @app.get("/health")

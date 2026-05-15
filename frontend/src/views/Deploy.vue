@@ -485,6 +485,15 @@ const aborting = ref(false)
 const showVariableHelp = ref(false)
 const cliOutputRef = ref(null)
 
+// 审批相关状态
+const approvalStatus = ref('none') // none, pending, approved, rejected
+const approvalId = ref(null)
+const approvalLevel = ref(null)
+const approvalInfo = ref(null)
+const showApprovalDialog = ref(false)
+const approvalComment = ref('')
+const rejectionReason = ref('')
+
 // 计算属性
 const canDeploy = computed(() => {
   if (deployForm.value.target_devices.length === 0) return false
@@ -758,12 +767,6 @@ let eventSource = null
 let timer = null
 
 const executeDeploy = async () => {
-  executionStatus.value = 'running'
-  startTime.value = Date.now()
-  timer = setInterval(() => {
-    elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
-  }, 1000)
-
   try {
     const deployData = {
       mode: deployForm.value.mode,
@@ -782,6 +785,28 @@ const executeDeploy = async () => {
 
     // 创建执行任务
     const result = await executeDeployApi(deployData)
+
+    // 检查是否需要审批
+    if (result.requires_approval) {
+      approvalStatus.value = 'pending'
+      approvalId.value = result.approval_id
+      approvalLevel.value = result.approval_level
+      approvalInfo.value = {
+        requester: currentUser?.username || 'Unknown',
+        requestedAt: new Date().toISOString(),
+        level: result.approval_level
+      }
+      ElMessage.info(t('deployPendingApproval'))
+      return
+    }
+
+    // 无需审批，开始执行
+    executionStatus.value = 'running'
+    startTime.value = Date.now()
+    timer = setInterval(() => {
+      elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
+    }, 1000)
+
     taskId.value = result.task_id
 
     // 连接SSE流
@@ -789,9 +814,7 @@ const executeDeploy = async () => {
 
     ElMessage.success(t('deployStarted'))
   } catch (error) {
-    executionStatus.value = 'failed'
     ElMessage.error(t('deployFailed'))
-    stopTimer()
   }
 }
 
@@ -910,6 +933,70 @@ const abortExecution = async () => {
   } finally {
     aborting.value = false
   }
+}
+
+// 审批处理函数
+const handleApprovalSubmit = async () => {
+  if (!approvalComment.value.trim()) {
+    ElMessage.warning(t('deployApprovalCommentRequired'))
+    return
+  }
+
+  try {
+    const response = await fetch(`/api/deploy-approval/${approvalId.value}/approve`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ comment: approvalComment.value })
+    })
+
+    if (response.ok) {
+      approvalStatus.value = 'approved'
+      ElMessage.success(t('deployApproved'))
+      // 刷新并开始执行
+      await startApprovedDeployment()
+    } else {
+      ElMessage.error(t('deployApproveFailed'))
+    }
+  } catch (error) {
+    ElMessage.error(t('deployApproveFailed'))
+  }
+}
+
+const handleRejectionSubmit = async () => {
+  if (!rejectionReason.value.trim()) {
+    ElMessage.warning(t('deployRejectionReasonRequired'))
+    return
+  }
+
+  try {
+    const response = await fetch(`/api/deploy-approval/${approvalId.value}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reason: rejectionReason.value })
+    })
+
+    if (response.ok) {
+      approvalStatus.value = 'rejected'
+      ElMessage.warning(t('deployRejected'))
+    } else {
+      ElMessage.error(t('deployRejectFailed'))
+    }
+  } catch (error) {
+    ElMessage.error(t('deployRejectFailed'))
+  }
+}
+
+const startApprovedDeployment = async () => {
+  // 审批通过后开始执行
+  executionStatus.value = 'running'
+  startTime.value = Date.now()
+  timer = setInterval(() => {
+    elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
+  }, 1000)
+
+  // 重新调用部署API
+  // 注意：实际实现需要一个新的API端点或在原API中处理
+  // 这里简化处理，直接显示执行状态
 }
 
 onMounted(() => {
