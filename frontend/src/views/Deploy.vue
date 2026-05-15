@@ -1541,6 +1541,25 @@ onMounted(() => {
   padding: 20px;
   height: 100%;
   overflow-y: auto;
+  scrollbar-gutter: stable;  /* 预留滚动条空间，防止内容宽度变化 */
+}
+
+/* 自定义滚动条样式 - 更窄更美观 */
+.config-panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.config-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.config-panel::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.config-panel::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .panel-header {
