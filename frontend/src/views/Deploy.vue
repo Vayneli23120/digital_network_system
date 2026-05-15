@@ -525,6 +525,7 @@
             v-if="selectedPreviewDevice.diff"
             :old-config="selectedPreviewDevice.old_config || ''"
             :new-config="selectedPreviewDevice.new_config || ''"
+            :diff-data="selectedPreviewDevice.diff"
             :is-dark="isDark"
           />
         </div>

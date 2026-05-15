@@ -167,7 +167,7 @@ async def preview_deploy(deploy_data: dict):
                             impact["affected_services"].append("SNMP")
                     impact["affected_services"] = list(set(impact["affected_services"]))
 
-                    new_config = current_config + "\n!\n! 追加配置\n" + snippet_content if snippet_position == 'append' else snippet_content + "\n!\n! 原有配置\n" + current_config
+                    new_config = snippet_content  # 只返回片段，不返回完整配置
             else:
                 # 其他模式：生成完整差异分析
                 diff_result = ConfigDiffService.analyze_diff(current_config, config_content)

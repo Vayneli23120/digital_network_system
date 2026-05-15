@@ -24,7 +24,7 @@
       </div>
       <div class="diff-body">
         <div
-          v-for="(line, index) in diffLines"
+          v-for="(line, index) in displayLines"
           :key="index"
           class="diff-line"
           :class="line.type"
@@ -38,7 +38,7 @@
             <code class="code-content">{{ line.content }}</code>
           </div>
         </div>
-        <div v-if="diffLines.length === 0" class="diff-empty">
+        <div v-if="displayLines.length === 0" class="diff-empty">
           {{ t('diffEmpty') }}
         </div>
       </div>
@@ -80,11 +80,31 @@ const props = defineProps({
   isDark: {
     type: Boolean,
     default: false
+  },
+  // 新增：直接传入diff数据，用于片段模式
+  diffData: {
+    type: Object,
+    default: null
   }
 })
 
-// 计算差异
-const diffLines = computed(() => {
+// 如果有diffData，直接使用；否则重新计算diff
+const displayLines = computed(() => {
+  if (props.diffData && props.diffData.lines) {
+    return props.diffData.lines
+  }
+  return computedDiffLines.value
+})
+
+const stats = computed(() => {
+  if (props.diffData && props.diffData.stats) {
+    return props.diffData.stats
+  }
+  return computedStats.value
+})
+
+// 计算差异（用于没有diffData的情况）
+const computedDiffLines = computed(() => {
   const oldLines = props.oldConfig.split('\n')
   const newLines = props.newConfig.split('\n')
 
@@ -92,14 +112,12 @@ const diffLines = computed(() => {
   let oldLineNum = 0
   let newLineNum = 0
 
-  // 简化的diff算法 - 使用LCS（最长公共子序列）
   const lcs = computeLCS(oldLines, newLines)
 
   let oldIdx = 0
   let newIdx = 0
 
   for (const line of lcs) {
-    // 处理删除的行
     while (oldIdx < oldLines.length && oldLines[oldIdx] !== line) {
       result.push({
         type: 'removed',
@@ -110,7 +128,6 @@ const diffLines = computed(() => {
       oldIdx++
     }
 
-    // 处理的添加的行
     while (newIdx < newLines.length && newLines[newIdx] !== line) {
       result.push({
         type: 'added',
@@ -121,7 +138,6 @@ const diffLines = computed(() => {
       newIdx++
     }
 
-    // 相同的行
     if (line !== undefined) {
       result.push({
         type: 'unchanged',
@@ -134,7 +150,6 @@ const diffLines = computed(() => {
     }
   }
 
-  // 处理剩余的行
   while (oldIdx < oldLines.length) {
     result.push({
       type: 'removed',
@@ -158,16 +173,14 @@ const diffLines = computed(() => {
   return result
 })
 
-// 统计信息
-const stats = computed(() => {
+const computedStats = computed(() => {
   return {
-    added: diffLines.value.filter(l => l.type === 'added').length,
-    removed: diffLines.value.filter(l => l.type === 'removed').length,
-    modified: diffLines.value.filter(l => l.type === 'modified').length
+    added: computedDiffLines.value.filter(l => l.type === 'added').length,
+    removed: computedDiffLines.value.filter(l => l.type === 'removed').length,
+    modified: computedDiffLines.value.filter(l => l.type === 'modified').length
   }
 })
 
-// 计算最长公共子序列
 function computeLCS(a, b) {
   const m = a.length
   const n = b.length
@@ -183,7 +196,6 @@ function computeLCS(a, b) {
     }
   }
 
-  // 回溯获取LCS
   const lcs = []
   let i = m, j = n
   while (i > 0 && j > 0) {
