@@ -833,6 +833,7 @@ const uploadFloorPlan = async () => {
 
 // Lifecycle
 let refreshInterval = null
+let timeTimerId = null
 
 // 处理路由参数（故障工单联动）
 const handleRouteParams = async () => {
@@ -870,7 +871,7 @@ onMounted(() => {
   refreshData()
 
   // Update time every second
-  setInterval(() => {
+  timeTimerId = setInterval(() => {
     currentTime.value = dayjs().format('HH:mm:ss')
   }, 1000)
 
@@ -885,6 +886,9 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (timeTimerId) {
+    clearInterval(timeTimerId)
+  }
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }

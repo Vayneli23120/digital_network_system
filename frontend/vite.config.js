@@ -35,6 +35,11 @@ export default defineConfig(({ mode }) => {
         '/photos': {
           target: apiBaseUrl,
           changeOrigin: true
+        },
+        '/ws': {
+          target: apiBaseUrl,
+          changeOrigin: true,
+          ws: true  // 启用 WebSocket 代理
         }
       }
     }

@@ -499,16 +499,25 @@ async def execute_deploy(deploy_data: dict):
 
         # 获取凭证组列表
         credential_groups_data = db.query(CredentialGroup).all()
-        credential_groups = [
-            {
-                'id': g.id,
-                'name': g.name,
-                'username': g.username,
-                'password': decrypt_password(g.password_encrypted),
-                'enable_password': decrypt_password(g.enable_password_encrypted) if g.enable_password_encrypted else None
-            }
-            for g in credential_groups_data
-        ]
+        credential_groups = []
+        for g in credential_groups_data:
+            try:
+                password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
+                enable_password = decrypt_password(g.enable_password_encrypted) if g.enable_password_encrypted else None
+                credential_groups.append({
+                    'id': g.id,
+                    'name': g.name,
+                    'username': g.username,
+                    'password': password,
+                    'enable_password': enable_password
+                })
+            except Exception as cred_error:
+                logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
+                # 跳过无法解密的凭证组
+                continue
+
+        if not credential_groups:
+            raise HTTPException(status_code=500, detail="无法解密任何凭证组，请检查加密密钥配置")
 
         # 获取配置内容
         config_content = None
@@ -659,7 +668,9 @@ async def execute_deploy(deploy_data: dict):
         raise
     except Exception as e:
         db.rollback()
+        import traceback
         logger.error(f"执行部署失败：{e}")
+        logger.error(traceback.format_exc())
         raise HTTPException(status_code=500, detail=f"部署失败：{str(e)}")
     finally:
         db.close()
@@ -690,15 +701,19 @@ async def rollback_deploy(rollback_data: dict):
 
         # 获取凭证组列表
         credential_groups_data = db.query(CredentialGroup).all()
-        credential_groups = [
-            {
-                'id': g.id,
-                'name': g.name,
-                'username': g.username,
-                'password': decrypt_password(g.password_encrypted),
-            }
-            for g in credential_groups_data
-        ]
+        credential_groups = []
+        for g in credential_groups_data:
+            try:
+                password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
+                credential_groups.append({
+                    'id': g.id,
+                    'name': g.name,
+                    'username': g.username,
+                    'password': password,
+                })
+            except Exception as cred_error:
+                logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
+                continue
 
         # 使用 NAPALM 服务回滚
         napalm_service = get_napalm_service()

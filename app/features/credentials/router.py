@@ -85,13 +85,25 @@ async def get_credential(cred_id: int):
         if not credential:
             raise HTTPException(status_code=404, detail="凭证组不存在")
 
+        # 尝试解密密码，失败时返回空密码提示用户重新输入
+        try:
+            password = decrypt_password(credential.password_encrypted)
+        except Exception:
+            password = ''
+
+        try:
+            enable_password = decrypt_password(credential.enable_password_encrypted) if credential.enable_password_encrypted else None
+        except Exception:
+            enable_password = None
+
         return {
             "id": credential.id,
             "name": credential.name,
             "description": credential.description,
             "username": credential.username,
-            "password": decrypt_password(credential.password_encrypted),
-            "enable_password": decrypt_password(credential.enable_password_encrypted) if credential.enable_password_encrypted else None,
+            "password": password,
+            "enable_password": enable_password,
+            "decrypt_warning": not password,  # 如果密码解密失败，提示用户
             "created_at": credential.created_at.isoformat(),
             "updated_at": credential.updated_at.isoformat()
         }

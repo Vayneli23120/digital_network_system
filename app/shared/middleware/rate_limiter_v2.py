@@ -18,11 +18,11 @@ class TieredRateLimiter:
 
     def __init__(self):
         # GET 请求：较宽松，适合频繁刷新
-        self.get_limiter = RateLimiter(max_requests=180, window_seconds=60)
+        self.get_limiter = RateLimiter(max_requests=300, window_seconds=60)
         # POST/PUT/DELETE：中等严格
-        self.write_limiter = RateLimiter(max_requests=40, window_seconds=60)
+        self.write_limiter = RateLimiter(max_requests=80, window_seconds=60)
         # 认证相关：严格限制
-        self.auth_limiter = RateLimiter(max_requests=10, window_seconds=60)
+        self.auth_limiter = RateLimiter(max_requests=15, window_seconds=60)
 
     def get_limiter_for_path(self, method: str, path: str) -> 'RateLimiter':
         """根据请求方法和路径选择限流器"""
@@ -50,22 +50,17 @@ class RateLimiter:
 
     def _cleanup(self, client_ip: str, now: float):
         """清理过期的请求记录 - 优化版"""
-        # 只在间隔时间后才清理，减少CPU占用
-        if now - self._last_cleanup[client_ip] < self._cleanup_interval:
-            cutoff = now - self.window_seconds
-            # 只保留窗口内的请求
-            original_count = len(self._requests[client_ip])
-            self._requests[client_ip] = [
-                (ts, path) for ts, path in self._requests[client_ip]
-                if ts > cutoff
-            ]
-            # 如果清理后为空，删除该IP记录
-            if not self._requests[client_ip]:
-                del self._requests[client_ip]
-                if client_ip in self._last_cleanup:
-                    del self._last_cleanup[client_ip]
-            else:
-                self._last_cleanup[client_ip] = now
+        cutoff = now - self.window_seconds
+        # 只保留窗口内的请求
+        self._requests[client_ip] = [
+            (ts, path) for ts, path in self._requests[client_ip]
+            if ts > cutoff
+        ]
+        # 如果清理后为空，删除该IP记录
+        if not self._requests[client_ip]:
+            del self._requests[client_ip]
+            if client_ip in self._last_cleanup:
+                del self._last_cleanup[client_ip]
 
     def is_allowed(self, client_ip: str, path: str) -> Tuple[bool, int, int]:
         """检查请求是否允许
@@ -103,10 +98,10 @@ class RateLimiter:
         }
 
 
-# 分层限流配置
-GET_LIMITER = RateLimiter(max_requests=120, window_seconds=60)      # GET: 120/分钟
-WRITE_LIMITER = RateLimiter(max_requests=40, window_seconds=60)     # 写入: 40/分钟
-AUTH_LIMITER = RateLimiter(max_requests=10, window_seconds=60)    # 认证: 10/分钟
+# 分层限流配置 - 放宽限制以适应正常高频使用
+GET_LIMITER = RateLimiter(max_requests=200, window_seconds=60)      # GET: 200/分钟
+WRITE_LIMITER = RateLimiter(max_requests=60, window_seconds=60)     # 写入: 60/分钟
+AUTH_LIMITER = RateLimiter(max_requests=15, window_seconds=60)    # 认证: 15/分钟
 
 # 白名单路径（不限流）
 WHITELIST_PATHS = [
@@ -119,7 +114,11 @@ WHITELIST_PATHS = [
 
 # 批量查询白名单（允许更高频率）
 BATCH_WHITELIST = [
-    "/api/dashboard",  # 仪表板聚合数据
+    "/api/dashboard",           # 仪表板聚合数据
+    "/api/dashboard/summary",   # 仪表板摘要
+    "/api/devices",             # 设备列表
+    "/api/faults",              # 故障列表
+    "/api/notifications",       # 通知
 ]
 
 

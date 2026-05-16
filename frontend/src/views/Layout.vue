@@ -80,6 +80,8 @@ const unreadNotifCount = ref(0)
 const currentUser = ref(localStorage.getItem('currentUser') || 'Admin')
 const activeTopTab = ref('dashboard')
 const showSearchOverlay = ref(false)
+const faultTimerId = ref(null)
+const notifTimerId = ref(null)
 
 // Fault badge - count of unprocessed faults
 const faultBadge = ref(0)
@@ -242,14 +244,17 @@ onMounted(() => {
   loadFaultBadge()
   // Load notification unread count
   loadUnreadNotifCount()
-  // Update every 30 seconds
-  setInterval(loadFaultBadge, 30000)
-  setInterval(loadUnreadNotifCount, 30000)
+  // Update every 30 seconds - store timer IDs for cleanup
+  faultTimerId.value = setInterval(loadFaultBadge, 30000)
+  notifTimerId.value = setInterval(loadUnreadNotifCount, 30000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('fault-status-change', loadFaultBadge)
+  // Clear timers to prevent memory leaks and continued requests
+  if (faultTimerId.value) clearInterval(faultTimerId.value)
+  if (notifTimerId.value) clearInterval(notifTimerId.value)
 })
 </script>
 

@@ -156,6 +156,10 @@ const editCredential = async (id) => {
     }
     editMode.value = true
     showAddDialog.value = true
+    // 如果密码解密失败，提示用户需要重新输入
+    if (data.decrypt_warning) {
+      ElMessage.warning(t('credDecryptWarning'))
+    }
   } catch (error) {
     ElMessage.error(t('credGetFailed'))
   }

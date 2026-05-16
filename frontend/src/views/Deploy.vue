@@ -355,8 +355,19 @@
                   <el-icon v-if="executionStatus === 'running'" class="is-loading"><Loading /></el-icon>
                   <span>{{ t('deployExecutionTitle') }}</span>
                 </div>
-                <div v-if="elapsedTime > 0" class="elapsed-time">
-                  {{ t('deployElapsedTime') }}: {{ formatDuration(elapsedTime) }}
+                <div class="overview-actions">
+                  <div v-if="elapsedTime > 0" class="elapsed-time">
+                    {{ t('deployElapsedTime') }}: {{ formatDuration(elapsedTime) }}
+                  </div>
+                  <el-button
+                    v-if="executionStatus === 'completed' && hasRollbackAvailable"
+                    type="warning"
+                    size="small"
+                    @click="handleRollback"
+                  >
+                    <el-icon><RefreshLeft /></el-icon>
+                    {{ t('deployRollback') }}
+                  </el-button>
                 </div>
               </div>
 
@@ -456,29 +467,59 @@
               </div>
             </div>
 
-            <!-- CLI 回显区域 -->
-            <div v-if="selectedDevice" class="cli-section">
-              <div class="cli-header">
-                <span class="cli-title">
-                  {{ t('deployCliOutput') }} - {{ selectedDevice.device_name }}
-                </span>
-                <button class="nav-action-btn secondary small" @click="clearCliOutput">
-                  <el-icon><Delete /></el-icon>
-                  {{ t('actionClear') }}
-                </button>
-              </div>
-              <div ref="cliOutputRef" class="cli-output">
-                <div
-                  v-for="(line, index) in selectedDevice.cliLogs"
-                  :key="index"
-                  class="cli-line"
-                  :class="line.type"
-                >
-                  <span class="cli-timestamp">{{ line.timestamp }}</span>
-                  <span class="cli-content">{{ line.content }}</span>
+            <!-- CLI 区域：并排显示命令输出和实时终端 -->
+            <div class="cli-section-parallel">
+              <!-- 左侧：CLI 命令输出（部署结果） -->
+              <div class="cli-panel">
+                <div class="cli-panel-header">
+                  <span class="cli-panel-title">
+                    {{ t('deployCliOutput') }}
+                    <span v-if="selectedDevice" class="device-badge">{{ selectedDevice.device_name }}</span>
+                  </span>
+                  <button class="nav-action-btn secondary small" @click="clearCliOutput">
+                    <el-icon><Delete /></el-icon>
+                    {{ t('actionClear') }}
+                  </button>
                 </div>
-                <div v-if="selectedDevice.cliLogs.length === 0" class="cli-empty">
-                  {{ t('deployCliEmpty') }}
+                <div ref="cliOutputRef" class="cli-panel-output">
+                  <div
+                    v-for="(line, index) in selectedDevice?.cliLogs || []"
+                    :key="index"
+                    class="cli-line"
+                    :class="line.type"
+                  >
+                    <span class="cli-timestamp">{{ formatTime(line.timestamp) }}</span>
+                    <span class="cli-content">{{ line.content }}</span>
+                  </div>
+                  <div v-if="!selectedDevice || selectedDevice.cliLogs.length === 0" class="cli-empty">
+                    {{ t('deployCliEmpty') }}
+                  </div>
+                </div>
+              </div>
+
+              <!-- 右侧：部署步骤详情 -->
+              <div class="cli-panel">
+                <div class="cli-panel-header">
+                  <span class="cli-panel-title">{{ t('deployStepsDetail') }}</span>
+                  <el-tag v-if="executionStatus === 'running'" type="warning" size="small">
+                    <el-icon class="is-loading"><Loading /></el-icon>
+                    {{ t('deployExecuting') }}
+                  </el-tag>
+                  <el-tag v-else-if="executionStatus === 'completed'" type="success" size="small">
+                    {{ t('deployCompleted') }}
+                  </el-tag>
+                </div>
+                <div ref="terminalRef" class="cli-panel-output">
+                  <div v-for="(line, idx) in deployStepLogs" :key="idx" class="cli-line" :class="line.type">
+                    <span class="cli-timestamp">{{ formatTime(line.timestamp) }}</span>
+                    <span v-if="line.step" class="cli-step">{{ line.message }}</span>
+                    <span v-if="line.command" class="cli-command">{{ line.command }}</span>
+                    <pre v-if="line.output" class="cli-content">{{ line.output }}</pre>
+                    <span v-if="line.error" class="cli-error-text">{{ line.error }}</span>
+                  </div>
+                  <div v-if="deployStepLogs.length === 0" class="cli-empty">
+                    {{ t('deployNoStepLogs') }}
+                  </div>
                 </div>
               </div>
             </div>
@@ -669,7 +710,8 @@ import {
   Document,
   Files,
   Calendar,
-  Edit
+  Edit,
+  RefreshLeft
 } from '@element-plus/icons-vue'
 import {
   getDevices,
@@ -678,6 +720,7 @@ import {
   getTemplate,
   previewDeploy as previewDeployApi,
   executeDeploy as executeDeployApi,
+  rollbackDeploy as rollbackDeployApi,
   getCompatibleVariables,
   getMaintenanceWindows,
   scheduleDeploy
@@ -708,7 +751,7 @@ const loading = ref(false)
 // 表单
 const deployForm = ref({
   mode: 'backup',
-  engine: 'napalm',  // napalm | netmiko，默认 napalm
+  engine: 'netmiko',  // napalm | netmiko，默认 netmiko（无需 SCP）
   napalm_mode: 'merge',  // merge | replace，默认 merge
   backup_file: '',
   template_id: '',
@@ -730,6 +773,10 @@ const selectedDevice = ref(null)
 const aborting = ref(false)
 const showVariableHelp = ref(false)
 const cliOutputRef = ref(null)
+
+// 部署步骤日志（简化版，无需 WebSocket）
+const deployStepLogs = ref([])
+const terminalRef = ref(null)
 
 // 审批相关状态
 const approvalStatus = ref('none') // none, pending, approved, rejected
@@ -795,6 +842,10 @@ const progressStatus = computed(() => {
   if (executionStatus.value === 'failed') return 'exception'
   if (executionStatus.value === 'completed') return 'success'
   return ''
+})
+
+const hasRollbackAvailable = computed(() => {
+  return deviceExecutions.value.some(d => d.rollback_available)
 })
 
 // 加载数据
@@ -923,7 +974,8 @@ const handleDeviceChange = () => {
       status: 'pending',
       progress: 0,
       message: '',
-      cliLogs: []
+      cliLogs: [],
+      rollback_available: false
     }
   })
 }
@@ -978,6 +1030,22 @@ const formatDuration = (seconds) => {
   const mins = Math.floor(seconds / 60)
   const secs = seconds % 60
   return `${mins}:${secs.toString().padStart(2, '0')}`
+}
+
+// 格式化时间
+const formatTime = (timestamp) => {
+  if (!timestamp) return ''
+  const date = new Date(timestamp)
+  return date.toLocaleTimeString()
+}
+
+// 自动滚动到底部
+const scrollToBottom = () => {
+  nextTick(() => {
+    if (terminalRef.value) {
+      terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+    }
+  })
 }
 
 // 预览部署
@@ -1180,6 +1248,10 @@ let timer = null
 
 const executeDeploy = async () => {
   try {
+    // 清空步骤日志
+    deployStepLogs.value = []
+
+    // 正常部署模式
     const deployData = {
       mode: deployForm.value.mode,
       engine: deployForm.value.engine,
@@ -1191,7 +1263,7 @@ const executeDeploy = async () => {
       base_backup_file: deployForm.value.base_backup_file,
       target_devices: deployForm.value.target_devices,
       variables: {},
-      dry_run: false,
+      dry_run: deployForm.value.dry_run,
       is_production: isProductionEnv.value,
       parallel_limit: parallelLimit.value
     }
@@ -1200,11 +1272,42 @@ const executeDeploy = async () => {
       if (v.key) deployData.variables[v.key] = v.value
     })
 
-    // 创建执行任务
+    // 显示开始日志
+    deployStepLogs.value.push({
+      timestamp: new Date().toISOString(),
+      step: 'start',
+      message: t('deployStarted'),
+      type: 'info'
+    })
+    scrollToBottom()
+
+    // 开始执行部署
+    executionStatus.value = 'running'
+    startTime.value = Date.now()
+    timer = setInterval(() => {
+      elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
+    }, 1000)
+
+    // 显示执行日志
+    deployStepLogs.value.push({
+      timestamp: new Date().toISOString(),
+      step: 'executing',
+      message: `${t('deployExecuting')}...`,
+      type: 'status'
+    })
+    scrollToBottom()
+
     const result = await executeDeployApi(deployData)
 
     // 检查是否需要审批
     if (result.requires_approval) {
+      clearInterval(timer)
+      deployStepLogs.value.push({
+        timestamp: new Date().toISOString(),
+        step: 'approval',
+        message: t('deployPendingApproval'),
+        type: 'warning'
+      })
       approvalStatus.value = 'pending'
       approvalId.value = result.approval_id
       approvalLevel.value = result.approval_level
@@ -1213,24 +1316,119 @@ const executeDeploy = async () => {
         requestedAt: new Date().toISOString(),
         level: result.approval_level
       }
-      ElMessage.info(t('deployPendingApproval'))
+      scrollToBottom()
       return
     }
 
-    // 无需审批，开始执行
-    executionStatus.value = 'running'
-    startTime.value = Date.now()
-    timer = setInterval(() => {
-      elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
-    }, 1000)
+    // 直接处理返回结果（后端已同步完成）
+    stopTimer()
 
-    taskId.value = result.task_id
+    // 处理每个设备的执行结果并显示日志
+    if (result.results && result.results.length > 0) {
+      result.results.forEach(r => {
+        const device = deviceExecutions.value.find(d => d.device_id === r.device_id)
+        if (device) {
+          device.status = r.success ? 'completed' : 'failed'
+          device.message = r.message || (r.success ? '部署成功' : '部署失败')
+          device.progress = 100
+          device.rollback_available = r.rollback_available || false
 
-    // 连接SSE流
-    connectExecutionStream()
+          // 添加设备执行日志到步骤详情
+          deployStepLogs.value.push({
+            timestamp: new Date().toISOString(),
+            step: 'device',
+            message: `${device.device_name}: ${r.success ? t('deployCompleted') : t('deployFailed')}`,
+            type: r.success ? 'success' : 'error'
+          })
 
-    ElMessage.success(t('deployStarted'))
+          // 显示 CLI 输出或配置差异
+          if (r.cli_output) {
+            // Netmiko 模式：显示 CLI 命令输出
+            device.cliLogs.push({
+              timestamp: new Date().toISOString(),
+              content: r.cli_output,
+              type: 'info'
+            })
+            // 也添加到步骤日志
+            const lines = r.cli_output.split('\n')
+            lines.forEach(line => {
+              if (line.trim()) {
+                deployStepLogs.value.push({
+                  timestamp: new Date().toISOString(),
+                  output: line,
+                  type: 'output'
+                })
+              }
+            })
+          }
+          if (r.diff) {
+            // NAPALM 模式：显示配置差异
+            device.cliLogs.push({
+              timestamp: new Date().toISOString(),
+              content: `配置差异:\n${r.diff}`,
+              type: 'diff'
+            })
+            // 也添加到步骤日志
+            deployStepLogs.value.push({
+              timestamp: new Date().toISOString(),
+              output: `配置差异:\n${r.diff}`,
+              type: 'diff'
+            })
+          }
+          if (r.rollback_available) {
+            device.cliLogs.push({
+              timestamp: new Date().toISOString(),
+              content: '支持回滚，可通过 rollback 操作恢复',
+              type: 'info'
+            })
+          }
+          if (r.errors && r.errors.length > 0) {
+            r.errors.forEach(err => {
+              device.cliLogs.push({
+                timestamp: new Date().toISOString(),
+                content: `错误: ${err}`,
+                type: 'error'
+              })
+              deployStepLogs.value.push({
+                timestamp: new Date().toISOString(),
+                error: err,
+                type: 'error'
+              })
+            })
+          }
+          scrollToBottom()
+        }
+      })
+    }
+
+    // 更新执行状态
+    executionStatus.value = result.success ? 'completed' : 'failed'
+    clearCache('devices')
+
+    // 最终状态日志
+    deployStepLogs.value.push({
+      timestamp: new Date().toISOString(),
+      step: 'complete',
+      message: result.success ? t('deployComplete') : t('deployFailed'),
+      type: result.success ? 'success' : 'error'
+    })
+    scrollToBottom()
+
+    if (result.success) {
+      ElMessage.success(t('deployComplete'))
+    } else {
+      ElMessage.error(t('deployFailed'))
+    }
+
   } catch (error) {
+    stopTimer()
+    executionStatus.value = 'failed'
+    deployStepLogs.value.push({
+      timestamp: new Date().toISOString(),
+      error: error.message || t('deployFailed'),
+      type: 'error'
+    })
+    scrollToBottom()
     ElMessage.error(t('deployFailed'))
   }
 }
@@ -1321,6 +1519,84 @@ const stopTimer = () => {
   if (timer) {
     clearInterval(timer)
     timer = null
+  }
+}
+
+const handleRollback = async () => {
+  try {
+    await ElMessageBox.confirm(
+      t('deployRollbackConfirm'),
+      t('deployRollbackTitle'),
+      { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'warning' }
+    )
+
+    const rollbackData = {
+      target_devices: deployForm.value.target_devices
+    }
+
+    executionStatus.value = 'running'
+    const result = await rollbackDeployApi(rollbackData)
+
+    stopTimer()
+
+    // 处理回滚结果
+    if (result.results && result.results.length > 0) {
+      result.results.forEach(r => {
+        const device = deviceExecutions.value.find(d => d.device_id === r.device_id)
+        if (device) {
+          device.status = r.success ? 'completed' : 'failed'
+          device.message = r.message || (r.success ? '回滚成功' : '回滚失败')
+          device.progress = 100
+          device.rollback_available = false
+
+          // 清空之前的日志并显示回滚日志
+          device.cliLogs = []
+
+          // 显示 CLI 输出
+          if (r.cli_output) {
+            device.cliLogs.push({
+              timestamp: new Date().toISOString(),
+              content: r.cli_output,
+              type: 'info'
+            })
+          }
+
+          // 显示配置差异
+          if (r.diff) {
+            device.cliLogs.push({
+              timestamp: new Date().toISOString(),
+              content: `配置变更:\n${r.diff}`,
+              type: 'diff'
+            })
+          }
+
+          // 显示错误
+          if (r.errors && r.errors.length > 0) {
+            r.errors.forEach(err => {
+              device.cliLogs.push({
+                timestamp: new Date().toISOString(),
+                content: `错误: ${err}`,
+                type: 'error'
+              })
+            })
+          }
+        }
+      })
+    }
+
+    executionStatus.value = result.success ? 'completed' : 'failed'
+    clearCache('devices')
+
+    if (result.success) {
+      ElMessage.success(t('deployRollbackSuccess'))
+    } else {
+      ElMessage.error(t('deployRollbackFailed'))
+    }
+
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error(t('deployRollbackFailed'))
+    }
   }
 }
 
@@ -1428,12 +1704,16 @@ const confirmDeployFromPreview = async () => {
   await confirmDeploy()
 }
 
-onMounted(() => {
-  loadDevices()
-  loadBackups()
-  loadTemplates()
-  loadCompatibleVariables()
-  loadMaintenanceWindows()
+onMounted(async () => {
+  // 依次加载，避免同时触发太多请求
+  await loadDevices()
+  await new Promise(r => setTimeout(r, 100))
+  await loadBackups()
+  await new Promise(r => setTimeout(r, 100))
+  await loadTemplates()
+  await new Promise(r => setTimeout(r, 100))
+  loadCompatibleVariables()  // 这个请求失败不影响，可以并行
+  loadMaintenanceWindows()   // 这个也不影响，可以并行
 })
 </script>
 
@@ -1866,6 +2146,12 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
+.overview-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
 .progress-overview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2038,14 +2324,25 @@ onMounted(() => {
   color: var(--text-secondary);
 }
 
-/* CLI section */
-.cli-section {
+/* CLI 并排布局 */
+.cli-section-parallel {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 20px;
+}
+
+.cli-panel {
   border: 1px solid var(--panel-border);
   border-radius: 8px;
   overflow: hidden;
 }
 
-.cli-header {
+.cli-panel.realtime {
+  border-color: #409eff;
+}
+
+.cli-panel-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -2054,45 +2351,71 @@ onMounted(() => {
   border-bottom: 1px solid var(--panel-border);
 }
 
-.cli-title {
+.deploy-page.dark .cli-panel-header {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cli-panel.realtime .cli-panel-header {
+  background: rgba(64, 158, 255, 0.1);
+}
+
+.cli-panel-title {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
 }
 
-.cli-output {
+.device-badge {
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: rgba(0, 184, 148, 0.15);
+  border-radius: 4px;
+  font-size: 12px;
+  color: #00b894;
+}
+
+.cli-panel-output {
   background: #1e1e1e;
   color: #d4d4d4;
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
   padding: 12px 15px;
-  max-height: 250px;
+  max-height: 300px;
+  min-height: 150px;
   overflow-y: auto;
-  min-height: 100px;
 }
 
 .cli-line {
   display: flex;
   gap: 10px;
-  padding: 1px 0;
+  padding: 2px 0;
+  flex-wrap: wrap;
 }
 
 .cli-timestamp {
   color: #858585;
   flex-shrink: 0;
+  font-size: 11px;
+}
+
+.cli-command {
+  color: #4ec9b0;
+  font-weight: 500;
 }
 
 .cli-content {
   white-space: pre-wrap;
   word-break: break-all;
+  flex: 1;
 }
 
 .cli-line.command .cli-content {
   color: #4ec9b0;
 }
 
-.cli-line.error .cli-content {
+.cli-line.error .cli-content,
+.cli-error-text {
   color: #f48771;
 }
 
@@ -2104,10 +2427,27 @@ onMounted(() => {
   color: #7ee787;
 }
 
-.cli-empty {
-  color: #858585;
-  text-align: center;
-  padding: 40px 0;
+.cli-line.diff .cli-content {
+  color: #ce9178;
+}
+
+.cli-step {
+  color: #569cd6;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cli-diff-inline {
+  color: #ce9178;
+  white-space: pre-wrap;
+  font-size: 11px;
+  margin: 4px 0;
+  padding: 6px 10px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+  max-width: 100%;
+  overflow-x: auto;
 }
 
 /* Animations */

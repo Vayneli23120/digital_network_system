@@ -9,15 +9,10 @@
         </el-tag>
       </div>
       <div class="page-actions">
-        <el-button type="success" @click="backupNow">
-          <el-icon><Download /></el-icon>
-          {{ t('deviceBackupNow') }}
+        <el-button type="primary" @click="showEditDialog = true">
+          <el-icon><Setting /></el-icon>
+          {{ t('deviceEdit') }}
         </el-button>
-        <el-button type="warning" @click="openConsoleDeploy">
-          <el-icon><Connection /></el-icon>
-          {{ t('consoleTitle') }}
-        </el-button>
-        <el-button type="primary" @click="showEditDialog = true">{{ t('deviceEdit') }}</el-button>
       </div>
     </div>
 
@@ -73,13 +68,27 @@
       <!-- 右侧：快速操作卡片 -->
       <div class="detail-side-card">
         <div class="card-title">{{ t('deviceQuickActions') }}</div>
-        <div class="action-list">
-          <el-button type="primary" class="action-btn" @click="backupNow">{{ t('deviceBackupNow') }}</el-button>
-          <el-button type="default" class="action-btn" @click="viewLatestConfig">{{ t('backupViewConfig') }}</el-button>
-          <el-button type="default" class="action-btn" @click="openConsoleDeploy">{{ t('consoleTitle') }}</el-button>
-          <el-button type="default" class="action-btn" @click="testConnection">{{ t('deviceConnectTest') }}</el-button>
-          <el-button type="default" class="action-btn" @click="openMaintDialog">{{ t('maintAddRecord') }}</el-button>
-          <el-button type="danger" class="action-btn" @click="confirmDeleteDevice" v-if="device">{{ t('deviceDelete') }}</el-button>
+        <div class="quick-actions">
+          <button class="quick-action-btn quick-action-btn-success" @click="backupNow">
+            <i class="action-icon"><Download /></i>
+            <span class="action-text">{{ t('deviceBackupNow') }}</span>
+          </button>
+          <button class="quick-action-btn" @click="viewLatestConfig">
+            <i class="action-icon"><View /></i>
+            <span class="action-text">{{ t('backupViewConfig') }}</span>
+          </button>
+          <button class="quick-action-btn" @click="testConnection">
+            <i class="action-icon"><Connection /></i>
+            <span class="action-text">{{ t('deviceConnectTest') }}</span>
+          </button>
+          <button class="quick-action-btn" @click="openMaintDialog">
+            <i class="action-icon"><Tools /></i>
+            <span class="action-text">{{ t('maintAddRecord') }}</span>
+          </button>
+          <button class="quick-action-btn quick-action-btn-danger" @click="confirmDeleteDevice" v-if="device">
+            <i class="action-icon"><Delete /></i>
+            <span class="action-text">{{ t('deviceDelete') }}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -232,29 +241,111 @@
     </div>
 
     <!-- 编辑设备对话框 -->
-    <el-dialog v-model="showEditDialog" :title="t('editDeviceTitle')" width="600px" append-to-body draggable align-center>
-      <el-form :model="editForm" label-width="100px">
-        <el-form-item :label="t('deviceName')"><el-input v-model="editForm.name" :disabled="true" /></el-form-item>
-        <el-form-item :label="t('deviceIp')"><el-input v-model="editForm.ip" /></el-form-item>
-        <el-form-item :label="t('deviceModel')"><el-input v-model="editForm.model" /></el-form-item>
-        <el-form-item :label="t('deviceSerialNumber')"><el-input v-model="editForm.serial_number" /></el-form-item>
-        <el-form-item :label="t('deviceLocation')"><el-input v-model="editForm.location" /></el-form-item>
-        <el-form-item :label="t('deviceRole')">
-          <el-select v-model="editForm.role">
-            <el-option :label="t('deviceRoleAccess')" value="access" />
-            <el-option :label="t('deviceRoleDistribution')" value="distribution" />
-            <el-option :label="t('deviceRoleCore')" value="core" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('deviceStatus')">
-          <el-select v-model="editForm.status">
-            <el-option :label="t('statusOnline')" value="online" />
-            <el-option :label="t('statusOffline')" value="offline" />
-            <el-option :label="t('statusMaintenance')" value="maintenance" />
-            <el-option :label="t('statusRetired')" value="retired" />
-          </el-select>
-        </el-form-item>
-      </el-form>
+    <el-dialog v-model="showEditDialog" :title="t('editDeviceTitle')" width="600px" append-to-body draggable align-center class="edit-device-dialog">
+      <div class="edit-dialog-content">
+        <!-- 基础信息 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Monitor /></el-icon>
+            {{ t('deviceBasicInfo') }}
+          </div>
+          <el-form :model="editForm" label-width="100px">
+            <el-form-item :label="t('deviceName')" required>
+              <el-input v-model="editForm.name" :placeholder="t('editDeviceNamePlaceholder')" :disabled="true" />
+            </el-form-item>
+            <el-form-item :label="t('deviceIp')" required>
+              <el-input v-model="editForm.ip" :placeholder="t('editDeviceIpPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('deviceModel')">
+              <el-input v-model="editForm.model" :placeholder="t('editDeviceModelPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('deviceLocation')">
+              <el-input v-model="editForm.location" :placeholder="t('editDeviceLocationPlaceholder')" />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 模块序列号 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Box /></el-icon>
+            {{ t('deviceModules') }}
+          </div>
+          <div class="modules-container">
+            <div v-for="(module, index) in editForm.modules" :key="index" class="module-row">
+              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 140px;">
+                <el-option :label="t('deviceMainModule')" value="main" />
+                <el-option :label="t('deviceExpansionModule')" value="expansion" />
+                <el-option :label="t('devicePowerModule')" value="power" />
+                <el-option :label="t('deviceSfpModule')" value="sfp" />
+                <el-option :label="t('deviceFanModule')" value="fan" />
+                <el-option :label="t('deviceTypeOther')" value="other" />
+              </el-select>
+              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 180px;" />
+              <el-button type="danger" size="small" :icon="Close" circle @click="removeModule(index)" v-if="editForm.modules && editForm.modules.length > 1" />
+            </div>
+            <el-button type="primary" size="small" :icon="Plus" @click="addModule">{{ t('deviceAddModule') }}</el-button>
+          </div>
+        </div>
+
+        <!-- 分类与状态 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Setting /></el-icon>
+            {{ t('deviceCategoryStatus') }}
+          </div>
+          <el-form :model="editForm" label-width="100px">
+            <el-form-item :label="t('deviceType')" required>
+              <el-select v-model="editForm.device_type" :placeholder="t('deviceSelectType')">
+                <el-option-group :label="t('deviceLayerDatacenter')">
+                  <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
+                  <el-option :label="t('deviceTypeServerSwitch')" value="server_switch" />
+                  <el-option :label="t('deviceTypeRouter')" value="router" />
+                  <el-option :label="t('deviceTypePA')" value="pa" />
+                  <el-option :label="t('deviceTypeFTD')" value="ftd" />
+                </el-option-group>
+                <el-option-group :label="t('deviceLayerWiFi')">
+                  <el-option :label="t('deviceTypeAP')" value="ap" />
+                  <el-option :label="t('deviceTypeWLC')" value="wlc" />
+                </el-option-group>
+                <el-option-group :label="t('deviceLayerAccess')">
+                  <el-option :label="t('deviceTypeUCE')" value="uce" />
+                  <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
+                </el-option-group>
+                <el-option-group :label="t('deviceTypeOther')">
+                  <el-option :label="t('deviceTypeOther')" value="other" />
+                </el-option-group>
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('deviceVendor')">
+              <el-select v-model="editForm.vendor">
+                <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('deviceRole')">
+              <el-select v-model="editForm.role">
+                <el-option :label="t('deviceRoleAccess')" value="access" />
+                <el-option :label="t('deviceRoleDistribution')" value="distribution" />
+                <el-option :label="t('deviceRoleCore')" value="core" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('deviceStatus')">
+              <el-select v-model="editForm.status">
+                <el-option :label="t('statusOnline')" value="online" />
+                <el-option :label="t('statusOffline')" value="offline" />
+                <el-option :label="t('statusMaintenance')" value="maintenance" />
+                <el-option :label="t('statusRetired')" value="retired" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('deviceCredentialGroup')">
+              <el-select v-model="editForm.credential_group" :placeholder="t('deviceSelectCredential')">
+                <el-option label="default" value="default" />
+                <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
+              </el-select>
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="updateDevice">{{ t('actionConfirm') }}</el-button>
@@ -317,8 +408,8 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Download, Upload, Picture } from '@element-plus/icons-vue'
-import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice } from '@/api'
+import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close } from '@element-plus/icons-vue'
+import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
@@ -336,6 +427,8 @@ const showEditDialog = ref(false)
 const showConfigDialog = ref(false)
 const editMode = ref(false)
 const configContent = ref('')
+const credentialGroups = ref([])
+const vendors = ref([])
 
 // 设备资产
 const deviceInventory = ref([])
@@ -368,7 +461,7 @@ const calculateLifeSpan = () => {
   const now = new Date()
   const years = Math.floor((now - purchase) / (365 * 24 * 60 * 60 * 1000))
   const months = Math.floor(((now - purchase) % (365 * 24 * 60 * 60 * 1000)) / (30 * 24 * 60 * 60 * 1000))
-  return `${years}年 ${months}月`
+  return `${years} ${t('yearUnit')} ${months} ${t('monthUnit')}`
 }
 
 const calculateMaintCost = () => {
@@ -386,7 +479,12 @@ const loadDevice = debounce(async (force = false) => {
       { forceRefresh: force }
     )
     device.value = data
-    editForm.value = { ...data }
+    // 解析 modules 数据
+    const modules = data.modules || [{ type: 'main', serial_number: '' }]
+    editForm.value = {
+      ...data,
+      modules: Array.isArray(modules) && modules.length > 0 ? modules : [{ type: 'main', serial_number: '' }]
+    }
   } catch (error) {
     if (error.name !== 'CanceledError') {
       ElMessage.error(t('msgDeviceDetailFailed'))
@@ -395,6 +493,42 @@ const loadDevice = debounce(async (force = false) => {
     loading.value = false
   }
 }, 300)
+
+const loadCredentialGroups = async () => {
+  try {
+    const data = await cachedRequest(
+      () => getCredentials(),
+      'credentials',
+      {},
+      { ttl: 60000 }
+    )
+    credentialGroups.value = data.items || data || []
+  } catch (error) {
+    // Silent fail
+  }
+}
+
+const loadVendors = async () => {
+  try {
+    const res = await getVendors()
+    vendors.value = res.vendors || []
+  } catch (error) {
+    // Silent fail
+  }
+}
+
+const addModule = () => {
+  if (!editForm.value.modules) {
+    editForm.value.modules = [{ type: 'main', serial_number: '' }]
+  }
+  editForm.value.modules.push({ type: 'other', serial_number: '' })
+}
+
+const removeModule = (index) => {
+  if (editForm.value.modules && editForm.value.modules.length > 1) {
+    editForm.value.modules.splice(index, 1)
+  }
+}
 
 const loadDeviceInventory = debounce(async (force = false) => {
   if (!route.params.id) return
@@ -428,7 +562,6 @@ const backupNow = async () => {
     loadDevice(true)
   } catch (error) { ElMessage.error(t('msgBackupFailed')) }
 }
-const openConsoleDeploy = () => { ElMessage.info(t('msgConsoleDev')) }
 const viewLatestConfig = async () => {
   if (!device.value?.recent_backups?.length) { ElMessage.warning(t('backupNoConfig')); return }
   viewConfig(device.value.recent_backups[0].id)
@@ -457,7 +590,10 @@ const deletePhoto = async (photoId) => {
 
 const updateDevice = async () => {
   try {
-    await updateDeviceApi(route.params.id, editForm.value)
+    await updateDeviceApi(route.params.id, {
+      ...editForm.value,
+      modules: editForm.value.modules
+    })
     clearCache('device_detail')
     ElMessage.success(t('msgDeviceUpdateSuccess'))
     showEditDialog.value = false
@@ -546,7 +682,7 @@ const deleteMaintInDetail = async (maintId) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 
-onMounted(() => { loadDevice() })
+onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors() })
 </script>
 
 <style scoped>
@@ -659,16 +795,76 @@ onMounted(() => { loadDevice() })
   font-weight: 500;
 }
 
-/* 操作列表 */
-.action-list {
+/* 快速操作按钮 - 重做 */
+.quick-actions {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
-.action-btn {
+.quick-action-btn {
   width: 100%;
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
   justify-content: center;
+  font-size: 14px;
+  line-height: 1;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.quick-action-btn:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--border-hover);
+}
+
+.quick-action-btn .action-icon {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.quick-action-btn .action-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.quick-action-btn .action-text {
+  margin-left: 8px;
+}
+
+/* 立即备份按钮 - 绿色 */
+.quick-action-btn-success {
+  background: #52c41a;
+  border-color: #52c41a;
+  color: #fff;
+}
+
+.quick-action-btn-success:hover {
+  background: #73d13d;
+  border-color: #73d13d;
+}
+
+/* 删除按钮 - 红色 */
+.quick-action-btn-danger {
+  background: #ff4d4f;
+  border-color: #ff4d4f;
+  color: #fff;
+}
+
+.quick-action-btn-danger:hover {
+  background: #ff7875;
+  border-color: #ff7875;
 }
 
 /* Tabs */
@@ -756,5 +952,66 @@ onMounted(() => { loadDevice() })
 @media (max-width: 768px) {
   .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
   .page-actions { width: 100%; flex-wrap: wrap; }
+}
+
+/* 编辑对话框样式 */
+.edit-device-dialog .edit-dialog-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.edit-device-dialog .form-section {
+  background: rgba(0, 48, 135, 0.04);
+  border-radius: 10px;
+  padding: 14px 16px;
+  border: 1px solid rgba(0, 48, 135, 0.08);
+}
+
+.edit-device-dialog .form-section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+}
+
+.edit-device-dialog .form-section-title .el-icon {
+  color: var(--accent-primary);
+}
+
+.edit-device-dialog .el-form-item {
+  margin-bottom: 10px;
+}
+
+.modules-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.module-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 暗黑模式 */
+.dark .edit-device-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .edit-device-dialog .form-section-title {
+  color: #8b949e;
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .edit-device-dialog .form-section-title .el-icon {
+  color: #58a6ff;
 }
 </style>

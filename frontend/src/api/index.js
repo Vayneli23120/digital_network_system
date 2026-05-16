@@ -209,6 +209,10 @@ export function executeDeploy(data) {
   return api.post('/deploy/execute', data)
 }
 
+export function rollbackDeploy(data) {
+  return api.post('/deploy/rollback', data)
+}
+
 export function getCompatibleVariables() {
   return api.get('/deploy/compatible-variables')
 }
