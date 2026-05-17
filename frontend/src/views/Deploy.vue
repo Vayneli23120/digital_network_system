@@ -530,22 +530,49 @@
                       <el-tag :type="record.success ? 'success' : 'danger'" size="small">
                         {{ record.success ? t('statusSuccess') : t('statusFailed') }}
                       </el-tag>
+                      <!-- 回滚状态标记 -->
+                      <el-tag v-if="record.mode === 'rollback'" type="info" size="small">
+                        {{ t('deployRollback') }}
+                      </el-tag>
+                      <el-tag v-else-if="hasBeenRolledBack(record)" type="warning" size="small">
+                        {{ t('deployRolledBack') }}
+                      </el-tag>
+                      <el-tag v-else-if="canRollback(record)" type="success" size="small">
+                        {{ t('deployCanRollback') }}
+                      </el-tag>
                     </div>
                     <div class="history-devices">
                       {{ record.device_names?.join(', ') || record.device_name || '-' }}
                     </div>
                     <div class="history-status">
                       <span v-if="record.deviceResults" class="status-summary">
-                        <span class="status-success">{{ record.deviceResults.filter(d => d.status === 'completed').length }} 成功</span>
+                        <span class="status-success">{{ record.deviceResults.filter(d => d.status === 'completed').length }} {{ t('deploySuccess') }}</span>
                         <span v-if="record.deviceResults.filter(d => d.status === 'failed').length > 0" class="status-failed">
-                          {{ record.deviceResults.filter(d => d.status === 'failed').length }} 失败
+                          {{ record.deviceResults.filter(d => d.status === 'failed').length }} {{ t('deployFailed') }}
                         </span>
                       </span>
                     </div>
                     <div class="history-engine">
                       <span class="engine-tag">{{ record.engine }}</span>
-                      <span v-if="record.mode === 'rollback'" class="mode-tag rollback">{{ t('deployRollback') }}</span>
-                      <span v-else-if="record.mode" class="mode-tag">{{ record.mode }}</span>
+                      <span v-if="record.mode && record.mode !== 'rollback'" class="mode-tag">{{ record.mode }}</span>
+                    </div>
+                    <!-- 操作按钮 -->
+                    <div class="history-actions" v-if="selectedHistoryId === record.id">
+                      <el-button
+                        v-if="canRollback(record) && record.engine === 'napalm'"
+                        type="warning"
+                        size="small"
+                        @click.stop="handleHistoryRollback(record)"
+                      >
+                        {{ t('deployRollback') }}
+                      </el-button>
+                      <el-button
+                        type="primary"
+                        size="small"
+                        @click.stop="handleRedeploy(record)"
+                      >
+                        {{ t('deployRedeploy') }}
+                      </el-button>
                     </div>
                   </div>
                   <div v-if="deployHistory.length === 0" class="cli-empty">
@@ -1140,6 +1167,69 @@ const loadHistoryRecord = (record) => {
   }
 }
 
+// 检查历史记录是否已被回滚
+const hasBeenRolledBack = (record) => {
+  if (record.mode === 'rollback') return false  // 回滚记录本身不算"已被回滚"
+  // 检查是否所有成功设备都已被回滚（rollback_available = false 且有 rollback_status）
+  const successDevices = record.deviceResults?.filter(d => d.status === 'completed') || []
+  if (successDevices.length === 0) return false
+  return successDevices.every(d => d.rollback_status === 'rolled_back')
+}
+
+// 检查历史记录是否可以回滚
+const canRollback = (record) => {
+  if (record.mode === 'rollback') return false  // 回滚记录不能再回滚
+  if (record.engine !== 'napalm') return false  // 只有 NAPALM 支持回滚
+  // 检查是否有 rollback_available = true 的设备
+  return record.deviceResults?.some(d => d.rollback_available) || false
+}
+
+// 从历史记录执行回滚
+const handleHistoryRollback = async (record) => {
+  // 先加载历史记录到设备执行列表
+  loadHistoryRecord(record)
+  // 然后执行回滚
+  await handleRollback()
+}
+
+// 从历史记录重新部署
+const handleRedeploy = async (record) => {
+  try {
+    await ElMessageBox.confirm(
+      t('deployRedeployConfirm', { count: record.deviceResults?.length || 0 }),
+      t('deployRedeployTitle'),
+      { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'info' }
+    )
+
+    // 提取历史记录中的设备 ID
+    const deviceIds = record.deviceResults?.map(d => d.device_id) || []
+    if (deviceIds.length === 0) {
+      ElMessage.warning(t('deployNoDevicesInHistory'))
+      return
+    }
+
+    // 设置目标设备
+    deployForm.value.target_devices = deviceIds
+
+    // 如果历史记录有配置信息，尝试恢复
+    if (record.mode) {
+      deployForm.value.mode = record.mode
+    }
+    if (record.engine) {
+      deployForm.value.engine = record.engine
+    }
+
+    ElMessage.success(t('deployDevicesSelected', { count: deviceIds.length }))
+
+    // 跳转到配置面板让用户确认部署参数
+    // 用户需要手动点击部署按钮
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('重新部署失败:', error)
+    }
+  }
+}
+
 // 预览部署
 const previewDeploy = async () => {
   if (!canDeploy.value) {
@@ -1692,6 +1782,30 @@ const handleRollback = async () => {
       if (deployHistory.value.length > 50) {
         deployHistory.value.pop()
       }
+
+      // 回滚成功后，更新原始部署历史记录的 rollback_available 状态
+      // 防止刷新页面后再次显示可回滚
+      if (result.success) {
+        // 找到最近一次成功部署的历史记录（非回滚操作）
+        const originalDeployHistory = deployHistory.value.find(h =>
+          h.mode !== 'rollback' &&
+          h.success &&
+          h.deviceResults?.some(d => rollbackDevices.includes(d.device_id))
+        )
+
+        if (originalDeployHistory) {
+          // 更新已回滚设备的 rollback_available 为 false
+          originalDeployHistory.deviceResults.forEach(d => {
+            if (rollbackDevices.includes(d.device_id)) {
+              d.rollback_available = false
+              d.rollback_status = 'rolled_back'  // 标记已回滚
+              d.rollback_time = new Date().toISOString()
+            }
+          })
+          console.log('已更新原始部署历史记录的回滚状态')
+        }
+      }
+
       saveHistoryToStorage()
     }
 
@@ -2818,6 +2932,18 @@ onMounted(async () => {
 .mode-tag.rollback {
   background: rgba(230, 162, 60, 0.15);
   color: var(--color-warning);
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--border-default);
+}
+
+.history-actions .el-button {
+  flex: 1;
 }
 
 /* ========================================

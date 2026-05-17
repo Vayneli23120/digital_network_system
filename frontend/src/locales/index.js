@@ -1326,6 +1326,13 @@ export const languages = {
     deployNoStepLogs: '暂无部署日志',
     deployHistory: '部署历史记录',
     deployNoHistory: '暂无部署历史',
+    deployRolledBack: '已回滚',
+    deployCanRollback: '可回滚',
+    deployRedeploy: '重新部署',
+    deployRedeployConfirm: '确认重新部署到 {count} 个设备？将使用历史记录中的配置。',
+    deployRedeployTitle: '重新部署',
+    deployNoDevicesInHistory: '历史记录中没有设备信息',
+    deployDevicesSelected: '已选择 {count} 个设备，请配置部署参数后点击部署',
 
     // 部署审批
     deployPendingApproval: '部署任务已提交，等待审批',
@@ -3913,6 +3920,13 @@ export const languages = {
     deployNoStepLogs: 'No deploy logs available',
     deployHistory: 'Deploy History',
     deployNoHistory: 'No deploy history',
+    deployRolledBack: 'Rolled Back',
+    deployCanRollback: 'Can Rollback',
+    deployRedeploy: 'Redeploy',
+    deployRedeployConfirm: 'Confirm redeploy to {count} devices? Will use config from history.',
+    deployRedeployTitle: 'Redeploy',
+    deployNoDevicesInHistory: 'No device info in history',
+    deployDevicesSelected: '{count} devices selected, configure params and click deploy',
 
     // Deploy Approval
     deployPendingApproval: 'Deployment task submitted, pending approval',
