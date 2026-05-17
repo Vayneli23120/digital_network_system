@@ -2,6 +2,7 @@
 
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -19,8 +20,15 @@ from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, 
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
 
-# 线程池执行器，用于并行部署
-_executor = ThreadPoolExecutor(max_workers=10)
+# 每个请求使用独立的线程池，避免全局资源争抢
+@asynccontextmanager
+async def get_deploy_executor(max_workers: int):
+    """获取部署专用的线程池执行器，自动清理"""
+    executor = ThreadPoolExecutor(max_workers=max_workers)
+    try:
+        yield executor
+    finally:
+        executor.shutdown(wait=False)  # 不等待，快速释放
 
 
 @router.post("/preview")
@@ -594,67 +602,9 @@ async def execute_deploy(deploy_data: dict):
         else:
             raise HTTPException(status_code=400, detail=f"不支持的部署模式：{mode}")
 
-        # 获取并行数量参数
-        parallel_limit = deploy_data.get('parallel_limit', 1)
-        logger.info(f"部署参数: engine={engine}, napalm_mode={napalm_mode}, parallel_limit={parallel_limit}")
-
-        # 选择部署引擎
-        if engine == 'napalm':
-            deploy_service = get_napalm_service()
-            logger.info(f"使用 NAPALM 引擎部署 (mode={napalm_mode})")
-        else:
-            deploy_service = get_deploy_service()
-            logger.info(f"使用 Netmiko 引擎部署")
-
-        # 并行执行部署的辅助函数
-        async def deploy_single_device(device_dict: dict):
-            """部署单个设备"""
-            loop = asyncio.get_event_loop()
-            try:
-                if engine == 'napalm':
-                    result = await loop.run_in_executor(
-                        _executor,
-                        lambda: deploy_service.deploy_to_device(
-                            device=device_dict,
-                            config=config_content,
-                            credential_groups=credential_groups,
-                            dry_run=dry_run,
-                            mode=napalm_mode
-                        )
-                    )
-                else:
-                    result = await loop.run_in_executor(
-                        _executor,
-                        lambda: deploy_service.deploy_to_device(
-                            device=device_dict,
-                            config=config_content,
-                            credential_groups=credential_groups,
-                            dry_run=dry_run
-                        )
-                    )
-                return result
-            except Exception as e:
-                logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
-                return {
-                    'device_id': device_dict['id'],
-                    'device_name': device_dict['name'],
-                    'success': False,
-                    'message': f'部署异常: {str(e)}'
-                }
-
-        # 使用信号量控制并行数量
-        semaphore = asyncio.Semaphore(parallel_limit)
-
-        async def deploy_with_semaphore(device_dict: dict):
-            """带信号量控制的部署"""
-            async with semaphore:
-                logger.info(f"开始部署设备: {device_dict['name']}")
-                result = await deploy_single_device(device_dict)
-                logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
-                return result
-
-        # 构建设备字典列表
-        device_dicts = [
+        # ========== 阶段1：数据库操作完成，关闭 Session ==========
+        # 将设备数据转为纯字典（脱离 SQLAlchemy 对象，避免线程安全问题）
+        device_data_list = [
             {
                 'id': device.id,
                 'name': device.name,
@@ -665,53 +615,150 @@ async def execute_deploy(deploy_data: dict):
             for device in devices
         ]
 
-        # 并行执行所有设备部署
-        logger.info(f"开始并行部署 {len(device_dicts)} 个设备，并行数量: {parallel_limit}")
-        results = await asyncio.gather(
-            *[deploy_with_semaphore(d) for d in device_dicts],
-            return_exceptions=True
-        )
+        # 关闭数据库连接（并行执行阶段不访问数据库）
+        db.close()
+        logger.info("数据库读取完成，关闭连接，开始并行部署")
 
-        # 处理结果
-        success_count = 0
-        failed_count = 0
-        processed_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                processed_results.append({
-                    'device_id': device_dicts[i]['id'],
-                    'device_name': device_dicts[i]['name'],
-                    'success': False,
-                    'message': f'部署异常: {str(result)}'
-                })
-                failed_count += 1
-            else:
-                processed_results.append(result)
-                if result.get('success'):
-                    success_count += 1
-                else:
+        # ========== 阶段2：并行执行（完全隔离数据库） ==========
+        parallel_limit = deploy_data.get('parallel_limit', 1)
+        # 单设备部署超时时间（秒）
+        DEVICE_TIMEOUT = 120
+        # 整体超时时间（秒），防止长时间阻塞
+        TOTAL_TIMEOUT = DEVICE_TIMEOUT * len(device_data_list) / parallel_limit + 60
+
+        logger.info(f"部署参数: engine={engine}, napalm_mode={napalm_mode}, parallel_limit={parallel_limit}")
+
+        # 选择部署引擎
+        if engine == 'napalm':
+            deploy_service = get_napalm_service()
+            logger.info(f"使用 NAPALM 引擎部署 (mode={napalm_mode})")
+        else:
+            deploy_service = get_deploy_service()
+            logger.info(f"使用 Netmiko 引擎部署")
+
+        # 使用独立的线程池执行器
+        async with get_deploy_executor(max_workers=min(parallel_limit, 5)) as executor:
+            semaphore = asyncio.Semaphore(parallel_limit)
+
+            async def deploy_single_device(device_dict: dict):
+                """部署单个设备（带超时控制）"""
+                loop = asyncio.get_event_loop()
+                try:
+                    if engine == 'napalm':
+                        result = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                executor,
+                                lambda: deploy_service.deploy_to_device(
+                                    device=device_dict,
+                                    config=config_content,
+                                    credential_groups=credential_groups,
+                                    dry_run=dry_run,
+                                    mode=napalm_mode
+                                )
+                            ),
+                            timeout=DEVICE_TIMEOUT
+                        )
+                    else:
+                        result = await asyncio.wait_for(
+                            loop.run_in_executor(
+                                executor,
+                                lambda: deploy_service.deploy_to_device(
+                                    device=device_dict,
+                                    config=config_content,
+                                    credential_groups=credential_groups,
+                                    dry_run=dry_run
+                                )
+                            ),
+                            timeout=DEVICE_TIMEOUT
+                        )
+                    return result
+                except asyncio.TimeoutError:
+                    logger.warning(f"设备 {device_dict['name']} 部署超时 ({DEVICE_TIMEOUT}s)")
+                    return {
+                        'device_id': device_dict['id'],
+                        'device_name': device_dict['name'],
+                        'success': False,
+                        'message': f'部署超时（{DEVICE_TIMEOUT}秒）'
+                    }
+                except Exception as e:
+                    logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
+                    return {
+                        'device_id': device_dict['id'],
+                        'device_name': device_dict['name'],
+                        'success': False,
+                        'message': f'部署异常: {str(e)}'
+                    }
+
+            async def deploy_with_semaphore(device_dict: dict):
+                """带信号量控制的部署"""
+                async with semaphore:
+                    logger.info(f"开始部署设备: {device_dict['name']}")
+                    result = await deploy_single_device(device_dict)
+                    logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
+                    return result
+
+            # 并行执行所有设备部署（带整体超时）
+            logger.info(f"开始并行部署 {len(device_data_list)} 个设备，并行数量: {parallel_limit}")
+            try:
+                results = await asyncio.wait_for(
+                    asyncio.gather(
+                        *[deploy_with_semaphore(d) for d in device_data_list],
+                        return_exceptions=True
+                    ),
+                    timeout=TOTAL_TIMEOUT
+                )
+            except asyncio.TimeoutError:
+                logger.error(f"整体部署超时 ({TOTAL_TIMEOUT}s)")
+                raise HTTPException(status_code=504, detail=f"部署超时，请减少设备数量或增加并行数")
+
+            # 处理结果
+            success_count = 0
+            failed_count = 0
+            processed_results = []
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    processed_results.append({
+                        'device_id': device_data_list[i]['id'],
+                        'device_name': device_data_list[i]['name'],
+                        'success': False,
+                        'message': f'部署异常: {str(result)}'
+                    })
                     failed_count += 1
+                else:
+                    processed_results.append(result)
+                    if result.get('success'):
+                        success_count += 1
+                    else:
+                        failed_count += 1
 
-        results = processed_results
+            results = processed_results
 
-        # 记录审计日志
-        for device, result in zip(devices, results):
-            action = "deploy_config_dry_run" if dry_run else "deploy_config"
-            engine_text = f"引擎:{engine}"
-            if engine == 'napalm':
-                engine_text += f"({napalm_mode})"
-            details = f"部署模式:{mode}, {engine_text}, 结果:{'成功' if result.get('success') else '失败'}"
+        # ========== 阶段3：重新获取 Session 写入审计日志 ==========
+        logger.info("并行部署完成，重新获取数据库连接写入审计日志")
+        db_log: Session = next(get_db())
+        try:
+            for device_dict, result in zip(device_data_list, results):
+                action = "deploy_config_dry_run" if dry_run else "deploy_config"
+                engine_text = f"引擎:{engine}"
+                if engine == 'napalm':
+                    engine_text += f"({napalm_mode})"
+                details = f"部署模式:{mode}, {engine_text}, 结果:{'成功' if result.get('success') else '失败'}"
 
-            audit_log = AuditLog(
-                operator="Web",
-                action=action,
-                target_type="device",
-                target_id=device.id,
-                details=details
-            )
-            db.add(audit_log)
+                audit_log = AuditLog(
+                    operator="Web",
+                    action=action,
+                    target_type="device",
+                    target_id=device_dict['id'],
+                    details=details
+                )
+                db_log.add(audit_log)
 
-        db.commit()
+            db_log.commit()
+        except Exception as log_error:
+            logger.error(f"写入审计日志失败: {log_error}")
+            db_log.rollback()
+        finally:
+            db_log.close()
 
         return {
             "success": True,
@@ -726,13 +773,19 @@ async def execute_deploy(deploy_data: dict):
     except HTTPException:
         raise
     except Exception as e:
-        db.rollback()
         import traceback
         logger.error(f"执行部署失败：{e}")
         logger.error(traceback.format_exc())
+        # db 可能已关闭，安全地尝试 rollback
+        try:
+            if db and db.is_active:
+                db.rollback()
+                db.close()
+        except:
+            pass
         raise HTTPException(status_code=500, detail=f"部署失败：{str(e)}")
-    finally:
-        db.close()
+    # 注意：db.close() 在正常流程中已经在并行执行前关闭，
+    # 这里不需要 finally 再次关闭
 
 
 @router.post("/rollback")
