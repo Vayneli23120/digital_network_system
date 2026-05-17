@@ -568,6 +568,7 @@
                     </div>
                     <!-- 操作按钮：只在原始部署记录上显示 -->
                     <div class="history-actions" v-if="selectedHistoryId === record.id && record.mode !== 'rollback' && record.mode !== 'redeploy'">
+                      <!-- 成功部署且可回滚：只显示回滚按钮 -->
                       <el-button
                         v-if="canRollback(record)"
                         type="warning"
@@ -576,8 +577,9 @@
                       >
                         {{ t('deployRollback') }}
                       </el-button>
+                      <!-- 已回滚或不支持回滚：只显示重新部署按钮 -->
                       <el-button
-                        v-if="!canRollback(record) || record.engine !== 'napalm'"
+                        v-else
                         type="primary"
                         size="small"
                         @click.stop="handleRedeploy(record)"
@@ -1124,14 +1126,52 @@ const scrollToBottom = () => {
 const saveToHistory = (result) => {
   // 计算每个设备的状态
   const deviceResults = deviceExecutions.value.map(d => {
-    const r = result.results?.find(r => r.device_id === d.device_id)
+    const r = result.results?.find(r => Number(r.device_id) === Number(d.device_id))
+
+    // 构建日志内容：使用后端返回的数据 + 前端累积的日志
+    const logs = []
+
+    // 先添加前端累积的日志（如果有）
+    if (d.cliLogs && d.cliLogs.length > 0) {
+      logs.push(...d.cliLogs)
+    }
+
+    // 再添加后端返回的数据（确保保存完整）
+    if (r) {
+      if (r.cli_output && !logs.some(l => l.content === r.cli_output)) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          content: r.cli_output,
+          type: 'info'
+        })
+      }
+      if (r.diff && !logs.some(l => l.content?.includes(r.diff))) {
+        logs.push({
+          timestamp: new Date().toISOString(),
+          content: `配置差异:\n${r.diff}`,
+          type: 'diff'
+        })
+      }
+      if (r.errors && r.errors.length > 0) {
+        r.errors.forEach(err => {
+          if (!logs.some(l => l.content?.includes(err))) {
+            logs.push({
+              timestamp: new Date().toISOString(),
+              content: `错误: ${err}`,
+              type: 'error'
+            })
+          }
+        })
+      }
+    }
+
     return {
       device_id: d.device_id,
       device_name: d.device_name,
       status: r?.success ? 'completed' : 'failed',
       message: r?.message || '',
       rollback_available: r?.rollback_available || false,
-      logs: d.cliLogs
+      logs: logs  // 使用完整的日志
     }
   })
 
