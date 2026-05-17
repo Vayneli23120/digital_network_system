@@ -1,5 +1,7 @@
 """Configuration deployment router"""
 
+import asyncio
+from concurrent.futures import ThreadPoolExecutor
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -16,6 +18,9 @@ from .napalm_service import get_napalm_service
 from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, DiffLine
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
+
+# 线程池执行器，用于并行部署
+_executor = ThreadPoolExecutor(max_workers=10)
 
 
 @router.post("/preview")
@@ -589,6 +594,10 @@ async def execute_deploy(deploy_data: dict):
         else:
             raise HTTPException(status_code=400, detail=f"不支持的部署模式：{mode}")
 
+        # 获取并行数量参数
+        parallel_limit = deploy_data.get('parallel_limit', 1)
+        logger.info(f"部署参数: engine={engine}, napalm_mode={napalm_mode}, parallel_limit={parallel_limit}")
+
         # 选择部署引擎
         if engine == 'napalm':
             deploy_service = get_napalm_service()
@@ -597,43 +606,93 @@ async def execute_deploy(deploy_data: dict):
             deploy_service = get_deploy_service()
             logger.info(f"使用 Netmiko 引擎部署")
 
-        # 执行部署
-        results = []
-        success_count = 0
-        failed_count = 0
+        # 并行执行部署的辅助函数
+        async def deploy_single_device(device_dict: dict):
+            """部署单个设备"""
+            loop = asyncio.get_event_loop()
+            try:
+                if engine == 'napalm':
+                    result = await loop.run_in_executor(
+                        _executor,
+                        lambda: deploy_service.deploy_to_device(
+                            device=device_dict,
+                            config=config_content,
+                            credential_groups=credential_groups,
+                            dry_run=dry_run,
+                            mode=napalm_mode
+                        )
+                    )
+                else:
+                    result = await loop.run_in_executor(
+                        _executor,
+                        lambda: deploy_service.deploy_to_device(
+                            device=device_dict,
+                            config=config_content,
+                            credential_groups=credential_groups,
+                            dry_run=dry_run
+                        )
+                    )
+                return result
+            except Exception as e:
+                logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
+                return {
+                    'device_id': device_dict['id'],
+                    'device_name': device_dict['name'],
+                    'success': False,
+                    'message': f'部署异常: {str(e)}'
+                }
 
-        for device in devices:
-            device_dict = {
+        # 使用信号量控制并行数量
+        semaphore = asyncio.Semaphore(parallel_limit)
+
+        async def deploy_with_semaphore(device_dict: dict):
+            """带信号量控制的部署"""
+            async with semaphore:
+                logger.info(f"开始部署设备: {device_dict['name']}")
+                result = await deploy_single_device(device_dict)
+                logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
+                return result
+
+        # 构建设备字典列表
+        device_dicts = [
+            {
                 'id': device.id,
                 'name': device.name,
                 'ip': device.ip,
                 'device_type': 'cisco_ios',
                 'credential_group': device.credential_group or 'default'
             }
+            for device in devices
+        ]
 
-            if engine == 'napalm':
-                # NAPALM 服务需要 napalm_mode 参数
-                result = deploy_service.deploy_to_device(
-                    device=device_dict,
-                    config=config_content,
-                    credential_groups=credential_groups,
-                    dry_run=dry_run,
-                    mode=napalm_mode
-                )
-            else:
-                # Netmiko 服务
-                result = deploy_service.deploy_to_device(
-                    device=device_dict,
-                    config=config_content,
-                    credential_groups=credential_groups,
-                    dry_run=dry_run
-                )
-            results.append(result)
+        # 并行执行所有设备部署
+        logger.info(f"开始并行部署 {len(device_dicts)} 个设备，并行数量: {parallel_limit}")
+        results = await asyncio.gather(
+            *[deploy_with_semaphore(d) for d in device_dicts],
+            return_exceptions=True
+        )
 
-            if result.get('success'):
-                success_count += 1
-            else:
+        # 处理结果
+        success_count = 0
+        failed_count = 0
+        processed_results = []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                processed_results.append({
+                    'device_id': device_dicts[i]['id'],
+                    'device_name': device_dicts[i]['name'],
+                    'success': False,
+                    'message': f'部署异常: {str(result)}'
+                })
                 failed_count += 1
+            else:
+                processed_results.append(result)
+                if result.get('success'):
+                    success_count += 1
+                else:
+                    failed_count += 1
+
+        results = processed_results
 
         # 记录审计日志
         for device, result in zip(devices, results):
