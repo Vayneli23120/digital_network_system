@@ -507,7 +507,7 @@ onMounted(() => {
 .page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .header-actions {
@@ -520,33 +520,34 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
   text-align: center;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: bold;
+  color: var(--text-primary);
 }
 
 .stat-card.success .stat-value {
-  color: #67c23a;
+  color: var(--status-active);
 }
 
 .stat-card.info .stat-value {
-  color: #409eff;
+  color: var(--accent-secondary);
 }
 
 .stat-card.warning .stat-value {
-  color: #e6a23c;
+  color: var(--status-warning);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-muted);
   margin-top: 8px;
 }
 
@@ -555,15 +556,16 @@ onMounted(() => {
 }
 
 .types-card {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
 }
 
 .card-title {
   font-size: 14px;
   font-weight: bold;
+  color: var(--text-primary);
   margin-bottom: 15px;
 }
 
@@ -581,14 +583,14 @@ onMounted(() => {
 
 .type-desc {
   font-size: 12px;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .rules-section {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
 }
 
 .section-header {
@@ -601,10 +603,11 @@ onMounted(() => {
 .section-header h3 {
   margin: 0;
   font-size: 16px;
+  color: var(--text-primary);
 }
 
 .condition-code {
-  background: #f5f7fa;
+  background: var(--bg-hover);
   padding: 4px 8px;
   border-radius: 4px;
   font-size: 12px;
@@ -613,7 +616,7 @@ onMounted(() => {
 
 .form-tip {
   font-size: 12px;
-  color: #909399;
+  color: var(--text-muted);
   margin-top: 5px;
 }
 
@@ -628,6 +631,7 @@ onMounted(() => {
 .actions-result h4 {
   margin-bottom: 10px;
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .action-item {

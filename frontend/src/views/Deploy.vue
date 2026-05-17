@@ -467,7 +467,7 @@
               </div>
             </div>
 
-            <!-- CLI 区域：并排显示命令输出和实时终端 -->
+            <!-- CLI 区域：并排显示命令输出和部署历史 -->
             <div class="cli-section-parallel">
               <!-- 左侧：CLI 命令输出（部署结果） -->
               <div class="cli-panel">
@@ -476,6 +476,13 @@
                     {{ t('deployCliOutput') }}
                     <span v-if="selectedDevice" class="device-badge">{{ selectedDevice.device_name }}</span>
                   </span>
+                  <el-tag v-if="executionStatus === 'running'" type="warning" size="small">
+                    <el-icon class="is-loading"><Loading /></el-icon>
+                    {{ t('deployExecuting') }}
+                  </el-tag>
+                  <el-tag v-else-if="executionStatus === 'completed'" type="success" size="small">
+                    {{ t('deployCompleted') }}
+                  </el-tag>
                   <button class="nav-action-btn secondary small" @click="clearCliOutput">
                     <el-icon><Delete /></el-icon>
                     {{ t('actionClear') }}
@@ -497,28 +504,44 @@
                 </div>
               </div>
 
-              <!-- 右侧：部署步骤详情 -->
-              <div class="cli-panel">
+              <!-- 右侧：部署历史记录 -->
+              <div class="cli-panel history-panel">
                 <div class="cli-panel-header">
-                  <span class="cli-panel-title">{{ t('deployStepsDetail') }}</span>
-                  <el-tag v-if="executionStatus === 'running'" type="warning" size="small">
-                    <el-icon class="is-loading"><Loading /></el-icon>
-                    {{ t('deployExecuting') }}
-                  </el-tag>
-                  <el-tag v-else-if="executionStatus === 'completed'" type="success" size="small">
-                    {{ t('deployCompleted') }}
-                  </el-tag>
+                  <span class="cli-panel-title">{{ t('deployHistory') }}</span>
                 </div>
-                <div ref="terminalRef" class="cli-panel-output">
-                  <div v-for="(line, idx) in deployStepLogs" :key="idx" class="cli-line" :class="line.type">
-                    <span class="cli-timestamp">{{ formatTime(line.timestamp) }}</span>
-                    <span v-if="line.step" class="cli-step">{{ line.message }}</span>
-                    <span v-if="line.command" class="cli-command">{{ line.command }}</span>
-                    <pre v-if="line.output" class="cli-content">{{ line.output }}</pre>
-                    <span v-if="line.error" class="cli-error-text">{{ line.error }}</span>
+                <div class="history-list">
+                  <div
+                    v-for="(record, idx) in deployHistory"
+                    :key="record.id || idx"
+                    class="history-item"
+                    :class="{ active: selectedHistoryId === record.id }"
+                    @click="loadHistoryRecord(record)"
+                  >
+                    <div class="history-info">
+                      <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
+                      <el-tag :type="record.success ? 'success' : 'danger'" size="small">
+                        {{ record.success ? t('statusSuccess') : t('statusFailed') }}
+                      </el-tag>
+                    </div>
+                    <div class="history-devices">
+                      {{ record.device_names?.join(', ') || record.device_name || '-' }}
+                    </div>
+                    <div class="history-status">
+                      <span v-if="record.deviceResults" class="status-summary">
+                        <span class="status-success">{{ record.deviceResults.filter(d => d.status === 'completed').length }} 成功</span>
+                        <span v-if="record.deviceResults.filter(d => d.status === 'failed').length > 0" class="status-failed">
+                          {{ record.deviceResults.filter(d => d.status === 'failed').length }} 失败
+                        </span>
+                      </span>
+                    </div>
+                    <div class="history-engine">
+                      <span class="engine-tag">{{ record.engine }}</span>
+                      <span v-if="record.mode === 'rollback'" class="mode-tag rollback">{{ t('deployRollback') }}</span>
+                      <span v-else-if="record.mode" class="mode-tag">{{ record.mode }}</span>
+                    </div>
                   </div>
-                  <div v-if="deployStepLogs.length === 0" class="cli-empty">
-                    {{ t('deployNoStepLogs') }}
+                  <div v-if="deployHistory.length === 0" class="cli-empty">
+                    {{ t('deployNoHistory') }}
                   </div>
                 </div>
               </div>
@@ -774,9 +797,30 @@ const aborting = ref(false)
 const showVariableHelp = ref(false)
 const cliOutputRef = ref(null)
 
-// 部署步骤日志（简化版，无需 WebSocket）
-const deployStepLogs = ref([])
-const terminalRef = ref(null)
+// 部署历史记录（从 localStorage 加载）
+const deployHistory = ref([])
+const selectedHistoryId = ref(null)
+
+// 加载历史记录
+const loadHistory = () => {
+  try {
+    const saved = localStorage.getItem('deployHistory')
+    if (saved) {
+      deployHistory.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load deploy history:', e)
+  }
+}
+
+// 保存历史记录到 localStorage
+const saveHistoryToStorage = () => {
+  try {
+    localStorage.setItem('deployHistory', JSON.stringify(deployHistory.value))
+  } catch (e) {
+    console.error('Failed to save deploy history:', e)
+  }
+}
 
 // 审批相关状态
 const approvalStatus = ref('none') // none, pending, approved, rejected
@@ -1042,10 +1086,68 @@ const formatTime = (timestamp) => {
 // 自动滚动到底部
 const scrollToBottom = () => {
   nextTick(() => {
-    if (terminalRef.value) {
-      terminalRef.value.scrollTop = terminalRef.value.scrollHeight
+    if (cliOutputRef.value) {
+      cliOutputRef.value.scrollTop = cliOutputRef.value.scrollHeight
     }
   })
+}
+
+// 保存部署到历史记录
+const saveToHistory = (result) => {
+  // 计算每个设备的状态
+  const deviceResults = deviceExecutions.value.map(d => {
+    const r = result.results?.find(r => r.device_id === d.device_id)
+    return {
+      device_id: d.device_id,
+      device_name: d.device_name,
+      status: r?.success ? 'completed' : 'failed',
+      message: r?.message || '',
+      rollback_available: r?.rollback_available || false,
+      logs: d.cliLogs
+    }
+  })
+
+  // 计算总体状态：所有设备都成功才算成功
+  const allSuccess = deviceResults.every(d => d.status === 'completed')
+
+  const historyRecord = {
+    id: Date.now(),
+    timestamp: new Date().toISOString(),
+    success: allSuccess,
+    engine: deployForm.value.engine,
+    mode: deployForm.value.napalm_mode || deployForm.value.mode,
+    device_names: deviceResults.map(d => d.device_name),
+    results: result.results,
+    deviceResults: deviceResults,  // 保存每个设备的详细状态
+    cliLogs: deviceResults
+  }
+  // 添加到历史列表顶部
+  deployHistory.value.unshift(historyRecord)
+  // 限制历史记录数量
+  if (deployHistory.value.length > 50) {
+    deployHistory.value.pop()
+  }
+  // 保存到 localStorage
+  saveHistoryToStorage()
+}
+
+// 加载历史记录到左侧面板
+const loadHistoryRecord = (record) => {
+  selectedHistoryId.value = record.id
+  // 清空当前设备执行状态，使用保存的状态
+  deviceExecutions.value = (record.deviceResults || record.cliLogs).map(d => ({
+    device_id: d.device_id,
+    device_name: d.device_name,
+    status: d.status || 'completed',  // 使用保存的状态，默认 completed
+    message: d.message || '',
+    progress: 100,
+    cliLogs: d.logs || [],
+    rollback_available: d.rollback_available || false
+  }))
+  // 选中第一个设备
+  if (deviceExecutions.value.length > 0) {
+    selectedDevice.value = deviceExecutions.value[0]
+  }
 }
 
 // 预览部署
@@ -1248,8 +1350,20 @@ let timer = null
 
 const executeDeploy = async () => {
   try {
-    // 清空步骤日志
-    deployStepLogs.value = []
+    // 初始化设备执行列表
+    deviceExecutions.value = deployForm.value.target_devices.map(id => {
+      const device = devices.value.find(d => d.id === id)
+      return {
+        device_id: id,
+        device_name: device?.name || '',
+        device_ip: device?.ip || '',
+        status: 'pending',
+        progress: 0,
+        message: '',
+        cliLogs: [],
+        rollback_available: false
+      }
+    })
 
     // 正常部署模式
     const deployData = {
@@ -1272,15 +1386,6 @@ const executeDeploy = async () => {
       if (v.key) deployData.variables[v.key] = v.value
     })
 
-    // 显示开始日志
-    deployStepLogs.value.push({
-      timestamp: new Date().toISOString(),
-      step: 'start',
-      message: t('deployStarted'),
-      type: 'info'
-    })
-    scrollToBottom()
-
     // 开始执行部署
     executionStatus.value = 'running'
     startTime.value = Date.now()
@@ -1288,26 +1393,11 @@ const executeDeploy = async () => {
       elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
     }, 1000)
 
-    // 显示执行日志
-    deployStepLogs.value.push({
-      timestamp: new Date().toISOString(),
-      step: 'executing',
-      message: `${t('deployExecuting')}...`,
-      type: 'status'
-    })
-    scrollToBottom()
-
     const result = await executeDeployApi(deployData)
 
     // 检查是否需要审批
     if (result.requires_approval) {
       clearInterval(timer)
-      deployStepLogs.value.push({
-        timestamp: new Date().toISOString(),
-        step: 'approval',
-        message: t('deployPendingApproval'),
-        type: 'warning'
-      })
       approvalStatus.value = 'pending'
       approvalId.value = result.approval_id
       approvalLevel.value = result.approval_level
@@ -1316,14 +1406,13 @@ const executeDeploy = async () => {
         requestedAt: new Date().toISOString(),
         level: result.approval_level
       }
-      scrollToBottom()
       return
     }
 
     // 直接处理返回结果（后端已同步完成）
     stopTimer()
 
-    // 处理每个设备的执行结果并显示日志
+    // 处理每个设备的执行结果
     if (result.results && result.results.length > 0) {
       result.results.forEach(r => {
         const device = deviceExecutions.value.find(d => d.device_id === r.device_id)
@@ -1333,45 +1422,18 @@ const executeDeploy = async () => {
           device.progress = 100
           device.rollback_available = r.rollback_available || false
 
-          // 添加设备执行日志到步骤详情
-          deployStepLogs.value.push({
-            timestamp: new Date().toISOString(),
-            step: 'device',
-            message: `${device.device_name}: ${r.success ? t('deployCompleted') : t('deployFailed')}`,
-            type: r.success ? 'success' : 'error'
-          })
-
           // 显示 CLI 输出或配置差异
           if (r.cli_output) {
-            // Netmiko 模式：显示 CLI 命令输出
             device.cliLogs.push({
               timestamp: new Date().toISOString(),
               content: r.cli_output,
               type: 'info'
             })
-            // 也添加到步骤日志
-            const lines = r.cli_output.split('\n')
-            lines.forEach(line => {
-              if (line.trim()) {
-                deployStepLogs.value.push({
-                  timestamp: new Date().toISOString(),
-                  output: line,
-                  type: 'output'
-                })
-              }
-            })
           }
           if (r.diff) {
-            // NAPALM 模式：显示配置差异
             device.cliLogs.push({
               timestamp: new Date().toISOString(),
               content: `配置差异:\n${r.diff}`,
-              type: 'diff'
-            })
-            // 也添加到步骤日志
-            deployStepLogs.value.push({
-              timestamp: new Date().toISOString(),
-              output: `配置差异:\n${r.diff}`,
               type: 'diff'
             })
           }
@@ -1389,11 +1451,6 @@ const executeDeploy = async () => {
                 content: `错误: ${err}`,
                 type: 'error'
               })
-              deployStepLogs.value.push({
-                timestamp: new Date().toISOString(),
-                error: err,
-                type: 'error'
-              })
             })
           }
           scrollToBottom()
@@ -1405,30 +1462,18 @@ const executeDeploy = async () => {
     executionStatus.value = result.success ? 'completed' : 'failed'
     clearCache('devices')
 
-    // 最终状态日志
-    deployStepLogs.value.push({
-      timestamp: new Date().toISOString(),
-      step: 'complete',
-      message: result.success ? t('deployComplete') : t('deployFailed'),
-      type: result.success ? 'success' : 'error'
-    })
-    scrollToBottom()
-
     if (result.success) {
       ElMessage.success(t('deployComplete'))
     } else {
       ElMessage.error(t('deployFailed'))
     }
 
+    // 保存到部署历史
+    saveToHistory(result)
+
   } catch (error) {
     stopTimer()
     executionStatus.value = 'failed'
-    deployStepLogs.value.push({
-      timestamp: new Date().toISOString(),
-      error: error.message || t('deployFailed'),
-      type: 'error'
-    })
-    scrollToBottom()
     ElMessage.error(t('deployFailed'))
   }
 }
@@ -1523,6 +1568,16 @@ const stopTimer = () => {
 }
 
 const handleRollback = async () => {
+  // 只回滚成功部署的设备（有 rollback_available 标记）
+  const rollbackDevices = deviceExecutions.value
+    .filter(d => d.rollback_available)
+    .map(d => d.device_id)
+
+  if (rollbackDevices.length === 0) {
+    ElMessage.warning('没有可回滚的设备')
+    return
+  }
+
   try {
     await ElMessageBox.confirm(
       t('deployRollbackConfirm'),
@@ -1531,7 +1586,7 @@ const handleRollback = async () => {
     )
 
     const rollbackData = {
-      target_devices: deployForm.value.target_devices
+      target_devices: rollbackDevices
     }
 
     executionStatus.value = 'running'
@@ -1586,6 +1641,29 @@ const handleRollback = async () => {
 
     executionStatus.value = result.success ? 'completed' : 'failed'
     clearCache('devices')
+
+    // 保存回滚到历史记录
+    if (result.results) {
+      const rollbackHistory = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        success: result.success,
+        engine: deployForm.value.engine,
+        mode: 'rollback',  // 标记为回滚操作
+        device_names: deviceExecutions.value.map(d => d.device_name),
+        results: result.results,
+        cliLogs: JSON.parse(JSON.stringify(deviceExecutions.value.map(d => ({
+          device_id: d.device_id,
+          device_name: d.device_name,
+          logs: d.cliLogs
+        }))))
+      }
+      deployHistory.value.unshift(rollbackHistory)
+      if (deployHistory.value.length > 50) {
+        deployHistory.value.pop()
+      }
+      saveHistoryToStorage()
+    }
 
     if (result.success) {
       ElMessage.success(t('deployRollbackSuccess'))
@@ -1705,6 +1783,9 @@ const confirmDeployFromPreview = async () => {
 }
 
 onMounted(async () => {
+  // 加载部署历史
+  loadHistory()
+
   // 依次加载，避免同时触发太多请求
   await loadDevices()
   await new Promise(r => setTimeout(r, 100))
@@ -1718,30 +1799,21 @@ onMounted(async () => {
 </script>
 
 <style scoped>
+/* ========================================
+   使用全局 Theme Token（来自 tokens.css）
+   不要重新定义变量，直接使用全局变量
+   ======================================== */
+
 .deploy-page {
   padding: 0;
   min-height: 100vh;
   background: var(--bg-primary);
 }
 
-/* Dark mode support */
-.deploy-page.dark {
-  --panel-bg: var(--bg-secondary);
-  --panel-border: var(--border-default);
-  --text-primary: var(--text-primary);
-  --text-secondary: var(--text-secondary);
-  background: var(--bg-primary);
-}
+/* ========================================
+   页面导航栏
+   ======================================== */
 
-.deploy-page:not(.dark) {
-  --panel-bg: #fff;
-  --panel-border: #e4e7ed;
-  --text-primary: #303133;
-  --text-secondary: #606266;
-  background: var(--bg-primary);
-}
-
-/* Page nav bar */
 .page-nav-bar {
   display: flex;
   justify-content: space-between;
@@ -1783,20 +1855,18 @@ onMounted(async () => {
   cursor: pointer;
   transition: all 0.25s ease;
   border: none;
+  background: var(--bg-card);
+  color: var(--text-secondary);
 }
 
 .nav-action-btn.secondary {
-  background: rgba(255, 255, 255, 0.9);
+  background: var(--bg-card);
   border: 1px solid var(--border-default);
   color: var(--text-secondary);
 }
 
 .nav-action-btn.secondary:hover {
-  background: var(--el-fill-color-light);
-}
-
-.deploy-page.dark .nav-action-btn.secondary:hover {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--bg-hover);
 }
 
 .nav-action-btn.danger {
@@ -1814,7 +1884,10 @@ onMounted(async () => {
   cursor: not-allowed;
 }
 
-/* Warning section */
+/* ========================================
+   警告区域
+   ======================================== */
+
 .warning-section {
   margin-bottom: 20px;
 }
@@ -1824,18 +1897,14 @@ onMounted(async () => {
   align-items: center;
   gap: 15px;
   padding: 15px 20px;
-  background: linear-gradient(135deg, #fff3cd 0%, #ffeaa7 100%);
-  border: 1px solid #ffc107;
+  background: rgba(230, 162, 60, 0.1);
+  border: 1px solid rgba(230, 162, 60, 0.3);
   border-radius: 12px;
-}
-
-.deploy-page.dark .warning-card {
-  background: linear-gradient(135deg, rgba(255, 193, 7, 0.15) 0%, rgba(255, 183, 77, 0.15) 100%);
 }
 
 .warning-icon {
   font-size: 24px;
-  color: #f59e0b;
+  color: var(--color-warning);
 }
 
 .warning-content {
@@ -1844,24 +1913,19 @@ onMounted(async () => {
 
 .warning-title {
   font-weight: 600;
-  color: #92400e;
+  color: var(--color-warning);
   margin-bottom: 4px;
-}
-
-.deploy-page.dark .warning-title {
-  color: #fbbf24;
 }
 
 .warning-desc {
   font-size: 13px;
-  color: #a16207;
+  color: var(--text-secondary);
 }
 
-.deploy-page.dark .warning-desc {
-  color: #fcd34d;
-}
+/* ========================================
+   主内容区域
+   ======================================== */
 
-/* Main content */
 .main-content-area {
   height: calc(100vh - 200px);
 }
@@ -1875,18 +1939,20 @@ onMounted(async () => {
   height: 100%;
 }
 
-/* Config panel */
+/* ========================================
+   配置面板
+   ======================================== */
+
 .config-panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   padding: 20px;
   height: 100%;
   overflow-y: auto;
-  scrollbar-gutter: stable;  /* 预留滚动条空间，防止内容宽度变化 */
+  scrollbar-gutter: stable;
 }
 
-/* 自定义滚动条样式 - 更窄更美观 */
 .config-panel::-webkit-scrollbar {
   width: 6px;
 }
@@ -1907,7 +1973,7 @@ onMounted(async () => {
 .panel-header {
   margin-bottom: 20px;
   padding-bottom: 15px;
-  border-bottom: 1px solid var(--panel-border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-title {
@@ -1916,7 +1982,10 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
-/* Form sections */
+/* ========================================
+   表单区域
+   ======================================== */
+
 .form-section {
   margin-bottom: 20px;
 }
@@ -1930,7 +1999,7 @@ onMounted(async () => {
 
 .section-label.required::after {
   content: ' *';
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .section-desc {
@@ -1939,7 +2008,10 @@ onMounted(async () => {
   margin-top: 5px;
 }
 
-/* Engine selection */
+/* ========================================
+   引擎选择
+   ======================================== */
+
 .engine-tag {
   margin-left: 6px;
   font-size: 11px;
@@ -1953,11 +2025,12 @@ onMounted(async () => {
   padding: 4px 10px;
   border-radius: 4px;
   font-size: 12px;
+  background: var(--bg-hover);
 }
 
 .engine-tip.safe {
   background: rgba(103, 194, 58, 0.1);
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .napalm-mode-tip {
@@ -1965,17 +2038,8 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-secondary);
   padding: 6px 10px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-hover);
   border-radius: 4px;
-}
-
-.deploy-page.dark .engine-tip.safe {
-  background: rgba(103, 194, 58, 0.15);
-  color: #85ce61;
-}
-
-.deploy-page.dark .napalm-mode-tip {
-  background: rgba(255, 255, 255, 0.05);
 }
 
 .smart-mode-tip {
@@ -1985,29 +2049,16 @@ onMounted(async () => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px;
-  background: rgba(144, 147, 153, 0.1);
+  background: var(--bg-hover);
   border-radius: 4px;
   white-space: nowrap;
 }
 
-.smart-mode-tip .tip-icon {
-  color: #909399;
-  flex-shrink: 0;
-}
-
+.smart-mode-tip .tip-icon,
 .smart-mode-tip .tip-text {
-  color: #909399;
+  color: var(--text-secondary);
   font-size: 12px;
   white-space: nowrap;
-}
-
-.deploy-page.dark .smart-mode-tip {
-  background: rgba(144, 147, 153, 0.15);
-}
-
-.deploy-page.dark .smart-mode-tip .tip-icon,
-.deploy-page.dark .smart-mode-tip .tip-text {
-  color: #a6a9ad;
 }
 
 .mode-radio-group {
@@ -2032,7 +2083,10 @@ onMounted(async () => {
   text-overflow: ellipsis;
 }
 
-/* Options styling */
+/* ========================================
+   选项样式
+   ======================================== */
+
 .backup-option,
 .template-option,
 .device-option {
@@ -2056,15 +2110,13 @@ onMounted(async () => {
 
 .backup-time {
   font-size: 11px;
-  color: #909399;
+  color: var(--text-secondary);
 }
 
-/* Execution mode hint */
-.execution-mode-hint {
-  margin-top: 10px;
-}
+/* ========================================
+   变量区域
+   ======================================== */
 
-/* Variables */
 .variables-list {
   display: flex;
   flex-direction: column;
@@ -2081,12 +2133,15 @@ onMounted(async () => {
   margin-top: 5px;
 }
 
-/* Actions */
+/* ========================================
+   操作按钮
+   ======================================== */
+
 .actions-section {
   display: flex;
   gap: 10px;
   padding-top: 15px;
-  border-top: 1px solid var(--panel-border);
+  border-top: 1px solid var(--border-subtle);
 }
 
 .preview-btn,
@@ -2105,10 +2160,13 @@ onMounted(async () => {
   box-shadow: 0 4px 12px rgba(0, 184, 148, 0.3);
 }
 
-/* Execution panel */
+/* ========================================
+   执行面板
+   ======================================== */
+
 .execution-panel {
-  background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
   border-radius: 12px;
   padding: 20px;
   height: 100%;
@@ -2120,7 +2178,10 @@ onMounted(async () => {
   box-shadow: 0 0 20px rgba(0, 184, 148, 0.1);
 }
 
-/* Execution overview */
+/* ========================================
+   执行概览
+   ======================================== */
+
 .execution-overview {
   margin-bottom: 20px;
 }
@@ -2135,10 +2196,15 @@ onMounted(async () => {
 .overview-title {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.overview-title .is-loading {
+  display: inline-flex;
+  align-items: center;
 }
 
 .elapsed-time {
@@ -2152,6 +2218,10 @@ onMounted(async () => {
   gap: 16px;
 }
 
+/* ========================================
+   进度统计
+   ======================================== */
+
 .progress-overview {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -2162,7 +2232,7 @@ onMounted(async () => {
 .progress-item {
   text-align: center;
   padding: 12px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-hover);
   border-radius: 8px;
 }
 
@@ -2191,22 +2261,25 @@ onMounted(async () => {
 }
 
 .progress-item.success .progress-value {
-  color: #67c23a;
+  color: var(--color-success);
 }
 
 .progress-item.warning .progress-value {
-  color: #e6a23c;
+  color: var(--color-warning);
 }
 
 .progress-item.error .progress-value {
-  color: #f56c6c;
+  color: var(--color-danger);
 }
 
 .overall-progress {
   margin-top: 10px;
 }
 
-/* Devices section */
+/* ========================================
+   设备区域
+   ======================================== */
+
 .devices-section {
   margin-bottom: 20px;
 }
@@ -2228,7 +2301,8 @@ onMounted(async () => {
 }
 
 .device-card {
-  border: 1px solid var(--panel-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   padding: 12px;
   cursor: pointer;
@@ -2236,26 +2310,28 @@ onMounted(async () => {
 }
 
 .device-card:hover {
-  border-color: #409eff;
+  border-color: var(--color-primary);
+  background: var(--bg-hover);
 }
 
 .device-card.active {
   border-color: #00b894;
   box-shadow: 0 2px 8px rgba(0, 184, 148, 0.2);
+  background: var(--bg-hover);
 }
 
 .device-card.success {
-  border-color: #67c23a;
-  background: rgba(103, 194, 58, 0.05);
+  border-color: var(--color-success);
+  background: rgba(103, 194, 58, 0.1);
 }
 
 .device-card.error {
-  border-color: #f56c6c;
-  background: rgba(245, 108, 108, 0.05);
+  border-color: var(--color-danger);
+  background: rgba(245, 108, 108, 0.1);
 }
 
 .device-card.running {
-  border-color: #409eff;
+  border-color: var(--color-primary);
   animation: pulse 2s infinite;
 }
 
@@ -2282,21 +2358,10 @@ onMounted(async () => {
   margin-top: 2px;
 }
 
-.status-icon.success {
-  color: #67c23a;
-}
-
-.status-icon.error {
-  color: #f56c6c;
-}
-
-.status-icon.running {
-  color: #409eff;
-}
-
-.status-icon.pending {
-  color: #909399;
-}
+.status-icon.success { color: var(--color-success); }
+.status-icon.error { color: var(--color-danger); }
+.status-icon.running { color: var(--color-primary); }
+.status-icon.pending { color: var(--text-secondary); }
 
 .device-text {
   display: flex;
@@ -2324,7 +2389,10 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
-/* CLI 并排布局 */
+/* ========================================
+   CLI 并排布局
+   ======================================== */
+
 .cli-section-parallel {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2333,13 +2401,17 @@ onMounted(async () => {
 }
 
 .cli-panel {
-  border: 1px solid var(--panel-border);
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
   border-radius: 8px;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  height: 340px;
 }
 
 .cli-panel.realtime {
-  border-color: #409eff;
+  border-color: var(--color-primary);
 }
 
 .cli-panel-header {
@@ -2347,12 +2419,10 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 10px 15px;
-  background: var(--el-fill-color-light);
-  border-bottom: 1px solid var(--panel-border);
-}
-
-.deploy-page.dark .cli-panel-header {
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--bg-hover);
+  border-bottom: 1px solid var(--border-default);
+  height: 40px;
+  flex-shrink: 0;
 }
 
 .cli-panel.realtime .cli-panel-header {
@@ -2365,6 +2435,17 @@ onMounted(async () => {
   color: var(--text-primary);
 }
 
+.cli-panel-header .el-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cli-panel-header .el-tag .is-loading {
+  display: inline-flex;
+  align-items: center;
+}
+
 .device-badge {
   margin-left: 8px;
   padding: 2px 8px;
@@ -2374,16 +2455,25 @@ onMounted(async () => {
   color: #00b894;
 }
 
+/* ========================================
+   CLI 输出区域 - 终端风格（始终深色）
+   ======================================== */
+
 .cli-panel-output {
-  background: #1e1e1e;
-  color: #d4d4d4;
+  background: var(--cli-bg);
+  color: var(--cli-text);
   font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
   font-size: 12px;
   line-height: 1.5;
   padding: 12px 15px;
-  max-height: 300px;
-  min-height: 150px;
+  flex: 1;
   overflow-y: auto;
+}
+
+.cli-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 20px;
 }
 
 .cli-line {
@@ -2394,7 +2484,7 @@ onMounted(async () => {
 }
 
 .cli-timestamp {
-  color: #858585;
+  color: var(--cli-timestamp);
   flex-shrink: 0;
   font-size: 11px;
 }
@@ -2410,26 +2500,12 @@ onMounted(async () => {
   flex: 1;
 }
 
-.cli-line.command .cli-content {
-  color: #4ec9b0;
-}
-
+.cli-line.command .cli-content { color: #4ec9b0; }
 .cli-line.error .cli-content,
-.cli-error-text {
-  color: #f48771;
-}
-
-.cli-line.warning .cli-content {
-  color: #dcdcaa;
-}
-
-.cli-line.success .cli-content {
-  color: #7ee787;
-}
-
-.cli-line.diff .cli-content {
-  color: #ce9178;
-}
+.cli-error-text { color: #f48771; }
+.cli-line.warning .cli-content { color: #dcdcaa; }
+.cli-line.success .cli-content { color: #7ee787; }
+.cli-line.diff .cli-content { color: #ce9178; }
 
 .cli-step {
   color: #569cd6;
@@ -2450,7 +2526,102 @@ onMounted(async () => {
   overflow-x: auto;
 }
 
-/* Animations */
+/* ========================================
+   历史记录面板
+   ======================================== */
+
+.history-panel {
+  border: 1px solid var(--border-default);
+}
+
+.history-list {
+  background: var(--bg-card);
+  padding: 8px;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.history-item {
+  padding: 10px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 8px;
+  background: var(--bg-hover);
+  border: 1px solid transparent;
+}
+
+.history-item:hover {
+  background: var(--bg-hover);
+  border-color: var(--color-primary);
+}
+
+.history-item.active {
+  background: rgba(64, 158, 255, 0.15);
+  border-color: var(--color-primary);
+}
+
+.history-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.history-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.history-devices {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.history-status {
+  margin-bottom: 4px;
+}
+
+.status-summary {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.status-success {
+  color: var(--status-active);
+}
+
+.status-failed {
+  color: var(--status-error);
+}
+
+.history-engine {
+  display: flex;
+  gap: 8px;
+}
+
+.engine-tag, .mode-tag {
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.mode-tag.rollback {
+  background: rgba(230, 162, 60, 0.15);
+  color: var(--color-warning);
+}
+
+/* ========================================
+   动画
+   ======================================== */
+
 .is-loading {
   animation: rotating 2s linear infinite;
 }
@@ -2460,14 +2631,17 @@ onMounted(async () => {
   to { transform: rotate(360deg); }
 }
 
-/* Preview Dialog Styles */
+/* ========================================
+   对话框样式
+   ======================================== */
+
 .preview-content {
   max-height: 70vh;
   overflow-y: auto;
 }
 
 .impact-summary {
-  background: linear-gradient(135deg, var(--el-fill-color-light) 0%, rgba(0, 184, 148, 0.05) 100%);
+  background: var(--bg-hover);
   border-radius: 12px;
   padding: 20px;
   margin-bottom: 20px;
@@ -2513,7 +2687,7 @@ onMounted(async () => {
   gap: 12px;
   margin-bottom: 16px;
   padding: 16px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-hover);
   border-radius: 8px;
 }
 
@@ -2533,7 +2707,7 @@ onMounted(async () => {
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background: var(--el-fill-color-light);
+  background: var(--bg-hover);
   border-bottom: 1px solid var(--border-default);
 }
 
@@ -2548,7 +2722,10 @@ onMounted(async () => {
   color: var(--text-secondary);
 }
 
-/* Schedule Dialog Styles */
+/* ========================================
+   预约对话框
+   ======================================== */
+
 .schedule-content {
   padding: 10px 0;
 }
@@ -2581,6 +2758,7 @@ onMounted(async () => {
 .window-label {
   font-weight: 500;
   font-size: 14px;
+  color: var(--text-primary);
 }
 
 .window-time {

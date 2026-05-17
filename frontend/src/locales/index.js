@@ -316,6 +316,7 @@ export const languages = {
     actionSubmit: '提交',
     actionClose: '关闭',
     actionCopy: '复制',
+    actionClear: '清空',
     commonRecordsCount: '{count} 条记录',
 
     // 提示消息
@@ -1317,6 +1318,8 @@ export const languages = {
     deployRealtimeCliTip: '启用后可实时查看命令执行过程（仅单设备部署可用）',
     deployStepsDetail: '部署步骤详情',
     deployNoStepLogs: '暂无部署日志',
+    deployHistory: '部署历史记录',
+    deployNoHistory: '暂无部署历史',
 
     // 部署审批
     deployPendingApproval: '部署任务已提交，等待审批',
@@ -2864,6 +2867,7 @@ export const languages = {
     actionSubmit: 'Submit',
     actionClose: 'Close',
     actionCopy: 'Copy',
+    actionClear: 'Clear',
     commonRecordsCount: '{count} records',
 
     // 提示消息
@@ -3895,6 +3899,8 @@ export const languages = {
     deployRealtimeCliTip: 'Enable to see command execution in real-time (only for single device deploy)',
     deployStepsDetail: 'Deploy Steps Detail',
     deployNoStepLogs: 'No deploy logs available',
+    deployHistory: 'Deploy History',
+    deployNoHistory: 'No deploy history',
 
     // Deploy Approval
     deployPendingApproval: 'Deployment task submitted, pending approval',

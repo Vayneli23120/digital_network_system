@@ -469,7 +469,7 @@ onMounted(() => {
 .page-header h2 {
   margin: 0;
   font-size: 20px;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .dashboard-stats {
@@ -477,39 +477,39 @@ onMounted(() => {
 }
 
 .stat-card {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
   text-align: center;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
   transition: all 0.3s;
 }
 
 .stat-card:hover {
-  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  box-shadow: var(--shadow-card);
 }
 
 .stat-value {
   font-size: 28px;
   font-weight: bold;
-  color: #303133;
+  color: var(--text-primary);
 }
 
 .stat-card.health-score .stat-value {
-  color: #409eff;
+  color: var(--accent-secondary);
 }
 
 .stat-card.risk-low .stat-value {
-  color: #67c23a;
+  color: var(--status-active);
 }
 
 .stat-card.risk-critical .stat-value {
-  color: #f56c6c;
+  color: var(--status-error);
 }
 
 .stat-label {
   font-size: 14px;
-  color: #909399;
+  color: var(--text-muted);
   margin-top: 8px;
 }
 
@@ -518,15 +518,15 @@ onMounted(() => {
 }
 
 .chart-card {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
 }
 
 .chart-title {
   font-size: 14px;
-  color: #303133;
+  color: var(--text-primary);
   margin-bottom: 10px;
 }
 
@@ -535,10 +535,10 @@ onMounted(() => {
 }
 
 .device-list-section {
-  background: #fff;
+  background: var(--bg-card);
   border-radius: 8px;
   padding: 20px;
-  border: 1px solid #ebeef5;
+  border: 1px solid var(--border-default);
 }
 
 .section-header {
@@ -551,6 +551,7 @@ onMounted(() => {
 .section-header h3 {
   margin: 0;
   font-size: 16px;
+  color: var(--text-primary);
 }
 
 .filters {
@@ -559,7 +560,7 @@ onMounted(() => {
 }
 
 .device-link {
-  color: #409eff;
+  color: var(--accent-secondary);
   text-decoration: none;
 }
 
@@ -580,7 +581,7 @@ onMounted(() => {
 
 .recommendation-item {
   font-size: 12px;
-  color: #606266;
+  color: var(--text-secondary);
 }
 
 .empty-history {
