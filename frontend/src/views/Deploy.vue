@@ -849,6 +849,7 @@ const cliOutputRef = ref(null)
 // 部署历史记录（从 localStorage 加载）
 const deployHistory = ref([])
 const selectedHistoryId = ref(null)
+const currentHistoryId = ref(null)  // 当前正在操作的部署记录ID（用于回滚关联）
 
 // 加载历史记录
 const loadHistory = () => {
@@ -1675,8 +1676,9 @@ const executeDeploy = async () => {
       ElMessage.error(t('deployFailed'))
     }
 
-    // 保存到部署历史
-    saveToHistory(result)
+    // 保存到部署历史，并保存当前历史ID用于回滚关联
+    const historyId = saveToHistory(result)
+    currentHistoryId.value = historyId  // 保存当前历史ID
 
   } catch (error) {
     stopTimer()
@@ -1897,7 +1899,7 @@ const handleRollback = async () => {
         results: result.results,
         deviceResults: rollbackDeviceResults,  // 保存每个设备的详细回滚状态
         cliLogs: rollbackDeviceResults,
-        parent_id: selectedHistoryId.value || null  // 关联到父记录（原始部署）
+        parent_id: selectedHistoryId.value || currentHistoryId.value || null  // 关联到父记录（原始部署）
       }
       deployHistory.value.unshift(rollbackHistory)
       if (deployHistory.value.length > 50) {
