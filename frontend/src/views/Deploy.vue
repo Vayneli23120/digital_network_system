@@ -255,11 +255,12 @@
                     type="warning"
                     effect="dark"
                     size="large"
+                    class="status-tag"
                   >
                     <el-icon><WarningFilled /></el-icon>
                     {{ t('deploySerialMode') }}
                   </el-tag>
-                  <el-tag v-else type="success" effect="dark" size="large">
+                  <el-tag v-else type="success" effect="dark" size="large" class="status-tag">
                     <el-icon><CircleCheckFilled /></el-icon>
                     {{ t('deployParallelMode', { limit: parallelLimit }) }}
                   </el-tag>
@@ -1878,15 +1879,26 @@ onMounted(async () => {
 .status-tag {
   display: inline-flex !important;
   align-items: center;
+  justify-content: center;
   gap: 6px;
-  height: 28px;
-  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.status-tag.el-tag--large {
+  height: 32px;
+  padding: 0 12px;
 }
 
 .status-tag :deep(.el-icon) {
   width: 14px;
   height: 14px;
   flex-shrink: 0;
+  margin-right: 0;
+}
+
+.status-tag.el-tag--large :deep(.el-icon) {
+  width: 16px;
+  height: 16px;
 }
 
 .status-tag :deep(.is-loading) {
@@ -2078,6 +2090,24 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 5px;
+}
+
+.execution-mode-hint {
+  margin-top: 8px;
+}
+
+.execution-mode-hint .el-tag,
+.execution-mode-hint .status-tag {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 6px;
+}
+
+.execution-mode-hint .el-tag :deep(.el-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  margin-right: 0;
 }
 
 /* ========================================
