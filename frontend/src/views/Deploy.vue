@@ -5,16 +5,22 @@
       <div class="nav-left">
         <h1 class="page-title">{{ t('deployTitle') }}</h1>
         <el-tag v-if="executionStatus === 'running'" type="warning" effect="dark" class="status-tag">
-          <el-icon class="is-loading"><Loading /></el-icon>
-          {{ t('deployExecuting') }}
+          <span class="status-content">
+            <el-icon class="is-loading"><Loading /></el-icon>
+            <span>{{ t('deployExecuting') }}</span>
+          </span>
         </el-tag>
         <el-tag v-else-if="executionStatus === 'completed'" type="success" class="status-tag">
-          <el-icon><CircleCheckFilled /></el-icon>
-          {{ t('deployCompleted') }}
+          <span class="status-content">
+            <el-icon><CircleCheckFilled /></el-icon>
+            <span>{{ t('deployCompleted') }}</span>
+          </span>
         </el-tag>
         <el-tag v-else-if="executionStatus === 'failed'" type="danger" class="status-tag">
-          <el-icon><CircleCloseFilled /></el-icon>
-          {{ t('deployFailed') }}
+          <span class="status-content">
+            <el-icon><CircleCloseFilled /></el-icon>
+            <span>{{ t('deployFailed') }}</span>
+          </span>
         </el-tag>
       </div>
       <div class="nav-right">
@@ -257,12 +263,16 @@
                     size="large"
                     class="status-tag"
                   >
-                    <el-icon><WarningFilled /></el-icon>
-                    {{ t('deploySerialMode') }}
+                    <span class="status-content">
+                      <el-icon><WarningFilled /></el-icon>
+                      <span>{{ t('deploySerialMode') }}</span>
+                    </span>
                   </el-tag>
                   <el-tag v-else type="success" effect="dark" size="large" class="status-tag">
-                    <el-icon><CircleCheckFilled /></el-icon>
-                    {{ t('deployParallelMode', { limit: parallelLimit }) }}
+                    <span class="status-content">
+                      <el-icon><CircleCheckFilled /></el-icon>
+                      <span>{{ t('deployParallelMode', { limit: parallelLimit }) }}</span>
+                    </span>
                   </el-tag>
                 </div>
               </div>
@@ -1878,10 +1888,26 @@ onMounted(async () => {
 
 .status-tag {
   display: inline-flex !important;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  white-space: nowrap;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+  white-space: nowrap !important;
+}
+
+/* 穿透 Element Plus el-tag 内部结构 */
+.status-tag :deep(.el-tag__content) {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
+}
+
+/* 直接作用于 el-tag 的所有子元素 */
+.status-tag.el-tag {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
 }
 
 .status-tag.el-tag--large {
@@ -1890,20 +1916,45 @@ onMounted(async () => {
 }
 
 .status-tag :deep(.el-icon) {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  margin-right: 0;
+  display: inline-flex !important;
+  align-items: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  vertical-align: middle !important;
 }
 
 .status-tag.el-tag--large :deep(.el-icon) {
-  width: 16px;
-  height: 16px;
+  width: 16px !important;
+  height: 16px !important;
 }
 
 .status-tag :deep(.is-loading) {
+  display: inline-flex !important;
+  align-items: center !important;
+}
+
+/* 确保 el-tag 内的文字也是 inline */
+.status-tag,
+.status-tag :deep(*) {
+  vertical-align: middle !important;
+}
+
+.status-content {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+
+.status-content .el-icon {
   display: inline-flex;
   align-items: center;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .nav-right {
@@ -2099,15 +2150,28 @@ onMounted(async () => {
 .execution-mode-hint .el-tag,
 .execution-mode-hint .status-tag {
   display: inline-flex !important;
-  align-items: center;
-  gap: 6px;
+  flex-direction: row !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 6px !important;
+}
+
+.execution-mode-hint .el-tag :deep(.el-tag__content) {
+  display: inline-flex !important;
+  flex-direction: row !important;
+  align-items: center !important;
+  gap: 6px !important;
 }
 
 .execution-mode-hint .el-tag :deep(.el-icon) {
-  width: 14px;
-  height: 14px;
-  flex-shrink: 0;
-  margin-right: 0;
+  display: inline-flex !important;
+  align-items: center !important;
+  width: 14px !important;
+  height: 14px !important;
+  flex-shrink: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 0 !important;
+  vertical-align: middle !important;
 }
 
 /* ========================================
