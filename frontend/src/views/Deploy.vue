@@ -1876,9 +1876,22 @@ onMounted(async () => {
 }
 
 .status-tag {
-  display: flex;
+  display: inline-flex !important;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+}
+
+.status-tag :deep(.el-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.status-tag :deep(.is-loading) {
+  display: inline-flex;
+  align-items: center;
 }
 
 .nav-right {
@@ -1887,7 +1900,7 @@ onMounted(async () => {
 }
 
 .nav-action-btn {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
@@ -1899,6 +1912,12 @@ onMounted(async () => {
   border: none;
   background: var(--bg-card);
   color: var(--text-secondary);
+}
+
+.nav-action-btn :deep(.el-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .nav-action-btn.secondary {
@@ -1924,6 +1943,17 @@ onMounted(async () => {
 .nav-action-btn.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.nav-action-btn.small {
+  padding: 4px 8px;
+  font-size: 12px;
+  gap: 4px;
+}
+
+.nav-action-btn.small :deep(.el-icon) {
+  width: 12px;
+  height: 12px;
 }
 
 /* ========================================
@@ -2484,9 +2514,17 @@ onMounted(async () => {
 }
 
 .cli-panel-header .el-tag {
-  display: inline-flex;
+  display: inline-flex !important;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
+  height: 24px;
+  padding: 0 8px;
+}
+
+.cli-panel-header .el-tag :deep(.el-icon) {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
 }
 
 .cli-panel-header .el-tag .is-loading {
