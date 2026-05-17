@@ -414,6 +414,7 @@
                     active: selectedDevice?.device_id === device.device_id,
                     success: device.status === 'completed',
                     error: device.status === 'failed',
+                    skipped: device.status === 'skipped',
                     running: device.status === 'running'
                   }"
                   @click="selectDevice(device)"
@@ -431,6 +432,12 @@
                         class="status-icon error"
                       >
                         <CircleCloseFilled />
+                      </el-icon>
+                      <el-icon
+                        v-else-if="device.status === 'skipped'"
+                        class="status-icon skipped"
+                      >
+                        <Minus />
                       </el-icon>
                       <el-icon
                         v-else-if="device.status === 'running'"
@@ -734,7 +741,8 @@ import {
   Files,
   Calendar,
   Edit,
-  RefreshLeft
+  RefreshLeft,
+  Minus
 } from '@element-plus/icons-vue'
 import {
   getDevices,
@@ -1040,7 +1048,7 @@ const removeVariable = (index) => {
 
 // 设备状态
 const getDeviceStatusType = (status) => {
-  const types = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger' }
+  const types = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger', skipped: 'warning' }
   return types[status] || 'info'
 }
 
@@ -1049,7 +1057,8 @@ const getDeviceStatusText = (status) => {
     pending: t('deployDevicePending'),
     running: t('deployDeviceRunning'),
     completed: t('deployDeviceCompleted'),
-    failed: t('deployDeviceFailed')
+    failed: t('deployDeviceFailed'),
+    skipped: t('deployDeviceSkipped')
   }
   return texts[status] || status
 }
@@ -1644,19 +1653,51 @@ const handleRollback = async () => {
 
     // 保存回滚到历史记录
     if (result.results) {
+      // 计算每个设备的回滚状态
+      const rollbackDeviceResults = deviceExecutions.value.map(d => {
+        const rollbackResult = result.results.find(r => r.device_id === d.device_id)
+        // 如果设备有 rollback_available 且有回滚结果，使用回滚结果状态
+        // 如果设备没有 rollback_available，标记为 skipped（原部署失败，未执行回滚）
+        if (d.rollback_available && rollbackResult) {
+          return {
+            device_id: d.device_id,
+            device_name: d.device_name,
+            status: rollbackResult.success ? 'completed' : 'failed',
+            message: rollbackResult.message || (rollbackResult.success ? '回滚成功' : '回滚失败'),
+            rollback_available: false,  // 回滚后不再可回滚
+            logs: d.cliLogs
+          }
+        } else if (!d.rollback_available) {
+          return {
+            device_id: d.device_id,
+            device_name: d.device_name,
+            status: 'skipped',  // 跳过回滚（原部署失败）
+            message: '原部署失败，未执行回滚',
+            rollback_available: false,
+            logs: d.cliLogs
+          }
+        } else {
+          return {
+            device_id: d.device_id,
+            device_name: d.device_name,
+            status: d.status,
+            message: d.message,
+            rollback_available: false,
+            logs: d.cliLogs
+          }
+        }
+      })
+
       const rollbackHistory = {
         id: Date.now(),
         timestamp: new Date().toISOString(),
         success: result.success,
         engine: deployForm.value.engine,
         mode: 'rollback',  // 标记为回滚操作
-        device_names: deviceExecutions.value.map(d => d.device_name),
+        device_names: rollbackDeviceResults.map(d => d.device_name),
         results: result.results,
-        cliLogs: JSON.parse(JSON.stringify(deviceExecutions.value.map(d => ({
-          device_id: d.device_id,
-          device_name: d.device_name,
-          logs: d.cliLogs
-        }))))
+        deviceResults: rollbackDeviceResults,  // 保存每个设备的详细回滚状态
+        cliLogs: rollbackDeviceResults
       }
       deployHistory.value.unshift(rollbackHistory)
       if (deployHistory.value.length > 50) {
@@ -2330,6 +2371,11 @@ onMounted(async () => {
   background: rgba(245, 108, 108, 0.1);
 }
 
+.device-card.skipped {
+  border-color: var(--color-warning);
+  background: rgba(230, 162, 60, 0.1);
+}
+
 .device-card.running {
   border-color: var(--color-primary);
   animation: pulse 2s infinite;
@@ -2362,6 +2408,7 @@ onMounted(async () => {
 .status-icon.error { color: var(--color-danger); }
 .status-icon.running { color: var(--color-primary); }
 .status-icon.pending { color: var(--text-secondary); }
+.status-icon.skipped { color: var(--color-warning); }
 
 .device-text {
   display: flex;
