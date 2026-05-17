@@ -2974,9 +2974,10 @@ onMounted(async () => {
 
 .history-list {
   background: var(--bg-card);
-  padding: 8px;
+  padding: 8px 8px 8px 16px;  /* 左侧留更多空间给连接线 */
   flex: 1;
   overflow-y: auto;
+  overflow-x: visible;  /* 允许连接线超出 */
 }
 
 .history-item {
@@ -2987,6 +2988,7 @@ onMounted(async () => {
   margin-bottom: 8px;
   background: var(--bg-hover);
   border: 1px solid transparent;
+  position: relative;  /* 确保定位上下文 */
 }
 
 .history-item:hover {
@@ -3070,35 +3072,28 @@ onMounted(async () => {
 
 /* 任务链连接线 */
 .history-item.is-child {
-  position: relative;
-  margin-left: 20px;
-  border-left: 2px solid var(--color-primary);
+  margin-left: 12px;  /* 缩进 */
+  padding-left: 20px;  /* 内容左移 */
+  border-left: 3px solid var(--color-primary);  /* 左边框作为连接线 */
+  background: var(--bg-card);
 }
 
-.chain-line {
-  position: absolute;
-  left: -20px;
-  top: 0;
-  bottom: 0;
-  width: 20px;
-  background: transparent;
-}
-
-.chain-line::before {
+.history-item.is-child::before {
   content: '';
   position: absolute;
-  left: 18px;
+  left: -12px;
   top: 50%;
-  width: 8px;
+  width: 12px;
   height: 2px;
   background: var(--color-primary);
 }
 
+/* 回滚记录使用警告色 */
 .history-item.is-rollback {
   border-left-color: var(--color-warning);
 }
 
-.history-item.is-rollback .chain-line::before {
+.history-item.is-rollback::before {
   background: var(--color-warning);
 }
 
