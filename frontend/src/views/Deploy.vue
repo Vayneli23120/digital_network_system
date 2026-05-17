@@ -1604,9 +1604,19 @@ const handleRollback = async () => {
     stopTimer()
 
     // 处理回滚结果
+    // 先将所有没有 rollback_available 的设备标记为 skipped
+    deviceExecutions.value.forEach(d => {
+      if (!d.rollback_available) {
+        d.status = 'skipped'
+        d.message = '原部署失败，未执行回滚'
+      }
+    })
+
+    // 然后处理有回滚结果的设备
     if (result.results && result.results.length > 0) {
       result.results.forEach(r => {
-        const device = deviceExecutions.value.find(d => d.device_id === r.device_id)
+        // 使用宽松比较，确保类型匹配
+        const device = deviceExecutions.value.find(d => Number(d.device_id) === Number(r.device_id))
         if (device) {
           device.status = r.success ? 'completed' : 'failed'
           device.message = r.message || (r.success ? '回滚成功' : '回滚失败')
@@ -1655,10 +1665,10 @@ const handleRollback = async () => {
     if (result.results) {
       // 计算每个设备的回滚状态
       const rollbackDeviceResults = deviceExecutions.value.map(d => {
-        const rollbackResult = result.results.find(r => r.device_id === d.device_id)
-        // 如果设备有 rollback_available 且有回滚结果，使用回滚结果状态
-        // 如果设备没有 rollback_available，标记为 skipped（原部署失败，未执行回滚）
-        if (d.rollback_available && rollbackResult) {
+        const rollbackResult = result.results.find(r => Number(r.device_id) === Number(d.device_id))
+        // 如果有回滚结果（说明该设备被执行了回滚），使用回滚结果状态
+        // 如果没有回滚结果（说明该设备原部署失败，未执行回滚），标记为 skipped
+        if (rollbackResult) {
           return {
             device_id: d.device_id,
             device_name: d.device_name,
@@ -1667,21 +1677,12 @@ const handleRollback = async () => {
             rollback_available: false,  // 回滚后不再可回滚
             logs: d.cliLogs
           }
-        } else if (!d.rollback_available) {
+        } else {
           return {
             device_id: d.device_id,
             device_name: d.device_name,
             status: 'skipped',  // 跳过回滚（原部署失败）
             message: '原部署失败，未执行回滚',
-            rollback_available: false,
-            logs: d.cliLogs
-          }
-        } else {
-          return {
-            device_id: d.device_id,
-            device_name: d.device_name,
-            status: d.status,
-            message: d.message,
             rollback_available: false,
             logs: d.cliLogs
           }
