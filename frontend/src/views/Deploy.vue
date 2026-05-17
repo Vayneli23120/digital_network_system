@@ -528,71 +528,68 @@
                       'is-child': record.parent_id
                     }"
                     @click="loadHistoryRecord(record)"
-                  >
-                    <!-- 任务链连接线 -->
-                    <div v-if="record.parent_id" class="chain-line"></div>
-
-                    <div class="history-info">
-                      <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
-                      <el-tag :type="record.success ? 'success' : 'danger'" size="small">
-                        {{ record.success ? t('statusSuccess') : t('statusFailed') }}
-                      </el-tag>
-                      <!-- 类型标记 -->
-                      <el-tag v-if="record.mode === 'rollback'" type="info" size="small" effect="plain">
-                        {{ t('deployRollbackRecord') }}
-                      </el-tag>
-                      <el-tag v-else-if="record.mode === 'redeploy'" type="warning" size="small" effect="plain">
-                        {{ t('deployRedeployRecord') }}
-                      </el-tag>
-                      <el-tag v-else-if="hasBeenRolledBack(record)" type="warning" size="small" effect="plain">
-                        {{ t('deployRolledBack') }}
-                      </el-tag>
-                      <el-tag v-else-if="canRollback(record)" type="success" size="small" effect="plain">
-                        {{ t('deployCanRollback') }}
-                      </el-tag>
-                    </div>
-                    <div class="history-devices">
-                      {{ record.device_names?.join(', ') || record.device_name || '-' }}
-                    </div>
-                    <div class="history-status">
-                      <span v-if="record.deviceResults" class="status-summary">
-                        <span class="status-success">{{ record.deviceResults.filter(d => d.status === 'completed').length }} {{ t('deploySuccess') }}</span>
-                        <span v-if="record.deviceResults.filter(d => d.status === 'failed').length > 0" class="status-failed">
-                          {{ record.deviceResults.filter(d => d.status === 'failed').length }} {{ t('deployFailed') }}
+                    >
+                      <div class="history-info">
+                        <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
+                        <el-tag :type="record.success ? 'success' : 'danger'" size="small">
+                          {{ record.success ? t('statusSuccess') : t('statusFailed') }}
+                        </el-tag>
+                        <!-- 类型标记 -->
+                        <el-tag v-if="record.mode === 'rollback'" type="info" size="small" effect="plain">
+                          {{ t('deployRollbackRecord') }}
+                        </el-tag>
+                        <el-tag v-else-if="record.mode === 'redeploy'" type="warning" size="small" effect="plain">
+                          {{ t('deployRedeployRecord') }}
+                        </el-tag>
+                        <el-tag v-else-if="hasBeenRolledBack(record)" type="warning" size="small" effect="plain">
+                          {{ t('deployRolledBack') }}
+                        </el-tag>
+                        <el-tag v-else-if="canRollback(record)" type="success" size="small" effect="plain">
+                          {{ t('deployCanRollback') }}
+                        </el-tag>
+                      </div>
+                      <div class="history-devices">
+                        {{ record.device_names?.join(', ') || record.device_name || '-' }}
+                      </div>
+                      <div class="history-status">
+                        <span v-if="record.deviceResults" class="status-summary">
+                          <span class="status-success">{{ record.deviceResults.filter(d => d.status === 'completed').length }} {{ t('deploySuccess') }}</span>
+                          <span v-if="record.deviceResults.filter(d => d.status === 'failed').length > 0" class="status-failed">
+                            {{ record.deviceResults.filter(d => d.status === 'failed').length }} {{ t('deployFailed') }}
+                          </span>
                         </span>
-                      </span>
+                      </div>
+                      <div class="history-engine">
+                        <span class="engine-tag">{{ record.engine }}</span>
+                        <span v-if="record.mode && record.mode !== 'rollback' && record.mode !== 'redeploy'" class="mode-tag">{{ record.mode }}</span>
+                      </div>
+                      <!-- 操作按钮：只在原始部署记录上显示 -->
+                      <div class="history-actions" v-if="selectedHistoryId === record.id && record.mode !== 'rollback' && record.mode !== 'redeploy'">
+                        <!-- 成功部署且可回滚：只显示回滚按钮 -->
+                        <el-button
+                          v-if="canRollback(record)"
+                          type="warning"
+                          size="small"
+                          @click.stop="handleHistoryRollback(record)"
+                        >
+                          {{ t('deployRollback') }}
+                        </el-button>
+                        <!-- 已回滚或不支持回滚：只显示重新部署按钮 -->
+                        <el-button
+                          v-else
+                          type="primary"
+                          size="small"
+                          @click.stop="handleRedeploy(record)"
+                        >
+                          {{ t('deployRedeploy') }}
+                        </el-button>
+                      </div>
                     </div>
-                    <div class="history-engine">
-                      <span class="engine-tag">{{ record.engine }}</span>
-                      <span v-if="record.mode && record.mode !== 'rollback' && record.mode !== 'redeploy'" class="mode-tag">{{ record.mode }}</span>
+                    <div v-if="deployHistory.length === 0" class="cli-empty">
+                      {{ t('deployNoHistory') }}
                     </div>
-                    <!-- 操作按钮：只在原始部署记录上显示 -->
-                    <div class="history-actions" v-if="selectedHistoryId === record.id && record.mode !== 'rollback' && record.mode !== 'redeploy'">
-                      <!-- 成功部署且可回滚：只显示回滚按钮 -->
-                      <el-button
-                        v-if="canRollback(record)"
-                        type="warning"
-                        size="small"
-                        @click.stop="handleHistoryRollback(record)"
-                      >
-                        {{ t('deployRollback') }}
-                      </el-button>
-                      <!-- 已回滚或不支持回滚：只显示重新部署按钮 -->
-                      <el-button
-                        v-else
-                        type="primary"
-                        size="small"
-                        @click.stop="handleRedeploy(record)"
-                      >
-                        {{ t('deployRedeploy') }}
-                      </el-button>
-                    </div>
-                  </div>
-                  <div v-if="deployHistory.length === 0" class="cli-empty">
-                    {{ t('deployNoHistory') }}
                   </div>
                 </div>
-              </div>
             </div>
           </div>
         </el-col>
@@ -857,6 +854,11 @@ const loadHistory = () => {
     const saved = localStorage.getItem('deployHistory')
     if (saved) {
       deployHistory.value = JSON.parse(saved)
+      // 从 localStorage 加载当前历史 ID
+      const savedCurrentId = localStorage.getItem('currentHistoryId')
+      if (savedCurrentId) {
+        currentHistoryId.value = parseInt(savedCurrentId)
+      }
     }
   } catch (e) {
     console.error('Failed to load deploy history:', e)
@@ -867,6 +869,10 @@ const loadHistory = () => {
 const saveHistoryToStorage = () => {
   try {
     localStorage.setItem('deployHistory', JSON.stringify(deployHistory.value))
+    // 同时保存当前历史 ID
+    if (currentHistoryId.value) {
+      localStorage.setItem('currentHistoryId', String(currentHistoryId.value))
+    }
   } catch (e) {
     console.error('Failed to save deploy history:', e)
   }
@@ -2976,10 +2982,9 @@ onMounted(async () => {
 
 .history-list {
   background: var(--bg-card);
-  padding: 8px 8px 8px 16px;  /* 左侧留更多空间给连接线 */
+  padding: 8px 8px 8px 12px;
   flex: 1;
   overflow-y: auto;
-  overflow-x: visible;  /* 允许连接线超出 */
 }
 
 .history-item {
@@ -3072,31 +3077,16 @@ onMounted(async () => {
   flex: 1;
 }
 
-/* 任务链连接线 */
+/* 任务链连接线 - 简单左边框方案 */
 .history-item.is-child {
-  margin-left: 12px;  /* 缩进 */
-  padding-left: 20px;  /* 内容左移 */
-  border-left: 3px solid var(--color-primary);  /* 左边框作为连接线 */
-  background: var(--bg-card);
-}
-
-.history-item.is-child::before {
-  content: '';
-  position: absolute;
-  left: -12px;
-  top: 50%;
-  width: 12px;
-  height: 2px;
-  background: var(--color-primary);
+  margin-left: 12px;
+  border-left: 3px solid var(--color-primary);
+  background: var(--bg-hover);
 }
 
 /* 回滚记录使用警告色 */
 .history-item.is-rollback {
   border-left-color: var(--color-warning);
-}
-
-.history-item.is-rollback::before {
-  background: var(--color-warning);
 }
 
 /* ========================================
