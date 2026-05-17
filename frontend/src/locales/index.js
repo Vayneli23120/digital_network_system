@@ -1333,6 +1333,12 @@ export const languages = {
     deployRedeployTitle: '重新部署',
     deployNoDevicesInHistory: '历史记录中没有设备信息',
     deployDevicesSelected: '已选择 {count} 个设备，请配置部署参数后点击部署',
+    deployRollbackRecord: '回滚记录',
+    deployRedeployRecord: '重新部署',
+    deployRedeployConfirmDetail: '确认重新部署到 {count} 个设备？\n引擎: {engine}\n模式: {mode}',
+    deployRedeployNoConfig: '历史记录中没有保存部署配置',
+    deployRedeployConfigMissing: '缺少必要配置',
+    deployRedeployFailed: '重新部署失败',
 
     // 部署审批
     deployPendingApproval: '部署任务已提交，等待审批',
@@ -3927,6 +3933,12 @@ export const languages = {
     deployRedeployTitle: 'Redeploy',
     deployNoDevicesInHistory: 'No device info in history',
     deployDevicesSelected: '{count} devices selected, configure params and click deploy',
+    deployRollbackRecord: 'Rollback',
+    deployRedeployRecord: 'Redeploy',
+    deployRedeployConfirmDetail: 'Confirm redeploy to {count} devices?\nEngine: {engine}\nMode: {mode}',
+    deployRedeployNoConfig: 'No deploy config saved in history',
+    deployRedeployConfigMissing: 'Missing required config',
+    deployRedeployFailed: 'Redeploy failed',
 
     // Deploy Approval
     deployPendingApproval: 'Deployment task submitted, pending approval',

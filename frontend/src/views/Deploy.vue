@@ -522,22 +522,32 @@
                     v-for="(record, idx) in deployHistory"
                     :key="record.id || idx"
                     class="history-item"
-                    :class="{ active: selectedHistoryId === record.id }"
+                    :class="{
+                      active: selectedHistoryId === record.id,
+                      'is-rollback': record.mode === 'rollback',
+                      'is-child': record.parent_id
+                    }"
                     @click="loadHistoryRecord(record)"
                   >
+                    <!-- 任务链连接线 -->
+                    <div v-if="record.parent_id" class="chain-line"></div>
+
                     <div class="history-info">
                       <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
                       <el-tag :type="record.success ? 'success' : 'danger'" size="small">
                         {{ record.success ? t('statusSuccess') : t('statusFailed') }}
                       </el-tag>
-                      <!-- 回滚状态标记 -->
-                      <el-tag v-if="record.mode === 'rollback'" type="info" size="small">
-                        {{ t('deployRollback') }}
+                      <!-- 类型标记 -->
+                      <el-tag v-if="record.mode === 'rollback'" type="info" size="small" effect="plain">
+                        {{ t('deployRollbackRecord') }}
                       </el-tag>
-                      <el-tag v-else-if="hasBeenRolledBack(record)" type="warning" size="small">
+                      <el-tag v-else-if="record.mode === 'redeploy'" type="warning" size="small" effect="plain">
+                        {{ t('deployRedeployRecord') }}
+                      </el-tag>
+                      <el-tag v-else-if="hasBeenRolledBack(record)" type="warning" size="small" effect="plain">
                         {{ t('deployRolledBack') }}
                       </el-tag>
-                      <el-tag v-else-if="canRollback(record)" type="success" size="small">
+                      <el-tag v-else-if="canRollback(record)" type="success" size="small" effect="plain">
                         {{ t('deployCanRollback') }}
                       </el-tag>
                     </div>
@@ -554,12 +564,12 @@
                     </div>
                     <div class="history-engine">
                       <span class="engine-tag">{{ record.engine }}</span>
-                      <span v-if="record.mode && record.mode !== 'rollback'" class="mode-tag">{{ record.mode }}</span>
+                      <span v-if="record.mode && record.mode !== 'rollback' && record.mode !== 'redeploy'" class="mode-tag">{{ record.mode }}</span>
                     </div>
-                    <!-- 操作按钮 -->
-                    <div class="history-actions" v-if="selectedHistoryId === record.id">
+                    <!-- 操作按钮：只在原始部署记录上显示 -->
+                    <div class="history-actions" v-if="selectedHistoryId === record.id && record.mode !== 'rollback' && record.mode !== 'redeploy'">
                       <el-button
-                        v-if="canRollback(record) && record.engine === 'napalm'"
+                        v-if="canRollback(record)"
                         type="warning"
                         size="small"
                         @click.stop="handleHistoryRollback(record)"
@@ -567,6 +577,7 @@
                         {{ t('deployRollback') }}
                       </el-button>
                       <el-button
+                        v-if="!canRollback(record) || record.engine !== 'napalm'"
                         type="primary"
                         size="small"
                         @click.stop="handleRedeploy(record)"
@@ -1127,16 +1138,49 @@ const saveToHistory = (result) => {
   // 计算总体状态：所有设备都成功才算成功
   const allSuccess = deviceResults.every(d => d.status === 'completed')
 
+  // 保存部署配置，用于重新部署
+  const deployConfig = {
+    mode: deployForm.value.mode,
+    engine: deployForm.value.engine,
+    napalm_mode: deployForm.value.napalm_mode,
+    backup_file: deployForm.value.backup_file,
+    template_id: deployForm.value.template_id,
+    snippet: deployForm.value.snippet,
+    snippet_position: deployForm.value.snippet_position,
+    base_backup_file: deployForm.value.base_backup_file,
+    variables: deployForm.value.variables ? JSON.parse(JSON.stringify(deployForm.value.variables)) : []
+  }
+
+  // 确定是否为重新部署
+  const isRedeploy = redeployParentId.value !== null
+  const parentId = redeployParentId.value
+
   const historyRecord = {
     id: Date.now(),
     timestamp: new Date().toISOString(),
     success: allSuccess,
     engine: deployForm.value.engine,
-    mode: deployForm.value.napalm_mode || deployForm.value.mode,
+    mode: isRedeploy ? 'redeploy' : (deployForm.value.napalm_mode || deployForm.value.mode),
     device_names: deviceResults.map(d => d.device_name),
     results: result.results,
     deviceResults: deviceResults,  // 保存每个设备的详细状态
-    cliLogs: deviceResults
+    cliLogs: deviceResults,
+    deployConfig: deployConfig,  // 保存部署配置，用于重新部署
+    parent_id: parentId,  // 重新部署时关联到父记录
+    children: []  // 子记录（回滚、重新部署）
+  }
+
+  // 如果是重新部署，更新父记录的 children
+  if (isRedeploy) {
+    const parentRecord = deployHistory.value.find(h => h.id === parentId)
+    if (parentRecord) {
+      if (!parentRecord.children) {
+        parentRecord.children = []
+      }
+      parentRecord.children.push(historyRecord.id)
+    }
+    // 清空重新部署标记
+    redeployParentId.value = null
   }
   // 添加到历史列表顶部
   deployHistory.value.unshift(historyRecord)
@@ -1146,6 +1190,9 @@ const saveToHistory = (result) => {
   }
   // 保存到 localStorage
   saveHistoryToStorage()
+
+  // 返回记录 ID，供回滚时使用
+  return historyRecord.id
 }
 
 // 加载历史记录到左侧面板
@@ -1195,40 +1242,73 @@ const handleHistoryRollback = async (record) => {
 // 从历史记录重新部署
 const handleRedeploy = async (record) => {
   try {
-    await ElMessageBox.confirm(
-      t('deployRedeployConfirm', { count: record.deviceResults?.length || 0 }),
-      t('deployRedeployTitle'),
-      { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'info' }
-    )
+    // 检查是否有部署配置
+    const config = record.deployConfig
+    if (!config) {
+      ElMessage.warning(t('deployRedeployNoConfig'))
+      return
+    }
 
-    // 提取历史记录中的设备 ID
     const deviceIds = record.deviceResults?.map(d => d.device_id) || []
     if (deviceIds.length === 0) {
       ElMessage.warning(t('deployNoDevicesInHistory'))
       return
     }
 
-    // 设置目标设备
+    await ElMessageBox.confirm(
+      t('deployRedeployConfirmDetail', {
+        count: deviceIds.length,
+        engine: config.engine,
+        mode: config.mode
+      }),
+      t('deployRedeployTitle'),
+      { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'info' }
+    )
+
+    // 恢复部署配置
+    deployForm.value.mode = config.mode || 'backup'
+    deployForm.value.engine = config.engine || 'napalm'
+    deployForm.value.napalm_mode = config.napalm_mode || 'merge'
+    deployForm.value.backup_file = config.backup_file || ''
+    deployForm.value.template_id = config.template_id || ''
+    deployForm.value.snippet = config.snippet || ''
+    deployForm.value.snippet_position = config.snippet_position || 'append'
+    deployForm.value.base_backup_file = config.base_backup_file || ''
     deployForm.value.target_devices = deviceIds
+    deployForm.value.variables = config.variables || []
+    deployForm.value.dry_run = false
 
-    // 如果历史记录有配置信息，尝试恢复
-    if (record.mode) {
-      deployForm.value.mode = record.mode
+    // 检查必要配置是否存在
+    let missingConfig = ''
+    if (deployForm.value.mode === 'backup' && !deployForm.value.backup_file) {
+      missingConfig = t('deploySelectBackupFile')
+    } else if (deployForm.value.mode === 'template' && !deployForm.value.template_id) {
+      missingConfig = t('deploySelectTemplate')
+    } else if (deployForm.value.mode === 'snippet' && !deployForm.value.snippet) {
+      missingConfig = t('deployInputSnippet')
     }
-    if (record.engine) {
-      deployForm.value.engine = record.engine
+
+    if (missingConfig) {
+      ElMessage.warning(t('deployRedeployConfigMissing') + ': ' + missingConfig)
+      return
     }
 
-    ElMessage.success(t('deployDevicesSelected', { count: deviceIds.length }))
+    // 记录父记录 ID，用于建立任务链
+    redeployParentId.value = record.id
 
-    // 跳转到配置面板让用户确认部署参数
-    // 用户需要手动点击部署按钮
+    // 直接执行部署
+    await executeDeploy()
+
   } catch (error) {
     if (error !== 'cancel') {
       console.error('重新部署失败:', error)
+      ElMessage.error(t('deployRedeployFailed'))
     }
   }
 }
+
+// 重新部署的父记录 ID
+const redeployParentId = ref(null)
 
 // 预览部署
 const previewDeploy = async () => {
@@ -1776,7 +1856,8 @@ const handleRollback = async () => {
         device_names: rollbackDeviceResults.map(d => d.device_name),
         results: result.results,
         deviceResults: rollbackDeviceResults,  // 保存每个设备的详细回滚状态
-        cliLogs: rollbackDeviceResults
+        cliLogs: rollbackDeviceResults,
+        parent_id: selectedHistoryId.value || null  // 关联到父记录（原始部署）
       }
       deployHistory.value.unshift(rollbackHistory)
       if (deployHistory.value.length > 50) {
@@ -1786,23 +1867,24 @@ const handleRollback = async () => {
       // 回滚成功后，更新原始部署历史记录的 rollback_available 状态
       // 防止刷新页面后再次显示可回滚
       if (result.success) {
-        // 找到最近一次成功部署的历史记录（非回滚操作）
-        const originalDeployHistory = deployHistory.value.find(h =>
-          h.mode !== 'rollback' &&
-          h.success &&
-          h.deviceResults?.some(d => rollbackDevices.includes(d.device_id))
-        )
+        // 找到父记录（原始部署）
+        const parentRecord = deployHistory.value.find(h => h.id === rollbackHistory.parent_id)
 
-        if (originalDeployHistory) {
+        if (parentRecord) {
           // 更新已回滚设备的 rollback_available 为 false
-          originalDeployHistory.deviceResults.forEach(d => {
+          parentRecord.deviceResults.forEach(d => {
             if (rollbackDevices.includes(d.device_id)) {
               d.rollback_available = false
               d.rollback_status = 'rolled_back'  // 标记已回滚
               d.rollback_time = new Date().toISOString()
             }
           })
-          console.log('已更新原始部署历史记录的回滚状态')
+          // 将回滚记录添加到父记录的 children 数组
+          if (!parentRecord.children) {
+            parentRecord.children = []
+          }
+          parentRecord.children.push(rollbackHistory.id)
+          console.log('已更新原始部署历史记录的回滚状态，并建立任务链关联')
         }
       }
 
@@ -2944,6 +3026,40 @@ onMounted(async () => {
 
 .history-actions .el-button {
   flex: 1;
+}
+
+/* 任务链连接线 */
+.history-item.is-child {
+  position: relative;
+  margin-left: 20px;
+  border-left: 2px solid var(--color-primary);
+}
+
+.chain-line {
+  position: absolute;
+  left: -20px;
+  top: 0;
+  bottom: 0;
+  width: 20px;
+  background: transparent;
+}
+
+.chain-line::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: 50%;
+  width: 8px;
+  height: 2px;
+  background: var(--color-primary);
+}
+
+.history-item.is-rollback {
+  border-left-color: var(--color-warning);
+}
+
+.history-item.is-rollback .chain-line::before {
+  background: var(--color-warning);
 }
 
 /* ========================================
