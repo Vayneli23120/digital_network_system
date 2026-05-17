@@ -617,14 +617,12 @@ async def execute_deploy(deploy_data: dict):
 
         # 关闭数据库连接（并行执行阶段不访问数据库）
         db.close()
-        logger.info("数据库读取完成，关闭连接，开始并行部署")
+        logger.info("数据库读取完成，关闭连接，开始部署")
 
-        # ========== 阶段2：并行执行（完全隔离数据库） ==========
+        # ========== 阶段2：执行部署（完全隔离数据库） ==========
         parallel_limit = deploy_data.get('parallel_limit', 1)
         # 单设备部署超时时间（秒）
         DEVICE_TIMEOUT = 120
-        # 整体超时时间（秒），防止长时间阻塞
-        TOTAL_TIMEOUT = DEVICE_TIMEOUT * len(device_data_list) / parallel_limit + 60
 
         logger.info(f"部署参数: engine={engine}, napalm_mode={napalm_mode}, parallel_limit={parallel_limit}")
 
@@ -636,20 +634,21 @@ async def execute_deploy(deploy_data: dict):
             deploy_service = get_deploy_service()
             logger.info(f"使用 Netmiko 引擎部署")
 
-        # 使用独立的线程池执行器
-        async with get_deploy_executor(max_workers=min(parallel_limit, 5)) as executor:
-            semaphore = asyncio.Semaphore(parallel_limit)
+        results = []
+        loop = asyncio.get_event_loop()
 
-            async def deploy_single_device(device_dict: dict):
-                """部署单个设备（带超时控制）"""
-                loop = asyncio.get_event_loop()
+        if parallel_limit == 1:
+            # ========== 串行模式：简单逐个执行 ==========
+            logger.info(f"串行模式：逐个部署 {len(device_data_list)} 个设备")
+            for device_dict in device_data_list:
+                logger.info(f"开始部署设备: {device_dict['name']}")
                 try:
                     if engine == 'napalm':
                         result = await asyncio.wait_for(
                             loop.run_in_executor(
-                                executor,
-                                lambda: deploy_service.deploy_to_device(
-                                    device=device_dict,
+                                None,  # 使用默认 executor
+                                lambda d=device_dict: deploy_service.deploy_to_device(
+                                    device=d,
                                     config=config_content,
                                     credential_groups=credential_groups,
                                     dry_run=dry_run,
@@ -661,9 +660,9 @@ async def execute_deploy(deploy_data: dict):
                     else:
                         result = await asyncio.wait_for(
                             loop.run_in_executor(
-                                executor,
-                                lambda: deploy_service.deploy_to_device(
-                                    device=device_dict,
+                                None,
+                                lambda d=device_dict: deploy_service.deploy_to_device(
+                                    device=d,
                                     config=config_content,
                                     credential_groups=credential_groups,
                                     dry_run=dry_run
@@ -671,67 +670,117 @@ async def execute_deploy(deploy_data: dict):
                             ),
                             timeout=DEVICE_TIMEOUT
                         )
-                    return result
+                    results.append(result)
+                    logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
                 except asyncio.TimeoutError:
                     logger.warning(f"设备 {device_dict['name']} 部署超时 ({DEVICE_TIMEOUT}s)")
-                    return {
+                    results.append({
                         'device_id': device_dict['id'],
                         'device_name': device_dict['name'],
                         'success': False,
                         'message': f'部署超时（{DEVICE_TIMEOUT}秒）'
-                    }
+                    })
                 except Exception as e:
                     logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
-                    return {
+                    results.append({
                         'device_id': device_dict['id'],
                         'device_name': device_dict['name'],
                         'success': False,
                         'message': f'部署异常: {str(e)}'
-                    }
-
-            async def deploy_with_semaphore(device_dict: dict):
-                """带信号量控制的部署"""
-                async with semaphore:
-                    logger.info(f"开始部署设备: {device_dict['name']}")
-                    result = await deploy_single_device(device_dict)
-                    logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
-                    return result
-
-            # 并行执行所有设备部署（带整体超时）
-            logger.info(f"开始并行部署 {len(device_data_list)} 个设备，并行数量: {parallel_limit}")
-            try:
-                results = await asyncio.wait_for(
-                    asyncio.gather(
-                        *[deploy_with_semaphore(d) for d in device_data_list],
-                        return_exceptions=True
-                    ),
-                    timeout=TOTAL_TIMEOUT
-                )
-            except asyncio.TimeoutError:
-                logger.error(f"整体部署超时 ({TOTAL_TIMEOUT}s)")
-                raise HTTPException(status_code=504, detail=f"部署超时，请减少设备数量或增加并行数")
-
-            # 处理结果
-            success_count = 0
-            failed_count = 0
-            processed_results = []
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    processed_results.append({
-                        'device_id': device_data_list[i]['id'],
-                        'device_name': device_data_list[i]['name'],
-                        'success': False,
-                        'message': f'部署异常: {str(result)}'
                     })
-                    failed_count += 1
-                else:
-                    processed_results.append(result)
-                    if result.get('success'):
-                        success_count += 1
-                    else:
-                        failed_count += 1
 
-            results = processed_results
+        else:
+            # ========== 并行模式：使用线程池 + semaphore ==========
+            # 整体超时时间（秒）
+            TOTAL_TIMEOUT = DEVICE_TIMEOUT * len(device_data_list) / parallel_limit + 60
+
+            # 使用独立的线程池执行器
+            async with get_deploy_executor(max_workers=min(parallel_limit, 5)) as executor:
+                semaphore = asyncio.Semaphore(parallel_limit)
+
+                async def deploy_single_device(device_dict: dict):
+                    """部署单个设备（带超时控制）"""
+                    try:
+                        if engine == 'napalm':
+                            result = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    executor,
+                                    lambda: deploy_service.deploy_to_device(
+                                        device=device_dict,
+                                        config=config_content,
+                                        credential_groups=credential_groups,
+                                        dry_run=dry_run,
+                                        mode=napalm_mode
+                                    )
+                                ),
+                                timeout=DEVICE_TIMEOUT
+                            )
+                        else:
+                            result = await asyncio.wait_for(
+                                loop.run_in_executor(
+                                    executor,
+                                    lambda: deploy_service.deploy_to_device(
+                                        device=device_dict,
+                                        config=config_content,
+                                        credential_groups=credential_groups,
+                                        dry_run=dry_run
+                                    )
+                                ),
+                                timeout=DEVICE_TIMEOUT
+                            )
+                        return result
+                    except asyncio.TimeoutError:
+                        logger.warning(f"设备 {device_dict['name']} 部署超时 ({DEVICE_TIMEOUT}s)")
+                        return {
+                            'device_id': device_dict['id'],
+                            'device_name': device_dict['name'],
+                            'success': False,
+                            'message': f'部署超时（{DEVICE_TIMEOUT}秒）'
+                        }
+                    except Exception as e:
+                        logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
+                        return {
+                            'device_id': device_dict['id'],
+                            'device_name': device_dict['name'],
+                            'success': False,
+                            'message': f'部署异常: {str(e)}'
+                        }
+
+                async def deploy_with_semaphore(device_dict: dict):
+                    """带信号量控制的部署"""
+                    async with semaphore:
+                        logger.info(f"开始部署设备: {device_dict['name']}")
+                        result = await deploy_single_device(device_dict)
+                        logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
+                        return result
+
+                # 并行执行所有设备部署（带整体超时）
+                logger.info(f"并行模式：同时部署 {len(device_data_list)} 个设备，并行数量: {parallel_limit}")
+                try:
+                    results = await asyncio.wait_for(
+                        asyncio.gather(
+                            *[deploy_with_semaphore(d) for d in device_data_list],
+                            return_exceptions=True
+                        ),
+                        timeout=TOTAL_TIMEOUT
+                    )
+                except asyncio.TimeoutError:
+                    logger.error(f"整体部署超时 ({TOTAL_TIMEOUT}s)")
+                    raise HTTPException(status_code=504, detail=f"部署超时，请减少设备数量或增加并行数")
+
+                # 处理结果
+                processed_results = []
+                for i, result in enumerate(results):
+                    if isinstance(result, Exception):
+                        processed_results.append({
+                            'device_id': device_data_list[i]['id'],
+                            'device_name': device_data_list[i]['name'],
+                            'success': False,
+                            'message': f'部署异常: {str(result)}'
+                        })
+                    else:
+                        processed_results.append(result)
+                results = processed_results
 
         # ========== 阶段3：重新获取 Session 写入审计日志 ==========
         logger.info("并行部署完成，重新获取数据库连接写入审计日志")
@@ -760,11 +809,15 @@ async def execute_deploy(deploy_data: dict):
         finally:
             db_log.close()
 
+        # 计算成功/失败数量
+        success_count = sum(1 for r in results if r.get('success'))
+        failed_count = len(results) - success_count
+
         return {
             "success": True,
             "results": results,
             "summary": {
-                "total": len(devices),
+                "total": len(device_data_list),
                 "success": success_count,
                 "failed": failed_count
             }
