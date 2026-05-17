@@ -40,25 +40,6 @@
       </div>
     </section>
 
-    <!-- 生产环境警告 -->
-    <section
-      v-if="isProductionEnv && deployForm.target_devices.length > 1"
-      class="warning-section"
-    >
-      <div class="warning-card">
-        <el-icon class="warning-icon"><WarningFilled /></el-icon>
-        <div class="warning-content">
-          <div class="warning-title">{{ t('deployProductionWarningTitle') }}</div>
-          <div class="warning-desc">
-            {{ t('deployProductionWarning', { count: deployForm.target_devices.length }) }}
-          </div>
-        </div>
-        <el-tag type="warning" effect="dark" size="large">
-          {{ t('deploySerialExecution') }}
-        </el-tag>
-      </div>
-    </section>
-
     <!-- 主内容区 -->
     <section class="main-content-area">
       <el-row :gutter="20" class="full-height">
@@ -254,26 +235,35 @@
                 </el-select>
                 <div class="section-desc">{{ t('deployDeviceTip') }}</div>
 
-                <!-- 执行模式提示 -->
-                <div v-if="deployForm.target_devices.length > 1" class="execution-mode-hint">
-                  <el-tag
-                    v-if="isProductionEnv"
-                    type="warning"
-                    effect="dark"
-                    size="large"
-                    class="status-tag"
-                  >
-                    <span class="status-content">
-                      <el-icon><WarningFilled /></el-icon>
-                      <span>{{ t('deploySerialMode') }}</span>
-                    </span>
-                  </el-tag>
-                  <el-tag v-else type="success" effect="dark" size="large" class="status-tag">
-                    <span class="status-content">
-                      <el-icon><CircleCheckFilled /></el-icon>
-                      <span>{{ t('deployParallelMode', { limit: parallelLimit }) }}</span>
-                    </span>
-                  </el-tag>
+                <!-- 执行模式选择 -->
+                <div v-if="deployForm.target_devices.length > 1" class="execution-mode-section">
+                  <div class="mode-options">
+                    <el-radio-group v-model="executionMode" size="small">
+                      <el-radio-button value="serial">
+                        <span class="mode-option-content">
+                          <el-icon><Loading /></el-icon>
+                          <span>{{ t('deploySerialModeLabel') }}</span>
+                        </span>
+                      </el-radio-button>
+                      <el-radio-button value="parallel">
+                        <span class="mode-option-content">
+                          <el-icon><CircleCheckFilled /></el-icon>
+                          <span>{{ t('deployParallelModeLabel') }}</span>
+                        </span>
+                      </el-radio-button>
+                    </el-radio-group>
+                  </div>
+                  <div v-if="executionMode === 'parallel'" class="parallel-limit-input">
+                    <span class="limit-label">{{ t('deployParallelLimitLabel') }}</span>
+                    <el-input-number
+                      v-model="parallelLimit"
+                      :min="1"
+                      :max="5"
+                      size="small"
+                      controls-position="right"
+                    />
+                    <span class="limit-tip">{{ t('deployParallelLimitTip') }}</span>
+                  </div>
                 </div>
               </div>
 
@@ -778,9 +768,9 @@ const { t } = useI18n()
 // 暗黑模式检测
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
-// 环境控制
-const isProductionEnv = ref(false)
-const parallelLimit = ref(1)
+// 执行模式控制
+const executionMode = ref('serial')  // serial | parallel
+const parallelLimit = ref(1)  // 并行数量，建议不超过3
 
 // 数据
 const devices = ref([])
@@ -1006,27 +996,7 @@ const loadTemplateVariables = async (templateId) => {
   }
 }
 
-// 环境检测
-const detectEnvironment = () => {
-  const productionPatterns = [
-    /prod/i, /production/i, /live/i, /core/i,
-    /border/i, /wan/i, /internet/i
-  ]
-
-  const hasProductionDevice = deployForm.value.target_devices.some(deviceId => {
-    const device = devices.value.find(d => d.id === deviceId)
-    if (!device) return false
-    return productionPatterns.some(pattern =>
-      pattern.test(device.name) || pattern.test(device.ip)
-    )
-  })
-
-  isProductionEnv.value = hasProductionDevice
-  parallelLimit.value = isProductionEnv.value ? 1 : 3
-}
-
 const handleDeviceChange = () => {
-  detectEnvironment()
   // 重置设备执行列表
   deviceExecutions.value = deployForm.value.target_devices.map(id => {
     const device = devices.value.find(d => d.id === id)
@@ -1336,14 +1306,22 @@ const confirmDeploy = async () => {
     return
   }
 
-  detectEnvironment()
+  // 计算实际并行数量：串行模式为1，并行模式使用用户设置的值
+  const actualParallelLimit = executionMode.value === 'serial' ? 1 : parallelLimit.value
 
-  // 生产环境多设备警告
-  if (isProductionEnv.value && deployForm.value.target_devices.length > 1) {
+  // 多设备部署确认
+  if (deployForm.value.target_devices.length > 1) {
+    const modeText = executionMode.value === 'serial'
+      ? t('deploySerialModeLabel')
+      : t('deployParallelModeLabel') + ` (${actualParallelLimit})`
+
     try {
       await ElMessageBox.confirm(
-        t('deployProductionConfirm', { count: deployForm.value.target_devices.length }),
-        t('deployProductionWarningTitle'),
+        t('deployMultiDeviceConfirm', {
+          count: deployForm.value.target_devices.length,
+          mode: modeText
+        }),
+        t('deployConfirmTitle'),
         { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'warning' }
       )
     } catch {
@@ -1398,8 +1376,7 @@ const executeDeploy = async () => {
       target_devices: deployForm.value.target_devices,
       variables: {},
       dry_run: deployForm.value.dry_run,
-      is_production: isProductionEnv.value,
-      parallel_limit: parallelLimit.value
+      parallel_limit: executionMode.value === 'serial' ? 1 : parallelLimit.value
     }
 
     deployForm.value.variables.forEach(v => {
@@ -2141,6 +2118,51 @@ onMounted(async () => {
   font-size: 12px;
   color: var(--text-secondary);
   margin-top: 5px;
+}
+
+.execution-mode-section {
+  margin-top: 12px;
+  padding: 12px;
+  background: var(--bg-hover);
+  border-radius: 8px;
+}
+
+.mode-options {
+  display: flex;
+  align-items: center;
+}
+
+.mode-options :deep(.el-radio-group) {
+  display: inline-flex;
+}
+
+.mode-option-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.mode-option-content .el-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.parallel-limit-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-left: 10px;
+}
+
+.limit-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.limit-tip {
+  font-size: 12px;
+  color: var(--text-muted);
 }
 
 .execution-mode-hint {
