@@ -213,6 +213,15 @@ export function rollbackDeploy(data) {
   return api.post('/deploy/rollback', data)
 }
 
+// 部署历史
+export function getDeployHistory(params) {
+  return api.get('/deploy/history', { params })
+}
+
+export function getDeployHistoryDetail(historyId) {
+  return api.get(`/deploy/history/${historyId}`)
+}
+
 export function getCompatibleVariables() {
   return api.get('/deploy/compatible-variables')
 }

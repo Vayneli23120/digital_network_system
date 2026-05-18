@@ -517,7 +517,7 @@
                 <div class="cli-panel-header">
                   <span class="cli-panel-title">{{ t('deployHistory') }}</span>
                 </div>
-                <div class="history-list">
+                <div class="history-list" v-loading="historyLoading">
                   <div
                     v-for="(record, idx) in deployHistory"
                     :key="record.id || idx"
@@ -531,6 +531,7 @@
                     >
                       <div class="history-info">
                         <span class="history-time">{{ formatDateTime(record.timestamp) }}</span>
+                        <span class="history-operator" v-if="record.username">{{ record.username }}</span>
                         <el-tag :type="record.success ? 'success' : 'danger'" size="small">
                           {{ record.success ? t('statusSuccess') : t('statusFailed') }}
                         </el-tag>
@@ -792,7 +793,9 @@ import {
   rollbackDeploy as rollbackDeployApi,
   getCompatibleVariables,
   getMaintenanceWindows,
-  scheduleDeploy
+  scheduleDeploy,
+  getDeployHistory,
+  getDeployHistoryDetail
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -843,38 +846,23 @@ const aborting = ref(false)
 const showVariableHelp = ref(false)
 const cliOutputRef = ref(null)
 
-// 部署历史记录（从 localStorage 加载）
+// 部署历史记录（从后端 API 加载）
 const deployHistory = ref([])
 const selectedHistoryId = ref(null)
 const currentHistoryId = ref(null)  // 当前正在操作的部署记录ID（用于回滚关联）
+const historyLoading = ref(false)
 
 // 加载历史记录
-const loadHistory = () => {
+const loadHistory = async () => {
   try {
-    const saved = localStorage.getItem('deployHistory')
-    if (saved) {
-      deployHistory.value = JSON.parse(saved)
-      // 从 localStorage 加载当前历史 ID
-      const savedCurrentId = localStorage.getItem('currentHistoryId')
-      if (savedCurrentId) {
-        currentHistoryId.value = parseInt(savedCurrentId)
-      }
-    }
+    historyLoading.value = true
+    const res = await getDeployHistory({ limit: 50 })
+    deployHistory.value = res.history || []
   } catch (e) {
     console.error('Failed to load deploy history:', e)
-  }
-}
-
-// 保存历史记录到 localStorage
-const saveHistoryToStorage = () => {
-  try {
-    localStorage.setItem('deployHistory', JSON.stringify(deployHistory.value))
-    // 同时保存当前历史 ID
-    if (currentHistoryId.value) {
-      localStorage.setItem('currentHistoryId', String(currentHistoryId.value))
-    }
-  } catch (e) {
-    console.error('Failed to save deploy history:', e)
+    ElMessage.error(t('deployLoadHistoryFailed'))
+  } finally {
+    historyLoading.value = false
   }
 }
 
@@ -1129,125 +1117,36 @@ const scrollToBottom = () => {
   })
 }
 
-// 保存部署到历史记录
-const saveToHistory = (result) => {
-  // 计算每个设备的状态
-  const deviceResults = deviceExecutions.value.map(d => {
-    const r = result.results?.find(r => Number(r.device_id) === Number(d.device_id))
-
-    // 构建日志内容：使用后端返回的数据 + 前端累积的日志
-    const logs = []
-
-    // 先添加前端累积的日志（如果有）
-    if (d.cliLogs && d.cliLogs.length > 0) {
-      logs.push(...d.cliLogs)
-    }
-
-    // 再添加后端返回的数据（确保保存完整）
-    if (r) {
-      if (r.cli_output && !logs.some(l => l.content === r.cli_output)) {
-        logs.push({
-          timestamp: new Date().toISOString(),
-          content: r.cli_output,
-          type: 'info'
-        })
-      }
-      if (r.diff && !logs.some(l => l.content?.includes(r.diff))) {
-        logs.push({
-          timestamp: new Date().toISOString(),
-          content: `配置差异:\n${r.diff}`,
-          type: 'diff'
-        })
-      }
-      if (r.errors && r.errors.length > 0) {
-        r.errors.forEach(err => {
-          if (!logs.some(l => l.content?.includes(err))) {
-            logs.push({
-              timestamp: new Date().toISOString(),
-              content: `错误: ${err}`,
-              type: 'error'
-            })
-          }
-        })
-      }
-    }
-
-    return {
-      device_id: d.device_id,
-      device_name: d.device_name,
-      status: r?.success ? 'completed' : 'failed',
-      message: r?.message || '',
-      rollback_available: r?.rollback_available || false,
-      logs: logs  // 使用完整的日志
-    }
-  })
-
-  // 计算总体状态：所有设备都成功才算成功
-  const allSuccess = deviceResults.every(d => d.status === 'completed')
-
-  // 保存部署配置，用于重新部署
-  const deployConfig = {
-    mode: deployForm.value.mode,
-    engine: deployForm.value.engine,
-    napalm_mode: deployForm.value.napalm_mode,
-    backup_file: deployForm.value.backup_file,
-    template_id: deployForm.value.template_id,
-    snippet: deployForm.value.snippet,
-    snippet_position: deployForm.value.snippet_position,
-    base_backup_file: deployForm.value.base_backup_file,
-    variables: deployForm.value.variables ? JSON.parse(JSON.stringify(deployForm.value.variables)) : []
-  }
-
-  // 确定是否为重新部署
-  const isRedeploy = redeployParentId.value !== null
-  const parentId = redeployParentId.value
-
-  const historyRecord = {
-    id: Date.now(),
-    timestamp: new Date().toISOString(),
-    success: allSuccess,
-    engine: deployForm.value.engine,
-    mode: isRedeploy ? 'redeploy' : (deployForm.value.napalm_mode || deployForm.value.mode),
-    device_names: deviceResults.map(d => d.device_name),
-    results: result.results,
-    deviceResults: deviceResults,  // 保存每个设备的详细状态
-    cliLogs: deviceResults,
-    deployConfig: deployConfig,  // 保存部署配置，用于重新部署
-    parent_id: parentId,  // 重新部署时关联到父记录
-    children: []  // 子记录（回滚、重新部署）
-  }
-
-  // 如果是重新部署，更新父记录的 children
-  if (isRedeploy) {
-    const parentRecord = deployHistory.value.find(h => h.id === parentId)
-    if (parentRecord) {
-      if (!parentRecord.children) {
-        parentRecord.children = []
-      }
-      parentRecord.children.push(historyRecord.id)
-    }
-    // 清空重新部署标记
-    redeployParentId.value = null
-  }
-  // 添加到历史列表顶部
-  deployHistory.value.unshift(historyRecord)
-  // 限制历史记录数量
-  if (deployHistory.value.length > 50) {
-    deployHistory.value.pop()
-  }
-  // 保存到 localStorage
-  saveHistoryToStorage()
-
-  // 返回记录 ID，供回滚时使用
-  return historyRecord.id
-}
-
-// 加载历史记录到左侧面板
-const loadHistoryRecord = (record) => {
+// 加载历史记录详情到左侧面板
+const loadHistoryRecord = async (record) => {
   selectedHistoryId.value = record.id
+
+  // 如果 record 只有摘要信息，从 API 加载完整详情
+  let fullRecord = record
+  if (!record.deviceResults || record.deviceResults.length === 0 || !record.deviceResults[0]?.logs) {
+    try {
+      fullRecord = await getDeployHistoryDetail(record.id)
+    } catch (e) {
+      console.error('Failed to load history detail:', e)
+      return
+    }
+  }
+
   // 清空当前设备执行状态，使用保存的状态
-  deviceExecutions.value = (record.deviceResults || record.cliLogs).map(d => ({
+  deviceExecutions.value = (fullRecord.deviceResults || []).map(d => ({
     device_id: d.device_id,
+    device_name: d.device_name,
+    status: d.status || 'completed',  // 使用保存的状态，默认 completed
+    message: d.message || '',
+    progress: 100,
+    cliLogs: d.logs || [],
+    rollback_available: d.rollback_available || false
+  }))
+  // 选中第一个设备
+  if (deviceExecutions.value.length > 0) {
+    selectedDevice.value = deviceExecutions.value[0]
+  }
+}
     device_name: d.device_name,
     status: d.status || 'completed',  // 使用保存的状态，默认 completed
     message: d.message || '',
@@ -1281,7 +1180,7 @@ const canRollback = (record) => {
 // 从历史记录执行回滚
 const handleHistoryRollback = async (record) => {
   // 先加载历史记录到设备执行列表
-  loadHistoryRecord(record)
+  await loadHistoryRecord(record)
   // 然后执行回滚
   await handleRollback()
 }
@@ -1289,14 +1188,25 @@ const handleHistoryRollback = async (record) => {
 // 从历史记录重新部署
 const handleRedeploy = async (record) => {
   try {
+    // 如果需要完整配置，从 API 加载详情
+    let fullRecord = record
+    if (!record.deployConfig && !record.deploy_config) {
+      try {
+        fullRecord = await getDeployHistoryDetail(record.id)
+      } catch (e) {
+        ElMessage.warning(t('deployRedeployNoConfig'))
+        return
+      }
+    }
+
     // 检查是否有部署配置
-    const config = record.deployConfig
+    const config = fullRecord.deployConfig || fullRecord.deploy_config
     if (!config) {
       ElMessage.warning(t('deployRedeployNoConfig'))
       return
     }
 
-    const deviceIds = record.deviceResults?.map(d => d.device_id) || []
+    const deviceIds = fullRecord.deviceResults?.map(d => d.device_id) || fullRecord.target_devices?.map(d => d.id) || []
     if (deviceIds.length === 0) {
       ElMessage.warning(t('deployNoDevicesInHistory'))
       return
@@ -1682,9 +1592,12 @@ const executeDeploy = async () => {
       ElMessage.error(t('deployFailed'))
     }
 
-    // 保存到部署历史，并保存当前历史ID用于回滚关联
-    const historyId = saveToHistory(result)
-    currentHistoryId.value = historyId  // 保存当前历史ID
+    // 使用 API 返回的 history_id，并重新加载历史记录
+    if (result.history_id) {
+      currentHistoryId.value = result.history_id
+    }
+    // 重新加载历史记录
+    await loadHistory()
 
   } catch (error) {
     stopTimer()
@@ -1801,7 +1714,8 @@ const handleRollback = async () => {
     )
 
     const rollbackData = {
-      target_devices: rollbackDevices
+      target_devices: rollbackDevices,
+      parent_id: selectedHistoryId.value || currentHistoryId.value || null
     }
 
     executionStatus.value = 'running'
@@ -1810,7 +1724,6 @@ const handleRollback = async () => {
     stopTimer()
 
     // 处理回滚结果
-    // 先将所有没有 rollback_available 的设备标记为 skipped
     deviceExecutions.value.forEach(d => {
       if (!d.rollback_available) {
         d.status = 'skipped'
@@ -1818,21 +1731,16 @@ const handleRollback = async () => {
       }
     })
 
-    // 然后处理有回滚结果的设备
     if (result.results && result.results.length > 0) {
       result.results.forEach(r => {
-        // 使用宽松比较，确保类型匹配
         const device = deviceExecutions.value.find(d => Number(d.device_id) === Number(r.device_id))
         if (device) {
           device.status = r.success ? 'completed' : 'failed'
           device.message = r.message || (r.success ? '回滚成功' : '回滚失败')
           device.progress = 100
           device.rollback_available = false
-
-          // 清空之前的日志并显示回滚日志
           device.cliLogs = []
 
-          // 显示 CLI 输出
           if (r.cli_output) {
             device.cliLogs.push({
               timestamp: new Date().toISOString(),
@@ -1840,8 +1748,6 @@ const handleRollback = async () => {
               type: 'info'
             })
           }
-
-          // 显示配置差异
           if (r.diff) {
             device.cliLogs.push({
               timestamp: new Date().toISOString(),
@@ -1849,8 +1755,6 @@ const handleRollback = async () => {
               type: 'diff'
             })
           }
-
-          // 显示错误
           if (r.errors && r.errors.length > 0) {
             r.errors.forEach(err => {
               device.cliLogs.push({
@@ -1867,77 +1771,8 @@ const handleRollback = async () => {
     executionStatus.value = result.success ? 'completed' : 'failed'
     clearCache('devices')
 
-    // 保存回滚到历史记录
-    if (result.results) {
-      // 计算每个设备的回滚状态
-      const rollbackDeviceResults = deviceExecutions.value.map(d => {
-        const rollbackResult = result.results.find(r => Number(r.device_id) === Number(d.device_id))
-        // 如果有回滚结果（说明该设备被执行了回滚），使用回滚结果状态
-        // 如果没有回滚结果（说明该设备原部署失败，未执行回滚），标记为 skipped
-        if (rollbackResult) {
-          return {
-            device_id: d.device_id,
-            device_name: d.device_name,
-            status: rollbackResult.success ? 'completed' : 'failed',
-            message: rollbackResult.message || (rollbackResult.success ? '回滚成功' : '回滚失败'),
-            rollback_available: false,  // 回滚后不再可回滚
-            logs: d.cliLogs
-          }
-        } else {
-          return {
-            device_id: d.device_id,
-            device_name: d.device_name,
-            status: 'skipped',  // 跳过回滚（原部署失败）
-            message: '原部署失败，未执行回滚',
-            rollback_available: false,
-            logs: d.cliLogs
-          }
-        }
-      })
-
-      const rollbackHistory = {
-        id: Date.now(),
-        timestamp: new Date().toISOString(),
-        success: result.success,
-        engine: deployForm.value.engine,
-        mode: 'rollback',  // 标记为回滚操作
-        device_names: rollbackDeviceResults.map(d => d.device_name),
-        results: result.results,
-        deviceResults: rollbackDeviceResults,  // 保存每个设备的详细回滚状态
-        cliLogs: rollbackDeviceResults,
-        parent_id: selectedHistoryId.value || currentHistoryId.value || null  // 关联到父记录（原始部署）
-      }
-      deployHistory.value.unshift(rollbackHistory)
-      if (deployHistory.value.length > 50) {
-        deployHistory.value.pop()
-      }
-
-      // 回滚成功后，更新原始部署历史记录的 rollback_available 状态
-      // 防止刷新页面后再次显示可回滚
-      if (result.success) {
-        // 找到父记录（原始部署）
-        const parentRecord = deployHistory.value.find(h => h.id === rollbackHistory.parent_id)
-
-        if (parentRecord) {
-          // 更新已回滚设备的 rollback_available 为 false
-          parentRecord.deviceResults.forEach(d => {
-            if (rollbackDevices.includes(d.device_id)) {
-              d.rollback_available = false
-              d.rollback_status = 'rolled_back'  // 标记已回滚
-              d.rollback_time = new Date().toISOString()
-            }
-          })
-          // 将回滚记录添加到父记录的 children 数组
-          if (!parentRecord.children) {
-            parentRecord.children = []
-          }
-          parentRecord.children.push(rollbackHistory.id)
-          console.log('已更新原始部署历史记录的回滚状态，并建立任务链关联')
-        }
-      }
-
-      saveHistoryToStorage()
-    }
+    // 重新加载历史记录
+    await loadHistory()
 
     if (result.success) {
       ElMessage.success(t('deployRollbackSuccess'))
@@ -2058,7 +1893,7 @@ const confirmDeployFromPreview = async () => {
 
 onMounted(async () => {
   // 加载部署历史
-  loadHistory()
+  await loadHistory()
 
   // 依次加载，避免同时触发太多请求
   await loadDevices()
@@ -3018,6 +2853,15 @@ onMounted(async () => {
 .history-time {
   font-size: 12px;
   color: var(--text-secondary);
+}
+
+.history-operator {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: var(--bg-hover);
+  border-radius: 4px;
 }
 
 .history-devices {

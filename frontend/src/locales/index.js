@@ -1339,6 +1339,10 @@ export const languages = {
     deployRedeployNoConfig: '历史记录中没有保存部署配置',
     deployRedeployConfigMissing: '缺少必要配置',
     deployRedeployFailed: '重新部署失败',
+    deployOperator: '操作人',
+    deployOperationType: '操作类型',
+    deployLoadHistoryFailed: '加载历史记录失败',
+    deployRedeployNoConfig: '历史记录中没有保存部署配置',
 
     // 部署审批
     deployPendingApproval: '部署任务已提交，等待审批',
@@ -3939,6 +3943,10 @@ export const languages = {
     deployRedeployNoConfig: 'No deploy config saved in history',
     deployRedeployConfigMissing: 'Missing required config',
     deployRedeployFailed: 'Redeploy failed',
+    deployOperator: 'Operator',
+    deployOperationType: 'Operation Type',
+    deployLoadHistoryFailed: 'Failed to load history',
+    deployRedeployNoConfig: 'No deploy config saved in history',
 
     // Deploy Approval
     deployPendingApproval: 'Deployment task submitted, pending approval',

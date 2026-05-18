@@ -1,24 +1,28 @@
 """Configuration deployment router"""
 
 import asyncio
+import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 from loguru import logger
 from jinja2 import Template
 
 from app.shared.database import get_db
-from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog
+from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User
+from app.shared.config import get_config
+from app.features.auth.router import get_current_user_from_token
 from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
 from .napalm_service import get_napalm_service
 from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, DiffLine
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
+config = get_config()
 
 # 每个请求使用独立的线程池，避免全局资源争抢
 @asynccontextmanager
@@ -493,6 +497,7 @@ async def execute_deploy(deploy_data: dict):
     }
     """
     db: Session = next(get_db())
+    history_record = None  # 部署历史记录
 
     try:
         mode = deploy_data.get('mode', 'backup')
@@ -782,7 +787,7 @@ async def execute_deploy(deploy_data: dict):
                         processed_results.append(result)
                 results = processed_results
 
-        # ========== 阶段3：重新获取 Session 写入审计日志 ==========
+        # ========== 阶段3：重新获取 Session 写入审计日志和历史记录 ==========
         logger.info("并行部署完成，重新获取数据库连接写入审计日志")
         db_log: Session = next(get_db())
         try:
@@ -802,6 +807,30 @@ async def execute_deploy(deploy_data: dict):
                 )
                 db_log.add(audit_log)
 
+            # 创建部署历史记录（仅非 dry_run）
+            if not dry_run:
+                deploy_config_data = {
+                    'mode': mode,
+                    'engine': engine,
+                    'napalm_mode': napalm_mode,
+                    'backup_file': deploy_data.get('backup_file'),
+                    'template_id': deploy_data.get('template_id'),
+                    'snippet': deploy_data.get('snippet'),
+                    'snippet_position': deploy_data.get('snippet_position'),
+                    'base_backup_file': deploy_data.get('base_backup_file'),
+                    'variables': variables
+                }
+                history_record = create_deploy_history(
+                    db=db_log,
+                    operation_type='deploy',
+                    engine=engine,
+                    mode=napalm_mode if engine == 'napalm' else mode,
+                    device_data_list=device_data_list,
+                    results=results,
+                    deploy_config=deploy_config_data,
+                    parent_id=deploy_data.get('parent_id')  # 重新部署时关联父记录
+                )
+
             db_log.commit()
         except Exception as log_error:
             logger.error(f"写入审计日志失败: {log_error}")
@@ -813,7 +842,7 @@ async def execute_deploy(deploy_data: dict):
         success_count = sum(1 for r in results if r.get('success'))
         failed_count = len(results) - success_count
 
-        return {
+        response = {
             "success": True,
             "results": results,
             "summary": {
@@ -822,6 +851,12 @@ async def execute_deploy(deploy_data: dict):
                 "failed": failed_count
             }
         }
+
+        # 返回历史记录 ID（用于回滚关联）
+        if not dry_run and history_record:
+            response["history_id"] = history_record.id
+
+        return response
 
     except HTTPException:
         raise
@@ -917,6 +952,21 @@ async def rollback_deploy(rollback_data: dict):
             )
             db.add(audit_log)
 
+        # 创建回滚历史记录
+        device_data_list = [
+            {'id': d.id, 'name': d.name, 'ip': d.ip}
+            for d in devices
+        ]
+        history_record = create_deploy_history(
+            db=db,
+            operation_type='rollback',
+            engine='napalm',  # 回滚只支持 NAPALM
+            mode='rollback',
+            device_data_list=device_data_list,
+            results=results,
+            parent_id=rollback_data.get('parent_id')  # 关联到原始部署记录
+        )
+
         db.commit()
 
         return {
@@ -926,7 +976,8 @@ async def rollback_deploy(rollback_data: dict):
                 "total": len(devices),
                 "success": success_count,
                 "failed": failed_count
-            }
+            },
+            "history_id": history_record.id
         }
 
     except HTTPException:
@@ -1048,3 +1099,226 @@ async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"预约部署失败：{e}")
         raise HTTPException(status_code=500, detail=f"Scheduling failed: {str(e)}")
+
+
+# =============================================================================
+# 部署历史 API
+# =============================================================================
+
+def get_current_username() -> str:
+    """获取当前用户名，认证关闭时返回 system"""
+    if not config.security.auth_enabled:
+        return "system"
+    return "Web"  # 简化处理，实际应从 JWT 获取
+
+
+@router.get("/history")
+async def get_deploy_history(
+    limit: int = 50,
+    offset: int = 0,
+    operation_type: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    获取部署历史列表
+
+    参数:
+    - limit: 返回数量限制
+    - offset: 偏移量
+    - operation_type: 操作类型筛选 (deploy/rollback/redeploy)
+    """
+    try:
+        query = db.query(DeployHistory).order_by(DeployHistory.created_at.desc())
+
+        if operation_type:
+            query = query.filter(DeployHistory.operation_type == operation_type)
+
+        total = query.count()
+        records = query.offset(offset).limit(limit).all()
+
+        # 构建返回数据
+        history_list = []
+        for record in records:
+            device_results = db.query(DeployDeviceResult).filter(
+                DeployDeviceResult.deploy_id == record.id
+            ).all()
+
+            history_list.append({
+                "id": record.id,
+                "timestamp": record.created_at.isoformat() if record.created_at else None,
+                "success": record.success,
+                "engine": record.engine,
+                "mode": record.mode,
+                "operation_type": record.operation_type,
+                "username": record.username,
+                "device_names": [dr.device_name for dr in device_results],
+                "total_devices": record.total_devices,
+                "success_count": record.success_count,
+                "failed_count": record.failed_count,
+                "parent_id": record.parent_id,
+                "deviceResults": [{
+                    "device_id": dr.device_id,
+                    "device_name": dr.device_name,
+                    "status": dr.status,
+                    "rollback_available": dr.rollback_available,
+                    "rollback_status": dr.rollback_status,
+                    "logs": _build_logs_from_result(dr)
+                } for dr in device_results]
+            })
+
+        return {
+            "total": total,
+            "history": history_list
+        }
+
+    except Exception as e:
+        logger.error(f"获取部署历史失败：{e}")
+        raise HTTPException(status_code=500, detail=f"获取历史失败：{str(e)}")
+
+
+@router.get("/history/{history_id}")
+async def get_deploy_history_detail(history_id: int, db: Session = Depends(get_db)):
+    """
+    获取单条部署历史详情（包含完整 CLI 输出）
+    """
+    try:
+        record = db.query(DeployHistory).filter(DeployHistory.id == history_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="历史记录不存在")
+
+        device_results = db.query(DeployDeviceResult).filter(
+            DeployDeviceResult.deploy_id == record.id
+        ).all()
+
+        return {
+            "id": record.id,
+            "timestamp": record.created_at.isoformat() if record.created_at else None,
+            "success": record.success,
+            "engine": record.engine,
+            "mode": record.mode,
+            "operation_type": record.operation_type,
+            "username": record.username,
+            "total_devices": record.total_devices,
+            "success_count": record.success_count,
+            "failed_count": record.failed_count,
+            "parent_id": record.parent_id,
+            "deploy_config": record.get_deploy_config_dict(),
+            "target_devices": record.get_target_devices_list(),
+            "deviceResults": [{
+                "device_id": dr.device_id,
+                "device_name": dr.device_name,
+                "status": dr.status,
+                "rollback_available": dr.rollback_available,
+                "rollback_status": dr.rollback_status,
+                "cli_output": dr.cli_output,
+                "diff_output": dr.diff_output,
+                "error_message": dr.error_message,
+                "execution_time_ms": dr.execution_time_ms,
+                "logs": _build_logs_from_result(dr)
+            } for dr in device_results]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"获取部署历史详情失败：{e}")
+        raise HTTPException(status_code=500, detail=f"获取详情失败：{str(e)}")
+
+
+def _build_logs_from_result(dr: DeployDeviceResult) -> list:
+    """从设备执行结果构建日志列表"""
+    logs = []
+    if dr.cli_output:
+        logs.append({
+            "timestamp": dr.created_at.isoformat() if dr.created_at else None,
+            "content": dr.cli_output,
+            "type": "info"
+        })
+    if dr.diff_output:
+        logs.append({
+            "timestamp": dr.created_at.isoformat() if dr.created_at else None,
+            "content": f"配置差异:\n{dr.diff_output}",
+            "type": "diff"
+        })
+    if dr.error_message:
+        logs.append({
+            "timestamp": dr.created_at.isoformat() if dr.created_at else None,
+            "content": f"错误: {dr.error_message}",
+            "type": "error"
+        })
+    return logs
+
+
+def create_deploy_history(
+    db: Session,
+    operation_type: str,
+    engine: str,
+    mode: str,
+    device_data_list: list,
+    results: list,
+    deploy_config: dict = None,
+    parent_id: int = None,
+    username: str = None
+) -> DeployHistory:
+    """
+    创建部署历史记录和设备执行结果
+
+    Args:
+        db: 数据库会话
+        operation_type: 操作类型 (deploy/rollback/redeploy)
+        engine: 部署引擎 (napalm/netmiko)
+        mode: 部署模式 (merge/replace/snippet/template/backup)
+        device_data_list: 设备数据列表
+        results: 执行结果列表
+        deploy_config: 部署配置（用于重新部署）
+        parent_id: 父记录 ID（任务链）
+        username: 操作用户名
+
+    Returns:
+        DeployHistory 实例
+    """
+    # 计算统计数据
+    success_count = sum(1 for r in results if r.get('success'))
+    failed_count = len(results) - success_count
+    all_success = success_count == len(results)
+
+    # 创建历史主记录
+    history = DeployHistory(
+        user_id=None,  # 暂不关联用户 ID
+        username=username or get_current_username(),
+        operation_type=operation_type,
+        engine=engine,
+        mode=mode,
+        target_devices=json.dumps(device_data_list),
+        success=all_success,
+        total_devices=len(device_data_list),
+        success_count=success_count,
+        failed_count=failed_count,
+        parent_id=parent_id,
+        deploy_config=json.dumps(deploy_config) if deploy_config else None,
+        created_at=datetime.utcnow()
+    )
+    db.add(history)
+    db.flush()  # 获取 ID
+
+    # 创建设备执行结果
+    for device_dict, result in zip(device_data_list, results):
+        device_result = DeployDeviceResult(
+            deploy_id=history.id,
+            device_id=device_dict['id'],
+            device_name=device_dict['name'],
+            status='completed' if result.get('success') else 'failed',
+            rollback_available=result.get('rollback_available', False),
+            rollback_status='pending',
+            cli_output=result.get('cli_output'),
+            diff_output=result.get('diff'),
+            error_message=result.get('message') if not result.get('success') else None,
+            execution_time_ms=result.get('execution_time_ms'),
+            created_at=datetime.utcnow()
+        )
+        db.add(device_result)
+
+    db.commit()
+    logger.info(f"创建部署历史记录: id={history.id}, type={operation_type}, user={username}")
+
+    return history

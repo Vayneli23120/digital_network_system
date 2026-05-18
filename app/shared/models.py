@@ -837,3 +837,74 @@ class Notification(Base):
 
     def __repr__(self):
         return f"<Notification(user='{self.user}', type='{self.type}')>"
+
+
+class DeployHistory(Base):
+    """部署历史主表 - 记录每次部署/回滚/重新部署操作"""
+    __tablename__ = "deploy_history"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    username = Column(String(100), nullable=True)  # 操作用户名（冗余，方便显示）
+    operation_type = Column(String(20), nullable=False, index=True)  # deploy/rollback/redeploy
+    engine = Column(String(20), nullable=False)  # napalm/netmiko
+    mode = Column(String(20))  # merge/replace/snippet/template/backup
+    target_devices = Column(Text)  # JSON: [{id, name, ip}]
+    success = Column(Boolean, nullable=False)  # 整体是否成功
+    total_devices = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    parent_id = Column(Integer, ForeignKey("deploy_history.id", ondelete="SET NULL"), nullable=True)  # 关联父记录
+    deploy_config = Column(Text)  # JSON: 部署配置（用于重新部署）
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    # 关系
+    device_results = relationship("DeployDeviceResult", back_populates="deploy_history", cascade="all, delete-orphan")
+    children = relationship("DeployHistory", backref="parent", remote_side=[id])
+
+    def __repr__(self):
+        return f"<DeployHistory(id={self.id}, type={self.operation_type}, user={self.username})>"
+
+    def get_target_devices_list(self):
+        """解析目标设备JSON"""
+        if self.target_devices:
+            try:
+                import json
+                return json.loads(self.target_devices)
+            except:
+                return []
+        return []
+
+    def get_deploy_config_dict(self):
+        """解析部署配置JSON"""
+        if self.deploy_config:
+            try:
+                import json
+                return json.loads(self.deploy_config)
+            except:
+                return {}
+        return {}
+
+
+class DeployDeviceResult(Base):
+    """部署设备执行结果表 - 记录每个设备的部署结果"""
+    __tablename__ = "deploy_device_results"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    deploy_id = Column(Integer, ForeignKey("deploy_history.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(Integer, nullable=False, index=True)
+    device_name = Column(String(100), nullable=False)
+    status = Column(String(20), nullable=False)  # completed/failed/skipped
+    rollback_available = Column(Boolean, default=False)
+    rollback_status = Column(String(20), default="pending")  # pending/rolled_back
+    cli_output = Column(Text)  # CLI 输出内容
+    diff_output = Column(Text)  # 配置差异
+    error_message = Column(Text)  # 错误信息
+    execution_time_ms = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    deploy_history = relationship("DeployHistory", back_populates="device_results")
+
+    def __repr__(self):
+        return f"<DeployDeviceResult(deploy_id={self.deploy_id}, device={self.device_name}, status={self.status})>"
