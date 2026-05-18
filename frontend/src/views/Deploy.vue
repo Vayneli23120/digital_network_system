@@ -1156,18 +1156,6 @@ const loadHistoryRecord = async (record) => {
     selectedDevice.value = deviceExecutions.value[0]
   }
 }
-    device_name: d.device_name,
-    status: d.status || 'completed',  // 使用保存的状态，默认 completed
-    message: d.message || '',
-    progress: 100,
-    cliLogs: d.logs || [],
-    rollback_available: d.rollback_available || false
-  }))
-  // 选中第一个设备
-  if (deviceExecutions.value.length > 0) {
-    selectedDevice.value = deviceExecutions.value[0]
-  }
-}
 
 // 检查历史记录是否已被回滚
 const hasBeenRolledBack = (record) => {
