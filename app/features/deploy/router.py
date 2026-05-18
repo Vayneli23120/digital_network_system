@@ -497,7 +497,7 @@ async def execute_deploy(deploy_data: dict):
     }
     """
     db: Session = next(get_db())
-    history_record = None  # 部署历史记录
+    history_id = None  # 部署历史记录 ID
 
     try:
         mode = deploy_data.get('mode', 'backup')
@@ -820,7 +820,7 @@ async def execute_deploy(deploy_data: dict):
                     'base_backup_file': deploy_data.get('base_backup_file'),
                     'variables': variables
                 }
-                history_record = create_deploy_history(
+                history_id = create_deploy_history(
                     db=db_log,
                     operation_type='deploy',
                     engine=engine,
@@ -853,8 +853,8 @@ async def execute_deploy(deploy_data: dict):
         }
 
         # 返回历史记录 ID（用于回滚关联）
-        if not dry_run and history_record:
-            response["history_id"] = history_record.id
+        if not dry_run and history_id:
+            response["history_id"] = history_id
 
         return response
 
@@ -957,7 +957,7 @@ async def rollback_deploy(rollback_data: dict):
             {'id': d.id, 'name': d.name, 'ip': d.ip}
             for d in devices
         ]
-        history_record = create_deploy_history(
+        rollback_history_id = create_deploy_history(
             db=db,
             operation_type='rollback',
             engine='napalm',  # 回滚只支持 NAPALM
@@ -977,7 +977,7 @@ async def rollback_deploy(rollback_data: dict):
                 "success": success_count,
                 "failed": failed_count
             },
-            "history_id": history_record.id
+            "history_id": rollback_history_id
         }
 
     except HTTPException:
@@ -1275,7 +1275,7 @@ def create_deploy_history(
         username: 操作用户名
 
     Returns:
-        DeployHistory 实例
+        int: 新创建的历史记录 ID
     """
     # 计算统计数据
     success_count = sum(1 for r in results if r.get('success'))
@@ -1318,7 +1318,9 @@ def create_deploy_history(
         )
         db.add(device_result)
 
+    db.flush()  # 获取 ID
+    history_id = history.id
     db.commit()
-    logger.info(f"创建部署历史记录: id={history.id}, type={operation_type}, user={username}")
+    logger.info(f"创建部署历史记录: id={history_id}, type={operation_type}, user={username}")
 
-    return history
+    return history_id  # 返回 ID 而不是对象
