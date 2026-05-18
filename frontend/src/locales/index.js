@@ -1343,6 +1343,11 @@ export const languages = {
     deployOperationType: '操作类型',
     deployLoadHistoryFailed: '加载历史记录失败',
     deployRedeployNoConfig: '历史记录中没有保存部署配置',
+    deployDeleteHistory: '删除历史',
+    deployDeleteConfirm: '确定要删除该历史记录吗？此操作不可恢复。',
+    deployDeleteSuccess: '删除成功',
+    deployDeleteFailed: '删除失败',
+    deployDeletePermissionDenied: '需要管理员权限',
 
     // 部署审批
     deployPendingApproval: '部署任务已提交，等待审批',

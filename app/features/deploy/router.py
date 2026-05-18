@@ -1225,6 +1225,39 @@ async def get_deploy_history_detail(history_id: int, db: Session = Depends(get_d
         raise HTTPException(status_code=500, detail=f"获取详情失败：{str(e)}")
 
 
+@router.delete("/history/{history_id}")
+async def delete_deploy_history(history_id: int, db: Session = Depends(get_db)):
+    """
+    删除部署历史记录（仅管理员可用）
+
+    注意：认证关闭时默认允许删除
+    """
+    try:
+        # 检查权限（当认证启用时，需要管理员权限）
+        if config.security.auth_enabled:
+            # TODO: 从 JWT 获取当前用户并检查 is_superuser
+            # 目前简化处理，认证启用时暂时禁止删除
+            raise HTTPException(status_code=403, detail="需要管理员权限")
+
+        record = db.query(DeployHistory).filter(DeployHistory.id == history_id).first()
+        if not record:
+            raise HTTPException(status_code=404, detail="历史记录不存在")
+
+        # 删除关联的设备执行结果（cascade 会自动处理）
+        db.delete(record)
+        db.commit()
+
+        logger.info(f"删除部署历史记录: id={history_id}")
+        return {"success": True, "message": "删除成功"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        logger.error(f"删除部署历史失败：{e}")
+        raise HTTPException(status_code=500, detail=f"删除失败：{str(e)}")
+
+
 def _build_logs_from_result(dr: DeployDeviceResult) -> list:
     """从设备执行结果构建日志列表"""
     logs = []

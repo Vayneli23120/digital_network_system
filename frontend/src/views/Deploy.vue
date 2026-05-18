@@ -584,6 +584,14 @@
                         >
                           {{ t('deployRedeploy') }}
                         </el-button>
+                        <!-- 删除按钮 -->
+                        <el-button
+                          type="danger"
+                          size="small"
+                          @click.stop="handleDeleteHistory(record)"
+                        >
+                          {{ t('deployDeleteHistory') }}
+                        </el-button>
                       </div>
                     </div>
                     <div v-if="deployHistory.length === 0" class="cli-empty">
@@ -795,7 +803,8 @@ import {
   getMaintenanceWindows,
   scheduleDeploy,
   getDeployHistory,
-  getDeployHistoryDetail
+  getDeployHistoryDetail,
+  deleteDeployHistory
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -1260,6 +1269,38 @@ const handleRedeploy = async (record) => {
     if (error !== 'cancel') {
       console.error('重新部署失败:', error)
       ElMessage.error(t('deployRedeployFailed'))
+    }
+  }
+}
+
+// 删除历史记录
+const handleDeleteHistory = async (record) => {
+  try {
+    await ElMessageBox.confirm(
+      t('deployDeleteConfirm'),
+      t('deployDeleteHistory'),
+      { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'warning' }
+    )
+
+    await deleteDeployHistory(record.id)
+    ElMessage.success(t('deployDeleteSuccess'))
+    // 重新加载历史记录
+    await loadHistory()
+
+    // 如果删除的是当前选中的记录，清空选中状态
+    if (selectedHistoryId.value === record.id) {
+      selectedHistoryId.value = null
+      deviceExecutions.value = []
+      selectedDevice.value = null
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      if (error.response?.status === 403) {
+        ElMessage.error(t('deployDeletePermissionDenied'))
+      } else {
+        ElMessage.error(t('deployDeleteFailed'))
+      }
+      console.error('删除历史记录失败:', error)
     }
   }
 }

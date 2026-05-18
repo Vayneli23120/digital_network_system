@@ -222,6 +222,10 @@ export function getDeployHistoryDetail(historyId) {
   return api.get(`/deploy/history/${historyId}`)
 }
 
+export function deleteDeployHistory(historyId) {
+  return api.delete(`/deploy/history/${historyId}`)
+}
+
 export function getCompatibleVariables() {
   return api.get('/deploy/compatible-variables')
 }
