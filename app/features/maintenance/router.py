@@ -140,6 +140,13 @@ def get_next_action_button(current_status):
 import json
 
 
+def add_utc_suffix(dt_iso: str) -> str:
+    """Add 'Z' suffix to datetime ISO string to indicate UTC timezone"""
+    if dt_iso and not dt_iso.endswith('Z'):
+        return dt_iso + 'Z'
+    return dt_iso
+
+
 def build_events_from_record(maintenance):
     """从维修记录构建事件时间线"""
     events = []
@@ -147,7 +154,7 @@ def build_events_from_record(maintenance):
     # 创建事件
     events.append({
         "event_type": "created",
-        "event_time": maintenance.created_at.isoformat() if maintenance.created_at else None,
+        "event_time": add_utc_suffix(maintenance.created_at.isoformat()) if maintenance.created_at else None,
         "operator": maintenance.operator or "System",
         "notes": f"创建维修单 {maintenance.maint_no}"
     })
@@ -156,7 +163,7 @@ def build_events_from_record(maintenance):
     if maintenance.diagnosing_at:
         events.append({
             "event_type": "diagnosing",
-            "event_time": maintenance.diagnosing_at.isoformat(),
+            "event_time": add_utc_suffix(maintenance.diagnosing_at.isoformat()),
             "operator": maintenance.current_owner or maintenance.operator,
             "notes": "开始故障诊断"
         })
@@ -164,7 +171,7 @@ def build_events_from_record(maintenance):
     if maintenance.repairing_at:
         events.append({
             "event_type": "repairing",
-            "event_time": maintenance.repairing_at.isoformat(),
+            "event_time": add_utc_suffix(maintenance.repairing_at.isoformat()),
             "operator": maintenance.current_owner or maintenance.operator,
             "notes": "开始维修作业"
         })
@@ -172,7 +179,7 @@ def build_events_from_record(maintenance):
     if maintenance.verifying_at:
         events.append({
             "event_type": "verifying",
-            "event_time": maintenance.verifying_at.isoformat(),
+            "event_time": add_utc_suffix(maintenance.verifying_at.isoformat()),
             "operator": maintenance.current_owner or maintenance.operator,
             "notes": "提交验证"
         })
@@ -180,7 +187,7 @@ def build_events_from_record(maintenance):
     if maintenance.completed_at:
         events.append({
             "event_type": "completed",
-            "event_time": maintenance.completed_at.isoformat(),
+            "event_time": add_utc_suffix(maintenance.completed_at.isoformat()),
             "operator": maintenance.current_owner or maintenance.operator,
             "notes": "维修完成"
         })
@@ -188,7 +195,7 @@ def build_events_from_record(maintenance):
     if maintenance.cancelled_at:
         events.append({
             "event_type": "cancelled",
-            "event_time": maintenance.cancelled_at.isoformat(),
+            "event_time": add_utc_suffix(maintenance.cancelled_at.isoformat()),
             "operator": maintenance.current_owner or maintenance.operator,
             "notes": "维修取消"
         })
@@ -227,7 +234,7 @@ async def get_maintenance(maint_id: int):
                 if fault.diagnosis_text:
                     fault_work_notes.append({
                         "event_type": "fault_diagnosis",
-                        "event_time": fault.diagnosing_at.isoformat() if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else maintenance.created_at.isoformat(),
+                        "event_time": add_utc_suffix(fault.diagnosing_at.isoformat()) if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else add_utc_suffix(maintenance.created_at.isoformat()),
                         "operator": fault.assigned_to or "Unknown",
                         "notes": fault.diagnosis_text,
                         "source": "fault"  # 标记来自故障
@@ -245,13 +252,13 @@ async def get_maintenance(maint_id: int):
         for e in db_events:
             events.append({
                 "event_type": e.event_type,
-                "event_time": e.event_time.isoformat() if e.event_time else None,
+                "event_time": add_utc_suffix(e.event_time.isoformat()) if e.event_time else None,
                 "operator": e.operator or "System",
                 "notes": e.notes or ""
             })
 
-        # 按时间排序，最新的在最上面
-        events.sort(key=lambda e: e.get('event_time') or '', reverse=True)
+        # 按时间排序，旧的在最上面（工作流程时间线：创建 -> 诊断 -> 维修 -> 验证 -> 完成）
+        events.sort(key=lambda e: e.get('event_time') or '', reverse=False)
 
         # 计算SLA剩余时间
         sla_remaining = None
@@ -276,21 +283,21 @@ async def get_maintenance(maint_id: int):
             "description": maintenance.description,
             "fault_id": maintenance.fault_id,
             "fault": fault_info,
-            "maint_time": maintenance.maint_time.isoformat() if maintenance.maint_time else None,
-            "created_at": maintenance.created_at.isoformat(),
+            "maint_time": add_utc_suffix(maintenance.maint_time.isoformat()) if maintenance.maint_time else None,
+            "created_at": add_utc_suffix(maintenance.created_at.isoformat()),
             # 新增状态系统字段
             "status": maintenance.status or "created",
             "status_label": STATUS_LABELS.get(maintenance.status, "创建"),
             "progress_percent": STATUS_PERCENT.get(maintenance.status, 20),
             "priority": maintenance.priority or "P3",
             "current_owner": maintenance.current_owner,
-            "sla_deadline": maintenance.sla_deadline.isoformat() if maintenance.sla_deadline else None,
+            "sla_deadline": add_utc_suffix(maintenance.sla_deadline.isoformat()) if maintenance.sla_deadline else None,
             "sla_remaining": sla_remaining,
-            "diagnosing_at": maintenance.diagnosing_at.isoformat() if maintenance.diagnosing_at else None,
-            "repairing_at": maintenance.repairing_at.isoformat() if maintenance.repairing_at else None,
-            "verifying_at": maintenance.verifying_at.isoformat() if maintenance.verifying_at else None,
-            "completed_at": maintenance.completed_at.isoformat() if maintenance.completed_at else None,
-            "cancelled_at": maintenance.cancelled_at.isoformat() if maintenance.cancelled_at else None,
+            "diagnosing_at": add_utc_suffix(maintenance.diagnosing_at.isoformat()) if maintenance.diagnosing_at else None,
+            "repairing_at": add_utc_suffix(maintenance.repairing_at.isoformat()) if maintenance.repairing_at else None,
+            "verifying_at": add_utc_suffix(maintenance.verifying_at.isoformat()) if maintenance.verifying_at else None,
+            "completed_at": add_utc_suffix(maintenance.completed_at.isoformat()) if maintenance.completed_at else None,
+            "cancelled_at": add_utc_suffix(maintenance.cancelled_at.isoformat()) if maintenance.cancelled_at else None,
             # 诊断信息字段
             "diagnosis_text": maintenance.diagnosis_text,
             "diagnosis_result": maintenance.diagnosis_result,

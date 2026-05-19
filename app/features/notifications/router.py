@@ -51,6 +51,14 @@ async def get_notifications(
 
     items = []
     for n in notifications:
+        # Append 'Z' suffix to indicate UTC time for proper frontend timezone handling
+        created_at_iso = n.created_at.isoformat() if n.created_at else None
+        if created_at_iso and not created_at_iso.endswith('Z'):
+            created_at_iso += 'Z'
+        read_at_iso = n.read_at.isoformat() if n.read_at else None
+        if read_at_iso and not read_at_iso.endswith('Z'):
+            read_at_iso += 'Z'
+
         items.append({
             "id": n.id,
             "type": n.type,
@@ -59,8 +67,8 @@ async def get_notifications(
             "reference_type": n.reference_type,
             "reference_id": n.reference_id,
             "read": n.read,
-            "read_at": n.read_at.isoformat() if n.read_at else None,
-            "created_at": n.created_at.isoformat()
+            "read_at": read_at_iso,
+            "created_at": created_at_iso
         })
 
     unread_count = service.get_unread_count(user)

@@ -32,6 +32,12 @@ class MovementCreate(BaseModel):
     source_device_id: Optional[int] = None  # 返回件来源设备
 
 
+class MovementUpdate(BaseModel):
+    reason: Optional[str] = None
+    reference: Optional[str] = None
+    unit_price: Optional[float] = None
+
+
 @router.post("/")
 async def api_create_movement(movement: MovementCreate, db: Session = Depends(get_db)):
     """
@@ -97,3 +103,76 @@ async def api_get_movement(movement_id: int, db: Session = Depends(get_db)):
         return svc_get_movement(db, movement_id)
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="记录不存在")
+
+
+@router.put("/{movement_id}")
+async def api_update_movement(movement_id: int, data: MovementUpdate, db: Session = Depends(get_db)):
+    """更新出入库记录"""
+    from app.shared.models import SparePartMovement, SparePartInstance
+
+    movement = db.query(SparePartMovement).filter(SparePartMovement.id == movement_id).first()
+    if not movement:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    # 更新字段
+    if data.reason is not None:
+        movement.reason = data.reason
+    if data.reference is not None:
+        movement.reference = data.reference
+
+    # 如果有序列号且指定了单价，更新实例单价
+    if movement.serial_number and data.unit_price is not None:
+        instance = db.query(SparePartInstance).filter(
+            SparePartInstance.serial_number == movement.serial_number
+        ).first()
+        if instance:
+            instance.unit_price = data.unit_price
+
+    db.commit()
+
+    return {
+        "id": movement.id,
+        "message": "更新成功",
+        "reason": movement.reason,
+        "reference": movement.reference,
+    }
+
+
+@router.delete("/{movement_id}")
+async def api_delete_movement(movement_id: int, db: Session = Depends(get_db)):
+    """删除出入库记录"""
+    from app.shared.models import SparePartMovement, SparePartInstance, SparePart
+
+    movement = db.query(SparePartMovement).filter(SparePartMovement.id == movement_id).first()
+    if not movement:
+        raise HTTPException(status_code=404, detail="记录不存在")
+
+    # 如果是报废入库记录且有序列号，需要同时删除实例
+    if movement.movement_type == "scrap_in" and movement.serial_number:
+        instance = db.query(SparePartInstance).filter(
+            SparePartInstance.serial_number == movement.serial_number,
+            SparePartInstance.status == "pending_scrap"
+        ).first()
+        if instance:
+            db.delete(instance)
+            # 更新备件库存数量
+            if movement.part_id:
+                part = db.query(SparePart).filter(SparePart.id == movement.part_id).first()
+                if part:
+                    part.quantity_in_stock = db.query(SparePartInstance).filter(
+                        SparePartInstance.part_id == movement.part_id,
+                        SparePartInstance.status == "in_stock"
+                    ).count()
+
+    serial_number = movement.serial_number
+    movement_type = movement.movement_type
+
+    db.delete(movement)
+    db.commit()
+
+    return {
+        "id": movement_id,
+        "message": "删除成功",
+        "serial_number": serial_number,
+        "movement_type": movement_type,
+    }

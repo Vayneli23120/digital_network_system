@@ -6,6 +6,10 @@
         <h1 class="page-title">{{ t('scrapManagement') }}</h1>
       </div>
       <div class="nav-right">
+        <button class="nav-action-btn primary" @click="showAddScrapDialog">
+          <el-icon><Plus /></el-icon>
+          {{ t('scrapAddMaterial') }}
+        </button>
         <button class="nav-action-btn secondary" @click="loadScrapItems" :disabled="loading">
           <el-icon><Refresh /></el-icon>
         </button>
@@ -127,50 +131,53 @@
 
         <!-- 数据面板 -->
       <section class="data-section">
-        <div class="table-header">
-          <span class="table-title">{{ t('scrapInventoryListTitle') }}</span>
-          <span class="table-count">{{ t('commonRecordsCount', { count: scrapItems.length }) }}</span>
-        </div>
-
         <el-table
           :data="scrapItems"
-          class="enterprise-table"
+          stripe
+          border
           v-loading="loading"
-          :header-cell-style="{ background: 'transparent' }"
+          header-align="center"
         >
-          <el-table-column prop="name" :label="t('spareName')" width="180">
+          <el-table-column prop="name" :label="t('spareName')" min-width="150">
             <template #default="{ row }">
-              <button class="name-link" @click="showScrapDetail(row)">
-                <span class="name-badge">{{ row.name }}</span>
-                <el-icon class="link-arrow"><ArrowRight /></el-icon>
-              </button>
+              <el-button type="primary" link @click="showScrapDetail(row)">
+                {{ row.name }}
+              </el-button>
             </template>
           </el-table-column>
-          <el-table-column prop="part_number" :label="t('sparePartNumber')" width="160">
+          <el-table-column prop="part_number" :label="t('sparePartNumber')" min-width="130" />
+          <el-table-column prop="quantity" :label="t('spareQuantity')" min-width="90" align="center">
             <template #default="{ row }">
-              <span class="part-number-text">{{ row.part_number }}</span>
+              <el-tag :type="row.quantity > 0 ? 'warning' : 'info'" size="small">
+                {{ row.quantity }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="quantity" :label="t('spareQuantity')" width="120">
+          <el-table-column :label="t('spareTotalPrice')" min-width="100" align="center">
             <template #default="{ row }">
-              <div class="quantity-badge danger">
-                <span class="quantity-value">{{ row.quantity }}</span>
-              </div>
+              <span v-if="row.total_value && row.total_value > 0">¥{{ row.total_value.toFixed(2) }}</span>
+              <span v-else class="text-muted">--</span>
             </template>
           </el-table-column>
-          <el-table-column :label="t('spareTotalPrice')" width="120">
-            <template #default="{ row }">
-              <div class="price-cell">
-                <span class="price-currency">¥</span>
-                <span class="price-value">{{ row.total_value.toFixed(2) }}</span>
-              </div>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('dashAction')" width="160" fixed="right">
+          <el-table-column :label="t('dashAction')" min-width="280" fixed="right">
             <template #default="{ row }">
               <div class="table-actions">
-                <el-button size="small" type="success" @click="showInDialog(row)">{{ t('spareStockIn') }}</el-button>
-                <el-button size="small" type="danger" @click="showScrapOutDialog(row)">{{ t('scrapScrap') }}</el-button>
+                <el-button size="small" plain @click="showEditScrapDialog(row)">
+                  <el-icon><Edit /></el-icon>
+                  {{ t('actionEdit') }}
+                </el-button>
+                <el-button size="small" plain @click="showInDialog(row)">
+                  <el-icon><Plus /></el-icon>
+                  {{ t('spareStockIn') }}
+                </el-button>
+                <el-button size="small" plain @click="showScrapOutDialog(row)">
+                  <el-icon><Minus /></el-icon>
+                  {{ t('scrapScrap') }}
+                </el-button>
+                <el-button size="small" plain @click="handleDeleteScrap(row)">
+                  <el-icon><Delete /></el-icon>
+                  {{ t('actionDelete') }}
+                </el-button>
               </div>
             </template>
           </el-table-column>
@@ -182,71 +189,53 @@
     <section v-show="activeTab === 'history'" class="history-content">
       <!-- 数据面板 -->
       <section class="data-section">
-        <div class="table-header">
-          <span class="table-title">{{ t('scrapHistoryListTitle') }}</span>
-          <span class="table-count">{{ t('commonRecordsCount', { count: historyTotal }) }}</span>
-          <button class="refresh-btn" @click="loadHistory">
-            <el-icon><Refresh /></el-icon>
-          </button>
-        </div>
-
         <el-table
           :data="historyItems"
-          class="enterprise-table"
+          stripe
+          border
           v-loading="historyLoading"
-          :header-cell-style="{ background: 'transparent' }"
+          header-align="center"
         >
-          <el-table-column prop="created_at" :label="t('movementTime')" width="180">
+          <el-table-column prop="created_at" :label="t('movementTime')" min-width="160">
             <template #default="{ row }">
-              <div class="time-cell">
-                <el-icon class="time-icon"><Clock /></el-icon>
-                <span class="time-text">{{ formatDateTime(row.created_at) }}</span>
-              </div>
+              {{ formatDateTime(row.created_at) }}
             </template>
           </el-table-column>
-          <el-table-column prop="name" :label="t('scrapPartName')" width="150">
+          <el-table-column prop="name" :label="t('scrapPartName')" min-width="120">
             <template #default="{ row }">
-              <span class="name-text">{{ row.name || '-' }}</span>
+              {{ row.name || '-' }}
             </template>
           </el-table-column>
-          <el-table-column prop="part_number" :label="t('sparePartNumber')" width="150">
+          <el-table-column prop="part_number" :label="t('sparePartNumber')" min-width="130" />
+          <el-table-column prop="serial_number" :label="t('scrapSerialNumber')" min-width="130">
             <template #default="{ row }">
-              <span class="part-number-text">{{ row.part_number || '-' }}</span>
+              {{ row.serial_number || '-' }}
             </template>
           </el-table-column>
-          <el-table-column prop="serial_number" :label="t('scrapSerialNumber')" width="150">
+          <el-table-column prop="movement_type" :label="t('movementType')" min-width="100" align="center">
             <template #default="{ row }">
-              <span class="serial-text">{{ row.serial_number || '-' }}</span>
+              <el-tag :type="row.movement_type === 'scrap_in' ? 'warning' : 'danger'" size="small">
+                {{ row.movement_type === 'scrap_in' ? t('scrapScrapIn') : t('scrapScrapped') }}
+              </el-tag>
             </template>
           </el-table-column>
-          <el-table-column prop="movement_type" :label="t('movementType')" width="100" align="center">
+          <el-table-column prop="quantity" :label="t('spareQuantity')" min-width="80" align="center">
             <template #default="{ row }">
-              <div :class="['type-badge', row.movement_type === 'scrap_in' ? 'in' : 'out']">
-                <span class="type-dot"></span>
-                <span class="type-text">{{ row.movement_type === 'scrap_in' ? t('scrapScrapIn') : t('scrapScrapped') }}</span>
-              </div>
+              {{ row.quantity }}
             </template>
           </el-table-column>
-          <el-table-column prop="quantity" :label="t('spareQuantity')" width="80" align="right">
+          <el-table-column :label="t('scrapSourceDevice')" min-width="100" align="center">
             <template #default="{ row }">
-              <span class="quantity-value">{{ row.quantity }}</span>
+              {{ row.source_device_name || '-' }}
             </template>
           </el-table-column>
-          <el-table-column :label="t('scrapSourceDevice')" width="120">
+          <el-table-column prop="unit_price" :label="t('spareUnitPrice')" min-width="90" align="center">
             <template #default="{ row }">
-              <span class="device-text">{{ row.source_device_name || '-' }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="unit_price" :label="t('spareUnitPrice')" width="100">
-            <template #default="{ row }">
-              <div class="price-cell">
-                <span class="price-currency">¥</span>
-                <span class="price-value">{{ (row.unit_price || 0).toFixed(2) }}</span>
-              </div>
+              ¥{{ (row.unit_price || 0).toFixed(2) }}
             </template>
           </el-table-column>
           <el-table-column prop="reason" :label="t('spareReason')" min-width="150" show-overflow-tooltip />
-          <el-table-column prop="reference" :label="t('scrapRelatedMaintenance')" width="120" show-overflow-tooltip />
+          <el-table-column prop="reference" :label="t('scrapRelatedMaintenance')" min-width="120" show-overflow-tooltip />
         </el-table>
 
         <div class="pagination-bar">
@@ -506,19 +495,49 @@
         @cancel="scrapOutScanDialogVisible = false"
       />
     </el-dialog>
+
+    <!-- 新增/编辑报废物料对话框 -->
+    <el-dialog v-model="editScrapDialogVisible" :title="isEditScrap ? t('scrapEditDialogTitle') : t('scrapAddMaterial')" width="600px" append-to-body draggable align-center>
+      <el-form :model="editScrapForm" label-width="80px" size="default">
+        <el-form-item :label="t('spareName')">
+          <el-input v-model="editScrapForm.name" />
+        </el-form-item>
+        <el-form-item :label="t('sparePartNumber')">
+          <el-input v-model="editScrapForm.part_number" />
+        </el-form-item>
+        <el-form-item :label="t('spareSerialNumber')">
+          <el-input v-model="editScrapForm.serial_number" :placeholder="t('spareSearchSerialPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('spareUnitPrice')">
+          <div class="price-input-row">
+            <el-input-number v-model="editScrapForm.unit_price" :min="0" :precision="2" style="width: 140px" />
+            <span class="unit-text">¥</span>
+          </div>
+        </el-form-item>
+        <el-form-item :label="t('scrapScrapReason')">
+          <el-input v-model="editScrapForm.reason" type="textarea" :rows="2" :placeholder="t('scrapScrapReasonPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('scrapRelatedMaintenance')">
+          <el-input v-model="editScrapForm.reference" :placeholder="t('scrapReferenceMaintenanceNo')" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="editScrapDialogVisible = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="submitEditScrap" :loading="editScrapSubmitting">{{ t('actionSave') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, onMounted, reactive } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload, Edit, Delete } from '@element-plus/icons-vue'
-import { getPartList, createMovement, getMovements, getPartBySerialNumber } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload, Edit, Delete, Plus, Minus } from '@element-plus/icons-vue'
+import { getPartList, createMovement, getMovements, getPartBySerialNumber, updateMovement, deleteMovement } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 import { useI18n } from '@/composables/useI18n'
-import { cachedRequest, clearCache } from '@/utils/cache.js'
-import { debounce } from '@/utils/requestManager.js'
+import { clearCache } from '@/utils/cache.js'
 
 const { t } = useI18n()
 
@@ -597,25 +616,43 @@ const scrapInScanDialogVisible = ref(false)
 const scrapInScanSessionRef = ref(null)
 const scrapInScanItems = ref([])
 
+// 编辑报废物料
+const editScrapDialogVisible = ref(false)
+const isEditScrap = ref(false)
+const editScrapSubmitting = ref(false)
+const editScrapPartId = ref(null)
+const editScrapForm = reactive({
+  name: '',
+  part_number: '',
+  serial_number: '',
+  unit_price: 0,
+  reason: '',
+  reference: '',
+  movement_id: null
+})
+
+// 共享的报废数据缓存
+const scrapInMovementsCache = ref([])
+const scrapOutMovementsCache = ref([])
+
+// 加载所有报废数据（共享给库存和历史两个Tab）
+const loadAllMovements = async () => {
+  const scrapInResult = await getMovements({ movement_type: 'scrap_in', limit: 200 })
+  const scrapOutResult = await getMovements({ movement_type: 'scrap_out', limit: 200 })
+  scrapInMovementsCache.value = scrapInResult.items || []
+  scrapOutMovementsCache.value = scrapOutResult.items || []
+  return {
+    scrapIn: scrapInMovementsCache.value,
+    scrapOut: scrapOutMovementsCache.value
+  }
+}
+
 // 加载报废库存（按序列号跟踪有序列号的，按数量跟踪无序列号的）
-const loadScrapItems = debounce(async (force = false) => {
+const loadScrapItems = async (force = false) => {
   loading.value = true
   try {
-    // 查询所有报废入库和报废出库记录
-    const scrapInResult = await cachedRequest(
-      () => getMovements({ movement_type: 'scrap_in', limit: 200 }),
-      'scrap_in_movements',
-      { movement_type: 'scrap_in', limit: 200 },
-      { forceRefresh: force }
-    )
-    const scrapOutResult = await cachedRequest(
-      () => getMovements({ movement_type: 'scrap_out', limit: 200 }),
-      'scrap_out_movements',
-      { movement_type: 'scrap_out', limit: 200 },
-      { forceRefresh: force }
-    )
-    const scrapInMovements = scrapInResult.items || []
-    const scrapOutMovements = scrapOutResult.items || []
+    // 加载所有数据（同时更新缓存）
+    const { scrapIn: scrapInMovements, scrapOut: scrapOutMovements } = await loadAllMovements()
 
     // 按序列号跟踪有序列号的入库
     const scrapInBySerial = {}  // 序列号 -> 入库记录
@@ -676,14 +713,15 @@ const loadScrapItems = debounce(async (force = false) => {
       groupedMap[key].total_value += (item.unit_price || 0)
       groupedMap[key].instances.push({
         serial_number: serial,
-        po_number: item.po_number,  // PO号
+        po_number: item.po_number,
         unit_price: item.unit_price,
         scraped_at: item.created_at,
         movement_type: 'scrap_in',
         reason: item.reason,
         reference: item.reference,
-        source_device_name: item.source_device_name,  // 来源设备名称
-        removed_from_device_id: item.source_device_id  // 来源设备ID（备用）
+        source_device_name: item.source_device_name,
+        removed_from_device_id: item.source_device_id,
+        movement_id: item.id  // 保存movement_id用于编辑/删除
       })
     })
 
@@ -710,7 +748,6 @@ const loadScrapItems = debounce(async (force = false) => {
         }
         groupedMap[partKey].quantity += netQty
         groupedMap[partKey].total_value += netQty * (inRecord?.unit_price || 0)
-        // 无序列号的显示数量（不展开实例）
         groupedMap[partKey].noSerialCount = netQty
       }
     })
@@ -724,17 +761,34 @@ const loadScrapItems = debounce(async (force = false) => {
         item.part_number.toLowerCase().includes(searchLower)
       )
     }
+    if (category.value) {
+      items = items.filter(item => {
+        // 这里需要根据备件的category过滤，但报废记录没有直接带category
+        // 暂时不实现分类筛选
+        return true
+      })
+    }
 
     scrapItems.value = items
     updateStats(scrapInMovements, scrapOutMovements)
+
+    // 同时更新历史数据（从缓存）
+    updateHistoryFromCache()
   } catch (e) {
-    if (e.name !== 'CanceledError') {
-      ElMessage.error(t('scrapLoadFailed') + '：' + (e.response?.data?.detail || e.message))
-    }
+    ElMessage.error(t('scrapLoadFailed') + '：' + (e.response?.data?.detail || e.message))
   } finally {
     loading.value = false
   }
-}, 300)
+}
+
+// 从缓存更新历史数据
+const updateHistoryFromCache = () => {
+  const allRecords = [...scrapInMovementsCache.value, ...scrapOutMovementsCache.value]
+  allRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const start = (historyPage.value - 1) * 50
+  historyItems.value = allRecords.slice(start, start + 50)
+  historyTotal.value = allRecords.length
+}
 
 // 更新统计（基于净库存）
 const updateStats = (scrapInMovements, scrapOutMovements) => {
@@ -752,32 +806,17 @@ const updateStats = (scrapInMovements, scrapOutMovements) => {
   }).length
 }
 
-// 加载报废历史（包含报废入库和报废出库）
-const loadHistory = debounce(async (force = false) => {
+// 加载报废历史（使用缓存，避免重复请求）
+const loadHistory = async (force = false) => {
   historyLoading.value = true
   try {
-    // 查询报废入库和报废出库记录
-    const scrapInResult = await cachedRequest(
-      () => getMovements({ movement_type: 'scrap_in', limit: 200 }),
-      'scrap_in_movements',
-      { movement_type: 'scrap_in', limit: 200 },
-      { forceRefresh: force }
-    )
-    const scrapOutResult = await cachedRequest(
-      () => getMovements({ movement_type: 'scrap_out', limit: 200 }),
-      'scrap_out_movements',
-      { movement_type: 'scrap_out', limit: 200 },
-      { forceRefresh: force }
-    )
-    const allRecords = [...(scrapInResult.items || []), ...(scrapOutResult.items || [])]
-
-    // 按时间排序
-    allRecords.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-
-    // 分页处理
-    const start = (historyPage.value - 1) * 50
-    historyItems.value = allRecords.slice(start, start + 50)
-    historyTotal.value = allRecords.length
+    // 如果强制刷新或缓存为空，调用 loadScrapItems（它会填充缓存）
+    if (force || scrapInMovementsCache.value.length === 0) {
+      await loadScrapItems(force)
+    } else {
+      // 直接从缓存更新
+      updateHistoryFromCache()
+    }
   } catch (e) {
     if (e.name !== 'CanceledError') {
       ElMessage.error(t('scrapHistoryLoadFailed'))
@@ -785,7 +824,7 @@ const loadHistory = debounce(async (force = false) => {
   } finally {
     historyLoading.value = false
   }
-}, 300)
+}
 
 // 重置筛选
 const resetFilters = () => {
@@ -1115,9 +1154,150 @@ const onScrapInScanComplete = async (result) => {
   loadHistory(true)
 }
 
+// 显示新增报废物料对话框
+const showAddScrapDialog = async () => {
+  const result = await getPartList({ limit: 100 })
+  partOptions.value = result.items || []
+
+  isEditScrap.value = false
+  Object.assign(editScrapForm, {
+    name: '',
+    part_number: '',
+    serial_number: '',
+    unit_price: 0,
+    reason: '',
+    reference: ''
+  })
+  editScrapPartId.value = null
+  editScrapDialogVisible.value = true
+}
+
+// 显示编辑报废物料对话框
+const showEditScrapDialog = (row) => {
+  // 取第一个实例进行编辑
+  const instance = row.instances?.[0]
+  if (!instance) {
+    ElMessage.warning(t('scrapNoScrapStock'))
+    return
+  }
+
+  isEditScrap.value = true
+  editScrapPartId.value = row.part_id
+
+  Object.assign(editScrapForm, {
+    name: row.name,
+    part_number: row.part_number,
+    serial_number: instance.serial_number || '',
+    unit_price: instance.unit_price || 0,
+    reason: instance.reason || '',
+    reference: instance.reference || '',
+    movement_id: instance.movement_id || null
+  })
+
+  editScrapDialogVisible.value = true
+}
+
+// 提交编辑报废物料
+const submitEditScrap = async () => {
+  if (!editScrapForm.serial_number) {
+    ElMessage.warning(t('msgEnterRequired') + t('spareSerialNumber'))
+    return
+  }
+
+  editScrapSubmitting.value = true
+  try {
+    // 使用存储的movement_id或重新查找
+    let movementId = editScrapForm.movement_id
+
+    if (!movementId) {
+      const scrapInResult = await getMovements({
+        movement_type: 'scrap_in',
+        keyword: editScrapForm.serial_number,
+        limit: 1
+      })
+      const movement = scrapInResult.items?.find(
+        m => m.serial_number === editScrapForm.serial_number
+      )
+      movementId = movement?.id
+    }
+
+    if (!movementId) {
+      ElMessage.warning(t('scrapSerialNotInScrap'))
+      editScrapSubmitting.value = false
+      return
+    }
+
+    await updateMovement(movementId, {
+      reason: editScrapForm.reason,
+      reference: editScrapForm.reference,
+      unit_price: editScrapForm.unit_price
+    })
+
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
+    ElMessage.success(t('scrapEditSuccess'))
+    editScrapDialogVisible.value = false
+    loadScrapItems(true)
+    loadHistory(true)
+  } catch (e) {
+    ElMessage.error(t('scrapEditFailed') + '：' + (e.response?.data?.detail || e.message))
+  } finally {
+    editScrapSubmitting.value = false
+  }
+}
+
+// 删除报废物料
+const handleDeleteScrap = async (row) => {
+  const instance = row.instances?.[0]
+  if (!instance) {
+    ElMessage.warning(t('scrapNoScrapStock'))
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(
+      t('scrapDeleteConfirm'),
+      t('msgConfirm'),
+      { type: 'warning' }
+    )
+
+    // 使用存储的movement_id或重新查找
+    let movementId = instance.movement_id
+
+    if (!movementId) {
+      const scrapInResult = await getMovements({
+        movement_type: 'scrap_in',
+        keyword: instance.serial_number,
+        limit: 1
+      })
+      const movement = scrapInResult.items?.find(
+        m => m.serial_number === instance.serial_number
+      )
+      movementId = movement?.id
+    }
+
+    if (!movementId) {
+      ElMessage.warning(t('scrapSerialNotInScrap'))
+      return
+    }
+
+    await deleteMovement(movementId)
+
+    clearCache('scrap_in_movements')
+    clearCache('scrap_out_movements')
+    ElMessage.success(t('scrapDeleteSuccess'))
+    loadScrapItems(true)
+    loadHistory(true)
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(t('scrapDeleteFailed') + '：' + (e.response?.data?.detail || e.message))
+    }
+  }
+}
+
 onMounted(() => {
+  // 只调用一次加载，loadScrapItems 会填充缓存，loadHistory 会使用缓存
   loadScrapItems()
-  loadHistory()
 })
 </script>
 
@@ -1223,6 +1403,18 @@ onMounted(() => {
   background: var(--bg-hover);
   color: var(--accent-primary);
   border-color: var(--accent-primary);
+}
+
+.nav-action-btn.primary {
+  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  color: white;
+  border: none;
+  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+}
+
+.nav-action-btn.primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
 }
 
 /* ===== Tab 切换 Chips ===== */
@@ -1556,265 +1748,35 @@ onMounted(() => {
 
 /* ===== 数据面板 ===== */
 .data-section {
-  padding: 16px;
   background: rgba(255, 255, 255, 0.85);
   backdrop-filter: blur(12px);
   border-radius: var(--radius-lg);
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 4px 24px rgba(0, 48, 135, 0.08);
+  overflow: hidden;
 }
 
-.table-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0, 48, 135, 0.08);
-  gap: 12px;
+/* 表格表头居中 */
+:deep(.el-table th.el-table__cell) {
+  text-align: center;
 }
 
-.table-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  letter-spacing: 0.03em;
-}
-
-.table-count {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.refresh-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.9);
-  border: 1px solid var(--border-default);
-  color: var(--text-tertiary);
-  cursor: pointer;
-  transition: all 0.25s ease;
-}
-
-.refresh-btn:hover {
-  background: rgba(9, 132, 227, 0.08);
-  border-color: rgba(9, 132, 227, 0.2);
-  color: #0984e3;
-}
-
-.enterprise-table { width: 100%; }
-
-.enterprise-table :deep(.el-table__inner-wrapper::before) {
-  display: none;
-}
-
-.enterprise-table :deep(.el-table__header-wrapper) {
-  border-bottom: 2px solid rgba(0, 48, 135, 0.1);
-}
-
-.enterprise-table :deep(th.el-table__cell) {
-  background: transparent;
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-tertiary);
-  letter-spacing: 0.03em;
-  padding: 12px 0;
-  border-bottom: none;
-}
-
-.enterprise-table :deep(td.el-table__cell) {
-  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
-  padding: 10px 0;
-  background: transparent;
-}
-
-.enterprise-table :deep(.el-table__row) {
-  transition: all 0.25s ease;
-  background: transparent;
-}
-
-.enterprise-table :deep(.el-table__row:hover > td) {
-  background: rgba(9, 132, 227, 0.04) !important;
-}
-
-/* 名称链接 */
-.name-link {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--accent-primary);
-  text-decoration: none;
-  transition: all 0.25s;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-}
-
-.name-link:hover {
-  color: var(--accent-secondary);
-}
-
-.name-badge {
-  font-family: 'JetBrains Mono', 'Geist Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-weight: 600;
-  font-size: 13px;
-  padding: 4px 8px;
-  background: rgba(9, 132, 227, 0.08);
-  border-radius: 6px;
-  transition: all 0.25s;
-}
-
-.name-link:hover .name-badge {
-  background: rgba(9, 132, 227, 0.15);
-}
-
-.link-arrow {
-  opacity: 0;
-  font-size: 12px;
-  transition: all 0.25s;
-  color: var(--accent-primary);
-}
-
-.name-link:hover .link-arrow {
-  opacity: 1;
-  transform: translateX(4px);
-}
-
-/* 编号文本 */
-.part-number-text {
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.serial-text {
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  color: var(--accent-primary);
-}
-
-/* 名称文本 */
-.name-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* 数量徽章 */
-.quantity-badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 12px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-.quantity-badge.danger {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-/* 价格单元格 */
-.price-cell {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-}
-
-.price-currency {
-  font-size: 11px;
-  color: var(--text-tertiary);
-}
-
-.price-value {
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 13px;
-  color: var(--text-secondary);
-  font-weight: 500;
-}
-
-/* 时间单元格 */
-.time-cell {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.time-icon {
-  font-size: 13px;
-  color: var(--text-tertiary);
-}
-
-.time-text {
-  font-size: 12px;
-  color: var(--text-secondary);
-  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-}
-
-/* 设备文本 */
-.device-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-/* 类型徽章 */
-.type-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid;
-}
-
-.type-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-}
-
-.type-badge.in {
-  border-color: rgba(251, 191, 36, 0.3);
-  color: #f59e0b;
-}
-.type-badge.in .type-dot { background: #f59e0b; }
-
-.type-badge.out {
-  border-color: rgba(239, 68, 68, 0.3);
-  color: #ef4444;
-}
-.type-badge.out .type-dot { background: #ef4444; }
-
-/* 操作按钮 */
+/* 操作按钮区域 */
 .table-actions {
   display: flex;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
 }
 
-.enterprise-table :deep(.el-button--small) {
-  border-radius: 6px;
+.table-actions .el-button {
+  padding: 5px 10px;
   font-size: 12px;
-  padding: 6px 12px;
 }
 
-.enterprise-table :deep(.el-button--success) {
-  background: linear-gradient(135deg, rgba(0, 184, 148, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
-  border: none;
-}
-
-.enterprise-table :deep(.el-button--danger) {
-  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(248, 81, 73, 0.9) 100%);
-  border: none;
+.text-muted {
+  color: var(--text-tertiary);
 }
 
 /* 分页 */
@@ -1962,6 +1924,15 @@ onMounted(() => {
   background: rgba(9, 132, 227, 0.15);
   border-color: #0984e3;
   color: #58a6ff;
+}
+
+.dark .nav-action-btn.primary {
+  background: linear-gradient(135deg, rgba(63, 185, 80, 0.9) 0%, rgba(85, 239, 196, 0.9) 100%);
+  box-shadow: 0 2px 8px rgba(63, 185, 80, 0.25);
+}
+
+.dark .nav-action-btn.primary:hover {
+  box-shadow: 0 4px 16px rgba(63, 185, 80, 0.35);
 }
 
 .dark .tab-section {
@@ -2259,6 +2230,20 @@ onMounted(() => {
 .scrap-in-dialog .el-form-item,
 .scrap-out-dialog .el-form-item {
   margin-bottom: 10px;
+}
+
+/* 价格输入行样式 */
+.price-input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.price-input-row .unit-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+  flex-shrink: 0;
 }
 
 /* 暗黑模式 */

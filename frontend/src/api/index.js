@@ -51,7 +51,8 @@ export function getDeviceInventory(deviceId) {
 // 备份相关
 export function backupDevice(deviceId, operator) {
   return api.post(`/backups/backup/${deviceId}`, null, {
-    params: { operator }
+    params: { operator },
+    timeout: 120000  // 备份操作可能需要较长时间（SSH连接设备）
   })
 }
 
@@ -347,6 +348,12 @@ export function getMovements(params) {
 }
 export function getMovementDetail(id) {
   return api.get(`/spare-movements/${id}`)
+}
+export function updateMovement(id, data) {
+  return api.put(`/spare-movements/${id}`, data)
+}
+export function deleteMovement(id) {
+  return api.delete(`/spare-movements/${id}`)
 }
 
 // 认证
@@ -689,4 +696,69 @@ export function closeFault(faultId) {
 
 export function getFaultTransitions(faultId) {
   return api.get(`/faults/${faultId}/transitions`)
+}
+
+// ============ 权限管理 API ============
+export function getPermissionsPermissions(params) {
+  return api.get('/permissions/permissions', { params })
+}
+
+export function getPermissionsRoles() {
+  return api.get('/permissions/roles')
+}
+
+export function getPermissionsRole(roleId) {
+  return api.get(`/permissions/roles/${roleId}`)
+}
+
+export function createPermissionsRole(data) {
+  return api.post('/permissions/roles', data)
+}
+
+export function updatePermissionsRole(roleId, data) {
+  return api.put(`/permissions/roles/${roleId}`, data)
+}
+
+export function deletePermissionsRole(roleId) {
+  return api.delete(`/permissions/roles/${roleId}`)
+}
+
+export function clonePermissionsRole(roleId, newName) {
+  return api.post(`/permissions/roles/${roleId}/clone`, null, { params: { new_name: newName } })
+}
+
+export function getPermissionsResources() {
+  return api.get('/permissions/resources')
+}
+
+export function getPermissionsDefaultsPermissions() {
+  return api.get('/permissions/defaults/permissions')
+}
+
+export function getPermissionsDefaultsRoles() {
+  return api.get('/permissions/defaults/roles')
+}
+
+export function getPermissionsInitStatus() {
+  return api.get('/permissions/init-status')
+}
+
+export function initPermissionsSystem() {
+  return api.post('/permissions/init')
+}
+
+export function getMyPermissions() {
+  return api.get('/permissions/my-permissions')
+}
+
+export function checkPermission(permission) {
+  return api.get(`/permissions/check/${permission}`)
+}
+
+export function checkPermissionsBatch(permissions) {
+  return api.get('/permissions/check-batch', { params: { permissions } })
+}
+
+export function updateUserRoles(userId, roleIds) {
+  return api.put(`/permissions/users/${userId}/roles`, { role_ids: roleIds })
 }

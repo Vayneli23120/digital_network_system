@@ -811,8 +811,7 @@ import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
-import { cachedRequest, clearCache } from '@/utils/cache.js'
-import { debounce } from '@/utils/requestManager.js'
+// API imports are in the composables
 
 const { t } = useI18n()
 
@@ -1496,15 +1495,10 @@ const verifyMaintPass = async () => {
   }
 }
 
-const loadMaintenanceInfo = debounce(async () => {
+const loadMaintenanceInfo = async () => {
   if (!fault.value.maintenance_id) return
   try {
-    const result = await cachedRequest(
-      () => api.get(`/maintenance/${fault.value.maintenance_id}`),
-      'maintenance_info',
-      { id: fault.value.maintenance_id },
-      { forceRefresh: true }
-    )
+    const result = await api.get(`/maintenance/${fault.value.maintenance_id}`)
     maintenanceInfo.value = result
     // 解析备件列表
     if (result.parts_replaced) {
@@ -1522,7 +1516,7 @@ const loadMaintenanceInfo = debounce(async () => {
       console.error('Failed to load maintenance info:', e)
     }
   }
-}, 300)
+}
 
 const goToMaintenance = () => {
   // 直接打开编辑对话框，不跳转
@@ -1539,15 +1533,11 @@ const getDiagnosisResultText = (result) => {
   return t(keys[result]) || result
 }
 
-const loadFault = debounce(async (force = false) => {
+const loadFault = async (force = false) => {
   try {
     const faultId = route.params.id
-    const data = await cachedRequest(
-      () => getFaultDetail(faultId),
-      'fault_detail',
-      { id: faultId },
-      { forceRefresh: force }
-    )
+    // 状态变更后强制刷新，不使用缓存
+    const data = await getFaultDetail(faultId)
     fault.value = data
 
     // 初始化诊断表单
@@ -1570,12 +1560,7 @@ const loadFault = debounce(async (force = false) => {
 
     // 加载设备信息
     if (data.device_id) {
-      const devicesData = await cachedRequest(
-        () => getDevices(),
-        'devices',
-        {},
-        { forceRefresh: false }
-      )
+      const devicesData = await getDevices()
       device.value = (devicesData.items || []).find(d => d.id === data.device_id)
     }
 
@@ -1584,10 +1569,9 @@ const loadFault = debounce(async (force = false) => {
       await loadMaintenanceInfo()
     }
 
-    // 加载可转换的状态
+    // 加载可转换的状态（不使用缓存，确保最新）
     try {
       const transitions = await getFaultTransitions(faultId)
-      // 提取 status 字段，因为 API 返回的是对象数组 [{status: 'accepted', label: '...'}, ...]
       validTransitions.value = (transitions.valid_transitions || []).map(t => t.status)
     } catch (e) {
       validTransitions.value = []
@@ -1601,7 +1585,7 @@ const loadFault = debounce(async (force = false) => {
   } finally {
     loading.value = false
   }
-}, 300)
+}
 
 const goBack = () => {
   router.push('/faults')

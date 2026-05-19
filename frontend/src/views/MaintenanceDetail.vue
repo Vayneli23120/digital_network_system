@@ -2327,18 +2327,26 @@ onMounted(async () => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .timeline-header {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .timeline-type {
   font-size: 13px;
   font-weight: 500;
   color: var(--text-primary);
+  flex: 1;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
+  line-height: 1.4;
 }
 
 .timeline-time {
