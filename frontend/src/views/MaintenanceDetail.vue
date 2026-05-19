@@ -244,47 +244,56 @@
           </el-button>
         </div>
 
-        <!-- 流程操作区（条件显示） -->
-        <div class="flow-actions-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-          <div class="actions-card-header">
-            <el-icon><Operation /></el-icon>
-            {{ t('maintFlowActions') }}
-          </div>
-
-          <!-- 维修中状态：显示备件和提交验证按钮 -->
-          <div class="flow-buttons" v-if="statusInfo.status === 'repairing'">
-            <el-button type="primary" @click="openEditDialog" class="flow-btn">
-              <el-icon><Box /></el-icon>
-              {{ t('maintAddSpare') }}
-            </el-button>
-            <el-button type="warning" @click="openEditDialog" class="flow-btn">
-              <el-icon><RefreshRight /></el-icon>
-              {{ t('maintAddReturn') }}
-            </el-button>
+        <!-- 流程操作区（DNAC风格：单一主按钮 + 更多操作dropdown） -->
+        <div class="action-control-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+          <!-- 主操作按钮（根据状态动态变化） -->
+          <div class="primary-action-area">
             <el-button
-              type="success"
-              @click="submitForVerification"
-              class="flow-btn"
-              :disabled="!canSubmitVerification"
+              type="primary"
+              class="primary-action-btn"
+              @click="handlePrimaryAction"
             >
-              <el-icon><CircleCheck /></el-icon>
-              {{ t('maintSubmitVerification') }}
+              <el-icon><component :is="primaryActionIcon" /></el-icon>
+              {{ primaryActionText }}
             </el-button>
-            <div class="flow-tip" v-if="!canSubmitVerification">
-              {{ t('maintSubmitTip') }}
-            </div>
           </div>
 
-          <!-- 验证中状态：只显示验证通过按钮 -->
-          <div class="flow-buttons" v-if="statusInfo.status === 'verifying'">
-            <el-button type="success" @click="verifyPass" class="flow-btn verify-btn">
-              <el-icon><SuccessFilled /></el-icon>
-              {{ t('maintVerifyPass') }}
-            </el-button>
-            <div class="verify-tip">
-              {{ t('maintVerifyTip') }}
-            </div>
+          <!-- 更多操作 dropdown -->
+          <div class="more-actions-area">
+            <el-dropdown trigger="click" placement="bottom-end">
+              <el-button type="default" class="more-actions-btn">
+                <el-icon><MoreFilled /></el-icon>
+                {{ t('moreActions') }}
+              </el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="openEditDialog">
+                    <el-icon><Edit /></el-icon>{{ t('actionEdit') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item divided @click="openEditDialog">
+                    <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="openEditDialog">
+                    <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="focusNoteInput">
+                    <el-icon><EditPen /></el-icon>{{ t('maintAddNote') }}
+                  </el-dropdown-item>
+                  <el-dropdown-item divided class="dropdown-danger" @click="handleCancel">
+                    <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
+        </div>
+
+        <!-- 已完成/已取消状态显示 -->
+        <div class="status-complete-card" v-if="statusInfo.status === 'completed' || statusInfo.status === 'cancelled'">
+          <el-button type="default" class="view-details-btn" @click="openEditDialog">
+            <el-icon><View /></el-icon>
+            {{ t('actionViewDetails') }}
+          </el-button>
         </div>
 
         <!-- 分配负责人（维修中或验证中状态时如果还没有负责人） -->
@@ -308,52 +317,37 @@
           </el-button>
         </div>
 
-        <!-- 取消按钮（仅维修中状态显示） -->
-        <div class="cancel-card" v-if="statusInfo.status === 'repairing'">
-          <el-button type="danger" size="default" @click="handleCancel" class="cancel-btn">
-            <el-icon><CircleClose /></el-icon>
-            {{ t('maintTransitionToCancelled') }}
-          </el-button>
-        </div>
-
-        <!-- 事件时间线（工作日志） -->
-        <div class="events-timeline-card" v-if="events.length > 0">
-          <div class="actions-card-header">
+        <!-- 事件时间线（DNAC Timeline风格） -->
+        <div class="timeline-section" v-if="events.length > 0">
+          <div class="section-header">
             <el-icon><Clock /></el-icon>
             {{ t('maintTimeline') }}
             <el-tag v-if="maintenance.has_fault_work_notes" type="info" size="small" class="fault-notes-tag">
               {{ t('maintIncludesFaultNotes') }}
             </el-tag>
           </div>
-          <div class="timeline-list">
-            <div class="timeline-item" v-for="(event, index) in events" :key="index" :class="[event.event_type, { 'from-fault': event.source === 'fault' }]">
-              <!-- 故障来源标记 -->
-              <div class="fault-source-badge" v-if="event.source === 'fault'">
-                <el-tag type="warning" size="small">{{ t('maintFromFault') }}</el-tag>
+          <div class="timeline-container">
+            <div
+              v-for="(event, index) in events"
+              :key="index"
+              class="timeline-item"
+              :class="{ 'from-fault': event.source === 'fault' }"
+            >
+              <!-- Timeline dot -->
+              <div class="timeline-dot" :class="event.event_type">
+                <el-icon :size="10">
+                  <component :is="getEventIcon(event.event_type)" />
+                </el-icon>
               </div>
-              <div class="timeline-marker">
-                <el-icon v-if="event.event_type === 'created'"><Document /></el-icon>
-                <el-icon v-else-if="event.event_type === 'diagnosing'"><Search /></el-icon>
-                <el-icon v-else-if="event.event_type === 'repairing'"><Setting /></el-icon>
-                <el-icon v-else-if="event.event_type === 'verifying'"><CircleCheck /></el-icon>
-                <el-icon v-else-if="event.event_type === 'completed'"><CircleCheck /></el-icon>
-                <el-icon v-else-if="event.event_type === 'cancelled'"><CircleClose /></el-icon>
-                <el-icon v-else-if="event.event_type === 'assigned'"><User /></el-icon>
-                <el-icon v-else-if="event.event_type === 'diagnosis_added'"><Search /></el-icon>
-                <el-icon v-else-if="event.event_type === 'fault_diagnosis'"><WarningFilled /></el-icon>
-                <el-icon v-else-if="event.event_type === 'work_note'"><Edit /></el-icon>
-                <el-icon v-else-if="event.event_type === 'verification_submitted'"><CircleCheck /></el-icon>
-                <el-icon v-else-if="event.event_type === 'verification_passed'"><SuccessFilled /></el-icon>
-                <el-icon v-else><MoreFilled /></el-icon>
-              </div>
+              <!-- Event content -->
               <div class="timeline-content">
                 <div class="timeline-header">
-                  <span class="timeline-type">{{ event.notes || t('maintTimelineEvent') }}</span>
+                  <span class="timeline-title">{{ event.notes || getEventLabel(event.event_type) }}</span>
                   <span class="timeline-time">{{ event.event_time ? formatDateTime(event.event_time) : '' }}</span>
                 </div>
-                <div class="timeline-operator" v-if="event.operator">
-                  <el-icon><User /></el-icon>
-                  {{ event.operator }}
+                <div class="timeline-meta" v-if="event.operator">
+                  <el-icon :size="12"><User /></el-icon>
+                  <span class="timeline-operator">{{ event.operator }}</span>
                 </div>
               </div>
             </div>
@@ -944,6 +938,104 @@ const canSubmitVerification = computed(() => {
   // 这个条件可以灵活调整，比如只要有工作日志就可以提交
   return true  // 暂时允许任何维修中状态提交验证
 })
+
+// ===== DNAC风格：主操作按钮 =====
+const primaryActionText = computed(() => {
+  const texts = {
+    'created': t('maintActionStart'),
+    'pending': t('maintActionStart'),
+    'diagnosing': t('maintActionStartRepair'),
+    'repairing': t('maintActionComplete'),
+    'verifying': t('maintVerifyPass'),
+    'completed': t('maintStatusCompleted'),
+    'cancelled': t('maintStatusCancelled')
+  }
+  return texts[statusInfo.value.status] || t('actionEdit')
+})
+
+const primaryActionIcon = computed(() => {
+  const icons = {
+    'created': 'PlayCircle',
+    'pending': 'PlayCircle',
+    'diagnosing': 'Setting',
+    'repairing': 'CircleCheck',
+    'verifying': 'SuccessFilled'
+  }
+  return icons[statusInfo.value.status] || 'Edit'
+})
+
+// 主操作处理（根据状态流转）
+const handlePrimaryAction = async () => {
+  const status = statusInfo.value.status
+  try {
+    if (status === 'created' || status === 'pending') {
+      // created -> diagnosing
+      await transitionMaintenanceStatus(maintenance.value.id, {
+        status: 'diagnosing',
+        operator: 'Web'
+      })
+    } else if (status === 'diagnosing') {
+      // diagnosing -> repairing
+      await transitionMaintenanceStatus(maintenance.value.id, {
+        status: 'repairing',
+        operator: 'Web'
+      })
+    } else if (status === 'repairing') {
+      // repairing -> verifying
+      await submitForVerification()
+    } else if (status === 'verifying') {
+      // verifying -> completed
+      await verifyPass()
+    }
+  } catch (e) {
+    ElMessage.error(t('maintTransitionFailed') + ': ' + (e.response?.data?.detail || e.message))
+  }
+}
+
+// 聚焦到工作日志输入区
+const focusNoteInput = () => {
+  const noteInput = document.querySelector('.note-input textarea')
+  if (noteInput) {
+    noteInput.focus()
+  }
+}
+
+// ===== Timeline 事件处理 =====
+const getEventIcon = (eventType) => {
+  const icons = {
+    'created': 'Document',
+    'diagnosing': 'Search',
+    'repairing': 'Setting',
+    'verifying': 'CircleCheck',
+    'completed': 'SuccessFilled',
+    'cancelled': 'CircleClose',
+    'assigned': 'User',
+    'work_note': 'Edit',
+    'fault_diagnosis': 'WarningFilled',
+    'diagnosis_added': 'Search',
+    'verification_submitted': 'CircleCheck',
+    'verification_passed': 'SuccessFilled'
+  }
+  return icons[eventType] || 'MoreFilled'
+}
+
+const getEventLabel = (eventType) => {
+  const labels = {
+    'created': t('maintEventCreated'),
+    'diagnosing': t('maintEventDiagnosing'),
+    'repairing': t('maintEventRepairing'),
+    'verifying': t('maintEventVerifying'),
+    'completed': t('maintEventCompleted'),
+    'cancelled': t('maintEventCancelled'),
+    'assigned': t('maintEventAssigned'),
+    'work_note': t('maintEventNote'),
+    'fault_diagnosis': t('maintEventFaultDiagnosis'),
+    'diagnosis_added': t('maintEventDiagnosisAdded'),
+    'verification_submitted': t('maintEventVerificationSubmitted'),
+    'verification_passed': t('maintEventVerificationPassed')
+  }
+  return labels[eventType] || eventType
+}
 
 const getStepClass = (step) => {
   if (workflowStep.value > step) return 'completed'
@@ -2136,72 +2228,70 @@ onMounted(async () => {
   font-weight: 600;
 }
 
-/* 流程操作区 */
-.flow-actions-card {
+/* DNAC风格流程操作区 */
+.action-control-card {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
   border-radius: var(--radius-lg);
   padding: 16px;
 }
 
-.flow-buttons {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
+.primary-action-area {
+  margin-bottom: 12px;
 }
 
-.flow-btn {
+.primary-action-btn {
   width: 100%;
-  height: 44px;
+  height: 40px;
   border-radius: 10px;
   font-weight: 600;
+  font-size: 14px;
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: all 0.2s;
-  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+  background: var(--accent-primary);
   border: none;
   color: white;
-  box-shadow: 0 2px 8px rgba(0, 184, 148, 0.25);
+  transition: all 0.2s;
 }
 
-.flow-btn:hover:not(:disabled) {
+.primary-action-btn:hover {
+  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.2);
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0, 184, 148, 0.35);
 }
 
-/* 特殊按钮颜色 */
-.el-button--primary.flow-btn {
-  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
+.more-actions-area {
+  display: flex;
+  justify-content: flex-end;
 }
 
-.el-button--warning.flow-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #fbbf24 100%);
-}
-
-.el-button--success.flow-btn {
-  background: linear-gradient(135deg, #00b894 0%, #55efc4 100%);
-}
-
-.flow-tip, .verify-tip {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  padding: 8px 12px;
+.more-actions-btn {
+  height: 36px;
+  border-radius: 8px;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   background: var(--bg-tertiary);
-  border-radius: 6px;
-  margin-top: 8px;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  transition: all 0.2s;
 }
 
-.verify-btn {
-  background: linear-gradient(135deg, var(--accent-success) 0%, #00a884 100%);
-  border: none;
+.more-actions-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-default);
 }
 
-.verify-tip {
-  background: rgba(0, 184, 148, 0.1);
-  color: var(--accent-success);
+/* dropdown危险项样式 */
+.dropdown-danger {
+  color: var(--accent-danger) !important;
+}
+
+.el-dropdown-menu__item.dropdown-danger:hover {
+  background-color: rgba(214, 48, 49, 0.1);
+  color: var(--accent-danger);
 }
 
 /* 取消按钮区 */
@@ -2219,152 +2309,144 @@ onMounted(async () => {
   margin-left: 8px;
 }
 
-/* 事件时间线 */
-.events-timeline-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  max-height: 400px;
-  overflow-y: auto;
+/* DNAC风格事件时间线 */
+.timeline-section {
+  margin-top: 16px;
 }
 
-.timeline-list {
+.timeline-section-header {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-  margin-top: 12px;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.timeline-container {
+  position: relative;
+  padding-left: 24px;
+  max-height: 400px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.timeline-container::before {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border-light);
 }
 
 .timeline-item {
+  position: relative;
+  padding: 8px 0 16px 0;
   display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 10px;
-  border-radius: 8px;
-  background: var(--bg-tertiary);
-  transition: all 0.2s;
+  flex-direction: column;
+  gap: 4px;
 }
 
-.timeline-item:hover {
-  background: var(--bg-hover);
-}
-
-.timeline-item.created {
-  background: rgba(9, 132, 227, 0.08);
-}
-
-.timeline-item.completed {
-  background: rgba(0, 184, 148, 0.1);
-}
-
-.timeline-item.cancelled {
-  background: rgba(214, 48, 49, 0.1);
-}
-
-.timeline-item.diagnosis_added {
-  background: rgba(9, 132, 227, 0.1);
-}
-
-.timeline-item.verification_submitted {
-  background: rgba(116, 185, 255, 0.1);
-}
-
-.timeline-item.verification_passed {
-  background: rgba(0, 184, 148, 0.15);
+.timeline-item:last-child {
+  padding-bottom: 0;
 }
 
 .timeline-item.from-fault {
-  border: 1px dashed var(--accent-warning);
-  background: rgba(255, 184, 0, 0.08);
+  position: relative;
 }
 
-.timeline-item.fault_diagnosis {
-  background: rgba(255, 184, 0, 0.1);
-}
-
-.timeline-item.work_note {
-  background: rgba(9, 132, 227, 0.08);
-}
-
-.fault-source-badge {
-  margin-bottom: 4px;
-}
-
-.timeline-marker {
+.timeline-dot {
+  position: absolute;
+  left: -20px;
+  top: 8px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  border: 2px solid var(--accent-primary);
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 50%;
-  background: var(--color-gb);
-  color: #fff;
+  z-index: 1;
 }
 
-.timeline-item.completed .timeline-marker {
+.timeline-dot.completed {
   background: var(--accent-success);
+  border-color: var(--accent-success);
 }
 
-.timeline-item.cancelled .timeline-marker {
+.timeline-dot.cancelled {
   background: var(--accent-danger);
+  border-color: var(--accent-danger);
 }
 
-.timeline-item.diagnosis_added .timeline-marker {
+.timeline-dot.diagnosis_added,
+.timeline-dot.verifying {
   background: var(--accent-secondary);
+  border-color: var(--accent-secondary);
 }
 
-.timeline-item.verification_submitted .timeline-marker {
-  background: #74b9ff;
-}
-
-.timeline-item.verification_passed .timeline-marker {
+.timeline-dot.verification_passed,
+.timeline-dot.verification_submitted {
   background: var(--accent-success);
+  border-color: var(--accent-success);
+}
+
+.timeline-dot.created {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.timeline-dot.fault_diagnosis {
+  background: var(--accent-warning);
+  border-color: var(--accent-warning);
 }
 
 .timeline-content {
-  flex: 1;
   display: flex;
   flex-direction: column;
   gap: 4px;
   min-width: 0;
-  overflow: hidden;
 }
 
 .timeline-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: baseline;
   gap: 8px;
 }
 
-.timeline-type {
-  font-size: 13px;
+.timeline-title {
+  font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-  flex: 1;
+  white-space: normal;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  white-space: normal;
   line-height: 1.4;
 }
 
 .timeline-time {
-  font-size: 11px;
-  color: var(--text-muted);
+  font-size: 12px;
+  color: var(--text-tertiary);
   font-family: var(--font-display);
+  white-space: nowrap;
+}
+
+.timeline-meta {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .timeline-operator {
-  display: flex;
-  align-items: center;
-  gap: 6px;
   font-size: 12px;
-  color: var(--text-tertiary);
-}
-
-.timeline-operator .el-icon {
-  font-size: 14px;
+  color: var(--text-secondary);
 }
 
 /* 操作区独立 Card */
