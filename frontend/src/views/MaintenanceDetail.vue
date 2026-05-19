@@ -58,7 +58,7 @@
           </div>
         </div>
 
-        <!-- Workflow 步骤流程（增强版） -->
+        <!-- Workflow 步骤流程（4步：创建→维修→验证→完成） -->
         <div class="workflow-steps-enhanced">
           <div class="workflow-step-item" :class="getStepClass(1)">
             <div class="step-icon">
@@ -73,27 +73,16 @@
           <div class="step-connector" :class="{ completed: workflowStep >= 2 }"></div>
           <div class="workflow-step-item" :class="getStepClass(2)">
             <div class="step-icon">
-              <el-icon><Search /></el-icon>
-            </div>
-            <div class="step-info">
-              <span class="step-label">{{ t('workflowStepDiagnose') }}</span>
-              <span class="step-time" v-if="statusInfo.diagnosing_at">{{ formatDateTime(statusInfo.diagnosing_at) }}</span>
-            </div>
-            <div class="step-dot" :class="getStepClass(2)">{{ workflowStep >= 2 ? '✓' : '2' }}</div>
-          </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 3 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(3)">
-            <div class="step-icon">
               <el-icon><Setting /></el-icon>
             </div>
             <div class="step-info">
               <span class="step-label">{{ t('workflowStepRepair') }}</span>
               <span class="step-time" v-if="statusInfo.repairing_at">{{ formatDateTime(statusInfo.repairing_at) }}</span>
             </div>
-            <div class="step-dot" :class="getStepClass(3)">{{ workflowStep >= 3 ? '✓' : '3' }}</div>
+            <div class="step-dot" :class="getStepClass(2)">{{ workflowStep >= 2 ? '✓' : '2' }}</div>
           </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 4 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(4)">
+          <div class="step-connector" :class="{ completed: workflowStep >= 3 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(3)">
             <div class="step-icon">
               <el-icon><CircleCheck /></el-icon>
             </div>
@@ -101,18 +90,18 @@
               <span class="step-label">{{ t('workflowStepVerify') }}</span>
               <span class="step-time" v-if="statusInfo.verifying_at">{{ formatDateTime(statusInfo.verifying_at) }}</span>
             </div>
-            <div class="step-dot" :class="getStepClass(4)">{{ workflowStep >= 4 ? '✓' : '4' }}</div>
+            <div class="step-dot" :class="getStepClass(3)">{{ workflowStep >= 3 ? '✓' : '3' }}</div>
           </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 5 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(5)">
+          <div class="step-connector" :class="{ completed: workflowStep >= 4 }"></div>
+          <div class="workflow-step-item" :class="getStepClass(4)">
             <div class="step-icon">
-              <el-icon><CircleCheck /></el-icon>
+              <el-icon><SuccessFilled /></el-icon>
             </div>
             <div class="step-info">
               <span class="step-label">{{ t('workflowStepComplete') }}</span>
               <span class="step-time" v-if="statusInfo.completed_at">{{ formatDateTime(statusInfo.completed_at) }}</span>
             </div>
-            <div class="step-dot" :class="getStepClass(5)">{{ workflowStep >= 5 ? '✓' : '5' }}</div>
+            <div class="step-dot" :class="getStepClass(4)">{{ workflowStep >= 4 ? '✓' : '4' }}</div>
           </div>
         </div>
 
@@ -415,35 +404,6 @@
                 <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
                 <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
               </el-select>
-            </el-form-item>
-          </el-form>
-        </div>
-
-        <!-- 诊断信息 Section (半自动状态机) -->
-        <div class="form-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-          <div class="form-section-title diagnosis">
-            <el-icon><Search /></el-icon>
-            {{ t('maintDiagnosisSection') }}
-            <el-tag v-if="editForm.diagnosis_text" type="success" size="small" class="section-badge">{{ t('maintDiagnosisFilled') }}</el-tag>
-          </div>
-          <el-form :model="editForm" label-width="70px">
-            <el-form-item :label="t('maintDiagnosisText')">
-              <el-input v-model="editForm.diagnosis_text" type="textarea" :rows="2" :placeholder="t('maintDiagnosisPlaceholder')" />
-            </el-form-item>
-            <el-form-item :label="t('maintDiagnosisResult')">
-              <el-select v-model="editForm.diagnosis_result" style="width: 200px" clearable>
-                <el-option :label="t('maintDiagnosisFaultFound')" value="fault_found" />
-                <el-option :label="t('maintDiagnosisNoFault')" value="no_fault" />
-                <el-option :label="t('maintDiagnosisNeedReplace')" value="need_replace" />
-                <el-option :label="t('maintDiagnosisNeedUpgrade')" value="need_upgrade" />
-              </el-select>
-            </el-form-item>
-            <el-form-item>
-              <el-button type="primary" @click="saveDiagnosis" :loading="savingDiagnosis">
-                <el-icon><Select /></el-icon>
-                {{ t('maintSaveDiagnosis') }}
-              </el-button>
-              <span class="save-tip" v-if="statusInfo.status === 'created' || statusInfo.status === 'pending'">{{ t('maintDiagnosisAutoTransitionTip') }}</span>
             </el-form-item>
           </el-form>
         </div>
@@ -870,10 +830,9 @@ const suggestInfo = ref({
 const STATUS_STEPS = {
   'created': 1,
   'pending': 1,  // pending 视为初始状态
-  'diagnosing': 2,
-  'repairing': 3,
-  'verifying': 4,
-  'completed': 5,
+  'repairing': 2,  // 直接进入维修阶段
+  'verifying': 3,
+  'completed': 4,
   'cancelled': 0
 }
 
@@ -913,9 +872,8 @@ const workflowStep = computed(() => {
 const nextStatusOptions = computed(() => {
   const currentStatus = statusInfo.value.status
   const transitions = {
-    'created': [{ status: 'diagnosing', label: t('maintTransitionToDiagnosing') }],
-    'pending': [{ status: 'diagnosing', label: t('maintTransitionToDiagnosing') }],  // pending 视为初始状态
-    'diagnosing': [{ status: 'repairing', label: t('maintTransitionToRepairing') }],
+    'created': [{ status: 'repairing', label: t('maintTransitionToRepairing') }],
+    'pending': [{ status: 'repairing', label: t('maintTransitionToRepairing') }],
     'repairing': [{ status: 'verifying', label: t('maintTransitionToVerifying') }],
     'verifying': [{ status: 'completed', label: t('maintTransitionToCompleted') }],
     'completed': [],
@@ -926,7 +884,7 @@ const nextStatusOptions = computed(() => {
 
 // 是否可以取消
 const canCancel = computed(() => {
-  const cancellableStates = ['created', 'pending', 'diagnosing', 'repairing', 'verifying']
+  const cancellableStates = ['created', 'pending', 'repairing', 'verifying']
   return cancellableStates.includes(statusInfo.value.status)
 })
 
@@ -944,7 +902,6 @@ const primaryActionText = computed(() => {
   const texts = {
     'created': t('maintActionStart'),
     'pending': t('maintActionStart'),
-    'diagnosing': t('maintActionStartRepair'),
     'repairing': t('maintActionComplete'),
     'verifying': t('maintVerifyPass'),
     'completed': t('maintStatusCompleted'),
@@ -955,9 +912,8 @@ const primaryActionText = computed(() => {
 
 const primaryActionIcon = computed(() => {
   const icons = {
-    'created': 'PlayCircle',
-    'pending': 'PlayCircle',
-    'diagnosing': 'Setting',
+    'created': 'Setting',
+    'pending': 'Setting',
     'repairing': 'CircleCheck',
     'verifying': 'SuccessFilled'
   }
@@ -969,13 +925,7 @@ const handlePrimaryAction = async () => {
   const status = statusInfo.value.status
   try {
     if (status === 'created' || status === 'pending') {
-      // created -> diagnosing
-      await transitionMaintenanceStatus(maintenance.value.id, {
-        status: 'diagnosing',
-        operator: 'Web'
-      })
-    } else if (status === 'diagnosing') {
-      // diagnosing -> repairing
+      // created/pending -> repairing（直接进入维修）
       await transitionMaintenanceStatus(maintenance.value.id, {
         status: 'repairing',
         operator: 'Web'

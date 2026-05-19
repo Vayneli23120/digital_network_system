@@ -13,11 +13,10 @@ from app.features.faults.router import send_maintenance_completed_notification
 
 router = APIRouter(prefix="/api/maintenance", tags=["maintenance"])
 
-# 状态流转规则
+# 状态流转规则（4步流程：创建→维修→验证→完成）
 VALID_TRANSITIONS = {
-    'created': ['diagnosing', 'cancelled'],
-    'pending': ['diagnosing', 'cancelled'],  # pending 视为初始状态，等同于 created
-    'diagnosing': ['repairing', 'cancelled'],
+    'created': ['repairing', 'cancelled'],  # 直接进入维修
+    'pending': ['repairing', 'cancelled'],  # pending 视为初始状态，直接进入维修
     'repairing': ['verifying', 'cancelled'],
     'verifying': ['completed', 'cancelled'],
     'completed': [],
@@ -27,7 +26,6 @@ VALID_TRANSITIONS = {
 STATUS_LABELS = {
     'created': '创建',
     'pending': '待处理',
-    'diagnosing': '诊断',
     'repairing': '维修',
     'verifying': '验证',
     'completed': '完成',
@@ -35,11 +33,10 @@ STATUS_LABELS = {
 }
 
 STATUS_PERCENT = {
-    'created': 20,
-    'pending': 20,  # pending 视为初始状态
-    'diagnosing': 40,
-    'repairing': 60,
-    'verifying': 80,
+    'created': 25,
+    'pending': 25,  # pending 视为初始状态
+    'repairing': 50,
+    'verifying': 75,
     'completed': 100,
     'cancelled': 0
 }
@@ -72,49 +69,24 @@ def suggest_next_status(maintenance, data=None):
     current_status = maintenance.status or "created"
     data = data or {}
 
-    # 规则1: created -> diagnosing (填写诊断内容)
-    if current_status == 'created':
-        # 检查是否有诊断内容
-        diagnosis_text = data.get('diagnosis_text') or maintenance.diagnosis_text
-        if diagnosis_text and len(diagnosis_text.strip()) > 0:
-            return ('diagnosing', '检测到已填写诊断内容', True)
-
-    # 规则2: diagnosing -> repairing (添加维修动作或更换备件)
-    if current_status == 'diagnosing':
-        # 检查是否有维修动作
+    # 规则1: created/pending -> repairing（直接进入维修）
+    if current_status in ('created', 'pending'):
+        # 检查是否有维修动作或备件信息
         repair_actions = data.get('repair_actions') or maintenance.repair_actions
         parts_replaced = data.get('parts_replaced') or maintenance.parts_replaced
+        spare_parts_list = data.get('spare_parts_list') or maintenance.spare_parts_list
 
-        has_repair_actions = False
-        if repair_actions:
-            try:
-                actions = json.loads(repair_actions) if isinstance(repair_actions, str) else repair_actions
-                if isinstance(actions, list) and len(actions) > 0:
-                    has_repair_actions = True
-            except:
-                pass
+        has_content = bool(repair_actions or parts_replaced or spare_parts_list)
+        if has_content:
+            return ('repairing', '检测到已添加维修内容', True)
 
-        has_parts = False
-        if parts_replaced:
-            try:
-                parts = json.loads(parts_replaced) if isinstance(parts_replaced, str) else parts_replaced
-                if isinstance(parts, list) and len(parts) > 0:
-                    has_parts = True
-            except:
-                # 旧格式 "型号(数量)" 也算有备件
-                if len(parts_replaced.strip()) > 0:
-                    has_parts = True
-
-        if has_repair_actions or has_parts:
-            return ('repairing', '检测到已添加维修动作或更换备件', True)
-
-    # 规则3: repairing -> verifying (提交验证结果)
+    # 规则2: repairing -> verifying（提交验证）
     if current_status == 'repairing':
         verification_result = data.get('verification_result') or maintenance.verification_result
         if verification_result:
             return ('verifying', '检测到已提交验证结果', True)
 
-    # 规则4: verifying -> completed (验证通过)
+    # 规则3: verifying -> completed（验证通过）
     if current_status == 'verifying':
         verify_passed = data.get('verify_passed') or maintenance.verify_passed
         if verify_passed:
@@ -125,10 +97,10 @@ def suggest_next_status(maintenance, data=None):
 
 
 def get_next_action_button(current_status):
-    """根据当前状态返回下一步操作按钮文案"""
+    """根据当前状态返回下一步操作按钮文案（简化4步流程）"""
     ACTION_BUTTONS = {
-        'created': {'action': 'diagnosing', 'label': '开始诊断', 'icon': 'Search'},
-        'diagnosing': {'action': 'repairing', 'label': '开始维修', 'icon': 'Setting'},
+        'created': {'action': 'repairing', 'label': '开始维修', 'icon': 'Setting'},
+        'pending': {'action': 'repairing', 'label': '开始维修', 'icon': 'Setting'},
         'repairing': {'action': 'verifying', 'label': '提交验证', 'icon': 'CircleCheck'},
         'verifying': {'action': 'completed', 'label': '完成维修', 'icon': 'SuccessFilled'},
         'completed': {'action': None, 'label': '查看详情', 'icon': 'View'},
@@ -159,15 +131,7 @@ def build_events_from_record(maintenance):
         "notes": f"创建维修单 {maintenance.maint_no}"
     })
 
-    # 各阶段事件
-    if maintenance.diagnosing_at:
-        events.append({
-            "event_type": "diagnosing",
-            "event_time": add_utc_suffix(maintenance.diagnosing_at.isoformat()),
-            "operator": maintenance.current_owner or maintenance.operator,
-            "notes": "开始故障诊断"
-        })
-
+    # 各阶段事件（简化4步流程）
     if maintenance.repairing_at:
         events.append({
             "event_type": "repairing",
@@ -375,9 +339,7 @@ async def transition_maintenance_status(
         # 更新状态和时间戳
         maintenance.status = new_status
 
-        if new_status == "diagnosing":
-            maintenance.diagnosing_at = datetime.utcnow()
-        elif new_status == "repairing":
+        if new_status == "repairing":
             maintenance.repairing_at = datetime.utcnow()
         elif new_status == "verifying":
             maintenance.verifying_at = datetime.utcnow()
@@ -694,14 +656,7 @@ async def auto_transition_status(maint_id: int, data: dict):
         # 更新状态和时间戳
         maintenance.status = suggested_status
 
-        if suggested_status == "diagnosing":
-            maintenance.diagnosing_at = datetime.utcnow()
-            # 更新诊断内容
-            if data.get('diagnosis_text'):
-                maintenance.diagnosis_text = data['diagnosis_text']
-            if data.get('diagnosis_result'):
-                maintenance.diagnosis_result = data['diagnosis_result']
-        elif suggested_status == "repairing":
+        if suggested_status == "repairing":
             maintenance.repairing_at = datetime.utcnow()
             # 更新维修动作
             if data.get('repair_actions'):
