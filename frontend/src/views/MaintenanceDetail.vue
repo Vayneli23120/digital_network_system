@@ -3152,7 +3152,94 @@ onMounted(async () => {
   font-size: 16px;
 }
 
-/* 暗色模式 */
+/* ===== 工作日志样式（与故障详情页一致） ===== */
+.notes-timeline {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.note-item {
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-default);
+  transition: background 0.2s;
+}
+
+.note-item:hover {
+  background: var(--bg-hover);
+}
+
+.note-item:last-child {
+  border-bottom: none;
+}
+
+.note-item.from-fault {
+  background: rgba(255, 184, 0, 0.05);
+}
+
+.note-item.from-fault:hover {
+  background: rgba(255, 184, 0, 0.1);
+}
+
+.note-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.note-author {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.note-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.note-content {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+}
+
+.notes-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 40px 20px;
+  color: var(--text-tertiary);
+}
+
+.notes-empty .el-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.add-note-section {
+  margin-bottom: 16px;
+}
+
+.note-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 12px;
+  align-items: center;
+}
+
+.action-btn-primary {
+  min-width: 120px;
+}
+
+.add-note-btn {
+  min-width: 100px;
+}
+
+/* ===== 暗色模式 ===== */
 .dark .suggest-icon {
   background: rgba(0, 184, 148, 0.15);
 }
