@@ -195,14 +195,40 @@ async def get_maintenance(maint_id: int):
                 }
 
                 # 构建故障工作日志事件（标记来源为 fault）
+                # 解析 diagnosis_text，分割成多条独立日志
                 if fault.diagnosis_text:
-                    fault_work_notes.append({
-                        "event_type": "fault_diagnosis",
-                        "event_time": add_utc_suffix(fault.diagnosing_at.isoformat()) if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else add_utc_suffix(maintenance.created_at.isoformat()),
-                        "operator": fault.assigned_to or "Unknown",
-                        "notes": fault.diagnosis_text,
-                        "source": "fault"  # 标记来自故障
-                    })
+                    # 格式：第一条日志\n\n--- 2026-05-19 21:59 ---\n第二条日志
+                    import re
+                    # 匹配时间分隔符
+                    pattern = r'\n\n--- (\d{4}-\d{2}-\d{2} \d{2}:\d{2}) ---\n'
+                    parts = re.split(pattern, fault.diagnosis_text)
+
+                    # 第一部分是最早的日志（没有时间分隔符）
+                    if parts and parts[0].strip():
+                        first_note_time = add_utc_suffix(fault.diagnosing_at.isoformat()) if hasattr(fault, 'diagnosing_at') and fault.diagnosing_at else add_utc_suffix(fault.created_at.isoformat() if fault.created_at else maintenance.created_at.isoformat())
+                        fault_work_notes.append({
+                            "event_type": "fault_diagnosis",
+                            "event_time": first_note_time,
+                            "operator": fault.assigned_to or fault.reporter or "Unknown",
+                            "notes": parts[0].strip(),
+                            "source": "fault"
+                        })
+
+                    # 后续部分是带时间分隔符的日志
+                    # parts 格式：[第一条, 时间1, 第二条, 时间2, 第三条, ...]
+                    # 奇数索引是时间，偶数索引是内容
+                    for i in range(1, len(parts), 2):
+                        if i + 1 < len(parts) and parts[i + 1].strip():
+                            time_str = parts[i]  # 格式：2026-05-19 21:59
+                            # 转换为 ISO 格式并添加 UTC 标记
+                            event_time = time_str + ":00Z"  # 添加秒和 UTC 标记
+                            fault_work_notes.append({
+                                "event_type": "fault_diagnosis",
+                                "event_time": event_time,
+                                "operator": fault.assigned_to or "Unknown",
+                                "notes": parts[i + 1].strip(),
+                                "source": "fault"
+                            })
 
         # 构建事件时间线（包含故障工作日志）
         # 故障工作日志放在最前面，然后是维修事件
