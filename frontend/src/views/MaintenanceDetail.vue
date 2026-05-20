@@ -331,7 +331,12 @@
               <!-- Event content -->
               <div class="timeline-content">
                 <div class="timeline-header">
-                  <span class="timeline-title">{{ event.notes || getEventLabel(event.event_type) }}</span>
+                  <span class="timeline-title">
+                    {{ event.notes || getEventLabel(event.event_type) }}
+                    <el-tag v-if="event.source === 'fault'" type="warning" size="small" class="fault-source-tag">
+                      {{ t('maintFromFault') }}
+                    </el-tag>
+                  </span>
                   <span class="timeline-time">{{ event.event_time ? formatDateTime(event.event_time) : '' }}</span>
                 </div>
                 <div class="timeline-meta" v-if="event.operator">
@@ -2379,6 +2384,15 @@ onMounted(async () => {
   word-wrap: break-word;
   overflow-wrap: break-word;
   line-height: 1.4;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.fault-source-tag {
+  margin-left: 4px;
+  font-size: 11px;
 }
 
 .timeline-time {

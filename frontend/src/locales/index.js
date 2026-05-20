@@ -1820,6 +1820,11 @@ export const languages = {
     maintEventCancelled: '维修取消',
     maintEventAssigned: '分配负责人',
     maintEventNote: '添加工作日志',
+    maintEventFaultDiagnosis: '故障诊断',
+    maintEventDiagnosisAdded: '添加诊断',
+    maintEventVerificationSubmitted: '提交验证',
+    maintEventVerificationPassed: '验证通过',
+    maintFromFault: '来自故障单',
 
     // 故障详情
     faultDetailTitle: '故障详情',
@@ -4737,6 +4742,11 @@ export const languages = {
     maintEventCancelled: 'Maintenance cancelled',
     maintEventAssigned: 'Assigned owner',
     maintEventNote: 'Added work note',
+    maintEventFaultDiagnosis: 'Fault diagnosis',
+    maintEventDiagnosisAdded: 'Diagnosis added',
+    maintEventVerificationSubmitted: 'Verification submitted',
+    maintEventVerificationPassed: 'Verification passed',
+    maintFromFault: 'From fault ticket',
 
     // ===== Semi-Auto State Machine =====
     // Basic Info
