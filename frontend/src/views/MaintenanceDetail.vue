@@ -133,6 +133,10 @@
             <span class="detail-item-label">{{ t('maintDetailLaborCost') }}</span>
             <span class="detail-item-value">{{ formatCurrency(maintenance.labor_cost) }}</span>
           </div>
+          <div class="detail-item">
+            <span class="detail-item-label">{{ t('maintDetailTotalCost') }}</span>
+            <span class="detail-item-value" style="color: var(--accent-success); font-weight: 600">{{ formatCurrency((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)) }}</span>
+          </div>
         </div>
 
         <!-- Tabs: 备件列表和返回件列表 -->
@@ -344,48 +348,6 @@
                   <span class="timeline-operator">{{ event.operator }}</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 成本统计数据卡片化 -->
-        <div class="cost-stats-card">
-          <div class="actions-card-header">
-            <el-icon><Coin /></el-icon>
-            {{ t('maintDetailCostStats') }}
-          </div>
-          <div class="cost-stats-grid">
-            <div class="cost-stat-item">
-              <div class="cost-stat-label">{{ t('maintDetailPartsCost') }}</div>
-              <div class="cost-stat-value">{{ formatCurrency(maintenance.parts_cost) }}</div>
-            </div>
-            <div class="cost-stat-item">
-              <div class="cost-stat-label">{{ t('maintDetailLaborCost') }}</div>
-              <div class="cost-stat-value">{{ formatCurrency(maintenance.labor_cost) }}</div>
-            </div>
-            <div class="cost-stat-item total">
-              <div class="cost-stat-label">{{ t('maintDetailTotalCost') }}</div>
-              <div class="cost-stat-value">{{ formatCurrency((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- 设备信息区增强 -->
-        <div class="device-info-card" v-if="device">
-          <div class="actions-card-header">
-            <el-icon><Monitor /></el-icon>
-            {{ t('maintDetailDeviceInfo') }}
-          </div>
-          <div class="device-header">
-            <el-avatar :size="48" class="device-avatar">
-              <el-icon><Switch /></el-icon>
-            </el-avatar>
-            <div class="device-meta">
-              <h4 class="device-name">{{ device.name }}</h4>
-              <span class="device-ip">{{ device.ip }}</span>
-              <el-tag :type="device.status === 'online' ? 'success' : 'info'" size="small">
-                {{ device.status }}
-              </el-tag>
             </div>
           </div>
         </div>
@@ -2481,101 +2443,9 @@ onMounted(async () => {
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
 
-/* 成本统计数据卡片化 */
-.cost-stats-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-
-.cost-stats-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.cost-stat-item {
-  padding: 12px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  text-align: center;
-}
-
-.cost-stat-label {
-  font-size: 11px;
-  color: var(--text-tertiary);
-  margin-bottom: 4px;
-}
-
-.cost-stat-value {
-  font-family: var(--font-display);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.cost-stat-item.total {
-  grid-column: 1 / -1;
-  background: rgba(214, 48, 49, 0.1);
-}
-
-.cost-stat-item.total .cost-stat-value {
-  color: var(--accent-danger);
-  font-size: 20px;
-}
-
-/* 设备信息区增强 */
-.device-info-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-}
-
-.device-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-}
-
-.device-avatar {
-  background: linear-gradient(135deg, var(--color-gb) 0%, var(--color-gb-mid) 100%);
-  color: #fff;
-}
-
-.device-meta {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.device-name {
-  margin: 0;
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.device-ip {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-family: var(--font-display);
-}
-
 /* 暗色模式适配 */
 .dark .actions-card-header .el-icon {
   color: var(--accent-primary);
-}
-
-.dark .cost-stat-item.total {
-  background: rgba(214, 48, 49, 0.15);
-}
-
-.dark .device-avatar {
-  background: linear-gradient(135deg, var(--accent-primary) 0%, #00a884 100%);
 }
 
 .dark .workflow-step-item.completed {
