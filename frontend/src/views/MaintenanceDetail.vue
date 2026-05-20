@@ -23,21 +23,67 @@
       </div>
     </section>
 
-    <!-- V2 左右布局 -->
-    <div class="maint-header">
-      <!-- 左侧：维修信息卡片 -->
-      <div class="maint-info-card">
-        <!-- 任务头部信息区 -->
-        <div class="task-header-section">
-          <div class="task-title-row">
-            <span class="maint-title">{{ maintenance.maint_no || t('maintDetailTitle') }}</span>
-            <el-tag :type="getStatusTagClass(statusInfo.status)" size="default" class="status-tag">
-              {{ statusInfo.status_label }}
-            </el-tag>
-            <el-tag :type="getPriorityTagClass(statusInfo.priority)" size="small" class="priority-tag">
-              {{ statusInfo.priority }}
-            </el-tag>
+    <!-- 参考故障详情页布局：左16右8 -->
+    <el-row :gutter="20" style="margin-top: 20px">
+      <!-- 左侧：状态流转 + 工作日志 + 基本信息 + 备件信息 -->
+      <el-col :span="16">
+        <!-- 状态流转卡片 -->
+        <el-card class="status-flow-card">
+          <template #header>
+            <div class="card-header-flex">
+              <span>{{ t('maintProgress') }}</span>
+              <el-tag :type="getStatusTagClass(statusInfo.status)" size="large">
+                {{ statusInfo.status_label }}
+              </el-tag>
+            </div>
+          </template>
+
+          <!-- Workflow 步骤流程（4步） -->
+          <div class="workflow-steps-enhanced">
+            <div class="workflow-step-item" :class="getStepClass(1)">
+              <div class="step-circle">
+                <el-icon v-if="workflowStep >= 1"><Check /></el-icon>
+                <span v-else>1</span>
+              </div>
+              <div class="step-label">{{ t('workflowStepCreate') }}</div>
+              <div v-if="workflowStep < 2" class="step-line"></div>
+            </div>
+            <div :class="['workflow-step-item', getStepClass(2)]">
+              <div class="step-circle">
+                <el-icon v-if="workflowStep >= 2"><Check /></el-icon>
+                <span v-else>2</span>
+              </div>
+              <div class="step-label">{{ t('workflowStepRepair') }}</div>
+              <div v-if="workflowStep < 3" class="step-line"></div>
+            </div>
+            <div :class="['workflow-step-item', getStepClass(3)]">
+              <div class="step-circle">
+                <el-icon v-if="workflowStep >= 3"><Check /></el-icon>
+                <span v-else>3</span>
+              </div>
+              <div class="step-label">{{ t('workflowStepVerify') }}</div>
+              <div v-if="workflowStep < 4" class="step-line"></div>
+            </div>
+            <div :class="['workflow-step-item', getStepClass(4)]">
+              <div class="step-circle">
+                <el-icon v-if="workflowStep >= 4"><Check /></el-icon>
+                <span v-else>4</span>
+              </div>
+              <div class="step-label">{{ t('workflowStepComplete') }}</div>
+            </div>
           </div>
+
+          <!-- 进度条 -->
+          <div class="progress-bar-section">
+            <el-progress
+              :percentage="statusInfo.progress_percent"
+              :status="statusInfo.status === 'cancelled' ? 'exception' : (statusInfo.status === 'completed' ? 'success' : '')"
+              :stroke-width="8"
+            />
+            <span class="progress-label">{{ statusInfo.progress_percent }}%</span>
+          </div>
+
+          <!-- 任务基本信息 -->
           <div class="task-meta-row">
             <div class="meta-item">
               <el-icon><Clock /></el-icon>
@@ -47,151 +93,118 @@
               <el-icon><User /></el-icon>
               <span>{{ statusInfo.current_owner || t('maintOwnerUnassigned') }}</span>
             </div>
-            <div class="meta-item sla" :class="{ overdue: statusInfo.sla_remaining === t('maintSlaOverdue') }">
-              <el-icon><Timer /></el-icon>
-              <span>{{ statusInfo.sla_remaining || t('maintSlaNotSet') }}</span>
+            <div class="meta-item device">
+              <el-icon><Monitor /></el-icon>
+              <router-link :to="`/devices/${maintenance.device_id}`" class="cell-link">{{ maintenance.device_name }}</router-link>
             </div>
           </div>
-          <div class="task-device-row">
-            <span>{{ t('maintDetailDeviceName') }}: <router-link :to="`/devices/${maintenance.device_id}`" class="cell-link">{{ maintenance.device_name }}</router-link></span>
-            <span>{{ t('maintType') }}: <span class="cell-tag" :class="getMaintTypeTagClass(maintenance.maint_type)">{{ getMaintTypeText(maintenance.maint_type) }}</span></span>
-          </div>
-        </div>
+        </el-card>
 
-        <!-- Workflow 步骤流程（4步：创建→维修→验证→完成） -->
-        <div class="workflow-steps-enhanced">
-          <div class="workflow-step-item" :class="getStepClass(1)">
-            <div class="step-icon">
-              <el-icon><Document /></el-icon>
+        <!-- 工作日志卡片（包含添加日志 + 日志列表） -->
+        <el-card class="work-notes-card" style="margin-top: 20px">
+          <template #header>
+            <div class="card-header-flex">
+              <span>{{ t('maintWorkNotes') }}</span>
+              <el-tag v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'" type="warning" size="small">
+                {{ statusInfo.status_label }}
+              </el-tag>
             </div>
-            <div class="step-info">
-              <span class="step-label">{{ t('workflowStepCreate') }}</span>
-              <span class="step-time" v-if="maintenance.created_at">{{ formatDateTime(maintenance.created_at) }}</span>
-            </div>
-            <div class="step-dot" :class="getStepClass(1)">{{ workflowStep >= 1 ? '✓' : '1' }}</div>
-          </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 2 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(2)">
-            <div class="step-icon">
-              <el-icon><Setting /></el-icon>
-            </div>
-            <div class="step-info">
-              <span class="step-label">{{ t('workflowStepRepair') }}</span>
-              <span class="step-time" v-if="statusInfo.repairing_at">{{ formatDateTime(statusInfo.repairing_at) }}</span>
-            </div>
-            <div class="step-dot" :class="getStepClass(2)">{{ workflowStep >= 2 ? '✓' : '2' }}</div>
-          </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 3 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(3)">
-            <div class="step-icon">
-              <el-icon><CircleCheck /></el-icon>
-            </div>
-            <div class="step-info">
-              <span class="step-label">{{ t('workflowStepVerify') }}</span>
-              <span class="step-time" v-if="statusInfo.verifying_at">{{ formatDateTime(statusInfo.verifying_at) }}</span>
-            </div>
-            <div class="step-dot" :class="getStepClass(3)">{{ workflowStep >= 3 ? '✓' : '3' }}</div>
-          </div>
-          <div class="step-connector" :class="{ completed: workflowStep >= 4 }"></div>
-          <div class="workflow-step-item" :class="getStepClass(4)">
-            <div class="step-icon">
-              <el-icon><SuccessFilled /></el-icon>
-            </div>
-            <div class="step-info">
-              <span class="step-label">{{ t('workflowStepComplete') }}</span>
-              <span class="step-time" v-if="statusInfo.completed_at">{{ formatDateTime(statusInfo.completed_at) }}</span>
-            </div>
-            <div class="step-dot" :class="getStepClass(4)">{{ workflowStep >= 4 ? '✓' : '4' }}</div>
-          </div>
-        </div>
+          </template>
 
-        <!-- 进度条显示 -->
-        <div class="progress-bar-section">
-          <el-progress
-            :percentage="statusInfo.progress_percent"
-            :status="statusInfo.status === 'cancelled' ? 'exception' : (statusInfo.status === 'completed' ? 'success' : '')"
-            :stroke-width="8"
-          />
-          <span class="progress-label">{{ t('maintProgress') }}: {{ statusInfo.progress_percent }}%</span>
-        </div>
+          <!-- 添加工作日志区域 -->
+          <div class="add-note-section" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+            <el-input
+              v-model="newNote"
+              type="textarea"
+              :rows="3"
+              :placeholder="t('maintNotePlaceholder')"
+              resize="none"
+            />
+            <div class="note-actions">
+              <!-- 主操作按钮 -->
+              <el-button type="primary" @click="handlePrimaryAction" class="action-btn-primary">
+                <el-icon><component :is="primaryActionIcon" /></el-icon>
+                {{ primaryActionText }}
+              </el-button>
+              <!-- 仅添加日志按钮 -->
+              <el-button type="default" @click="addWorkNote" :disabled="!newNote" :loading="addingNote" class="add-note-btn">
+                <el-icon><Plus /></el-icon>
+                {{ t('maintAddNote') }}
+              </el-button>
+            </div>
+          </div>
 
-        <!-- 详情网格 -->
-        <div class="detail-grid">
-          <div class="detail-item">
-            <span class="detail-item-label">{{ t('maintDetailVendor') }}</span>
-            <span class="detail-item-value">{{ maintenance.vendor || t('maintDetailVendorNone') }}</span>
+          <!-- 日志时间线（按时间倒序，最新在上） -->
+          <div class="notes-timeline" v-if="workNotesList.length > 0">
+            <div class="note-item" v-for="(note, idx) in workNotesList" :key="idx" :class="{ 'from-fault': note.source === 'fault' }">
+              <div class="note-header">
+                <span class="note-author">{{ note.operator || 'System' }}</span>
+                <span class="note-time">{{ formatDateTime(note.event_time || note.created_at) }}</span>
+                <el-tag v-if="note.source === 'fault'" type="warning" size="small">{{ t('maintFromFault') }}</el-tag>
+                <el-tag v-if="note.event_type === 'work_note'" type="info" size="small">{{ t('maintEventNote') }}</el-tag>
+              </div>
+              <div class="note-content">{{ note.notes || note.content }}</div>
+            </div>
           </div>
-          <div class="detail-item">
-            <span class="detail-item-label">{{ t('maintDetailHours') }}</span>
-            <span class="detail-item-value">{{ maintenance.labor_hours }} {{ t('maintDetailHoursUnit') }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-item-label">{{ t('maintDetailPartsCost') }}</span>
-            <span class="detail-item-value" style="color: var(--accent-warning)">{{ formatCurrency(maintenance.parts_cost) }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-item-label">{{ t('maintDetailLaborCost') }}</span>
-            <span class="detail-item-value">{{ formatCurrency(maintenance.labor_cost) }}</span>
-          </div>
-          <div class="detail-item">
-            <span class="detail-item-label">{{ t('maintDetailTotalCost') }}</span>
-            <span class="detail-item-value" style="color: var(--accent-success); font-weight: 600">{{ formatCurrency((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)) }}</span>
-          </div>
-        </div>
 
-        <!-- Tabs: 备件列表和返回件列表 -->
-        <div class="tabs-wrapper" style="margin-top: 16px">
-          <div class="tabs-header">
-            <span class="tab-item" :class="{ active: activeTab === 'spare' }" @click="activeTab = 'spare'">{{ t('maintDetailSpareInfo') }}</span>
-            <span class="tab-item" :class="{ active: activeTab === 'return' }" @click="activeTab = 'return'">{{ t('maintDetailReturnInfo') }}</span>
-            <span class="tab-item" :class="{ active: activeTab === 'desc' }" @click="activeTab = 'desc'">{{ t('maintDetailLaborInfo') }}</span>
+          <!-- 空状态 -->
+          <div class="notes-empty" v-else>
+            <el-icon><Document /></el-icon>
+            <span>{{ t('maintNoNotes') }}</span>
           </div>
-          <div class="tabs-content">
-            <!-- 备件列表 -->
-            <div v-show="activeTab === 'spare'">
-              <div class="spare-parts-display" v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
+        </el-card>
+
+        <!-- 维修基本信息卡片 -->
+        <el-card class="basic-info-card" style="margin-top: 20px">
+          <template #header>
+            <span>{{ t('maintBasicInfo') }}</span>
+          </template>
+
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item :label="t('maintType')">
+              <el-tag :type="getMaintTypeTagClass(maintenance.maint_type)" size="small">
+                {{ getMaintTypeText(maintenance.maint_type) }}
+              </el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('maintDetailVendor')">{{ maintenance.vendor || '-' }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintDetailHours')">{{ maintenance.labor_hours || 0 }} {{ t('maintDetailHoursUnit') }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintDetailPartsCost')">
+              <span style="color: var(--accent-warning)">{{ formatCurrency(maintenance.parts_cost || 0) }}</span>
+            </el-descriptions-item>
+            <el-descriptions-item :label="t('maintDetailLaborCost')">{{ formatCurrency(maintenance.labor_cost || 0) }}</el-descriptions-item>
+            <el-descriptions-item :label="t('maintDetailTotalCost')">
+              <span style="color: var(--accent-success); font-weight: 600">{{ formatCurrency((maintenance.parts_cost || 0) + (maintenance.labor_cost || 0)) }}</span>
+            </el-descriptions-item>
+          </el-descriptions>
+
+          <!-- 备件/返回件 Tabs -->
+          <el-tabs v-model="activeTab" style="margin-top: 16px">
+            <el-tab-pane :label="t('maintDetailSpareInfo')" name="spare">
+              <div v-if="maintenance.spare_parts_list && maintenance.spare_parts_list.length > 0">
                 <el-table :data="maintenance.spare_parts_list" border size="small">
                   <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
-                    <template #default="{ row }">
-                      <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-                    </template>
+                    <template #default="{ row }"><span class="cell-primary">{{ row.serial_number || '-' }}</span></template>
                   </el-table-column>
                   <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
-                  <el-table-column prop="name" :label="t('maintColName')" width="150" />
+                  <el-table-column prop="name" :label="t('maintColName')" min-width="120" />
                   <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
                   <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="80">
-                    <template #default="{ row }">
-                      <span class="cell-success">{{ formatCurrency(row.unit_price) }}</span>
-                    </template>
-                  </el-table-column>
-                  <el-table-column :label="t('maintColSubtotal')" width="80">
-                    <template #default="{ row }">
-                      <span class="cell-success">{{ formatCurrency((row.quantity || 1) * (row.unit_price || 0)) }}</span>
-                    </template>
+                    <template #default="{ row }"><span class="cell-success">{{ formatCurrency(row.unit_price) }}</span></template>
                   </el-table-column>
                 </el-table>
-                <div class="parts-total">
-                  {{ t('maintSpareTotalCost') }}: <span class="cost">{{ formatCurrency(maintenance.parts_cost) }}</span>
-                </div>
               </div>
               <div class="empty-state" v-else>
-                <span class="empty-icon">📦</span>
-                <span class="empty-text">{{ t('maintDetailNoSpare') }}</span>
+                <el-tag type="info" size="small">{{ t('maintDetailNoSpare') }}</el-tag>
               </div>
-            </div>
-
-            <!-- 返回件列表 -->
-            <div v-show="activeTab === 'return'">
-              <div class="return-parts-display" v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
+            </el-tab-pane>
+            <el-tab-pane :label="t('maintDetailReturnInfo')" name="return">
+              <div v-if="maintenance.return_parts_list && maintenance.return_parts_list.length > 0">
                 <el-table :data="maintenance.return_parts_list" border size="small">
                   <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="120">
-                    <template #default="{ row }">
-                      <span class="cell-primary">{{ row.serial_number || '-' }}</span>
-                    </template>
+                    <template #default="{ row }"><span class="cell-primary">{{ row.serial_number || '-' }}</span></template>
                   </el-table-column>
                   <el-table-column prop="part_number" :label="t('maintColModel')" width="120" />
-                  <el-table-column prop="name" :label="t('maintColName')" width="150" />
-                  <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60" />
+                  <el-table-column prop="name" :label="t('maintColName')" min-width="120" />
                   <el-table-column :label="t('maintDetailReturnScrapIn')" width="80">
                     <template #default="{ row }">
                       <span class="cell-tag" :class="row.scrap_in ? 'success' : 'info'">
@@ -200,159 +213,162 @@
                     </template>
                   </el-table-column>
                 </el-table>
-                <div class="return-tip">{{ t('maintDetailReturnTip') }}</div>
               </div>
               <div class="empty-state" v-else>
-                <span class="empty-icon">🔄</span>
-                <span class="empty-text">{{ t('maintDetailNoReturn') }}</span>
+                <el-tag type="info" size="small">{{ t('maintDetailNoReturn') }}</el-tag>
               </div>
-            </div>
+            </el-tab-pane>
+            <el-tab-pane :label="t('maintDetailLaborInfo')" name="desc">
+              <p class="description-text">{{ maintenance.description || t('maintDetailNoDesc') }}</p>
+            </el-tab-pane>
+          </el-tabs>
+        </el-card>
+      </el-col>
 
-            <!-- 维修描述 -->
-            <div v-show="activeTab === 'desc'">
-              <p class="description">{{ maintenance.description || t('maintDetailNoDesc') }}</p>
-            </div>
-          </div>
-        </div>
-      </div>
+      <!-- 右侧：操作按钮 + 处理时间线 + 设备信息 -->
+      <el-col :span="8">
+        <!-- 操作卡片 -->
+        <el-card class="actions-card">
+          <template #header>
+            <span>{{ t('moreActions') }}</span>
+          </template>
 
-      <!-- 右侧：操作卡片 -->
-      <div class="maint-actions-card">
-        <!-- 工作日志输入区（ServiceNow Notes风格） -->
-        <div class="work-notes-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-          <div class="actions-card-header">
-            <el-icon><Edit /></el-icon>
-            {{ t('maintWorkNotes') }}
-          </div>
-          <el-input
-            v-model="newNote"
-            type="textarea"
-            :rows="3"
-            :placeholder="t('maintNotePlaceholder')"
-            class="note-input"
-          />
-          <el-button type="primary" size="default" class="note-submit-btn" @click="addWorkNote" :loading="addingNote">
-            <el-icon><Plus /></el-icon>
-            {{ t('maintAddNote') }}
-          </el-button>
-        </div>
-
-        <!-- 流程操作区（DNAC风格：单一主按钮 + 更多操作dropdown） -->
-        <div class="action-control-card" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-          <!-- 主操作按钮（根据状态动态变化） -->
-          <div class="primary-action-area">
-            <el-button
-              type="primary"
-              class="primary-action-btn"
-              @click="handlePrimaryAction"
+          <!-- 分配负责人 -->
+          <div class="assign-section" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+            <el-select
+              v-model="assignForm.owner"
+              :placeholder="t('maintOwnerPlaceholder')"
+              filterable
+              clearable
+              style="width: 100%"
             >
-              <el-icon><component :is="primaryActionIcon" /></el-icon>
-              {{ primaryActionText }}
+              <template #prefix><el-icon><User /></el-icon></template>
+              <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+            </el-select>
+            <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
+              {{ t('maintAssignBtn') }}
             </el-button>
           </div>
 
           <!-- 更多操作 dropdown -->
-          <div class="more-actions-area">
-            <el-dropdown trigger="click" placement="bottom-end">
-              <el-button type="default" class="more-actions-btn">
-                <el-icon><MoreFilled /></el-icon>
-                {{ t('moreActions') }}
-              </el-button>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item @click="openEditDialog">
-                    <el-icon><Edit /></el-icon>{{ t('actionEdit') }}
-                  </el-dropdown-item>
-                  <el-dropdown-item divided @click="openEditDialog">
-                    <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="openEditDialog">
-                    <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
-                  </el-dropdown-item>
-                  <el-dropdown-item @click="focusNoteInput">
-                    <el-icon><EditPen /></el-icon>{{ t('maintAddNote') }}
-                  </el-dropdown-item>
-                  <el-dropdown-item divided class="dropdown-danger" @click="handleCancel">
-                    <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
-                  </el-dropdown-item>
-                </el-dropdown-menu>
-              </template>
-            </el-dropdown>
-          </div>
-        </div>
+          <el-dropdown trigger="click" style="width: 100%" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
+            <el-button type="default" style="width: 100%">
+              <el-icon><MoreFilled /></el-icon>
+              {{ t('moreActions') }}
+              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
+            </el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item @click="openEditDialog">
+                  <el-icon><Edit /></el-icon>{{ t('actionEdit') }}
+                </el-dropdown-item>
+                <el-dropdown-item divided @click="openEditDialog">
+                  <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
+                </el-dropdown-item>
+                <el-dropdown-item @click="openEditDialog">
+                  <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
+                </el-dropdown-item>
+                <el-dropdown-item divided class="dropdown-danger" @click="handleCancel">
+                  <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
+                </el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
 
-        <!-- 已完成/已取消状态显示 -->
-        <div class="status-complete-card" v-if="statusInfo.status === 'completed' || statusInfo.status === 'cancelled'">
-          <el-button type="default" class="view-details-btn" @click="openEditDialog">
+          <!-- 已完成状态 -->
+          <el-button type="default" style="width: 100%" v-if="statusInfo.status === 'completed' || statusInfo.status === 'cancelled'" @click="openEditDialog">
             <el-icon><View /></el-icon>
             {{ t('actionViewDetails') }}
           </el-button>
-        </div>
+        </el-card>
 
-        <!-- 分配负责人（维修中或验证中状态时如果还没有负责人） -->
-        <div class="assign-card" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-          <div class="actions-card-header">
-            <el-icon><User /></el-icon>
-            {{ t('maintAssignBtn') }}
-          </div>
-          <el-select
-            v-model="assignForm.owner"
-            :placeholder="t('maintOwnerPlaceholder')"
-            filterable
-            clearable
-            style="margin-top: 12px"
-          >
-            <template #prefix><el-icon><User /></el-icon></template>
-            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
-          </el-select>
-          <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
-            {{ t('maintAssignBtn') }}
-          </el-button>
-        </div>
+        <!-- 处理时间线卡片 -->
+        <el-card class="timeline-card" style="margin-top: 20px">
+          <template #header>
+            <span>{{ t('maintTimeline') }}</span>
+          </template>
 
-        <!-- 事件时间线（DNAC Timeline风格） -->
-        <div class="timeline-section" v-if="events.length > 0">
-          <div class="section-header">
-            <el-icon><Clock /></el-icon>
-            {{ t('maintTimeline') }}
-            <el-tag v-if="maintenance.has_fault_work_notes" type="info" size="small" class="fault-notes-tag">
-              {{ t('maintIncludesFaultNotes') }}
-            </el-tag>
-          </div>
-          <div class="timeline-container">
-            <div
-              v-for="(event, index) in events"
-              :key="index"
-              class="timeline-item"
-              :class="{ 'from-fault': event.source === 'fault' }"
+          <el-timeline>
+            <el-timeline-item
+              :timestamp="formatDateTime(maintenance.created_at)"
+              placement="top"
+              color="#409EFF"
             >
-              <!-- Timeline dot -->
-              <div class="timeline-dot" :class="event.event_type">
-                <el-icon :size="10">
-                  <component :is="getEventIcon(event.event_type)" />
-                </el-icon>
-              </div>
-              <!-- Event content -->
-              <div class="timeline-content">
-                <div class="timeline-header">
-                  <div class="timeline-title-wrapper">
-                    <el-tag v-if="event.source === 'fault'" type="warning" size="small" class="fault-source-tag">
-                      {{ t('maintFromFault') }}
-                    </el-tag>
-                    <span class="timeline-title">{{ event.notes || getEventLabel(event.event_type) }}</span>
-                  </div>
-                  <span class="timeline-time">{{ event.event_time ? formatDateTime(event.event_time) : '' }}</span>
-                </div>
-                <div class="timeline-meta" v-if="event.operator">
-                  <el-icon :size="12"><User /></el-icon>
-                  <span class="timeline-operator">{{ event.operator }}</span>
-                </div>
-              </div>
+              <el-card>
+                <h4>{{ t('maintEventCreated') }}</h4>
+                <p>{{ t('maintColNo') }}：{{ maintenance.maint_no }}</p>
+              </el-card>
+            </el-timeline-item>
+            <el-timeline-item
+              v-if="statusInfo.repairing_at"
+              :timestamp="formatDateTime(statusInfo.repairing_at)"
+              placement="top"
+              color="#E6A23C"
+            >
+              <el-card>
+                <h4>{{ t('workflowStepRepair') }}</h4>
+                <p>{{ t('maintEventRepairing') }}</p>
+              </el-card>
+            </el-timeline-item>
+            <el-timeline-item
+              v-if="statusInfo.verifying_at"
+              :timestamp="formatDateTime(statusInfo.verifying_at)"
+              placement="top"
+              color="#67C23A"
+            >
+              <el-card>
+                <h4>{{ t('workflowStepVerify') }}</h4>
+                <p>{{ t('maintEventVerifying') }}</p>
+              </el-card>
+            </el-timeline-item>
+            <el-timeline-item
+              v-if="statusInfo.completed_at"
+              :timestamp="formatDateTime(statusInfo.completed_at)"
+              placement="top"
+              color="#67C23A"
+            >
+              <el-card>
+                <h4>{{ t('workflowStepComplete') }}</h4>
+                <p>{{ t('maintEventCompleted') }}</p>
+              </el-card>
+            </el-timeline-item>
+            <el-timeline-item
+              v-if="statusInfo.cancelled_at"
+              :timestamp="formatDateTime(statusInfo.cancelled_at)"
+              placement="top"
+              color="#F56C6C"
+            >
+              <el-card>
+                <h4>{{ t('maintEventCancelled') }}</h4>
+                <p>{{ maintenance.cancel_reason || '-' }}</p>
+              </el-card>
+            </el-timeline-item>
+          </el-timeline>
+        </el-card>
+
+        <!-- 设备信息卡片 -->
+        <el-card class="device-card" style="margin-top: 20px" v-if="device">
+          <template #header>
+            <span>{{ t('maintDetailDeviceInfo') }}</span>
+          </template>
+
+          <div class="device-info">
+            <div class="device-row">
+              <span class="device-label">{{ t('colDeviceName') }}</span>
+              <router-link :to="`/devices/${device.id}`" class="device-link">{{ device.name }}</router-link>
+            </div>
+            <div class="device-row">
+              <span class="device-label">{{ t('colDeviceIp') }}</span>
+              <span class="device-value">{{ device.ip }}</span>
+            </div>
+            <div class="device-row">
+              <span class="device-label">{{ t('colDeviceStatus') }}</span>
+              <el-tag :type="device.status === 'online' ? 'success' : 'info'" size="small">{{ device.status }}</el-tag>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
+        </el-card>
+      </el-col>
+    </el-row>
 
     <!-- 编辑维修对话框 -->
     <el-dialog v-model="showEditDialog" :title="t('maintDetailEdit')" width="720px" append-to-body draggable align-center class="edit-maint-dialog">
@@ -833,6 +849,32 @@ const PRIORITY_COLORS = {
 // 计算当前 workflow 步骤（基于后端状态）
 const workflowStep = computed(() => {
   return STATUS_STEPS[statusInfo.value.status] || 1
+})
+
+// 工作日志列表（合并维修日志 + 故障来源日志，按时间倒序，最新在上）
+const workNotesList = computed(() => {
+  // 合并所有事件，包括故障来源日志和维修工单日志
+  const allNotes = []
+
+  // 添加维修工单的事件
+  events.value.forEach(e => {
+    // 只包含工作日志类型的记录
+    if (e.event_type === 'work_note' || e.source === 'fault') {
+      allNotes.push({
+        ...e,
+        created_at: e.event_time
+      })
+    }
+  })
+
+  // 按时间倒序排序（最新在上）
+  allNotes.sort((a, b) => {
+    const timeA = a.event_time || a.created_at || ''
+    const timeB = b.event_time || b.created_at || ''
+    return timeB.localeCompare(timeA)  // 倒序：最新的在前
+  })
+
+  return allNotes
 })
 
 // 获取下一步可转换的状态

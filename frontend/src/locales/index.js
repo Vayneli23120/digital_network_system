@@ -1825,6 +1825,12 @@ export const languages = {
     maintEventVerificationSubmitted: '提交验证',
     maintEventVerificationPassed: '验证通过',
     maintFromFault: '来自故障单',
+    maintNoNotes: '暂无工作日志',
+    maintIncludesFaultNotes: '包含故障诊断日志',
+    workflowStepCreate: '创建',
+    workflowStepRepair: '维修',
+    workflowStepVerify: '验证',
+    workflowStepComplete: '完成',
 
     // 故障详情
     faultDetailTitle: '故障详情',
@@ -4747,6 +4753,12 @@ export const languages = {
     maintEventVerificationSubmitted: 'Verification submitted',
     maintEventVerificationPassed: 'Verification passed',
     maintFromFault: 'From fault ticket',
+    maintNoNotes: 'No work notes',
+    maintIncludesFaultNotes: 'Includes fault diagnosis notes',
+    workflowStepCreate: 'Create',
+    workflowStepRepair: 'Repair',
+    workflowStepVerify: 'Verify',
+    workflowStepComplete: 'Complete',
 
     // ===== Semi-Auto State Machine =====
     // Basic Info
