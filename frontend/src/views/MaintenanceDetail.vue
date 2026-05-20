@@ -54,49 +54,20 @@
             </div>
           </template>
 
-          <!-- Workflow 步骤流程（4步） -->
-          <div class="workflow-steps-enhanced">
-            <div class="workflow-step-item" :class="getStepClass(1)">
+          <!-- 状态流程指示器（参考故障详情页） -->
+          <div class="status-flow-indicator">
+            <div
+              v-for="(step, idx) in maintSteps"
+              :key="step.key"
+              :class="['flow-step', { active: statusInfo.status === step.key, completed: isStepCompleted(step.key) }]"
+            >
               <div class="step-circle">
-                <el-icon v-if="workflowStep >= 1"><Check /></el-icon>
-                <span v-else>1</span>
+                <el-icon v-if="isStepCompleted(step.key)"><Check /></el-icon>
+                <span v-else>{{ idx + 1 }}</span>
               </div>
-              <div class="step-label">{{ t('workflowStepCreate') }}</div>
-              <div v-if="workflowStep < 2" class="step-line"></div>
+              <div class="step-label">{{ step.label }}</div>
+              <div v-if="idx < maintSteps.length - 1" class="step-line" :class="{ completed: isStepCompleted(maintSteps[idx + 1]?.key) }"></div>
             </div>
-            <div :class="['workflow-step-item', getStepClass(2)]">
-              <div class="step-circle">
-                <el-icon v-if="workflowStep >= 2"><Check /></el-icon>
-                <span v-else>2</span>
-              </div>
-              <div class="step-label">{{ t('workflowStepRepair') }}</div>
-              <div v-if="workflowStep < 3" class="step-line"></div>
-            </div>
-            <div :class="['workflow-step-item', getStepClass(3)]">
-              <div class="step-circle">
-                <el-icon v-if="workflowStep >= 3"><Check /></el-icon>
-                <span v-else>3</span>
-              </div>
-              <div class="step-label">{{ t('workflowStepVerify') }}</div>
-              <div v-if="workflowStep < 4" class="step-line"></div>
-            </div>
-            <div :class="['workflow-step-item', getStepClass(4)]">
-              <div class="step-circle">
-                <el-icon v-if="workflowStep >= 4"><Check /></el-icon>
-                <span v-else>4</span>
-              </div>
-              <div class="step-label">{{ t('workflowStepComplete') }}</div>
-            </div>
-          </div>
-
-          <!-- 进度条 -->
-          <div class="progress-bar-section">
-            <el-progress
-              :percentage="statusInfo.progress_percent"
-              :status="statusInfo.status === 'cancelled' ? 'exception' : (statusInfo.status === 'completed' ? 'success' : '')"
-              :stroke-width="8"
-            />
-            <span class="progress-label">{{ statusInfo.progress_percent }}%</span>
           </div>
 
           <!-- 任务基本信息 -->
@@ -776,6 +747,26 @@ const STATUS_STEPS = {
   'verifying': 3,
   'completed': 4,
   'cancelled': 0
+}
+
+// 状态流转步骤（参考故障详情页）
+const maintSteps = [
+  { key: 'created', label: t('workflowStepCreate') },
+  { key: 'repairing', label: t('workflowStepRepair') },
+  { key: 'verifying', label: t('workflowStepVerify') },
+  { key: 'completed', label: t('workflowStepComplete') }
+]
+
+// 状态完成顺序
+const statusOrder = ['created', 'pending', 'repairing', 'verifying', 'completed']
+
+// 判断某步骤是否已完成
+const isStepCompleted = (stepKey) => {
+  if (!stepKey) return false
+  if (statusInfo.value.status === 'cancelled') return false
+  const currentIdx = statusOrder.indexOf(statusInfo.value.status)
+  const stepIdx = statusOrder.indexOf(stepKey)
+  return stepIdx < currentIdx || statusInfo.value.status === stepKey
 }
 
 const STATUS_ICONS = {
@@ -1933,147 +1924,95 @@ onMounted(async () => {
   font-size: 13px;
 }
 
-/* Workflow 步骤增强版 */
-.workflow-steps-enhanced {
+/* 状态流转指示器（参考故障详情页） */
+.status-flow-indicator {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 16px;
-  background: var(--bg-tertiary, #f7f9fc);
-  border-radius: 10px;
+  justify-content: space-between;
+  padding: 20px 10px;
   margin-bottom: 16px;
-  overflow-x: auto;
 }
 
-.workflow-step-item {
+.flow-step {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  background: var(--bg-card, #ffffff);
-  transition: all 0.2s;
+  position: relative;
+  flex: 1;
 }
 
-.workflow-step-item.completed {
-  background: rgba(0, 184, 148, 0.1);
-}
-
-.workflow-step-item.active {
-  background: rgba(225, 112, 85, 0.15);
-  box-shadow: 0 0 0 2px var(--accent-warning, #e17055);
-}
-
-.workflow-step-item.pending {
-  opacity: 0.6;
-}
-
-.step-icon {
+.step-circle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  font-size: 12px;
+  font-weight: 600;
   background: var(--bg-tertiary);
+  color: var(--text-muted);
+  transition: all 0.3s;
 }
 
-.workflow-step-item.completed .step-icon {
-  background: var(--accent-success, #00b894);
+.flow-step.active .step-circle {
+  background: #409EFF;
   color: #fff;
+  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.3);
 }
 
-.workflow-step-item.active .step-icon {
-  background: var(--accent-warning, #e17055);
+.flow-step.completed .step-circle {
+  background: #67C23A;
   color: #fff;
-}
-
-.workflow-step-item.pending .step-icon {
-  background: var(--bg-tertiary);
-  color: var(--text-muted, #9BAABB);
-}
-
-.step-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .step-label {
   font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 8px;
+}
+
+.flow-step.active .step-label {
+  color: #409EFF;
   font-weight: 500;
-  color: var(--text-secondary);
 }
 
-.workflow-step-item.completed .step-label {
-  color: var(--accent-success);
+.flow-step.completed .step-label {
+  color: #67C23A;
 }
 
-.workflow-step-item.active .step-label {
-  color: var(--accent-warning);
-  font-weight: 600;
-}
-
-.step-time {
-  font-size: 11px;
-  color: var(--text-muted, #9BAABB);
-  font-family: var(--font-display);
-}
-
-.step-dot {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
-  font-weight: 600;
-}
-
-.step-dot.completed {
-  background: var(--accent-success, #00b894);
-  color: #fff;
-}
-
-.step-dot.active {
-  background: var(--accent-warning, #e17055);
-  color: #fff;
-}
-
-.step-dot.pending {
-  background: var(--bg-card, #ffffff);
-  border: 2px solid var(--border-default, #E2E8F2);
-  color: var(--text-muted, #9BAABB);
-}
-
-.step-connector {
-  width: 20px;
+.step-line {
+  width: calc(100% - 48px);
   height: 2px;
-  background: var(--border-default, #E2E8F2);
-  flex-shrink: 0;
+  background: var(--bg-tertiary);
+  position: absolute;
+  left: calc(50% + 16px);
+  top: 16px;
 }
 
-.step-connector.completed {
-  background: var(--accent-success, #00b894);
+.step-line.completed {
+  background: #67C23A;
 }
 
-/* 进度条 */
-.progress-bar-section {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 20px;
+/* 暗色模式状态流转 */
+.dark .step-circle {
+  background: var(--bg-tertiary);
 }
 
-.progress-bar-section .el-progress {
-  flex: 1;
+.dark .flow-step.active .step-circle {
+  background: #409EFF;
 }
 
-.progress-label {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  font-weight: 500;
+.dark .flow-step.completed .step-circle {
+  background: #67C23A;
+}
+
+.dark .step-line {
+  background: var(--border-default);
+}
+
+.dark .step-line.completed {
+  background: #67C23A;
 }
 
 .maint-actions-card {
