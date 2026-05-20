@@ -331,12 +331,12 @@
               <!-- Event content -->
               <div class="timeline-content">
                 <div class="timeline-header">
-                  <span class="timeline-title">
-                    {{ event.notes || getEventLabel(event.event_type) }}
+                  <div class="timeline-title-wrapper">
                     <el-tag v-if="event.source === 'fault'" type="warning" size="small" class="fault-source-tag">
                       {{ t('maintFromFault') }}
                     </el-tag>
-                  </span>
+                    <span class="timeline-title">{{ event.notes || getEventLabel(event.event_type) }}</span>
+                  </div>
                   <span class="timeline-time">{{ event.event_time ? formatDateTime(event.event_time) : '' }}</span>
                 </div>
                 <div class="timeline-meta" v-if="event.operator">
@@ -2372,26 +2372,30 @@ onMounted(async () => {
 .timeline-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 8px;
+}
+
+.timeline-title-wrapper {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .timeline-title {
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
-  white-space: normal;
+  white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
-  line-height: 1.4;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
+  line-height: 1.6;
 }
 
 .fault-source-tag {
-  margin-left: 4px;
+  display: inline-block;
   font-size: 11px;
 }
 
