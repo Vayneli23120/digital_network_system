@@ -20,6 +20,28 @@
           <el-icon><Edit /></el-icon>
           {{ t('actionEdit') }}
         </button>
+        <el-dropdown v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'" trigger="click" @command="handleMoreAction">
+          <button class="nav-action-btn secondary">
+            <el-icon><MoreFilled /></el-icon>
+          </button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="openEditDialog">
+                <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
+              </el-dropdown-item>
+              <el-dropdown-item @click="openEditDialog">
+                <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
+              </el-dropdown-item>
+              <el-dropdown-item divided class="dropdown-danger" command="cancel">
+                <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button type="default" size="small" v-if="statusInfo.status === 'completed' || statusInfo.status === 'cancelled'" @click="openEditDialog">
+          <el-icon><View /></el-icon>
+          {{ t('actionViewDetails') }}
+        </el-button>
       </div>
     </section>
 
@@ -225,65 +247,30 @@
         </el-card>
       </el-col>
 
-      <!-- 右侧：操作按钮 + 处理时间线 + 设备信息 -->
+      <!-- 右侧：处理时间线 -->
       <el-col :span="8">
-        <!-- 操作卡片 -->
-        <el-card class="actions-card">
+        <!-- 分配负责人（如果没有负责人且未完成） -->
+        <el-card class="assign-card" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
           <template #header>
-            <span>{{ t('moreActions') }}</span>
+            <span>{{ t('maintAssignBtn') }}</span>
           </template>
-
-          <!-- 分配负责人 -->
-          <div class="assign-section" v-if="!statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-            <el-select
-              v-model="assignForm.owner"
-              :placeholder="t('maintOwnerPlaceholder')"
-              filterable
-              clearable
-              style="width: 100%"
-            >
-              <template #prefix><el-icon><User /></el-icon></template>
-              <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
-            </el-select>
-            <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
-              {{ t('maintAssignBtn') }}
-            </el-button>
-          </div>
-
-          <!-- 更多操作 dropdown -->
-          <el-dropdown trigger="click" style="width: 100%" v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'">
-            <el-button type="default" style="width: 100%">
-              <el-icon><MoreFilled /></el-icon>
-              {{ t('moreActions') }}
-              <el-icon class="el-icon--right"><ArrowDown /></el-icon>
-            </el-button>
-            <template #dropdown>
-              <el-dropdown-menu>
-                <el-dropdown-item @click="openEditDialog">
-                  <el-icon><Edit /></el-icon>{{ t('actionEdit') }}
-                </el-dropdown-item>
-                <el-dropdown-item divided @click="openEditDialog">
-                  <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
-                </el-dropdown-item>
-                <el-dropdown-item @click="openEditDialog">
-                  <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
-                </el-dropdown-item>
-                <el-dropdown-item divided class="dropdown-danger" @click="handleCancel">
-                  <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
-                </el-dropdown-item>
-              </el-dropdown-menu>
-            </template>
-          </el-dropdown>
-
-          <!-- 已完成状态 -->
-          <el-button type="default" style="width: 100%" v-if="statusInfo.status === 'completed' || statusInfo.status === 'cancelled'" @click="openEditDialog">
-            <el-icon><View /></el-icon>
-            {{ t('actionViewDetails') }}
+          <el-select
+            v-model="assignForm.owner"
+            :placeholder="t('maintOwnerPlaceholder')"
+            filterable
+            clearable
+            style="width: 100%"
+          >
+            <template #prefix><el-icon><User /></el-icon></template>
+            <el-option v-for="user in users" :key="user.id" :label="user.full_name || user.username" :value="user.username" />
+          </el-select>
+          <el-button type="primary" size="default" style="width: 100%; margin-top: 8px" @click="handleAssign">
+            {{ t('maintAssignBtn') }}
           </el-button>
         </el-card>
 
         <!-- 处理时间线卡片 -->
-        <el-card class="timeline-card" style="margin-top: 20px">
+        <el-card class="timeline-card" :style="{ marginTop: !statusInfo.current_owner && statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled' ? '20px' : '0' }">
           <template #header>
             <span>{{ t('maintTimeline') }}</span>
           </template>
@@ -344,28 +331,6 @@
               </el-card>
             </el-timeline-item>
           </el-timeline>
-        </el-card>
-
-        <!-- 设备信息卡片 -->
-        <el-card class="device-card" style="margin-top: 20px" v-if="device">
-          <template #header>
-            <span>{{ t('maintDetailDeviceInfo') }}</span>
-          </template>
-
-          <div class="device-info">
-            <div class="device-row">
-              <span class="device-label">{{ t('colDeviceName') }}</span>
-              <router-link :to="`/devices/${device.id}`" class="device-link">{{ device.name }}</router-link>
-            </div>
-            <div class="device-row">
-              <span class="device-label">{{ t('colDeviceIp') }}</span>
-              <span class="device-value">{{ device.ip }}</span>
-            </div>
-            <div class="device-row">
-              <span class="device-label">{{ t('colDeviceStatus') }}</span>
-              <el-tag :type="device.status === 'online' ? 'success' : 'info'" size="small">{{ device.status }}</el-tag>
-            </div>
-          </div>
         </el-card>
       </el-col>
     </el-row>
@@ -1044,6 +1009,13 @@ const handleStatusTransition = async (targetStatus) => {
   } catch (e) {
     const detail = e.response?.data?.detail || e.message
     ElMessage.error(t('maintTransitionFailed') + ': ' + detail)
+  }
+}
+
+// 更多操作菜单处理
+const handleMoreAction = (command) => {
+  if (command === 'cancel') {
+    handleCancel()
   }
 }
 
