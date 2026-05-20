@@ -20,19 +20,13 @@
           <el-icon><Edit /></el-icon>
           {{ t('actionEdit') }}
         </button>
-        <el-dropdown v-if="statusInfo.status !== 'completed' && statusInfo.status !== 'cancelled'" trigger="click" @command="handleMoreAction">
+        <el-dropdown v-if="canCancel" trigger="click" @command="handleMoreAction">
           <button class="nav-action-btn secondary">
             <el-icon><MoreFilled /></el-icon>
           </button>
           <template #dropdown>
             <el-dropdown-menu>
-              <el-dropdown-item @click="openEditDialog">
-                <el-icon><Box /></el-icon>{{ t('maintAddSpare') }}
-              </el-dropdown-item>
-              <el-dropdown-item @click="openEditDialog">
-                <el-icon><RefreshRight /></el-icon>{{ t('maintAddReturn') }}
-              </el-dropdown-item>
-              <el-dropdown-item divided class="dropdown-danger" command="cancel">
+              <el-dropdown-item class="dropdown-danger" command="cancel">
                 <el-icon><CircleClose /></el-icon>{{ t('maintTransitionToCancelled') }}
               </el-dropdown-item>
             </el-dropdown-menu>
