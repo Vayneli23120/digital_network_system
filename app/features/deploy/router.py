@@ -4,7 +4,7 @@ import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -13,8 +13,9 @@ from loguru import logger
 from jinja2 import Template
 
 from app.shared.database import get_db
-from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User
+from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User, LogEntry
 from app.shared.config import get_config
+from app.shared.dependencies import require_permission
 from app.features.auth.router import get_current_user_from_token
 from app.features.credentials.credential_service import decrypt_password
 from .deploy_service import get_deploy_service
@@ -478,7 +479,7 @@ async def preview_deploy(deploy_data: dict):
 
 
 @router.post("/execute")
-async def execute_deploy(deploy_data: dict):
+async def execute_deploy(deploy_data: dict, request: Request):
     """
     执行配置部署
 
@@ -498,6 +499,9 @@ async def execute_deploy(deploy_data: dict):
     """
     db: Session = next(get_db())
     history_id = None  # 部署历史记录 ID
+
+    # 获取当前用户名
+    current_username = get_current_username_from_request(request)
 
     try:
         mode = deploy_data.get('mode', 'backup')
@@ -614,7 +618,7 @@ async def execute_deploy(deploy_data: dict):
                 'id': device.id,
                 'name': device.name,
                 'ip': device.ip,
-                'device_type': 'cisco_ios',
+                'vendor': device.vendor,  # 厂商（用于确定 driver）
                 'credential_group': device.credential_group or 'default'
             }
             for device in devices
@@ -626,8 +630,8 @@ async def execute_deploy(deploy_data: dict):
 
         # ========== 阶段2：执行部署（完全隔离数据库） ==========
         parallel_limit = deploy_data.get('parallel_limit', 1)
-        # 单设备部署超时时间（秒）
-        DEVICE_TIMEOUT = 120
+        # 单设备部署超时时间（秒）- NAPALM 需要更长时间（compare_config + commit_config）
+        DEVICE_TIMEOUT = 180 if engine == 'napalm' else 120
 
         logger.info(f"部署参数: engine={engine}, napalm_mode={napalm_mode}, parallel_limit={parallel_limit}")
 
@@ -675,6 +679,9 @@ async def execute_deploy(deploy_data: dict):
                             ),
                             timeout=DEVICE_TIMEOUT
                         )
+                    # 确保 rollback_available 存在
+                    if result.get('success') and engine == 'napalm':
+                        result.setdefault('rollback_available', True)
                     results.append(result)
                     logger.info(f"设备 {device_dict['name']} 部署完成: success={result.get('success')}")
                 except asyncio.TimeoutError:
@@ -683,7 +690,8 @@ async def execute_deploy(deploy_data: dict):
                         'device_id': device_dict['id'],
                         'device_name': device_dict['name'],
                         'success': False,
-                        'message': f'部署超时（{DEVICE_TIMEOUT}秒）'
+                        'message': f'部署超时（{DEVICE_TIMEOUT}秒）',
+                        'rollback_available': False
                     })
                 except Exception as e:
                     logger.error(f"设备 {device_dict['name']} 部署异常: {e}")
@@ -691,7 +699,8 @@ async def execute_deploy(deploy_data: dict):
                         'device_id': device_dict['id'],
                         'device_name': device_dict['name'],
                         'success': False,
-                        'message': f'部署异常: {str(e)}'
+                        'message': f'部署异常: {str(e)}',
+                        'rollback_available': False
                     })
 
         else:
@@ -781,9 +790,13 @@ async def execute_deploy(deploy_data: dict):
                             'device_id': device_data_list[i]['id'],
                             'device_name': device_data_list[i]['name'],
                             'success': False,
-                            'message': f'部署异常: {str(result)}'
+                            'message': f'部署异常: {str(result)}',
+                            'rollback_available': False
                         })
                     else:
+                        # 确保 rollback_available 存在，默认 True（NAPALM 成功部署后可回滚）
+                        if result.get('success') and engine == 'napalm':
+                            result.setdefault('rollback_available', True)
                         processed_results.append(result)
                 results = processed_results
 
@@ -807,6 +820,25 @@ async def execute_deploy(deploy_data: dict):
                 )
                 db_log.add(audit_log)
 
+                # 记录工具执行日志 (LogEntry)
+                tool_type = engine  # netmiko 或 napalm
+                operation = f"{action} - {device_dict['name']}"
+                target = f"{device_dict['name']} ({device_dict['ip']})"
+                status = "success" if result.get('success') else "failed"
+                log_content = result.get('output', '') or result.get('error', '') or details
+                duration_ms = result.get('duration_ms')
+
+                log_entry = LogEntry(
+                    tool_type=tool_type,
+                    operation=operation,
+                    target=target,
+                    status=status,
+                    log_content=log_content,
+                    duration_ms=duration_ms,
+                    created_by="Web"
+                )
+                db_log.add(log_entry)
+
             # 创建部署历史记录（仅非 dry_run）
             if not dry_run:
                 deploy_config_data = {
@@ -820,15 +852,18 @@ async def execute_deploy(deploy_data: dict):
                     'base_backup_file': deploy_data.get('base_backup_file'),
                     'variables': variables
                 }
+                # 判断是重新部署还是首次部署
+                is_redeploy = deploy_data.get('parent_id') is not None
                 history_id = create_deploy_history(
                     db=db_log,
-                    operation_type='deploy',
+                    operation_type='redeploy' if is_redeploy else 'deploy',
                     engine=engine,
                     mode=napalm_mode if engine == 'napalm' else mode,
                     device_data_list=device_data_list,
                     results=results,
                     deploy_config=deploy_config_data,
-                    parent_id=deploy_data.get('parent_id')  # 重新部署时关联父记录
+                    parent_id=deploy_data.get('parent_id'),  # 重新部署时关联父记录
+                    username=current_username
                 )
 
             db_log.commit()
@@ -877,7 +912,7 @@ async def execute_deploy(deploy_data: dict):
 
 
 @router.post("/rollback")
-async def rollback_deploy(rollback_data: dict):
+async def rollback_deploy(rollback_data: dict, request: Request):
     """
     回滚设备配置到上一版本（仅 NAPALM 支持）
 
@@ -887,6 +922,9 @@ async def rollback_deploy(rollback_data: dict):
     }
     """
     db: Session = next(get_db())
+
+    # 获取当前用户名
+    current_username = get_current_username_from_request(request)
 
     try:
         target_device_ids = rollback_data.get('target_devices', [])
@@ -926,7 +964,7 @@ async def rollback_deploy(rollback_data: dict):
                 'id': device.id,
                 'name': device.name,
                 'ip': device.ip,
-                'device_type': 'cisco_ios',
+                'vendor': device.vendor,  # 厂商（用于确定 driver）
                 'credential_group': device.credential_group or 'default'
             }
 
@@ -941,7 +979,7 @@ async def rollback_deploy(rollback_data: dict):
             else:
                 failed_count += 1
 
-        # 记录审计日志
+        # 记录审计日志和工具执行日志
         for device, result in zip(devices, results):
             audit_log = AuditLog(
                 operator="Web",
@@ -951,6 +989,17 @@ async def rollback_deploy(rollback_data: dict):
                 details=f"配置回滚, 结果:{'成功' if result.get('success') else '失败'}"
             )
             db.add(audit_log)
+
+            # 记录工具执行日志 (LogEntry)
+            log_entry = LogEntry(
+                tool_type='napalm',  # 回滚只支持 NAPALM
+                operation=f"rollback_config - {device.name}",
+                target=f"{device.name} ({device.ip})",
+                status="success" if result.get('success') else "failed",
+                log_content=result.get('output', '') or result.get('error', '') or "配置回滚",
+                created_by="Web"
+            )
+            db.add(log_entry)
 
         # 创建回滚历史记录
         device_data_list = [
@@ -964,8 +1013,23 @@ async def rollback_deploy(rollback_data: dict):
             mode='rollback',
             device_data_list=device_data_list,
             results=results,
-            parent_id=rollback_data.get('parent_id')  # 关联到原始部署记录
+            parent_id=rollback_data.get('parent_id'),  # 关联到原始部署记录
+            username=current_username
         )
+
+        # 更新原始部署记录的设备状态（标记为已回滚）
+        parent_id = rollback_data.get('parent_id')
+        if parent_id:
+            for device, result in zip(devices, results):
+                if result.get('success'):
+                    # 找到原始部署记录中对应的设备执行结果
+                    original_result = db.query(DeployDeviceResult).filter(
+                        DeployDeviceResult.deploy_id == parent_id,
+                        DeployDeviceResult.device_id == device.id
+                    ).first()
+                    if original_result:
+                        original_result.rollback_available = False
+                        original_result.rollback_status = 'rolled_back'
 
         db.commit()
 
@@ -1105,11 +1169,35 @@ async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
 # 部署历史 API
 # =============================================================================
 
-def get_current_username() -> str:
-    """获取当前用户名，认证关闭时返回 system"""
+def get_current_username_from_request(request) -> str:
+    """从请求获取当前用户名
+
+    优先级：
+    1. 从 X-User 请求头获取（前端传递）
+    2. 从 JWT token 解码获取
+    3. 认证关闭时返回 system
+    """
     if not config.security.auth_enabled:
         return "system"
-    return "Web"  # 简化处理，实际应从 JWT 获取
+
+    # 从请求头获取
+    x_user = request.headers.get("X-User")
+    if x_user:
+        return x_user
+
+    # 从 Authorization header 解码 JWT
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        try:
+            from app.features.auth.router import decode_token
+            token = auth_header.replace("Bearer ", "")
+            payload = decode_token(token)
+            if payload and payload.get("sub"):
+                return payload.get("sub")
+        except Exception:
+            pass
+
+    return "system"
 
 
 @router.get("/history")
@@ -1226,29 +1314,44 @@ async def get_deploy_history_detail(history_id: int, db: Session = Depends(get_d
 
 
 @router.delete("/history/{history_id}")
-async def delete_deploy_history(history_id: int, db: Session = Depends(get_db)):
+async def delete_deploy_history(
+    history_id: int,
+    _: None = Depends(require_permission("deploy_history:delete")),
+    db: Session = Depends(get_db)
+):
     """
-    删除部署历史记录（仅管理员可用）
+    删除部署历史记录
 
-    注意：认证关闭时默认允许删除
+    - 如果删除的是父记录（原始部署）：级联删除所有关联的回滚/重新部署记录
+    - 如果删除的是子记录（回滚/重新部署）：只删除自己
+
+    权限: deploy_history:delete 或 admin:all
     """
     try:
-        # 检查权限（当认证启用时，需要管理员权限）
-        if config.security.auth_enabled:
-            # TODO: 从 JWT 获取当前用户并检查 is_superuser
-            # 目前简化处理，认证启用时暂时禁止删除
-            raise HTTPException(status_code=403, detail="需要管理员权限")
-
         record = db.query(DeployHistory).filter(DeployHistory.id == history_id).first()
         if not record:
             raise HTTPException(status_code=404, detail="历史记录不存在")
 
-        # 删除关联的设备执行结果（cascade 会自动处理）
+        deleted_count = 1
+
+        # 如果是父记录（原始部署），级联删除所有子记录
+        if record.parent_id is None and record.operation_type == 'deploy':
+            child_records = db.query(DeployHistory).filter(DeployHistory.parent_id == history_id).all()
+            for child in child_records:
+                db.query(DeployDeviceResult).filter(DeployDeviceResult.deploy_id == child.id).delete()
+                db.delete(child)
+                logger.info(f"级联删除子记录: id={child.id}, type={child.operation_type}")
+            deleted_count += len(child_records)
+
+        # 删除当前记录的设备执行结果
+        db.query(DeployDeviceResult).filter(DeployDeviceResult.deploy_id == history_id).delete()
+
+        # 删除当前记录
         db.delete(record)
         db.commit()
 
-        logger.info(f"删除部署历史记录: id={history_id}")
-        return {"success": True, "message": "删除成功"}
+        logger.info(f"删除部署历史记录: id={history_id}, 共删除 {deleted_count} 条记录")
+        return {"success": True, "message": f"删除成功，共删除 {deleted_count} 条记录"}
 
     except HTTPException:
         raise
@@ -1318,7 +1421,7 @@ def create_deploy_history(
     # 创建历史主记录
     history = DeployHistory(
         user_id=None,  # 暂不关联用户 ID
-        username=username or get_current_username(),
+        username=username or "system",
         operation_type=operation_type,
         engine=engine,
         mode=mode,

@@ -26,14 +26,28 @@ class NapalmDeployService:
 
     def __init__(self):
         # 设备类型映射到 NAPALM driver
+        # NAPALM 支持的 driver: ios, nxos, nxos_ssh, junos, eos, iosxr, huawei, etc.
         self.driver_map = {
             'cisco_ios': 'ios',
             'cisco_xe': 'ios',
-            'cisco_xr': 'ios',
-            'cisco_nxos': 'nxos',
+            'cisco_xr': 'iosxr',
+            'cisco_nxos': 'nxos_ssh',
+            'nxos': 'nxos_ssh',
             'juniper_junos': 'junos',
             'arista_eos': 'eos',
             'huawei': 'huawei',
+            'h3c_comware': 'huawei',
+            # 自定义设备类型映射
+            'cisco': 'ios',
+            'switch': 'ios',
+            'office_switch': 'ios',
+            'core_switch': 'ios',
+            'uce': 'ios',
+            'uce_new': 'ios',
+            'router': 'ios',
+            'rtr': 'ios',
+            'layer2': 'ios',
+            'layer3': 'ios',
         }
 
     def get_device_credentials(self, device: dict, credential_groups: List[dict]) -> dict:
@@ -66,8 +80,19 @@ class NapalmDeployService:
         if not NAPALM_AVAILABLE:
             raise RuntimeError("napalm 未安装，无法连接设备")
 
-        device_type = device.get('device_type', 'cisco_ios')
-        driver_name = self.get_driver_name(device_type)
+        # 根据 vendor 字段确定 NAPALM driver（厂商设备类型）
+        # vendor: cisco, juniper, huawei, arista 等
+        # device_type 是业务角色类型，不用于确定 driver
+        vendor = device.get('vendor', 'cisco').lower()
+
+        vendor_driver_map = {
+            'cisco': 'ios',           # Cisco IOS/IOS-XE 设备
+            'juniper': 'junos',       # Juniper 设备
+            'huawei': 'huawei',       # 华为设备
+            'h3c': 'huawei',          # H3C 设备
+            'arista': 'eos',          # Arista 设备
+        }
+        driver_name = vendor_driver_map.get(vendor, 'ios')
 
         napalm_device = {
             'hostname': device.get('ip'),
@@ -75,7 +100,14 @@ class NapalmDeployService:
             'password': credentials.get('password', ''),
             'optional_args': {
                 'port': device.get('ssh_port', 22),
-                'inline_transfer': True,  # 使用 inline 传输，无需 SCP
+                'inline_transfer': False,  # 使用 SCP 传输（需要设备开启 ip scp server enable）
+                'global_delay_factor': 3,  # 增加延迟因子
+                'fast_cli': False,
+                'transport': 'ssh',
+                'allow_agent': False,
+                'ssh_config_file': None,
+                'conn_timeout': 60,
+                'read_timeout': 120,
             }
         }
 
@@ -695,8 +727,17 @@ class NapalmStreamService:
 
     def _connect_device(self, device: dict, credentials: dict):
         """使用 NAPALM 连接设备"""
-        device_type = device.get('device_type', 'cisco_ios')
-        driver_name = self.driver_map.get(device_type, 'ios')
+        # 根据 vendor 字段确定 driver
+        vendor = device.get('vendor', 'cisco').lower()
+
+        vendor_driver_map = {
+            'cisco': 'ios',
+            'juniper': 'junos',
+            'huawei': 'huawei',
+            'h3c': 'huawei',
+            'arista': 'eos',
+        }
+        driver_name = vendor_driver_map.get(vendor, 'ios')
 
         napalm_device = {
             'hostname': device.get('ip'),
@@ -704,7 +745,14 @@ class NapalmStreamService:
             'password': credentials.get('password', ''),
             'optional_args': {
                 'port': device.get('ssh_port', 22),
-                'inline_transfer': True,
+                'inline_transfer': True,  # 使用 inline 传输，避免 Tcl
+                'global_delay_factor': 3,
+                'fast_cli': False,
+                'transport': 'ssh',
+                'allow_agent': False,
+                'ssh_config_file': None,
+                'conn_timeout': 60,
+                'read_timeout': 120,
             }
         }
 

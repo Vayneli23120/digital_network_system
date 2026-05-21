@@ -55,10 +55,22 @@ class DeployService:
         if not NETMIKO_AVAILABLE:
             raise RuntimeError("netmiko 未安装，无法连接设备")
 
-        device_type = device.get('device_type', 'cisco_ios')
+        # 根据 vendor 字段确定 Netmiko device_type（厂商设备类型）
+        # vendor: cisco, juniper, huawei, arista 等
+        # device_type 是业务角色类型，不用于确定 device_type
+        vendor = device.get('vendor', 'cisco').lower()
+
+        vendor_device_type_map = {
+            'cisco': 'cisco_ios',       # Cisco IOS/IOS-XE 设备
+            'juniper': 'juniper_junos', # Juniper 设备
+            'huawei': 'huawei',         # 华为设备
+            'h3c': 'hp_comware',        # H3C 设备
+            'arista': 'arista_eos',     # Arista 设备
+        }
+        netmiko_device_type = vendor_device_type_map.get(vendor, 'cisco_ios')
 
         netmiko_device = {
-            'device_type': device_type,
+            'device_type': netmiko_device_type,
             'host': device.get('ip'),
             'port': device.get('ssh_port', 22),
             'username': credentials.get('username', ''),
@@ -66,6 +78,8 @@ class DeployService:
             'secret': credentials.get('enable_password', ''),
             'timeout': 30,
             'session_timeout': 60,
+            'global_delay_factor': 2,  # 增加延迟因子，适应工业交换机等慢响应设备
+            'fast_cli': False,  # 禁用快速CLI模式，提高可靠性
         }
 
         try:

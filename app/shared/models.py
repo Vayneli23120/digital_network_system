@@ -23,7 +23,30 @@ class Device(Base):
     serial_number = Column(String(100))
     location = Column(String(200))
     role = Column(String(50), index=True)  # access, distribution, core
-    status = Column(String(50), default="online", index=True)  # online, offline, maintenance, retired
+
+    # ===== 部署状态（用户手动管理）=====
+    # in-use: 已部署在生产网络中
+    # un-used: 未部署（库存中、新设备）
+    # maintenance: 正在维护
+    # retired: 已退役
+    deployment_status = Column(String(50), default="un-used", index=True)
+
+    # ===== 可达性状态（自动监控判定）=====
+    # reachable: 设备网络可达（响应 ICMP/SSH）
+    # unreachable: 设备网络不可达
+    # unknown: 状态未知（首次发现或监控失败）
+    reachability = Column(String(50), default="unknown", index=True)
+
+    # ===== 可达性详情 =====
+    last_reachability_check = Column(DateTime)  # 最后检查时间
+    reachability_latency_ms = Column(Integer)   # 响应延迟（毫秒）
+    reachability_method = Column(String(20))    # 检测方法：icmp/ssh/snmp
+
+    # ===== 兼容旧字段（已弃用，将逐步迁移）=====
+    # status 字段保留用于数据迁移兼容，后续版本将移除
+    # 新代码请使用 deployment_status 和 reachability
+    status = Column(String(50), default="online", index=True)  # DEPRECATED
+
     device_type = Column(String(50), default="switch", index=True)  # uce, office_switch, ap, wlc, core_switch, server_switch, router, pa, ftd, other
     purchase_date = Column(DateTime)
     vendor = Column(String(200))
