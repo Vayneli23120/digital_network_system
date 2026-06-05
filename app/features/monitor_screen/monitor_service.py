@@ -129,6 +129,7 @@ def get_floor_plan_nodes(db: Session, plan_id: int) -> List[Dict[str, Any]]:
                 "location": device.location,
                 "x_percent": float(node.x_percent),
                 "y_percent": float(node.y_percent),
+                "scale": float(node.scale) if node.scale else 1.0,  # 缩放比例
                 "uptime_hours": round(uptime_hours, 1),
                 "lifespan_days": lifespan_days,
                 "active_fault_severity": active_fault.severity if active_fault else None,
@@ -190,24 +191,33 @@ def create_device_node(db: Session, plan_id: int, device_id: int, x_percent: flo
     }
 
 
-def update_device_node(db: Session, plan_id: int, node_id: int, x_percent: float, y_percent: float) -> Optional[Dict[str, Any]]:
-    """更新设备节点位置"""
+def update_device_node(db: Session, plan_id: int, node_id: int, x_percent: float = None, y_percent: float = None, scale: float = None) -> Optional[Dict[str, Any]]:
+    """更新设备节点位置和大小"""
     node = db.query(DeviceNode).filter(
         DeviceNode.floor_plan_id == plan_id,
         DeviceNode.id == node_id
     ).first()
     if not node:
         return None
-    node.x_percent = x_percent
-    node.y_percent = y_percent
+
+    # 只更新提供的字段
+    if x_percent is not None:
+        node.x_percent = x_percent
+    if y_percent is not None:
+        node.y_percent = y_percent
+    if scale is not None:
+        # 限制缩放范围 0.5-3.0
+        node.scale = max(0.5, min(3.0, scale))
+
     node.updated_at = datetime.utcnow()
     db.commit()
     db.refresh(node)
     return {
         "id": node.id,
-        "x_percent": x_percent,
-        "y_percent": y_percent,
-        "message": "节点位置更新成功",
+        "x_percent": float(node.x_percent),
+        "y_percent": float(node.y_percent),
+        "scale": float(node.scale) if node.scale else 1.0,
+        "message": "节点更新成功",
     }
 
 

@@ -41,8 +41,9 @@ class DeviceNodeCreate(BaseModel):
 
 
 class DeviceNodeUpdate(BaseModel):
-    x_percent: float
-    y_percent: float
+    x_percent: Optional[float] = None
+    y_percent: Optional[float] = None
+    scale: Optional[float] = None  # 缩放比例 (0.5-3.0)
 
 
 # ============ 平面图管理 API ============
@@ -154,8 +155,8 @@ async def create_node(plan_id: int, node_data: DeviceNodeCreate, db: Session = D
 
 @router.put("/floor-plans/{plan_id}/nodes/{node_id}")
 async def update_node(plan_id: int, node_id: int, node_data: DeviceNodeUpdate, db: Session = Depends(get_db)):
-    """更新设备节点位置"""
-    result = update_device_node(db, plan_id, node_id, node_data.x_percent, node_data.y_percent)
+    """更新设备节点位置和大小"""
+    result = update_device_node(db, plan_id, node_id, node_data.x_percent, node_data.y_percent, node_data.scale)
     if not result:
         raise HTTPException(status_code=404, detail="节点不存在")
     return result

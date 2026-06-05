@@ -95,9 +95,10 @@
               <div
                 v-for="node in filteredNodes"
                 :key="node.id"
-                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, dragging: dragState && dragState.nodeId === node.id }]"
-                :style="{ left: node.x_percent + '%', top: node.y_percent + '%' }"
+                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, dragging: dragState && dragState.nodeId === node.id, resizing: resizeState && resizeState.nodeId === node.id }]"
+                :style="{ left: node.x_percent + '%', top: node.y_percent + '%', transform: `translate(-50%, -50%) scale(${node.scale || 1})` }"
                 @mousedown.stop="onNodeMouseDown($event, node)"
+                @wheel.stop="onNodeWheel($event, node)"
               >
               <!-- Switch Icon -->
               <div class="node-icon switch-icon" v-if="node.device_type === 'switch'">
@@ -406,6 +407,10 @@ const highlightedNodeId = ref(null)
 
 // Drag state (drag-to-reposition existing nodes)
 const dragState = ref(null)
+
+// Resize state (wheel-to-resize nodes)
+const resizeState = ref(null)
+let resizeSaveTimer = null
 
 // WebSocket for real-time device status
 let deviceStatusWs = null
@@ -997,6 +1002,36 @@ const onDragEnd = async (e) => {
   }
 }
 
+// 滚轮调整节点大小
+const onNodeWheel = (e, node) => {
+  e.preventDefault()
+  const delta = e.deltaY > 0 ? -0.1 : 0.1  // 向上放大，向下缩小
+  const currentScale = node.scale || 1
+  const newScale = Math.max(0.5, Math.min(3, currentScale + delta))
+
+  // 更新节点缩放
+  node.scale = Math.round(newScale * 10) / 10  // 保留一位小数
+
+  // 显示调整状态
+  resizeState.value = { nodeId: node.id, scale: node.scale }
+
+  // 延迟保存（避免频繁请求）
+  if (resizeSaveTimer) clearTimeout(resizeSaveTimer)
+  resizeSaveTimer = setTimeout(async () => {
+    resizeState.value = null
+    if (!selectedPlanId.value) return
+    try {
+      await fetch(`/api/floor-plans/${selectedPlanId.value}/nodes/${node.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scale: node.scale }),
+      })
+    } catch (err) {
+      console.error('Failed to save node scale:', err)
+    }
+  }, 500)
+}
+
 // Lifecycle
 let refreshInterval = null
 let timeTimerId = null
@@ -1321,26 +1356,31 @@ onUnmounted(() => {
 /* Nodes Overlay */
 .device-node {
   position: absolute;
-  transform: translate(-50%, -50%);
+  transform-origin: center center;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: filter 0.2s;
 }
 
 .device-node:hover {
-  transform: translate(-50%, -50%) scale(1.2);
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
 }
 
 .device-node.highlighted {
-  transform: translate(-50%, -50%) scale(1.3);
   z-index: 10;
+  filter: drop-shadow(0 3px 6px rgba(255, 193, 7, 0.4));
 }
 
 .device-node.dragging {
-  transform: translate(-50%, -50%) scale(1.2);
   z-index: 20;
   cursor: grabbing;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
-  transition: none; /* disable transition while dragging for responsiveness */
+  transition: none;
+}
+
+.device-node.resizing {
+  z-index: 25;
+  cursor: ns-resize;
+  filter: drop-shadow(0 2px 6px rgba(0, 150, 255, 0.4));
 }
 
 .node-icon {

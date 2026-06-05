@@ -661,7 +661,7 @@ class FloorPlan(Base):
 
 
 class DeviceNode(Base):
-    """设备节点表 - 存储设备在平面图上的位置"""
+    """设备节点表 - 存储设备在平面图上的位置和大小"""
     __tablename__ = "device_nodes"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -669,6 +669,7 @@ class DeviceNode(Base):
     floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
     x_percent = Column(DECIMAL(5, 2), nullable=False)  # X坐标百分比 (0-100)
     y_percent = Column(DECIMAL(5, 2), nullable=False)  # Y坐标百分比 (0-100)
+    scale = Column(DECIMAL(3, 2), default=1.0)  # 缩放比例 (0.5-3.0)，默认 1.0
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -677,7 +678,7 @@ class DeviceNode(Base):
     floor_plan = relationship("FloorPlan", back_populates="nodes")
 
     def __repr__(self):
-        return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent})>"
+        return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent}, scale={self.scale})>"
 
 
 # =============================================================================
