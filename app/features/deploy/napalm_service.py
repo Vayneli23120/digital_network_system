@@ -85,14 +85,9 @@ class NapalmDeployService:
         # device_type 是业务角色类型，不用于确定 driver
         vendor = device.get('vendor', 'cisco').lower()
 
-        vendor_driver_map = {
-            'cisco': 'ios',           # Cisco IOS/IOS-XE 设备
-            'juniper': 'junos',       # Juniper 设备
-            'huawei': 'huawei',       # 华为设备
-            'h3c': 'huawei',          # H3C 设备
-            'arista': 'eos',          # Arista 设备
-        }
-        driver_name = vendor_driver_map.get(vendor, 'ios')
+        from app.features.devices.drivers.registry import DriverRegistry
+        driver_class = DriverRegistry.get(vendor)
+        driver_name = driver_class.NAPALM_DRIVER or 'ios'
 
         napalm_device = {
             'hostname': device.get('ip'),
@@ -730,14 +725,9 @@ class NapalmStreamService:
         # 根据 vendor 字段确定 driver
         vendor = device.get('vendor', 'cisco').lower()
 
-        vendor_driver_map = {
-            'cisco': 'ios',
-            'juniper': 'junos',
-            'huawei': 'huawei',
-            'h3c': 'huawei',
-            'arista': 'eos',
-        }
-        driver_name = vendor_driver_map.get(vendor, 'ios')
+        from app.features.devices.drivers.registry import DriverRegistry
+        driver_class = DriverRegistry.get(vendor)
+        driver_name = driver_class.NAPALM_DRIVER or 'ios'
 
         napalm_device = {
             'hostname': device.get('ip'),
