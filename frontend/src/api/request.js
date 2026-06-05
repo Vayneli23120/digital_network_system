@@ -9,6 +9,55 @@ import {
   showNetworkError
 } from '@/utils/requestManager.js'
 
+// SSH 错误翻译映射
+const SSH_ERROR_MAP_ZH = {
+  'Authentication failed': 'SSH 认证失败，请检查用户名和密码',
+  'authentication failed': 'SSH 认证失败，请检查用户名和密码',
+  'Auth failed': 'SSH 认证失败，请检查用户名和密码',
+  'auth failed': 'SSH 认证失败，请检查用户名和密码',
+  'Connection timed out': '连接超时，请检查设备网络连通性',
+  'connection timed out': '连接超时，请检查设备网络连通性',
+  'Connection timeout': '连接超时，请检查设备网络连通性',
+  'Timed out': '连接超时，请检查设备网络连通性',
+  'timed out': '连接超时，请检查设备网络连通性',
+  'Connection refused': '连接被拒绝，请检查 SSH 服务是否开启',
+  'connection refused': '连接被拒绝，请检查 SSH 服务是否开启',
+  'Connection refused by server': '连接被拒绝，请检查 SSH 服务是否开启',
+  'SSH protocol error': 'SSH 协议错误',
+  'ssh protocol error': 'SSH 协议错误',
+  'Protocol error': 'SSH 协议错误',
+  'Unable to connect': '无法连接到设备',
+  'unable to connect': '无法连接到设备',
+  'Could not connect': '无法连接到设备',
+  'No route to host': '网络不可达',
+  'no route to host': '网络不可达',
+  'Network is unreachable': '网络不可达',
+  'network is unreachable': '网络不可达',
+  'Name or service not known': '无法解析主机名',
+  'Unknown host': '无法解析主机名',
+  'unknown host': '无法解析主机名',
+  'Host key verification failed': '主机密钥验证失败',
+  'host key verification failed': '主机密钥验证失败',
+  'Banner exchange error': 'SSH 握手失败',
+  'banner': 'SSH 握手失败',
+  'password is required': '需要密码认证',
+  'Password required': '需要密码认证'
+}
+
+// 翻译 SSH 错误信息
+function translateSSHError(message) {
+  const language = localStorage.getItem('language') || 'zh'
+  if (language !== 'zh') return message  // 英文模式下不翻译
+
+  // 检查是否包含 SSH 相关错误
+  for (const [english, chinese] of Object.entries(SSH_ERROR_MAP_ZH)) {
+    if (message.toLowerCase().includes(english.toLowerCase())) {
+      return chinese
+    }
+  }
+  return message
+}
+
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
   timeout: 30000
@@ -58,12 +107,22 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       ElMessage.error('登录已过期，请重新登录')
       localStorage.removeItem('accessToken')
+      localStorage.removeItem('isLoggedIn')
+      localStorage.removeItem('currentUser')
       window.location.href = '/login'
       return Promise.reject(error)
     }
 
-    // 显示网络错误
-    showNetworkError(error)
+    // 对于有具体错误信息的请求，显示具体信息而不是笼统提示
+    const detail = error.response?.data?.detail || error.response?.data?.error
+    if (detail) {
+      // 翻译 SSH 相关错误
+      const translatedDetail = translateSSHError(detail)
+      ElMessage.error(translatedDetail)
+    } else {
+      // 显示通用网络错误
+      showNetworkError(error)
+    }
 
     return Promise.reject(error)
   }

@@ -4,6 +4,7 @@
 统一管理多种告警渠道（邮件、企业微信、钉钉），提供统一的告警发送接口。
 """
 
+from datetime import datetime
 from typing import Optional, List
 from loguru import logger
 
@@ -79,6 +80,19 @@ class NotificationService:
         )
         self._send_wechat("send_device_unreachable_alert", device_name=device_name, ip=ip, operator=operator)
         self._send_dingtalk("send_device_unreachable_alert", device_name=device_name, ip=ip, operator=operator)
+
+    def notify_device_recovered(self, device_name: str, ip: str,
+                                  downtime: Optional[int] = None):
+        """设备恢复通知 — 多渠道发送"""
+        if not self.config.alerts.enabled:
+            return
+        downtime_text = f"\n离线时间：约 {downtime} 分钟" if downtime else ""
+        self._send_email(
+            subject=f"[NAS 通知] 设备恢复：{device_name}",
+            body=f"设备：{device_name}\nIP：{ip}\n状态：已恢复在线{downtime_text}\n时间：{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}",
+        )
+        self._send_wechat("send_device_recovered_alert", device_name=device_name, ip=ip, downtime=downtime)
+        self._send_dingtalk("send_device_recovered_alert", device_name=device_name, ip=ip, downtime=downtime)
 
     def notify_fault(self, device_name: str, fault_no: str,
                       severity: str, description: str):

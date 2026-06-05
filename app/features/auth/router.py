@@ -56,7 +56,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None  # 使用 str 而非 EmailStr，允许空字符串
     full_name: Optional[str] = Field(None, max_length=100)
     role_ids: Optional[List[int]] = None
     is_active: Optional[bool] = None
@@ -568,13 +568,16 @@ async def update_user(
     if not user:
         raise HTTPException(status_code=404, detail="用户不存在")
 
-    # 更新邮箱
+    # 更新邮箱（只有真正变化时才检查）
     if user_data.email is not None:
-        if user_data.email != user.email:
-            existing = db.query(User).filter(User.email == user_data.email).first()
-            if existing:
-                raise HTTPException(status_code=400, detail="邮箱已存在")
-        user.email = user_data.email
+        # 处理空字符串 -> 转为 None
+        new_email = user_data.email if user_data.email.strip() else None
+        if new_email != user.email:
+            if new_email:
+                existing = db.query(User).filter(User.email == new_email).first()
+                if existing:
+                    raise HTTPException(status_code=400, detail="邮箱已存在")
+            user.email = new_email
 
     # 更新全名
     if user_data.full_name is not None:

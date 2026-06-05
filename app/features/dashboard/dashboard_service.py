@@ -24,33 +24,81 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     Returns:
         摘要数据字典
     """
-    # 设备统计
-    total_devices = db.query(Device).count()
-    online_devices = db.query(Device).filter(Device.status == "online").count()
-    offline_devices = db.query(Device).filter(Device.status == "offline").count()
-    maintenance_devices = db.query(Device).filter(Device.status == "maintenance").count()
-    retired_devices = db.query(Device).filter(Device.status == "retired").count()
+    # 设备统计 - 改用 reachability 字段（只统计已部署设备）
+    total_deployed = db.query(Device).filter(Device.deployment_status == "in-use").count()
+    reachable_devices = db.query(Device).filter(
+        Device.deployment_status == "in-use",
+        Device.reachability == "reachable"
+    ).count()
+    unreachable_devices = db.query(Device).filter(
+        Device.deployment_status == "in-use",
+        Device.reachability == "unreachable"
+    ).count()
+    unknown_devices = db.query(Device).filter(
+        Device.deployment_status == "in-use",
+        Device.reachability == "unknown"
+    ).count()
 
-    # 按设备类型统计
+    # 部署状态统计（全部设备）
+    in_use_devices = db.query(Device).filter(Device.deployment_status == "in-use").count()
+    un_used_devices = db.query(Device).filter(Device.deployment_status == "un-used").count()
+    maintenance_devices = db.query(Device).filter(Device.deployment_status == "maintenance").count()
+    retired_devices = db.query(Device).filter(Device.deployment_status == "retired").count()
+
+    # 按设备类型统计 - 同时包含 deployment_status 和 reachability
     device_types = ["uce", "core_switch", "server_switch", "office_switch", "ap", "wlc", "router", "pa", "ftd", "other"]
     devices_by_type = {}
     for dtype in device_types:
+        total = db.query(Device).filter(Device.device_type == dtype).count()
         devices_by_type[dtype] = {
-            "total": db.query(Device).filter(Device.device_type == dtype).count(),
-            "online": db.query(Device).filter(Device.device_type == dtype, Device.status == "online").count(),
-            "offline": db.query(Device).filter(Device.device_type == dtype, Device.status == "offline").count(),
-            "maintenance": db.query(Device).filter(Device.device_type == dtype, Device.status == "maintenance").count(),
-            "retired": db.query(Device).filter(Device.device_type == dtype, Device.status == "retired").count(),
+            "total": total,
+            # 部署状态
+            "in_use": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "in-use").count(),
+            "un_used": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "un-used").count(),
+            "maintenance": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "maintenance").count(),
+            "retired": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "retired").count(),
+            # 可达性状态（仅统计 in-use 设备）
+            "reachable": db.query(Device).filter(
+                Device.device_type == dtype,
+                Device.deployment_status == "in-use",
+                Device.reachability == "reachable"
+            ).count(),
+            "unreachable": db.query(Device).filter(
+                Device.device_type == dtype,
+                Device.deployment_status == "in-use",
+                Device.reachability == "unreachable"
+            ).count(),
+            "unknown": db.query(Device).filter(
+                Device.device_type == dtype,
+                Device.deployment_status == "in-use",
+                Device.reachability == "unknown"
+            ).count(),
+            # 兼容旧字段（向后兼容）
+            "online": db.query(Device).filter(Device.device_type == dtype, Device.reachability == "reachable", Device.deployment_status == "in-use").count(),
+            "offline": db.query(Device).filter(Device.device_type == dtype, Device.reachability == "unreachable", Device.deployment_status == "in-use").count(),
         }
 
     # 备份统计（最近 10 条）
     recent_backups = db.query(BackupRecord).order_by(BackupRecord.backup_time.desc()).limit(10).all()
 
-    # 故障统计（近 30 天，限制数量避免全表加载）
+    # 故障统计（近 30 天，按状态分组）
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     recent_faults = db.query(FaultRecord).filter(
         FaultRecord.created_at >= thirty_days_ago
     ).limit(1000).all()
+
+    # 活跃故障（未解决）
+    ACTIVE_STATUS = ('open', 'assigned', 'accepted', 'diagnosing', 'resolving', 'transferred')
+    active_faults = [f for f in recent_faults if f.status in ACTIVE_STATUS]
+    active_count = len(active_faults)
+    active_critical = len([f for f in active_faults if f.severity == "critical"])
+    active_major = len([f for f in active_faults if f.severity == "major"])
+    active_minor = len([f for f in active_faults if f.severity == "minor"])
+
+    # 已解决故障
+    RESOLVED_STATUS = ('resolved', 'closed')
+    resolved_faults = [f for f in recent_faults if f.status in RESOLVED_STATUS]
+    resolved_count = len(resolved_faults)
 
     # 维修任务统计
     all_maintenance = db.query(MaintenanceRecord).limit(5000).all()
@@ -75,11 +123,20 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
 
     return {
         "devices": {
-            "total": total_devices,
-            "online": online_devices,
-            "offline": offline_devices,
-            "maintenance": maintenance_devices,
-            "retired": retired_devices,
+            "total": total_deployed,  # 只统计已部署设备
+            "reachable": reachable_devices,
+            "unreachable": unreachable_devices,
+            "unknown": unknown_devices,
+            # 兼容旧字段（向后兼容）
+            "online": reachable_devices,
+            "offline": unreachable_devices,
+            # 部署状态统计
+            "deployment": {
+                "in_use": in_use_devices,
+                "un_used": un_used_devices,
+                "maintenance": maintenance_devices,
+                "retired": retired_devices,
+            },
             "by_type": devices_by_type,
         },
         "backups": {
@@ -94,6 +151,14 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
         },
         "faults": {
             "count_30days": len(recent_faults),
+            # 活跃故障（未解决）- DNAC 风格
+            "active": active_count,
+            "active_critical": active_critical,
+            "active_major": active_major,
+            "active_minor": active_minor,
+            # 已解决故障
+            "resolved": resolved_count,
+            # 兼容旧字段（按严重级别统计全部）
             "critical_count": len([f for f in recent_faults if f.severity == "critical"]),
             "major_count": len([f for f in recent_faults if f.severity == "major"]),
             "minor_count": len([f for f in recent_faults if f.severity == "minor"]),

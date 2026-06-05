@@ -336,11 +336,19 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ========================================
+   使用全局 Theme Token（来自 tokens.css）
+   不要重新定义变量，直接使用全局变量
+   ======================================== */
+
 .tool-logs-page {
   max-width: 1200px;
 }
 
-/* Page Header */
+/* ========================================
+   页面导航栏 - 与 Deploy.vue 一致
+   ======================================== */
+
 .page-header {
   display: flex;
   justify-content: space-between;
@@ -350,15 +358,15 @@ onMounted(() => {
 
 .page-title h1 {
   font-size: 20px;
-  font-weight: 500;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--text-primary);
   margin: 0;
 }
 
 .page-subtitle {
   font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink3);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
 }
 
 .btn-row {
@@ -366,7 +374,93 @@ onMounted(() => {
   gap: var(--gap-sm);
 }
 
-/* KPI Grid */
+/* ========================================
+   按钮系统 - 现代、轻量、主次分明
+   ======================================== */
+
+.btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.btn .el-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* 主按钮 */
+.btn-primary {
+  background: var(--accent-secondary);
+  color: white;
+  border: none;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #0077b6;
+  box-shadow: 0 2px 6px rgba(9, 132, 227, 0.2);
+  transform: translateY(-1px);
+}
+
+/* 小按钮 */
+.btn-sm {
+  height: 32px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.btn-tiny {
+  height: 22px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+
+/* 幽灵按钮 */
+.btn-ghost {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+/* 危险按钮 */
+.btn-danger {
+  background: var(--accent-danger);
+  color: white;
+  border: none;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #c42a2a;
+  box-shadow: 0 2px 6px rgba(214, 48, 49, 0.2);
+  transform: translateY(-1px);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   KPI Grid - 浅色卡片风格
+   ======================================== */
+
 .kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -375,46 +469,57 @@ onMounted(() => {
 }
 
 .kpi {
-  background: var(--surface);
-  border-radius: var(--radius-xl);
-  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
   overflow: hidden;
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s ease;
+}
+
+.kpi:hover {
+  border-color: var(--accent-secondary);
+  transform: translateY(-1px);
 }
 
 .kpi-top {
   height: 4px;
 }
 
-.kpi-blue .kpi-top { background: var(--color-gb); }
-.kpi-green .kpi-top { background: var(--success); }
-.kpi-red .kpi-top { background: var(--danger); }
-.kpi-yellow .kpi-top { background: var(--color-gy); }
+.kpi-blue .kpi-top { background: var(--accent-secondary); }
+.kpi-green .kpi-top { background: var(--accent-primary); }
+.kpi-red .kpi-top { background: var(--accent-danger); }
+.kpi-yellow .kpi-top { background: var(--accent-warning); }
 
 .kpi-body {
-  padding: 18px 20px;
+  padding: 16px 20px;
 }
 
 .kpi-value {
-  font-family: var(--font-mono);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
   font-size: 28px;
   font-weight: 300;
-  color: var(--ink);
+  color: var(--text-primary);
   line-height: 1;
 }
 
 .kpi-label {
   font-size: 12px;
   font-weight: 400;
-  color: var(--ink3);
+  color: var(--text-secondary);
   margin-top: 6px;
 }
 
-/* Panel */
+/* ========================================
+   Panel - 浅色企业风格
+   ======================================== */
+
 .panel {
-  background: var(--surface);
-  border-radius: var(--radius-panel);
-  border: 1px solid var(--border);
+  background: var(--bg-card);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-default);
   margin-bottom: var(--gap-md);
+  box-shadow: var(--shadow-card);
 }
 
 .panel-hd {
@@ -422,26 +527,29 @@ onMounted(() => {
   justify-content: space-between;
   align-items: center;
   padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .panel-title {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .panel-meta {
   font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink3);
+  font-family: 'Geist Mono', monospace;
+  color: var(--text-secondary);
 }
 
 .panel-body {
-  padding: 18px 20px;
+  padding: 16px 20px;
 }
 
-/* Filter Bar */
+/* ========================================
+   Filter Bar - 现代表单风格
+   ======================================== */
+
 .filter-bar {
   display: flex;
   gap: var(--gap-sm);
@@ -452,121 +560,86 @@ onMounted(() => {
   padding: 8px 12px;
   font-size: 13px;
   font-family: var(--font-body);
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   min-width: 120px;
+  transition: all 0.15s ease;
+}
+
+.fselect:hover {
+  border-color: var(--accent-secondary);
+}
+
+.fselect:focus {
+  border-color: var(--accent-secondary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
 }
 
 .finput {
   padding: 8px 12px;
   font-size: 13px;
   font-family: var(--font-body);
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
   width: 200px;
+  transition: all 0.15s ease;
+}
+
+.finput:hover {
+  border-color: var(--accent-secondary);
 }
 
 .finput:focus {
-  border-color: var(--color-gb);
+  border-color: var(--accent-secondary);
   outline: none;
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
+  background: var(--bg-card);
 }
 
-.btn-sm {
-  padding: 8px 12px;
-}
+/* ========================================
+   Table - 浅色企业风格
+   ======================================== */
 
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 400;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
-}
-
-.btn-primary {
-  background: var(--color-gb);
-  color: #fff;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-gb-mid);
-}
-
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background: #991b1b;
-}
-
-.btn-ghost {
-  background: var(--surface);
-  color: var(--ink2);
-  border-color: var(--border);
-}
-
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-gb-ghost);
-}
-
-.btn-tiny {
-  padding: 4px 8px;
-  font-size: 11px;
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Table */
 .tbl {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12.5px;
+  font-size: 13px;
 }
 
 .tbl th {
-  padding: 10px 8px;
+  padding: 12px 10px;
   font-size: 11px;
   font-weight: 500;
-  color: var(--ink3);
+  color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.3px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--border-default);
 }
 
 .tbl td {
-  padding: 10px 8px;
-  color: var(--ink2);
-  border-bottom: 1px solid var(--border);
+  padding: 12px 10px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border-subtle);
 }
 
 .tbl tr:hover td {
-  background: var(--color-gb-ghost);
+  background: var(--bg-hover);
   cursor: pointer;
 }
 
 .td-mono {
-  font-family: var(--font-mono);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
   font-size: 12px;
-  color: var(--color-gb);
+  color: var(--accent-secondary);
 }
 
 .td-action {
-  color: var(--color-gb);
+  color: var(--accent-secondary);
   cursor: pointer;
 }
 
@@ -574,152 +647,197 @@ onMounted(() => {
   text-decoration: underline;
 }
 
-/* Tags */
+/* ========================================
+   Tags / Badge - 状态标签
+   ======================================== */
+
 .tag {
   display: inline-block;
   padding: 4px 10px;
   font-size: 11px;
   font-weight: 500;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-sm);
 }
 
 .tag-blue {
-  background: var(--color-gb-light);
-  color: var(--color-gb);
+  background: rgba(9, 132, 227, 0.1);
+  color: var(--accent-secondary);
 }
 
 .tag-green {
   background: var(--success-bg);
-  color: var(--success);
+  color: var(--accent-primary);
 }
 
 .tag-red {
   background: var(--danger-bg);
-  color: var(--danger);
+  color: var(--accent-danger);
 }
 
 .tag-yellow {
   background: var(--warn-bg);
-  color: var(--warn);
+  color: var(--accent-warning);
 }
 
 .tag-gray {
-  background: var(--bg);
-  color: var(--ink3);
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
-/* Pagination */
+/* ========================================
+   Pagination - 浅色风格
+   ======================================== */
+
 .pagination-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
 }
 
 .page-info {
   font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink3);
+  font-family: 'Geist Mono', monospace;
+  color: var(--text-secondary);
 }
 
 .page-btns {
   display: flex;
-  gap: 8px;
+  gap: var(--gap-sm);
 }
 
-/* 详情对话框样式 */
+/* ========================================
+   详情对话框 - form-section 风格
+   ======================================== */
+
 .tool-detail-dialog .form-section {
   background: rgba(0, 48, 135, 0.04);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  padding: var(--gap-md);
   border: 1px solid rgba(0, 48, 135, 0.08);
-  margin-bottom: 12px;
+  margin-bottom: var(--gap-md);
 }
+
 .tool-detail-dialog .section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--gap-sm);
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: var(--gap-md);
+  padding-bottom: var(--gap-sm);
   border-bottom: 1px solid rgba(0, 48, 135, 0.06);
 }
+
 .tool-detail-dialog .section-header .el-icon {
-  color: var(--accent-primary);
+  color: var(--accent-secondary);
 }
+
 .tool-detail-dialog .detail-item {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--gap-xs);
 }
+
 .tool-detail-dialog .detail-item label {
   font-size: 12px;
   color: var(--text-tertiary);
   font-weight: 500;
 }
+
 .tool-detail-dialog .detail-item span {
   font-size: 13px;
   color: var(--text-primary);
 }
+
 .tool-detail-dialog .detail-item.full-width {
   flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: var(--gap-sm);
 }
+
 .tool-detail-dialog .detail-item.full-width label {
   min-width: 80px;
 }
+
 .tool-detail-dialog .mono-text {
-  font-family: var(--font-mono);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  font-size: 12px;
 }
 
-/* 暗黑模式 */
-.dark .tool-detail-dialog .form-section {
-  background: rgba(13, 17, 23, 0.6);
-  border-color: rgba(48, 54, 61, 0.4);
-}
-.dark .tool-detail-dialog .section-header {
-  color: #8b949e;
-  border-bottom-color: rgba(48, 54, 61, 0.4);
-}
-.dark .tool-detail-dialog .section-header .el-icon {
-  color: #58a6ff;
-}
+/* ========================================
+   Log Content - VSCode Terminal 风格（深色）
+   ======================================== */
 
-/* Log Content */
 .log-content {
-  background: #0d1117;
-  border-radius: var(--radius-lg);
-  padding: 16px;
+  background: #1e1e1e;
+  border-radius: var(--radius-md);
+  padding: var(--gap-md);
+  border: 1px solid #3c3c3c;
 }
 
 .log-content pre {
-  color: #c9d1d9;
-  font-family: var(--font-mono);
+  color: #cccccc;
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
   font-size: 12px;
   line-height: 1.5;
   white-space: pre-wrap;
   word-break: break-all;
   max-height: 300px;
   overflow-y: auto;
+  margin: 0;
 }
 
 .log-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: var(--gap-sm);
   padding: 40px;
-  color: var(--ink3);
+  color: var(--text-secondary);
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
 }
 
 .log-empty .el-icon {
   font-size: 32px;
+  color: var(--text-muted);
 }
 
-/* Responsive */
+/* ========================================
+   暗色模式适配
+   ======================================== */
+
+.dark .tool-detail-dialog .form-section {
+  background: rgba(13, 17, 23, 0.6);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .tool-detail-dialog .section-header {
+  color: var(--text-secondary);
+  border-bottom-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .tool-detail-dialog .section-header .el-icon {
+  color: var(--accent-primary);
+}
+
+.dark .log-content {
+  background: #0d1117;
+  border-color: #30363d;
+}
+
+.dark .log-content pre {
+  color: #c9d1d9;
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+
 @media (max-width: 768px) {
   .kpi-grid {
     grid-template-columns: repeat(2, 1fr);

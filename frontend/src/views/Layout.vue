@@ -60,7 +60,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation, Sort } from '@element-plus/icons-vue'
+import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation, Sort, Lock } from '@element-plus/icons-vue'
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -178,6 +178,7 @@ const sidebarGroups = computed(() => {
           { path: '/logs', text: t('menuLogs'), icon: Document },
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell },
           { path: '/users', text: t('menuUsers'), icon: User },
+          { path: '/permissions', text: t('menuPermissions') || '角色权限', icon: Lock },
         ]
       },
     ],
@@ -196,7 +197,7 @@ watch(route, (newRoute) => {
     activeTopTab.value = 'config'
   } else if (path.startsWith('/spare') || path.startsWith('/scrap') || path.startsWith('/movements')) {
     activeTopTab.value = 'spare'
-  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users') || path.startsWith('/notifications')) {
+  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/users') || path.startsWith('/permissions') || path.startsWith('/notifications')) {
     activeTopTab.value = 'system'
   }
 }, { immediate: true })

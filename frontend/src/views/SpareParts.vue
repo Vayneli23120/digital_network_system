@@ -185,27 +185,18 @@
           </el-form-item>
         </div>
 
-        <!-- 库存与成本 -->
+        <!-- 存放信息 -->
         <div class="form-section">
           <div class="section-header">
             <el-icon><Goods /></el-icon>
-            <span>{{ t('spareStockCostSection') }}</span>
+            <span>{{ t('spareLocationSection') || '存放信息' }}</span>
           </div>
-          <el-row :gutter="12">
-            <el-col :span="12">
-              <el-form-item :label="t('spareUnitPrice')">
-                <el-input-number v-model="addForm.unit_price" :min="0" :precision="2" style="width: 110px" />
-                <span class="unit-text">元</span>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item :label="t('spareQuantity')">
-                <el-input-number v-model="addForm.quantity_in_stock" :min="0" style="width: 110px" />
-              </el-form-item>
-            </el-col>
-          </el-row>
           <el-form-item :label="t('spareLocation')">
             <el-input v-model="addForm.location" :placeholder="t('spareLocationPlaceholder')" />
+          </el-form-item>
+          <el-form-item :label="t('spareMinQuantity')">
+            <el-input-number v-model="addForm.min_quantity" :min="0" style="width: 100%" />
+            <div class="field-hint">{{ t('spareMinQuantityHint') || '库存低于此数量时显示低库存警告' }}</div>
           </el-form-item>
         </div>
 
@@ -267,8 +258,7 @@ const addForm = ref({
   part_number: '',
   name: '',
   category: 'other',
-  unit_price: 0,
-  quantity_in_stock: 0,
+  min_quantity: 0,
   location: '',
   description: ''
 })
@@ -348,8 +338,7 @@ const resetAddForm = () => {
     part_number: '',
     name: '',
     category: 'other',
-    unit_price: 0,
-    quantity_in_stock: 0,
+    min_quantity: 0,
     location: '',
     description: ''
   }
@@ -986,13 +975,14 @@ onMounted(() => {
 .spare-add-dialog .section-header .el-icon {
   color: var(--accent-primary);
 }
-.spare-add-dialog .unit-text {
-  font-size: 12px;
-  color: var(--text-tertiary);
-  margin-left: 4px;
-}
 .spare-add-dialog .el-form-item {
   margin-bottom: 10px;
+}
+.spare-add-dialog .field-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  line-height: 1.4;
 }
 
 /* ===== 对话框样式 ===== */

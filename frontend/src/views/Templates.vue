@@ -1,27 +1,49 @@
 <template>
-  <div class="templates-page">
-    <el-card>
-      <template #header>
-        <div class="card-header">
-          <span>{{ t('tplTitle') }}</span>
-          <el-button type="primary" @click="showAddDialog = true">
-            <el-icon><Plus /></el-icon>
-            {{ t('tplNew') }}
-          </el-button>
-        </div>
-      </template>
+  <div class="templates-page" :class="{ dark: isDark }">
+    <!-- 页面标题栏 -->
+    <section class="page-nav-bar">
+      <div class="nav-left">
+        <h1 class="page-title">{{ t('tplTitle') }}</h1>
+      </div>
+      <div class="nav-right">
+        <button class="nav-action-btn primary" @click="showAddDialog = true">
+          <el-icon><Plus /></el-icon>
+          {{ t('tplNew') }}
+        </button>
+      </div>
+    </section>
 
-      <el-table :data="templates" style="width: 100%" v-loading="loading">
-        <el-table-column prop="name" :label="t('tplName')" width="200" />
-        <el-table-column prop="description" :label="t('tplDescription')" />
+    <el-card class="templates-card">
+      <el-table :data="templates" style="width: 100%" v-loading="loading" class="templates-table">
+        <el-table-column prop="name" :label="t('tplName')" width="200">
+          <template #default="{ row }">
+            <span class="template-name">{{ row.name }}</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="description" :label="t('tplDescription')">
+          <template #default="{ row }">
+            <span class="template-desc">{{ row.description || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="created_at" :label="t('colCreatedAt')" width="180">
           <template #default="{ row }">{{ formatDateTime(row.created_at) }}</template>
         </el-table-column>
         <el-table-column :label="t('colOperation')" width="220" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="viewTemplate(row.id)">{{ t('actionView') }}</el-button>
-            <el-button size="small" @click="editTemplate(row.id)">{{ t('actionEdit') }}</el-button>
-            <el-button size="small" type="danger" @click="deleteTemplate(row.id)">{{ t('actionDelete') }}</el-button>
+            <div class="action-buttons">
+              <button class="nav-action-btn small secondary" @click="viewTemplate(row.id)">
+                <el-icon><View /></el-icon>
+                {{ t('actionView') }}
+              </button>
+              <button class="nav-action-btn small secondary" @click="editTemplate(row.id)">
+                <el-icon><Edit /></el-icon>
+                {{ t('actionEdit') }}
+              </button>
+              <button class="nav-action-btn small danger" @click="deleteTemplate(row.id)">
+                <el-icon><Delete /></el-icon>
+                {{ t('actionDelete') }}
+              </button>
+            </div>
           </template>
         </el-table-column>
         <template #empty>
@@ -37,7 +59,7 @@
 
     <!-- 添加/编辑模板对话框 -->
     <el-dialog v-model="showAddDialog" :title="editMode ? t('tplEdit') : t('tplNew')" width="800px" append-to-body draggable align-center class="template-dialog">
-      <el-form :model="templateForm" label-width="90px" size="default">
+      <el-form :model="templateForm" label-width="90px" size="default" class="config-form">
         <!-- 基本信息 -->
         <div class="form-section">
           <div class="section-header">
@@ -84,9 +106,9 @@
             />
           </el-form-item>
           <el-form-item :label="t('tplVarHelp')">
-            <el-alert type="info" :closable="false">
+            <el-alert type="info" :closable="false" class="var-alert">
               <p>{{ t('tplAvailableVars') }}</p>
-              <ul>
+              <ul class="var-list">
                 <li><code>{{ hostname }}</code> - {{ t('tplVarHostname') }}</li>
                 <li><code>{{ ip }}</code> - {{ t('tplVarIp') }}</li>
                 <li><code>{{ location }}</code> - {{ t('tplVarLocation') }}</li>
@@ -98,16 +120,20 @@
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="editMode ? updateTemplate() : createTemplate()">{{ t('actionConfirm') }}</el-button>
+        <div class="dialog-footer">
+          <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
+          <el-button type="primary" @click="editMode ? updateTemplate() : createTemplate()">{{ t('actionConfirm') }}</el-button>
+        </div>
       </template>
     </el-dialog>
 
     <!-- 查看模板对话框 -->
-    <el-dialog v-model="showViewDialog" :title="t('tplView')" width="800px">
-      <div v-if="currentTemplate">
-        <h4>{{ currentTemplate.name }}</h4>
-        <p>{{ currentTemplate.description }}</p>
+    <el-dialog v-model="showViewDialog" :title="t('tplView')" width="800px" align-center class="view-dialog">
+      <div v-if="currentTemplate" class="view-content">
+        <div class="view-header">
+          <h4 class="view-title">{{ currentTemplate.name }}</h4>
+          <p class="view-desc">{{ currentTemplate.description }}</p>
+        </div>
         <pre class="template-content">{{ currentTemplate.template_content }}</pre>
       </div>
     </el-dialog>
@@ -115,9 +141,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Document, Edit, Setting } from '@element-plus/icons-vue'
+import { Document, Edit, Setting, Plus, View, Delete } from '@element-plus/icons-vue'
 import { getTemplates, createTemplate as createTemplateApi, getTemplate, updateTemplate as updateTemplateApi, deleteTemplate as deleteTemplateApi } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
@@ -125,6 +151,9 @@ import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
+
+// 暗黑模式检测
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
 const templates = ref([])
 const loading = ref(false)
@@ -283,44 +312,298 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* ========================================
+   使用全局 Theme Token（来自 tokens.css）
+   不要重新定义变量，直接使用全局变量
+   ======================================== */
+
 .templates-page {
   padding: 0;
+  min-height: 100vh;
+  background: var(--bg-primary);
 }
 
-.template-editor {
-  font-family: 'Consolas', 'Monaco', monospace;
-  font-size: 13px;
+/* ========================================
+   页面导航栏
+   ======================================== */
+
+.page-nav-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--gap-md);
 }
 
-.template-content {
-  background: var(--bg-tertiary);
+.nav-left {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+}
+
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
   color: var(--text-primary);
+}
+
+.nav-right {
+  display: flex;
+  gap: 10px;
+}
+
+/* ========================================
+   按钮系统 - 现代、轻量、主次分明
+   ======================================== */
+
+.nav-action-btn {
+  height: 28px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: all 0.15s ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  border: none;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+}
+
+.nav-action-btn .el-icon {
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+}
+
+/* 小按钮 */
+.nav-action-btn.small {
+  height: 22px;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+/* 主按钮 */
+.nav-action-btn.primary {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.nav-action-btn.primary:hover {
+  background: #00a884;
+  box-shadow: 0 2px 6px rgba(0, 184, 148, 0.2);
+  transform: translateY(-1px);
+}
+
+/* 次按钮 */
+.nav-action-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+}
+
+.nav-action-btn.secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+/* 危险按钮 */
+.nav-action-btn.danger {
+  background: var(--accent-danger);
+  color: white;
+  border: none;
+}
+
+.nav-action-btn.danger:hover {
+  background: #c42a2a;
+  box-shadow: 0 2px 6px rgba(214, 48, 49, 0.2);
+  transform: translateY(-1px);
+}
+
+/* ========================================
+   卡片样式
+   ======================================== */
+
+.templates-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+}
+
+.templates-card :deep(.el-card__body) {
   padding: var(--gap-md);
-  border-radius: var(--radius-md);
-  font-family: 'Consolas', 'Monaco', monospace;
+}
+
+/* ========================================
+   表格样式
+   ======================================== */
+
+.templates-table :deep(.el-table__header-wrapper th) {
+  background: var(--bg-hover);
   font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.templates-table :deep(.el-table__body-wrapper td) {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.templates-table :deep(.el-table__row:hover td) {
+  background: var(--bg-hover) !important;
+}
+
+/* 暗色模式表格 */
+.dark .templates-table :deep(.el-table__header-wrapper th) {
+  background: var(--bg-tertiary);
+}
+
+.dark .templates-table :deep(.el-table__row:hover td) {
+  background: var(--bg-hover) !important;
+}
+
+/* ========================================
+   模板名称和描述
+   ======================================== */
+
+.template-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.template-desc {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+/* ========================================
+   操作按钮区域
+   ======================================== */
+
+.action-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* ========================================
+   分页栏
+   ======================================== */
+
+.pagination-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--gap-md) 0;
+  margin-top: var(--gap-md);
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* ========================================
+   Dialog/Modal 样式
+   ======================================== */
+
+.template-dialog :deep(.el-dialog) {
+  border-radius: var(--radius-lg);
+}
+
+.template-dialog :deep(.el-dialog__header) {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dialog-footer {
+  display: flex;
+  gap: var(--gap-md);
+  justify-content: flex-end;
+}
+
+/* ========================================
+   表单区域 - 现代 DevOps 风格
+   ======================================== */
+
+.config-form :deep(.el-input__wrapper) {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: none;
+  padding: 0 12px;
+  height: 32px;
+  transition: all 0.15s ease;
+}
+
+.config-form :deep(.el-input__wrapper:hover) {
+  border-color: var(--accent-secondary);
+}
+
+.config-form :deep(.el-input__wrapper.is-focus) {
+  border-color: var(--accent-secondary);
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
+  background: var(--bg-card);
+}
+
+.config-form :deep(.el-input__inner) {
+  font-size: 14px;
+  color: var(--text-primary);
+  height: 32px;
+}
+
+/* Placeholder 提高可见度 */
+.config-form :deep(.el-input__inner::placeholder) {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  opacity: 1;
+}
+
+/* Textarea */
+.config-form :deep(.el-textarea__inner) {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  color: var(--text-primary);
+  padding: 12px;
+  transition: all 0.15s ease;
+  box-shadow: none;
+}
+
+.config-form :deep(.el-textarea__inner:hover) {
+  border-color: var(--accent-secondary);
+}
+
+.config-form :deep(.el-textarea__inner:focus) {
+  border-color: var(--accent-secondary);
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
+}
+
+/* ========================================
+   模板编辑器
+   ======================================== */
+
+.template-editor :deep(.el-textarea__inner) {
+  font-family: 'Geist Mono', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
   line-height: 1.5;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  max-height: 400px;
-  overflow-y: auto;
-  margin-top: var(--gap-sm);
 }
 
-.dark .template-content {
-  background: #1e1e1e;
-  color: #d4d4d4;
-}
+/* ========================================
+   form-section 卡片分组样式
+   ======================================== */
 
-/* 对话框样式 */
-.template-dialog .form-section {
-  background: rgba(0, 48, 135, 0.04);
-  border-radius: 10px;
+.form-section {
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
   padding: 14px 16px;
-  border: 1px solid rgba(0, 48, 135, 0.08);
+  border: 1px solid var(--border-subtle);
   margin-bottom: 12px;
 }
-.template-dialog .section-header {
+
+.section-header {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -329,37 +612,160 @@ onMounted(() => {
   color: var(--text-secondary);
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+  border-bottom: 1px solid var(--border-subtle);
 }
-.template-dialog .section-header .el-icon {
+
+.section-header .el-icon {
   color: var(--accent-primary);
 }
-.template-dialog .el-form-item {
+
+.config-form :deep(.el-form-item) {
   margin-bottom: 10px;
 }
 
-/* 暗黑模式 */
-.dark .template-dialog .form-section {
-  background: rgba(13, 17, 23, 0.6);
-  border-color: rgba(48, 54, 61, 0.4);
-}
-.dark .template-dialog .section-header {
-  color: #8b949e;
-  border-bottom-color: rgba(48, 54, 61, 0.4);
-}
-.dark .template-dialog .section-header .el-icon {
-  color: #58a6ff;
+/* 暗色模式 */
+.dark .form-section {
+  background: var(--bg-tertiary);
+  border-color: var(--border-default);
 }
 
-ul {
+.dark .section-header {
+  color: var(--text-secondary);
+  border-bottom-color: var(--border-default);
+}
+
+.dark .section-header .el-icon {
+  color: var(--accent-primary);
+}
+
+/* ========================================
+   变量提示样式
+   ======================================== */
+
+.var-alert {
+  border-radius: var(--radius-md);
+}
+
+.var-alert :deep(.el-alert__content) {
+  padding: var(--gap-sm);
+}
+
+.var-list {
   margin: var(--gap-xs) 0;
   padding-left: 20px;
 }
 
-code {
+.var-list li {
+  margin-bottom: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.var-list code {
   background: var(--bg-tertiary);
   padding: 2px 6px;
   border-radius: var(--radius-sm);
-  font-family: 'Consolas', 'Monaco', monospace;
+  font-family: 'Geist Mono', 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  color: var(--accent-secondary);
+}
+
+/* ========================================
+   查看对话框样式
+   ======================================== */
+
+.view-dialog :deep(.el-dialog) {
+  border-radius: var(--radius-lg);
+}
+
+.view-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+}
+
+.view-header {
+  padding-bottom: var(--gap-md);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.view-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.view-desc {
+  margin: 8px 0 0;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.template-content {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  padding: var(--gap-md);
+  border-radius: var(--radius-md);
+  font-family: 'Geist Mono', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 400px;
+  overflow-y: auto;
+  border: 1px solid var(--border-subtle);
+}
+
+/* 暗色模式模板内容 */
+.dark .template-content {
+  background: var(--bg-tertiary);
+  border-color: var(--border-default);
+}
+
+/* ========================================
+   暗色模式全局适配
+   ======================================== */
+
+.dark .templates-card {
+  background: var(--bg-card);
+  border-color: var(--border-default);
+}
+
+.dark .page-title {
+  color: var(--text-primary);
+}
+
+.dark .nav-action-btn {
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+}
+
+.dark .nav-action-btn.secondary {
+  border-color: var(--border-default);
+}
+
+.dark .nav-action-btn.secondary:hover {
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+/* ========================================
+   动画
+   ======================================== */
+
+@keyframes fade-slide-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.templates-card {
+  animation: fade-slide-in 0.2s ease;
 }
 </style>

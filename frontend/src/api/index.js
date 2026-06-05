@@ -206,12 +206,14 @@ export function previewDeploy(data) {
   return api.post('/deploy/preview', data)
 }
 
+// 部署执行 - 使用更长超时时间（批量部署可能需要很长时间）
 export function executeDeploy(data) {
-  return api.post('/deploy/execute', data)
+  return api.post('/deploy/execute', data, { timeout: 600000 }) // 10分钟
 }
 
+// 配置回滚 - 使用更长超时时间
 export function rollbackDeploy(data) {
-  return api.post('/deploy/rollback', data)
+  return api.post('/deploy/rollback', data, { timeout: 600000 }) // 10分钟
 }
 
 // 部署历史
@@ -392,7 +394,92 @@ export function getCheckItems() {
   return api.get('/compliance/checks')
 }
 export function runComplianceCheck(data) {
-  return api.post('/compliance/check', data)
+  return api.post('/compliance/check', data, {
+    timeout: 180000  // AI审核可能需要较长时间（3分钟）
+  })
+}
+
+// AI 配置审核
+export function uploadConfigFile(formData) {
+  return api.post('/compliance/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: 180000  // AI审核可能需要较长时间（3分钟）
+  })
+}
+
+export function quickComplianceCheck(data) {
+  return api.post('/compliance/quick-check', data, {
+    timeout: 120000  // 快速审核（2分钟）
+  })
+}
+
+// 标准文档管理
+export function getStandards(includeInactive = false) {
+  return api.get('/compliance/standards', { params: { include_inactive: includeInactive } })
+}
+
+export function getStandard(id) {
+  return api.get(`/compliance/standards/${id}`)
+}
+
+export function createStandard(data) {
+  return api.post('/compliance/standards', data)
+}
+
+export function updateStandard(id, data) {
+  return api.put(`/compliance/standards/${id}`, data)
+}
+
+export function deleteStandard(id) {
+  return api.delete(`/compliance/standards/${id}`)
+}
+
+export function generateRulesForStandard(standardId) {
+  return api.post(`/compliance/standards/${standardId}/generate-rules`, null, {
+    timeout: 180000  // AI生成规则可能需要较长时间（3分钟）
+  })
+}
+
+export function uploadStandardDocument(formData) {
+  return api.post('/compliance/standards/upload', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' }
+  })
+}
+
+// 规则管理
+export function getRules(standardId = null) {
+  return api.get('/compliance/rules', { params: { standard_id: standardId } })
+}
+
+export function getRuleDetail(ruleId) {
+  return api.get(`/compliance/rules/${ruleId}`)
+}
+
+export function updateRuleStatus(ruleId, isActive) {
+  return api.put(`/compliance/rules/${ruleId}/status`, null, { params: { is_active: isActive } })
+}
+
+export function updateRule(ruleId, data) {
+  return api.put(`/compliance/rules/${ruleId}`, data)
+}
+
+// AI 配置管理
+export function getAIConfig() {
+  return api.get('/compliance/ai-config')
+}
+
+export function createAIConfig(data) {
+  return api.post('/compliance/ai-config', data)
+}
+
+export function updateAIConfig(configId, data) {
+  return api.put(`/compliance/ai-config/${configId}`, data)
+}
+
+export function testAIConfig(data) {
+  return api.post('/compliance/ai-config/test', data, {
+    timeout: 120000  // AI测试可能需要较长时间（2分钟）
+  })
 }
 
 // 厂商管理

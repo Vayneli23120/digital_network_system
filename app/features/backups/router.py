@@ -50,6 +50,18 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
         }
 
+        # 检查凭证是否完整
+        if not credentials["username"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"凭证组 '{cred_group_name}' 未设置用户名"
+            )
+        if not credentials["password"]:
+            raise HTTPException(
+                status_code=500,
+                detail=f"凭证组 '{cred_group_name}' 未设置密码"
+            )
+
         # 执行备份
         from app.shared.config import get_config
         config = get_config()
@@ -127,6 +139,10 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             cache.invalidate_prefix("dashboard:")
 
             raise HTTPException(status_code=500, detail=result["message"])
+
+    except HTTPException:
+        # HTTPException 直接重新抛出，不拦截
+        raise
 
     except Exception as e:
         # 记录失败日志

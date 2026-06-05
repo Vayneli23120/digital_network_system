@@ -1,7 +1,7 @@
 """Planned maintenance router - 计划性运维管理（AI增强版）
 
 新增功能：
-- AI推荐巡检任务生成
+- AI推荐巡检任务生成（使用 ADK Agent）
 - 健康评分驱动的自动PM任务
 - 与工作流引擎集成
 - 预测性维护建议
@@ -19,7 +19,10 @@ from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.models import MaintenancePlan, MaintenanceTask, MaintenanceRecord, Device
-from app.services.ai_manager import predictive_maintenance_analysis
+
+# ADK 导入（预测性维护功能）
+from app.services.adk.runner import adk_runner
+from app.services.adk.agents import predictive_agent
 
 router = APIRouter(prefix="/api/planned-maintenance", tags=["planned-maintenance"])
 

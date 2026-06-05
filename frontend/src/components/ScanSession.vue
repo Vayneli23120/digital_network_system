@@ -81,16 +81,20 @@
             <el-table-column prop="name" :label="t('scanColName')" width="120">
               <template #default="{ row }">{{ row.name || t('scanNotFoundInList') }}</template>
             </el-table-column>
-            <el-table-column prop="unit_price" :label="t('scanColUnitPrice')" width="100">
+            <el-table-column prop="unit_price" :label="t('scanColUnitPrice')" width="140">
               <template #default="{ row }">
-                <el-input-number
-                  v-model="row.unit_price"
-                  :min="0"
-                  :precision="2"
-                  size="small"
-                  controls-position="right"
-                  :placeholder="t('scanUnitPricePlaceholder')"
-                />
+                <div class="price-cell">
+                  <el-input-number
+                    v-model="row.unit_price"
+                    :min="0"
+                    :precision="2"
+                    size="small"
+                    controls-position="right"
+                    :placeholder="t('scanUnitPricePlaceholder')"
+                    class="price-input"
+                  />
+                  <span class="currency-label">¥</span>
+                </div>
               </template>
             </el-table-column>
             <el-table-column prop="notes" :label="t('scanColNotes')" width="120">
@@ -683,5 +687,21 @@ onUnmounted(() => {
   background: rgba(63, 185, 80, 0.15);
   border-color: #3fb950;
   color: #3fb950;
+}
+
+/* 单价单元格样式 */
+.price-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+}
+.price-cell .price-input {
+  width: 80px;
+}
+.price-cell .currency-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  font-weight: 500;
 }
 </style>

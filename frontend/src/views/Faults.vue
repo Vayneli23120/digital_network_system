@@ -436,7 +436,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Search, Plus, Refresh, Document, Clock, CircleCheck, SuccessFilled, ArrowRight, Edit, View, Delete, Setting, Warning, InfoFilled, Connection, Aim } from '@element-plus/icons-vue'
-import { getFaults, getDevices, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
+import { getFaults, getDevices, getUsers, createFault, updateFault as updateFaultApi, deleteFault } from '@/api'
 import { formatDateTime, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { debounce } from '@/utils/requestManager.js'
@@ -448,7 +448,7 @@ const router = useRouter()
 const faults = ref([])
 const filteredFaults = ref([])
 const devices = ref([])
-const users = ref(['Vayne', '张工', '李工', '王工', '运维组'])
+const users = ref([])
 const loading = ref(false)
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -717,6 +717,17 @@ const loadDevices = async () => {
   }
 }
 
+const loadUsers = async () => {
+  try {
+    const data = await getUsers()
+    // 使用 full_name 作为显示名称，如果没有则用 username
+    users.value = data.map(u => u.full_name || u.username).filter(Boolean)
+  } catch (error) {
+    // 加载失败时使用默认列表
+    users.value = ['运维组']
+  }
+}
+
 const openAddDialog = () => {
   editMode.value = false
   resetForm()
@@ -826,6 +837,7 @@ const resetForm = () => {
 onMounted(() => {
   loadFaults()
   loadDevices()
+  loadUsers()
 })
 </script>
 

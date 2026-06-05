@@ -242,14 +242,13 @@
             </div>
           </template>
 
-          <!-- 维修单号（点击打开编辑） -->
+          <!-- 维修单号（点击打开维修详情页） -->
           <div class="maint-header-row">
             <span class="maint-label">{{ t('maintNo') }}:</span>
-            <a v-if="fault.status !== 'closed'" class="maint-link-clickable" @click="openMaintEditDialog">
+            <router-link :to="`/maintenance/${maintenanceInfo.id}`" class="maint-link-clickable">
               {{ maintenanceInfo.maint_no }}
-              <el-icon class="edit-icon"><Edit /></el-icon>
-            </a>
-            <span v-else class="maint-link-disabled">{{ maintenanceInfo.maint_no }}</span>
+              <el-icon class="link-icon"><TopRight /></el-icon>
+            </router-link>
           </div>
 
           <!-- 成本信息 -->
@@ -789,7 +788,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft, MoreFilled, WarningFilled } from '@element-plus/icons-vue'
+import { Tools, UserFilled, Select, Search, Document, CircleCheck, Lock, Check, Edit, Delete, Right, Plus, Box, RefreshRight, Coin, SuccessFilled, Aim, InfoFilled, ArrowLeft, MoreFilled, WarningFilled, TopRight } from '@element-plus/icons-vue'
 import {
   getFaultDetail,
   updateFault as updateFaultApi,
@@ -2259,7 +2258,7 @@ onUnmounted(() => {
   color: var(--accent-secondary, #66b1ff);
 }
 
-.maint-link-clickable .edit-icon {
+.maint-link-clickable .link-icon {
   font-size: 14px;
   opacity: 0.7;
 }

@@ -91,6 +91,12 @@ def list_parts(
                 "unit_price": float(p.unit_price),
                 "location": p.location,
                 "status": p.status,
+                # 计算总价值（从库存实例汇总单价）
+                "total_value": float(
+                    db.query(func.sum(SparePartInstance.unit_price))
+                    .filter(SparePartInstance.part_id == p.id, SparePartInstance.status == "in_stock")
+                    .scalar() or 0
+                ),
                 "created_at": p.created_at.isoformat() if p.created_at else None,
                 "updated_at": p.updated_at.isoformat() if p.updated_at else None,
             }
@@ -221,10 +227,21 @@ def delete_part(db: Session, part_id: int) -> Dict[str, Any]:
     if not part:
         raise ResourceNotFoundException("SparePart")
 
+    # 先删除关联的库存实例
+    from app.shared.models import SparePartInstance, SparePartMovement
+    instances = db.query(SparePartInstance).filter(SparePartInstance.part_id == part_id).all()
+    instance_count = len(instances)
+
+    # 删除出入库记录
+    for instance in instances:
+        db.query(SparePartMovement).filter(SparePartMovement.serial_number == instance.serial_number).delete()
+        db.delete(instance)
+
+    # 删除备件基础信息
     db.delete(part)
     db.commit()
 
-    return {"success": True, "message": "删除成功"}
+    return {"success": True, "message": f"删除成功，同时删除 {instance_count} 个库存实例"}
 
 
 def get_stats(db: Session) -> Dict[str, Any]:
@@ -241,7 +258,13 @@ def get_stats(db: Session) -> Dict[str, Any]:
     low_stock = db.query(SparePart).filter(
         SparePart.quantity_in_stock < SparePart.min_quantity
     ).count()
-    total_value = db.query(func.sum(SparePart.quantity_in_stock * SparePart.unit_price)).scalar() or 0
+
+    # 从库存实例汇总单价计算总价值（入库时的实际单价）
+    total_value = db.query(
+        func.sum(SparePartInstance.unit_price)
+    ).filter(
+        SparePartInstance.status == "in_stock"
+    ).scalar() or 0
 
     by_category = {}
     rows = db.query(

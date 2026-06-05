@@ -1,7 +1,7 @@
 """Incident Center - 故障管理路由
 
 企业级Incident Center风格：
-- AI辅助故障分析
+- AI辅助故障分析（使用 ADK Agent）
 - 根因分析支持
 - 自动创建维修单决策
 - 故障生命周期管理
@@ -17,8 +17,11 @@ import json
 
 from app.shared.database import get_db
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
-from app.services.ai_manager import analyze_fault as ai_analyze_fault
 from app.services.workflow.executor import WorkflowExecutor
+
+# ADK 导入
+from app.services.adk.runner import adk_runner
+from app.services.adk.agents import fault_analysis_agent
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
@@ -29,7 +32,7 @@ router = APIRouter(prefix="/api/faults", tags=["faults"])
 FAULT_VALID_TRANSITIONS = {
     'open': ['assigned', 'closed'],
     'assigned': ['diagnosing', 'reassigned', 'closed'],  # 直接开始诊断
-    'diagnosing': ['resolving', 'transferred', 'reassigned', 'closed'],  # 支持转单
+    'diagnosing': ['resolving', 'transferred', 'resolved', 'reassigned'],  # 支持转单，禁止直接关闭
     'resolving': ['resolved', 'closed'],
     'transferred': ['resolved', 'closed'],  # 维修完成需人工确认
     'resolved': ['closed'],
@@ -494,7 +497,7 @@ async def analyze_fault(
     db: Session = Depends(get_db)
 ):
     """
-    AI分析故障
+    AI分析故障（使用 ADK Agent）
 
     返回：
     - 故障类型判断
@@ -506,8 +509,18 @@ async def analyze_fault(
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    # 执行AI分析
-    result = await ai_analyze_fault(fault_id, db)
+    device_name = fault.device.name if fault.device else fault.device_name or "Unknown"
+
+    # 使用 ADK Agent 执行分析
+    result = await adk_runner.run_agent(
+        agent=fault_analysis_agent,
+        user_id="faults_api",
+        message=f"请分析故障 ID={fault_id}，设备名称={device_name}，故障描述={fault.description}",
+        analysis_type="fault",
+        target_type="fault",
+        target_id=fault_id,
+        db=db
+    )
 
     if not result.get('success'):
         return {
@@ -516,7 +529,8 @@ async def analyze_fault(
             "message": "AI分析失败"
         }
 
-    analysis_result = result.get('result', {})
+    # 解析结果
+    analysis_result = adk_runner.parse_json_response(result.get('response', '')) or {}
 
     # 根据AI建议自动创建维修单
     if request.auto_create_maintenance:

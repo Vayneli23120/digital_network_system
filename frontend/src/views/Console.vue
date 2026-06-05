@@ -1,31 +1,83 @@
 <template>
-  <div class="console-page">
-    <!-- Page Header -->
-    <div class="page-header">
-      <div class="page-title">
-        <h1>{{ t('consoleTitle') }}</h1>
-        <span class="page-subtitle">{{ t('consoleSubtitle') }}</span>
-      </div>
-      <div class="btn-row">
-        <div class="connection-status" :class="connected ? 'connected' : 'disconnected'">
-          <el-icon><Connection /></el-icon>
+  <div class="console-page" :class="{ dark: isDark }">
+    <!-- Page Navigation Bar -->
+    <section class="page-nav-bar">
+      <div class="nav-left">
+        <h1 class="page-title">{{ t('consoleTitle') }}</h1>
+        <div class="connection-badge" :class="connected ? 'connected' : 'disconnected'">
+          <span class="badge-dot"></span>
           <span>{{ connected ? t('consoleConnected') : t('consoleDisconnected') }}</span>
         </div>
       </div>
-    </div>
-
-    <!-- Connection Panel -->
-    <div class="panel">
-      <div class="panel-hd">
-        <span class="panel-title">{{ t('consoleSerialConnection') }}</span>
+      <div class="nav-right">
+        <router-link to="/deploy" class="console-btn secondary">
+          <el-icon><Upload /></el-icon>
+          {{ t('consoleGoToDeploy') }}
+        </router-link>
       </div>
-      <div class="panel-body">
-        <div class="form-grid">
-          <el-row :gutter="16">
-            <el-col :span="6">
-              <div class="form-row">
-                <label class="form-label">{{ t('consoleBaudRate') }}</label>
-                <select class="fselect" v-model="baudRate" :disabled="connected">
+    </section>
+
+    <!-- Console Workspace: Left Sidebar + Right Terminal -->
+    <section class="console-workspace">
+      <!-- Left: Configuration Sidebar -->
+      <aside class="config-sidebar">
+
+        <!-- Session Status Card -->
+        <div class="session-card" :class="connected ? 'connected' : 'disconnected'">
+          <div class="session-header">
+            <div class="session-icon">
+              <el-icon><Connection /></el-icon>
+            </div>
+            <div class="session-title-group">
+              <span class="session-title">Console Session</span>
+              <div class="session-status">
+                <span class="status-dot" :class="connected ? 'active' : 'idle'"></span>
+                <span class="status-text">{{ connected ? t('consoleConnected') : t('consoleDisconnected') }}</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="session-body">
+            <div class="param-row">
+              <span class="param-label">Port</span>
+              <span class="param-value">{{ selectedPort || '--' }}</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Baud Rate</span>
+              <span class="param-value">{{ baudRate }}</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Config</span>
+              <span class="param-value">{{ dataBits }}N{{ stopBits }}</span>
+            </div>
+            <div class="param-row">
+              <span class="param-label">Parity</span>
+              <span class="param-value">None</span>
+            </div>
+          </div>
+
+          <div class="session-actions">
+            <button class="session-btn success" :disabled="connected" @click="connectPort">
+              <el-icon><Connection /></el-icon>
+              {{ t('consoleConnect') }}
+            </button>
+            <button class="session-btn danger" :disabled="!connected" @click="disconnectPort">
+              <el-icon><SwitchButton /></el-icon>
+              {{ t('consoleDisconnect') }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Serial Configuration Panel -->
+        <div class="config-panel">
+          <div class="panel-header">
+            <span class="panel-title">Serial Configuration</span>
+          </div>
+          <div class="panel-body">
+            <div class="config-grid">
+              <div class="config-item">
+                <label class="config-label">Baud Rate</label>
+                <select class="config-select" v-model="baudRate" :disabled="connected">
                   <option :value="9600">9600</option>
                   <option :value="19200">19200</option>
                   <option :value="38400">38400</option>
@@ -33,142 +85,132 @@
                   <option :value="115200">115200</option>
                 </select>
               </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="form-row">
-                <label class="form-label">{{ t('consoleDataBits') }}</label>
-                <select class="fselect" v-model="dataBits" :disabled="connected">
+              <div class="config-item">
+                <label class="config-label">Data Bits</label>
+                <select class="config-select" v-model="dataBits" :disabled="connected">
                   <option :value="8">8</option>
                   <option :value="7">7</option>
                 </select>
               </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="form-row">
-                <label class="form-label">{{ t('consoleStopBits') }}</label>
-                <select class="fselect" v-model="stopBits" :disabled="connected">
+              <div class="config-item">
+                <label class="config-label">Stop Bits</label>
+                <select class="config-select" v-model="stopBits" :disabled="connected">
                   <option :value="1">1</option>
                   <option :value="2">2</option>
                 </select>
               </div>
-            </el-col>
-            <el-col :span="6">
-              <div class="form-row buttons-inline">
-                <button class="btn btn-success" @click="connectPort" :disabled="connected">
-                  <el-icon><Connection /></el-icon>
-                  {{ t('consoleConnect') }}
-                </button>
-                <button class="btn btn-danger" @click="disconnectPort" :disabled="!connected">
-                  <el-icon><SwitchButton /></el-icon>
-                  {{ t('consoleDisconnect') }}
-                </button>
+            </div>
+
+            <!-- Web Serial Support Warning -->
+            <div class="serial-warning" v-if="!isSupported">
+              <el-icon><WarningFilled /></el-icon>
+              <span>{{ t('consoleSerialNotSupported') }}</span>
+            </div>
+
+            <!-- Port Selection -->
+            <div class="port-selector" v-if="isSupported && !connected">
+              <button class="select-port-btn" @click="requestPort">
+                <el-icon><Search /></el-icon>
+                {{ t('consoleSelectSerial') }}
+              </button>
+              <span class="port-tip">{{ t('consoleSelectSerialTip') }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Config Push Panel -->
+        <div class="push-panel">
+          <div class="panel-header">
+            <span class="panel-title">Configuration Push</span>
+            <el-tag v-if="!connected" type="warning" size="small" effect="plain">
+              {{ t('consoleConnectRequired') }}
+            </el-tag>
+          </div>
+          <div class="panel-body">
+            <div class="push-grid">
+              <div class="push-item">
+                <label class="push-label">{{ t('consoleConfigTemplate') }}</label>
+                <select class="push-select" v-model="selectedTemplate" :disabled="!connected">
+                  <option value="">{{ t('consoleSelectTemplate') }}</option>
+                  <option v-for="template in templates" :key="template.id" :value="template.id">
+                    {{ template.name }}
+                  </option>
+                </select>
               </div>
-            </el-col>
-          </el-row>
-        </div>
-
-        <!-- Web Serial Support Check -->
-        <div class="serial-warning" v-if="!isSupported">
-          <el-icon><WarningFilled /></el-icon>
-          <span>{{ t('consoleSerialNotSupported') }}</span>
-        </div>
-
-        <!-- Serial Port Selection -->
-        <div class="port-selection-area" v-if="isSupported && !connected">
-          <button class="btn btn-primary btn-lg" @click="requestPort">
-            <el-icon><Search /></el-icon>
-            {{ t('consoleSelectSerial') }}
-          </button>
-          <span class="port-tip">{{ t('consoleSelectSerialTip') }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tips for SSH Deploy -->
-    <div class="info-tip-card">
-      <el-icon><InfoFilled /></el-icon>
-      <span>{{ t('consoleSshDeployTip') }}</span>
-      <router-link to="/deploy" class="tip-link">{{ t('consoleGoToDeploy') }}</router-link>
-    </div>
-
-    <!-- Serial Config Push Panel -->
-    <div class="panel config-push-panel">
-      <div class="panel-hd">
-        <span class="panel-title">{{ t('consoleSerialPushTitle') }}</span>
-        <el-tag v-if="!connected" type="warning" size="small">{{ t('consoleConnectRequired') }}</el-tag>
-      </div>
-      <div class="panel-body">
-        <el-row :gutter="16">
-          <el-col :span="8">
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleConfigTemplate') }}</label>
-              <select class="fselect" v-model="selectedTemplate" :disabled="!connected">
-                <option value="">{{ t('consoleSelectTemplate') }}</option>
-                <option v-for="template in templates" :key="template.id" :value="template.id">
-                  {{ template.name }}
-                </option>
-              </select>
+              <div class="push-item">
+                <label class="push-label">{{ t('consoleConfigFile') }}</label>
+                <select class="push-select" v-model="selectedBackup" :disabled="!connected">
+                  <option value="">{{ t('consoleSelectBackup') }}</option>
+                  <option v-for="backup in backups" :key="backup.id" :value="backup.id">
+                    {{ backup.device_name }} - {{ formatTime(backup.backup_time) }}
+                  </option>
+                </select>
+              </div>
             </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="form-row">
-              <label class="form-label">{{ t('consoleConfigFile') }}</label>
-              <select class="fselect" v-model="selectedBackup" :disabled="!connected">
-                <option value="">{{ t('consoleSelectBackup') }}</option>
-                <option v-for="backup in backups" :key="backup.id" :value="backup.id">
-                  {{ backup.device_name }} - {{ formatTime(backup.backup_time) }}
-                </option>
-              </select>
-            </div>
-          </el-col>
-          <el-col :span="8">
-            <div class="form-row buttons-inline">
-              <button class="btn btn-primary" @click="pushConfigViaSerial" :disabled="isPushing || (!selectedTemplate && !selectedBackup)">
-                <el-icon><Upload /></el-icon>
+
+            <div class="push-action">
+              <button class="push-btn primary" :disabled="isPushing || (!selectedTemplate && !selectedBackup)" @click="pushConfigViaSerial">
+                <el-icon v-if="isPushing" class="is-loading"><Loading /></el-icon>
+                <el-icon v-else><Upload /></el-icon>
                 {{ isPushing ? t('consolePushing') : t('consolePushConfig') }}
               </button>
             </div>
-          </el-col>
-        </el-row>
 
-        <!-- Push Progress -->
-        <div class="push-progress" v-if="isPushing">
-          <div class="progress-bar">
-            <div class="progress-fill" :style="{ width: pushProgress + '%' }"></div>
-          </div>
-          <span class="progress-text">{{ pushProgress }}% - {{ pushStep }}</span>
-        </div>
-      </div>
-    </div>
-
-    <!-- Console Terminal -->
-    <div class="panel terminal-panel">
-      <div class="panel-hd">
-        <span class="panel-title">{{ t('consoleTerminalOutput') }}</span>
-        <div class="terminal-actions">
-          <button class="btn btn-tiny btn-ghost" @click="clearTerminal">
-            <el-icon><Delete /></el-icon>
-            {{ t('consoleClear') }}
-          </button>
-          <button class="btn btn-tiny btn-ghost" @click="downloadLog">
-            <el-icon><Download /></el-icon>
-            {{ t('consoleDownloadLog') }}
-          </button>
-        </div>
-      </div>
-      <div class="panel-body">
-        <div class="terminal" ref="terminalRef">
-          <div class="terminal-line" v-for="(line, idx) in terminalLines" :key="idx" :class="line.type">
-            <span class="terminal-time">{{ line.time }}</span>
-            <span class="terminal-text">{{ line.text }}</span>
-          </div>
-          <div class="terminal-empty" v-if="terminalLines.length === 0">
-            {{ t('consoleTerminalEmpty') }}
+            <!-- Push Progress -->
+            <div class="push-progress" v-if="isPushing">
+              <div class="progress-track">
+                <div class="progress-fill" :style="{ width: pushProgress + '%' }"></div>
+              </div>
+              <span class="progress-label">{{ pushStep }}</span>
+            </div>
           </div>
         </div>
 
-        <!-- Manual Input -->
-        <div class="terminal-input" v-if="connected">
+        <!-- Info Tip (Compact) -->
+        <div class="info-tip-compact">
+          <el-icon><InfoFilled /></el-icon>
+          <span>{{ t('consoleSshDeployTip') }}</span>
+        </div>
+
+      </aside>
+
+      <!-- Right: Terminal Workspace (Visual Core) -->
+      <main class="terminal-workspace">
+        <div class="terminal-header">
+          <div class="terminal-title">
+            <span class="terminal-indicator" :class="connected ? 'active' : 'idle'"></span>
+            <span>{{ t('consoleTerminalOutput') }}</span>
+          </div>
+          <div class="terminal-actions">
+            <button class="terminal-btn" @click="clearTerminal">
+              <el-icon><Delete /></el-icon>
+              {{ t('consoleClear') }}
+            </button>
+            <button class="terminal-btn" @click="downloadLog">
+              <el-icon><Download /></el-icon>
+              {{ t('consoleDownloadLog') }}
+            </button>
+          </div>
+        </div>
+
+        <div class="terminal-output" ref="terminalRef">
+          <div class="cli-line" v-for="(line, idx) in terminalLines" :key="idx" :class="line.type">
+            <span class="cli-timestamp">{{ line.time }}</span>
+            <span class="cli-content">{{ line.text }}</span>
+          </div>
+          <!-- Cursor Blink -->
+          <div class="cli-cursor-container" v-if="connected && terminalLines.length > 0">
+            <span class="cli-cursor"></span>
+          </div>
+          <div class="cli-empty" v-if="terminalLines.length === 0">
+            <el-icon><Monitor /></el-icon>
+            <span>{{ t('consoleTerminalEmpty') }}</span>
+          </div>
+        </div>
+
+        <!-- Manual Command Input -->
+        <div class="terminal-input-area" v-if="connected">
+          <span class="input-prompt">&gt;</span>
           <input
             class="command-input"
             v-model="manualCommand"
@@ -176,25 +218,81 @@
             :placeholder="t('consoleCommandPlaceholder')"
             ref="commandInputRef"
           />
-          <button class="btn btn-tiny btn-primary" @click="sendManualCommand">
-            {{ t('consoleSend') }}
+          <button class="send-btn" @click="sendManualCommand">
+            <el-icon><Promotion /></el-icon>
           </button>
         </div>
-      </div>
-    </div>
+      </main>
+
+      <!-- Right: Session History Panel -->
+      <aside class="history-sidebar">
+        <div class="history-panel">
+          <div class="history-header">
+            <span class="history-title">{{ t('consoleSessionHistory') }}</span>
+            <button class="clear-history-btn" @click="clearSessionHistory" :disabled="sessionHistory.length === 0">
+              <el-icon><Delete /></el-icon>
+            </button>
+          </div>
+          <div class="history-list" v-if="sessionHistory.length > 0">
+            <div
+              class="history-item"
+              v-for="session in sessionHistory"
+              :key="session.id"
+              :class="session.status"
+              @click="viewSessionLog(session)"
+            >
+              <div class="history-item-header">
+                <span class="history-item-status" :class="session.status">
+                  {{ session.status === 'completed' ? t('consoleSessionCompleted') : session.status === 'failed' ? t('consoleSessionFailed') : t('consoleSessionAborted') }}
+                </span>
+                <span class="history-item-time">{{ session.endTime ? formatTime(session.endTime) : '--' }}</span>
+              </div>
+              <div class="history-item-body">
+                <div class="history-param">
+                  <span class="param-key">Port:</span>
+                  <span class="param-val">{{ session.port || '--' }}</span>
+                </div>
+                <div class="history-param">
+                  <span class="param-key">Baud:</span>
+                  <span class="param-val">{{ session.baudRate }}</span>
+                </div>
+                <div class="history-param" v-if="session.pushSource">
+                  <span class="param-key">{{ t('consolePushSource') }}:</span>
+                  <span class="param-val">{{ session.pushSource }}</span>
+                </div>
+                <div class="history-param" v-if="session.commandCount">
+                  <span class="param-key">{{ t('consoleCommandCount') }}:</span>
+                  <span class="param-val">{{ session.commandCount }}</span>
+                </div>
+              </div>
+              <div class="history-item-footer">
+                <span class="history-duration">{{ session.duration ? formatDuration(session.duration) : '--' }}</span>
+              </div>
+            </div>
+          </div>
+          <div class="history-empty" v-else>
+            <el-icon><Clock /></el-icon>
+            <span>{{ t('consoleNoSessionHistory') }}</span>
+          </div>
+        </div>
+      </aside>
+    </section>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled, Upload } from '@element-plus/icons-vue'
+import { Connection, Search, Delete, Download, SwitchButton, WarningFilled, InfoFilled, Upload, Promotion, Loading, Monitor, Clock } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
 import { getTemplates, getBackups, getBackupContent, getTemplate } from '@/api'
 import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
+
+// 暗黑模式检测
+const isDark = computed(() => document.documentElement.classList.contains('dark'))
 
 // Web Serial API Support
 const isSupported = ref('serial' in navigator)
@@ -223,6 +321,88 @@ const selectedBackup = ref('')
 const isPushing = ref(false)
 const pushProgress = ref(0)
 const pushStep = ref('')
+
+// Session History (localStorage persisted)
+const sessionHistory = ref([])
+const currentSession = ref(null)
+
+// Load session history from localStorage
+const loadSessionHistory = () => {
+  try {
+    const saved = localStorage.getItem('consoleSessionHistory')
+    if (saved) {
+      sessionHistory.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load session history:', e)
+  }
+}
+
+// Save session history to localStorage
+const saveSessionHistory = () => {
+  try {
+    localStorage.setItem('consoleSessionHistory', JSON.stringify(sessionHistory.value.slice(0, 50))) // Keep last 50
+  } catch (e) {
+    console.error('Failed to save session history:', e)
+  }
+}
+
+// Start a new session
+const startSession = () => {
+  currentSession.value = {
+    id: Date.now(),
+    startTime: new Date().toISOString(),
+    port: selectedPort.value,
+    baudRate: baudRate.value,
+    dataBits: dataBits.value,
+    stopBits: stopBits.value,
+    status: 'active',
+    pushSource: null,
+    commandCount: 0,
+    endTime: null,
+    duration: null,
+    logs: []
+  }
+}
+
+// End current session
+const endSession = (status = 'completed') => {
+  if (currentSession.value) {
+    currentSession.value.endTime = new Date().toISOString()
+    currentSession.value.status = status
+    currentSession.value.duration = Math.round((new Date(currentSession.value.endTime) - new Date(currentSession.value.startTime)) / 1000)
+    sessionHistory.value.unshift(currentSession.value)
+    saveSessionHistory()
+    currentSession.value = null
+  }
+}
+
+// Clear session history
+const clearSessionHistory = () => {
+  sessionHistory.value = []
+  localStorage.removeItem('consoleSessionHistory')
+}
+
+// View session log
+const viewSessionLog = (session) => {
+  if (session.logs && session.logs.length > 0) {
+    terminalLines.value = session.logs.map(log => ({
+      time: log.time,
+      text: log.text,
+      type: log.type
+    }))
+  }
+}
+
+// Format duration
+const formatDuration = (seconds) => {
+  if (seconds < 60) {
+    return `${seconds}s`
+  }
+  const mins = Math.floor(seconds / 60)
+  const secs = seconds % 60
+  return `${mins}m ${secs}s`
+}
 
 // ReadableStream controller for async reading
 let readLoopPromise = null
@@ -260,9 +440,8 @@ const requestPort = async () => {
   try {
     const newPort = await navigator.serial.requestPort()
     const info = await newPort.getInfo()
-    selectedPort.value = `Serial Port (USB VID:${info.usbVendorId || 'N/A'} PID:${info.usbProductId || 'N/A'})`
+    selectedPort.value = `Serial (VID:${info.usbVendorId || 'N/A'} PID:${info.usbProductId || 'N/A'})`
     port.value = newPort
-    availablePorts.value = [selectedPort.value]
     addLine(t('consoleSerialSelected'), 'info')
   } catch (err) {
     if (err.name === 'NotFoundError') {
@@ -289,6 +468,9 @@ const connectPort = async () => {
 
     connected.value = true
     addLine(`${t('consoleConnect')}: ${baudRate.value} baud, ${dataBits.value}N${stopBits.value}`, 'success')
+
+    // Start session record
+    startSession()
 
     // Start reading loop
     startReadLoop()
@@ -322,8 +504,12 @@ const disconnectPort = async () => {
     connected.value = false
     addLine(t('consoleDisconnectSuccess'), 'warning')
     ElMessage.info(t('consoleDisconnectSuccess'))
+
+    // End session record
+    endSession('completed')
   } catch (err) {
     ElMessage.error(t('consoleDisconnectFailed') + ': ' + err.message)
+    endSession('failed')
   }
 }
 
@@ -374,7 +560,7 @@ const sendCommand = async (command, delay = 0.5) => {
     writer.value.releaseLock()
     writer.value = null
 
-    addLine(command, 'input')
+    addLine(command, 'command')
 
     await new Promise(r => setTimeout(r, delay * 1000))
   } catch (err) {
@@ -411,15 +597,22 @@ const pushConfigViaSerial = async () => {
   pushStep.value = t('consolePreparePush')
 
   let configContent = ''
+  let pushSourceName = ''
 
   try {
     // Get config content
     if (selectedBackup.value) {
       const data = await getBackupContent(selectedBackup.value)
       configContent = data.content || ''
+      // Find backup name
+      const backup = backups.value.find(b => b.id === selectedBackup.value)
+      pushSourceName = backup ? `${backup.device_name} Backup` : 'Backup'
     } else if (selectedTemplate.value) {
       const data = await getTemplate(selectedTemplate.value)
       configContent = data.template_content || ''
+      // Find template name
+      const template = templates.value.find(t => t.id === selectedTemplate.value)
+      pushSourceName = template ? template.name : 'Template'
     }
 
     if (!configContent) {
@@ -430,6 +623,12 @@ const pushConfigViaSerial = async () => {
     const commands = configContent.split('\n')
       .map(line => line.trim())
       .filter(line => line && !line.startsWith('!') && !line.startsWith('#'))
+
+    // Record push info to current session
+    if (currentSession.value) {
+      currentSession.value.pushSource = pushSourceName
+      currentSession.value.commandCount = commands.length
+    }
 
     addLine(t('consolePushStart') + ` (${commands.length} ${t('consoleCommands')})`, 'info')
 
@@ -474,6 +673,9 @@ const pushConfigViaSerial = async () => {
   } catch (err) {
     addLine(t('consolePushFailed') + ': ' + err.message, 'error')
     ElMessage.error(t('consolePushFailed') + ': ' + err.message)
+    if (currentSession.value) {
+      currentSession.value.status = 'failed'
+    }
   }
 
   isPushing.value = false
@@ -493,6 +695,9 @@ const downloadLog = () => {
 
 // Load templates and backups on mount
 onMounted(async () => {
+  // Load session history
+  loadSessionHistory()
+
   try {
     const templateData = await cachedRequest(
       () => getTemplates(),
@@ -525,203 +730,592 @@ onUnmounted(async () => {
 </script>
 
 <style scoped>
+/* ========================================
+   Console Page - Enterprise NetDevOps Style
+   ======================================== */
+
 .console-page {
-  max-width: 1200px;
+  max-width: 1600px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-md);
+  min-height: calc(100vh - 120px);
 }
 
-/* Page Header */
-.page-header {
+/* ========================================
+   Page Navigation Bar
+   ======================================== */
+
+.page-nav-bar {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--gap-lg);
+  align-items: center;
 }
 
-.page-title h1 {
-  font-size: 20px;
-  font-weight: 500;
-  color: var(--ink);
-  margin: 0;
-}
-
-.page-subtitle {
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink3);
-}
-
-.btn-row {
+.nav-left {
   display: flex;
-  gap: var(--gap-sm);
+  align-items: center;
+  gap: var(--gap-md);
 }
 
-.connection-status {
+.page-title {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.connection-badge {
   display: flex;
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: var(--radius-pill);
+  border-radius: var(--radius-md);
   font-size: 12px;
   font-weight: 500;
+  background: var(--bg-hover);
+  color: var(--text-secondary);
 }
 
-.connection-status.connected {
+.connection-badge.connected {
   background: var(--success-bg);
-  color: var(--success);
+  color: var(--accent-primary);
 }
 
-.connection-status.disconnected {
-  background: var(--bg);
-  color: var(--ink3);
+.connection-badge.disconnected {
+  background: var(--bg-hover);
+  color: var(--text-tertiary);
 }
 
-/* Grid */
-.grid2 {
+.badge-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.connection-badge.connected .badge-dot {
+  background: var(--accent-primary);
+  animation: badge-pulse 2s infinite;
+}
+
+@keyframes badge-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.4);
+  }
+  50% {
+    opacity: 0.8;
+    box-shadow: 0 0 0 4px rgba(0, 184, 148, 0);
+  }
+}
+
+.nav-right {
+  display: flex;
+  gap: var(--gap-sm);
+}
+
+/* ========================================
+   Console Workspace - Left + Middle + Right Layout
+   ======================================== */
+
+.console-workspace {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 280px 1fr 240px;
   gap: var(--gap-md);
-  margin-bottom: var(--gap-lg);
+  flex: 1;
+  min-height: 400px;
 }
 
-/* Panel */
-.panel {
-  background: var(--surface);
-  border-radius: var(--radius-panel);
-  border: 1px solid var(--border);
+/* ========================================
+   Right: Session History Sidebar
+   ======================================== */
+
+.history-sidebar {
+  display: flex;
+  flex-direction: column;
 }
 
-.panel-hd {
+.history-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 20px;
-  border-bottom: 1px solid var(--border);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
 }
 
-.panel-title {
+.history-title {
   font-size: 13px;
-  font-weight: 500;
-  color: var(--ink);
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.panel-body {
-  padding: 18px 20px;
-}
-
-/* Form Grid */
-.form-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.form-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.form-row.buttons {
-  margin-top: 8px;
-}
-
-.form-label {
-  min-width: 80px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--ink2);
-}
-
-.port-selector {
-  display: flex;
-  gap: 8px;
-  flex: 1;
-}
-
-.fselect {
-  flex: 1;
-  padding: 8px 12px;
-  font-size: 13px;
-  font-family: var(--font-body);
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--border);
+.clear-history-btn {
+  height: 22px;
+  width: 22px;
+  padding: 0;
   border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-tertiary);
+  transition: all 0.15s ease;
 }
 
-.fselect:focus {
-  border-color: var(--color-gb);
-  outline: none;
+.clear-history-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--accent-danger);
+  color: var(--accent-danger);
 }
 
-.fselect:disabled {
-  opacity: 0.6;
+.clear-history-btn:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* Buttons */
-.btn {
-  display: inline-flex;
-  align-items: center;
+.clear-history-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.history-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
   gap: 6px;
-  padding: 8px 16px;
-  font-size: 13px;
-  font-weight: 400;
-  border-radius: var(--radius-sm);
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.history-list::-webkit-scrollbar {
+  width: 4px;
+}
+
+.history-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.history-list::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 2px;
+}
+
+.history-item {
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 8px;
   cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
+  transition: all 0.15s ease;
 }
 
-.btn .el-icon {
-  font-size: 14px;
+.history-item:hover {
+  background: var(--bg-tertiary);
+  border-color: var(--accent-secondary);
+  transform: translateY(-1px);
 }
 
-.btn-primary {
-  background: var(--color-gb);
-  color: #fff;
+.history-item.completed {
+  border-color: rgba(0, 184, 148, 0.2);
 }
 
-.btn-primary:hover:not(:disabled) {
-  background: var(--color-gb-mid);
+.history-item.failed {
+  border-color: rgba(214, 48, 49, 0.2);
 }
 
-.btn-success {
-  background: var(--success);
-  color: #fff;
+.history-item.aborted {
+  border-color: rgba(225, 112, 85, 0.2);
 }
 
-.btn-success:hover:not(:disabled) {
-  background: #15703b;
+.history-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
 }
 
-.btn-danger {
-  background: var(--danger);
-  color: #fff;
+.history-item-status {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
 
-.btn-danger:hover:not(:disabled) {
-  background: #991b1b;
+.history-item-status.completed {
+  background: var(--success-bg);
+  color: var(--accent-primary);
 }
 
-.btn-ghost {
-  background: var(--surface);
-  color: var(--ink2);
-  border-color: var(--border);
+.history-item-status.failed {
+  background: var(--error-bg);
+  color: var(--accent-danger);
 }
 
-.btn-ghost:hover:not(:disabled) {
-  background: var(--color-gb-ghost);
-  border-color: var(--border2);
+.history-item-status.aborted {
+  background: var(--warn-bg);
+  color: var(--accent-warning);
 }
 
-.btn-tiny {
-  padding: 4px 8px;
+.history-item-time {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: 'Geist Mono', monospace;
+}
+
+.history-item-body {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.history-param {
+  display: flex;
+  gap: 4px;
   font-size: 11px;
 }
 
-.btn:disabled {
+.param-key {
+  color: var(--text-tertiary);
+}
+
+.param-val {
+  color: var(--text-secondary);
+  font-family: 'Geist Mono', monospace;
+}
+
+.history-item-footer {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: 4px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}
+
+.history-duration {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: 'Geist Mono', monospace;
+}
+
+.history-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+  color: var(--text-tertiary);
+  font-size: 12px;
+  padding: 20px;
+}
+
+.history-empty .el-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.5;
+}
+
+/* ========================================
+   Left Sidebar - Configuration
+   ======================================== */
+
+.config-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.config-sidebar::-webkit-scrollbar {
+  width: 4px;
+}
+
+.config-sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.config-sidebar::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 2px;
+}
+
+/* ========================================
+   Session Card - Console Session Panel
+   ======================================== */
+
+.session-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s ease;
+}
+
+.session-card:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.session-card.connected {
+  border-color: rgba(0, 184, 148, 0.3);
+  box-shadow: var(--shadow-card), 0 0 10px rgba(0, 184, 148, 0.1);
+}
+
+.session-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.session-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(9, 132, 227, 0.1);
+  border-radius: var(--radius-md);
+  color: var(--accent-secondary);
+}
+
+.session-icon .el-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.session-title-group {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.session-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.session-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.status-dot.active {
+  background: var(--accent-primary);
+  animation: status-pulse 2s infinite;
+}
+
+.status-dot.idle {
+  background: var(--text-tertiary);
+}
+
+@keyframes status-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.5);
+  }
+  50% {
+    opacity: 0.6;
+    box-shadow: 0 0 0 3px rgba(0, 184, 148, 0);
+  }
+}
+
+.status-text {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.session-card.connected .status-text {
+  color: var(--accent-primary);
+}
+
+.session-body {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.param-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.param-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.param-value {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+}
+
+.session-actions {
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.session-btn {
+  flex: 1;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: none;
+}
+
+.session-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.session-btn.success {
+  background: var(--accent-primary);
+  color: white;
+}
+
+.session-btn.success:hover:not(:disabled) {
+  background: #00a884;
+  box-shadow: 0 0 6px rgba(0, 184, 148, 0.3);
+}
+
+.session-btn.danger {
+  background: var(--accent-danger);
+  color: white;
+}
+
+.session-btn.danger:hover:not(:disabled) {
+  background: #c42a2a;
+  box-shadow: 0 0 6px rgba(214, 48, 49, 0.3);
+}
+
+.session-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ========================================
+   Config Panel - Serial Configuration
+   ======================================== */
+
+.config-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s ease;
+}
+
+.config-panel:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.config-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.config-panel .panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.config-panel .panel-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+}
+
+.config-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-label {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.config-select {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.config-select:hover:not(:disabled) {
+  border-color: var(--accent-secondary);
+}
+
+.config-select:focus {
+  border-color: var(--accent-secondary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
+}
+
+.config-select:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -730,203 +1324,733 @@ onUnmounted(async () => {
 .serial-warning {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-top: 14px;
-  padding: 10px 12px;
+  gap: 6px;
+  padding: 8px 10px;
   background: var(--warn-bg);
-  color: var(--warn);
-  border-radius: var(--radius-sm);
-  font-size: 12px;
+  color: var(--accent-warning);
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  border: 1px solid rgba(225, 112, 85, 0.2);
 }
 
-/* Terminal Panel */
-.terminal-panel {
-  margin-bottom: var(--gap-lg);
+.serial-warning .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* Port Selector */
+.port-selector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px;
+  background: rgba(9, 132, 227, 0.05);
+  border-radius: var(--radius-md);
+}
+
+.select-port-btn {
+  width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  background: var(--accent-secondary);
+  color: white;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.select-port-btn:hover {
+  background: #0873d1;
+  box-shadow: 0 0 6px rgba(9, 132, 227, 0.3);
+}
+
+.select-port-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.port-tip {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  text-align: center;
+}
+
+/* ========================================
+   Push Panel - Configuration Push
+   ======================================== */
+
+.push-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  transition: all 0.2s ease;
+}
+
+.push-panel:hover {
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-elevated);
+}
+
+.push-panel .panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.push-panel .panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.push-panel .panel-header .el-tag {
+  height: 18px;
+  padding: 0 6px;
+  font-size: 10px;
+}
+
+.push-panel .panel-body {
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap-sm);
+}
+
+.push-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.push-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.push-label {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+.push-select {
+  height: 28px;
+  padding: 0 8px;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.push-select:hover:not(:disabled) {
+  border-color: var(--accent-secondary);
+}
+
+.push-select:focus {
+  border-color: var(--accent-secondary);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
+}
+
+.push-select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.push-action {
+  padding-top: 4px;
+}
+
+.push-btn {
+  width: 100%;
+  height: 28px;
+  padding: 0 12px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.push-btn.primary {
+  background: var(--accent-primary);
+  color: white;
+  border: none;
+}
+
+.push-btn.primary:hover:not(:disabled) {
+  background: #00a884;
+  box-shadow: 0 0 6px rgba(0, 184, 148, 0.3);
+}
+
+.push-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.push-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+.push-btn .is-loading {
+  animation: rotating 2s linear infinite;
+}
+
+@keyframes rotating {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Push Progress */
+.push-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--gap-sm);
+  padding: 8px;
+  background: var(--bg-hover);
+  border-radius: var(--radius-md);
+}
+
+.progress-track {
+  flex: 1;
+  height: 4px;
+  background: var(--border-default);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  background: var(--accent-primary);
+  transition: width 0.3s ease;
+}
+
+.progress-label {
+  font-size: 11px;
+  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
+  color: var(--text-secondary);
+  min-width: 100px;
+}
+
+/* ========================================
+   Info Tip (Compact)
+   ======================================== */
+
+.info-tip-compact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: rgba(9, 132, 227, 0.05);
+  border: 1px solid rgba(9, 132, 227, 0.1);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.info-tip-compact .el-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--accent-secondary);
+}
+
+/* ========================================
+   Right: Terminal Workspace - Light Mode Default
+   ======================================== */
+
+.terminal-workspace {
+  background: var(--bg-card);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: var(--shadow-card);
+}
+
+/* ========================================
+   Terminal Header - Light Mode
+   ======================================== */
+
+.terminal-header {
+  background: var(--bg-hover);
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  height: 36px;
+}
+
+.terminal-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.terminal-indicator {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-tertiary);
+}
+
+.terminal-indicator.active {
+  background: var(--accent-primary);
+  animation: terminal-pulse 2s infinite;
+}
+
+.terminal-indicator.idle {
+  background: var(--text-tertiary);
+}
+
+@keyframes terminal-pulse {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 0 0 rgba(0, 184, 148, 0.6);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 0 4px rgba(0, 184, 148, 0);
+  }
 }
 
 .terminal-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
-.terminal {
-  background: #0d1117;
-  color: #c9d1d9;
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  min-height: 300px;
-  max-height: 400px;
-  overflow-y: auto;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 1.4;
-}
-
-.terminal-line {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 4px;
-}
-
-.terminal-time {
-  color: #6e7681;
+.terminal-btn {
+  height: 22px;
+  padding: 0 8px;
+  border-radius: var(--radius-sm);
   font-size: 11px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
 }
 
-.terminal-text {
+.terminal-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
+}
+
+.terminal-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ========================================
+   Terminal Output - Light Mode
+   ======================================== */
+
+.terminal-output {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', 'Geist Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 12px 16px;
   flex: 1;
+  overflow-y: auto;
+  min-height: 200px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-default) transparent;
+}
+
+.terminal-output::-webkit-scrollbar {
+  width: 6px;
+}
+
+.terminal-output::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.terminal-output::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 3px;
+}
+
+.terminal-output::-webkit-scrollbar-thumb:hover {
+  background: var(--text-tertiary);
+}
+
+/* CLI Line */
+.cli-line {
+  display: flex;
+  gap: 10px;
+  padding: 1px 0;
+}
+
+.cli-timestamp {
+  color: var(--text-tertiary);
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.cli-content {
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-all;
+  flex: 1;
 }
 
-.terminal-line.input .terminal-text {
-  color: #58a6ff;
+/* Light Mode - ANSI Style Colors */
+.cli-line.command .cli-content {
+  color: var(--accent-secondary);
+  font-weight: 500;
 }
 
-.terminal-line.success .terminal-text {
-  color: #3fb950;
+.cli-line.success .cli-content {
+  color: var(--accent-primary);
 }
 
-.terminal-line.error .terminal-text {
-  color: #f85149;
+.cli-line.error .cli-content {
+  color: var(--accent-danger);
 }
 
-.terminal-line.warning .terminal-text {
-  color: #d29922;
+.cli-line.warning .cli-content {
+  color: var(--accent-warning);
 }
 
-.terminal-line.info .terminal-text {
-  color: #8b949e;
+.cli-line.info .cli-content {
+  color: var(--accent-secondary);
 }
 
-.terminal-empty {
-  color: #6e7681;
-  text-align: center;
-  padding: 100px 0;
+.cli-line.output .cli-content {
+  color: var(--text-secondary);
 }
 
-/* Terminal Input */
-.terminal-input {
+/* Cursor Container */
+.cli-cursor-container {
   display: flex;
+  padding: 2px 0;
+}
+
+.cli-cursor {
+  display: inline-block;
+  width: 10px;
+  height: 16px;
+  background: var(--accent-secondary);
+  animation: cursor-blink 1s step-end infinite;
+  margin-left: 10px;
+}
+
+@keyframes cursor-blink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+/* Empty State */
+.cli-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gap-sm);
+  height: 100%;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.cli-empty .el-icon {
+  width: 24px;
+  height: 24px;
+  opacity: 0.5;
+}
+
+/* ========================================
+   Terminal Input Area - Light Mode
+   ======================================== */
+
+.terminal-input-area {
+  display: flex;
+  align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  padding: 10px 14px;
+  background: var(--bg-hover);
+  border-top: 1px solid var(--border-subtle);
+}
+
+.input-prompt {
+  color: var(--accent-secondary);
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
 }
 
 .command-input {
   flex: 1;
-  padding: 8px 12px;
-  font-family: var(--font-mono);
-  font-size: 13px;
-  color: var(--ink);
-  background: var(--bg);
-  border: 1px solid var(--border);
+  height: 26px;
+  padding: 0 10px;
+  font-family: 'JetBrains Mono', 'Geist Mono', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
 }
 
 .command-input:focus {
-  border-color: var(--color-gb);
+  border-color: var(--accent-secondary);
   outline: none;
+  box-shadow: 0 0 0 2px rgba(9, 132, 227, 0.15);
 }
 
-/* Buttons Inline */
-.buttons-inline {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
+.command-input::placeholder {
+  color: var(--text-tertiary);
 }
 
-/* Port Selection Area */
-.port-selection-area {
-  display: flex;
-  flex-direction: column;
+.send-btn {
+  height: 26px;
+  width: 26px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  padding: 24px;
-  background: rgba(0, 48, 135, 0.04);
+  justify-content: center;
+  cursor: pointer;
+  background: var(--accent-secondary);
+  color: white;
+  border: none;
+  transition: all 0.15s ease;
+}
+
+.send-btn:hover {
+  background: #0873d1;
+  box-shadow: 0 0 6px rgba(9, 132, 227, 0.3);
+}
+
+.send-btn .el-icon {
+  width: 12px;
+  height: 12px;
+}
+
+/* ========================================
+   Console Button System
+   ======================================== */
+
+.console-btn {
+  height: 28px;
+  padding: 0 12px;
   border-radius: var(--radius-md);
-  margin-top: 14px;
-}
-
-.btn-lg {
-  padding: 12px 24px;
-  font-size: 14px;
-}
-
-.port-tip {
   font-size: 12px;
-  color: var(--ink3);
-}
-
-/* Info Tip Card */
-.info-tip-card {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px;
-  background: rgba(9, 132, 227, 0.08);
-  border: 1px solid rgba(9, 132, 227, 0.2);
-  border-radius: var(--radius-sm);
-  margin-bottom: var(--gap-md);
-  color: var(--ink2);
-  font-size: 13px;
-}
-
-.info-tip-card .el-icon {
-  color: var(--color-gb-mid);
-}
-
-.tip-link {
-  color: var(--color-gb-mid);
   font-weight: 500;
-  margin-left: 8px;
-}
-
-.tip-link:hover {
-  color: var(--color-gb);
-}
-
-/* Config Push Panel */
-.config-push-panel {
-  margin-bottom: var(--gap-md);
-}
-
-.push-progress {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
-  margin-top: 12px;
-  padding: 12px;
-  background: var(--bg);
-  border-radius: var(--radius-sm);
+  gap: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
 }
 
-.push-progress .progress-bar {
-  flex: 1;
-  height: 6px;
-  background: var(--border);
-  border-radius: 3px;
-  overflow: hidden;
+.console-btn.secondary {
+  background: transparent;
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
 }
 
-.push-progress .progress-fill {
-  height: 100%;
-  background: linear-gradient(90deg, var(--color-gb), var(--color-gb-mid));
-  transition: width 0.3s;
+.console-btn.secondary:hover {
+  background: var(--bg-hover);
+  border-color: var(--accent-secondary);
+  color: var(--accent-secondary);
 }
 
-.push-progress .progress-text {
-  font-size: 12px;
-  font-family: var(--font-mono);
-  color: var(--ink2);
-  min-width: 120px;
+.console-btn .el-icon {
+  width: 12px;
+  height: 12px;
 }
 
-/* Responsive */
-@media (max-width: 768px) {
-  .terminal {
+/* ========================================
+   DARK MODE - Terminal Deep Style
+   ======================================== */
+
+.console-page.dark .terminal-workspace {
+  background: #1e1e1e;
+  border-color: #3c3c3c;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4), 0 0 1px rgba(86, 156, 214, 0.1);
+}
+
+.console-page.dark .terminal-header {
+  background: #252526;
+  border-color: #3c3c3c;
+}
+
+.console-page.dark .terminal-title {
+  color: #cccccc;
+}
+
+.console-page.dark .terminal-indicator.idle {
+  background: #636e72;
+}
+
+.console-page.dark .terminal-btn {
+  border-color: #3c3c3c;
+  color: #cccccc;
+}
+
+.console-page.dark .terminal-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: #569cd6;
+  color: #569cd6;
+}
+
+.console-page.dark .terminal-output {
+  background: #1e1e1e;
+  color: #d4d4d4;
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}
+
+.console-page.dark .terminal-output::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.console-page.dark .terminal-output::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.console-page.dark .cli-timestamp {
+  color: #6a9955;
+  opacity: 0.8;
+}
+
+.console-page.dark .cli-content {
+  color: #d4d4d4;
+}
+
+/* Dark Mode - ANSI Colors */
+.console-page.dark .cli-line.command .cli-content {
+  color: #4ec9b0;
+}
+
+.console-page.dark .cli-line.success .cli-content {
+  color: #89d185;
+}
+
+.console-page.dark .cli-line.error .cli-content {
+  color: #f14c4c;
+}
+
+.console-page.dark .cli-line.warning .cli-content {
+  color: #cca700;
+}
+
+.console-page.dark .cli-line.info .cli-content {
+  color: #569cd6;
+}
+
+.console-page.dark .cli-line.output .cli-content {
+  color: #d4d4d4;
+}
+
+.console-page.dark .cli-cursor {
+  background: #4ec9b0;
+}
+
+.console-page.dark .cli-empty {
+  color: #858585;
+}
+
+.console-page.dark .terminal-input-area {
+  background: #252526;
+  border-color: #3c3c3c;
+}
+
+.console-page.dark .input-prompt {
+  color: #4ec9b0;
+}
+
+.console-page.dark .command-input {
+  background: #1e1e1e;
+  border-color: #3c3c3c;
+  color: #d4d4d4;
+}
+
+.console-page.dark .command-input:focus {
+  border-color: #569cd6;
+  box-shadow: 0 0 0 2px rgba(86, 156, 214, 0.2);
+}
+
+.console-page.dark .command-input::placeholder {
+  color: #858585;
+}
+
+/* ========================================
+   Responsive
+   ======================================== */
+
+@media (max-width: 1400px) {
+  .console-workspace {
+    grid-template-columns: 280px 1fr;
+  }
+
+  .history-sidebar {
+    display: none;
+  }
+}
+
+@media (max-width: 900px) {
+  .console-workspace {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .config-sidebar {
+    max-height: none;
+    overflow: visible;
+  }
+
+  .terminal-output {
     min-height: 200px;
+  }
+}
+
+@media (max-width: 600px) {
+  .page-nav-bar {
+    flex-direction: column;
+    gap: var(--gap-sm);
+    align-items: flex-start;
+  }
+
+  .nav-left {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .push-grid {
+    grid-template-columns: 1fr;
   }
 }
 </style>

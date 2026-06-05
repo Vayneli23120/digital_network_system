@@ -560,7 +560,10 @@ const backupNow = async () => {
     ElMessage.success(t('msgBackupSuccessShort'))
     clearCache('device_detail')
     loadDevice(true)
-  } catch (error) { ElMessage.error(t('msgBackupFailed')) }
+  } catch (error) {
+    // 错误已在请求拦截器中显示，这里只需清理缓存
+    clearCache('device_detail')
+  }
 }
 const viewLatestConfig = async () => {
   if (!device.value?.recent_backups?.length) { ElMessage.warning(t('backupNoConfig')); return }

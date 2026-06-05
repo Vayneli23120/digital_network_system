@@ -267,6 +267,14 @@ async def startup_event():
     init_default_templates()
     init_default_roles()
 
+    # 启动设备可达性监控服务
+    try:
+        from .services.reachability_monitor import start_reachability_monitor
+        monitor = start_reachability_monitor()
+        logger.info("设备可达性监控服务已启动")
+    except Exception as e:
+        logger.warning(f"启动可达性监控服务失败: {e}")
+
 
 # ============ 优雅关闭 ============
 
@@ -275,6 +283,15 @@ def handle_shutdown(signum, frame):
     """处理 SIGTERM/SIGINT 信号"""
     sig_name = signal.Signals(signum).name
     logger.info(f"收到 {sig_name} 信号，开始优雅关闭...")
+
+    # 停止可达性监控服务
+    try:
+        from .services.reachability_monitor import stop_reachability_monitor
+        stop_reachability_monitor()
+        logger.info("可达性监控服务已停止")
+    except Exception as e:
+        logger.warning(f"停止可达性监控服务失败: {e}")
+
     try:
         get_db_manager().engine.dispose()
         logger.info("数据库连接池已关闭")

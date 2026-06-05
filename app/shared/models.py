@@ -5,7 +5,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean,
-    DECIMAL, ForeignKey, Index, CheckConstraint, Table
+    DECIMAL, Float, ForeignKey, Index, CheckConstraint, Table
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -931,3 +931,95 @@ class DeployDeviceResult(Base):
 
     def __repr__(self):
         return f"<DeployDeviceResult(deploy_id={self.deploy_id}, device={self.device_name}, status={self.status})>"
+
+
+class ComplianceStandard(Base):
+    """配置标准文档表 - 存储公司的配置标准文档（自然语言格式）"""
+    __tablename__ = "compliance_standards"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)  # 标准名称
+    version = Column(String(20), nullable=False)  # 版本号
+    description = Column(String(500))  # 描述
+    content = Column(Text, nullable=False)  # 标准文档内容（自然语言）
+    file_path = Column(String(500))  # 上传文件路径（可选）
+    is_active = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(String(100))  # 创建者
+
+    # 关系
+    rules = relationship("ComplianceRule", back_populates="standard", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<ComplianceStandard(id={self.id}, name={self.name}, version={self.version})>"
+
+
+class ComplianceRule(Base):
+    """合规规则表 - AI 自动生成的检查规则"""
+    __tablename__ = "compliance_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    standard_id = Column(Integer, ForeignKey("compliance_standards.id", ondelete="CASCADE"), nullable=False, index=True)
+    rule_id = Column(String(20), nullable=False)  # 规则编号 (AI-001)
+    name = Column(String(100), nullable=False)  # 规则名称
+    category = Column(String(50))  # 分类 (security/availability/compliance)
+    severity = Column(String(20))  # 严重性 (critical/high/medium/low/info)
+    pattern = Column(Text)  # 匹配模式（正则表达式或关键词）
+    check_logic = Column(Text)  # AI 生成的检查逻辑描述
+    recommendation = Column(Text)  # 推荐配置
+    source_type = Column(String(20), default="auto")  # 来源：auto(AI生成)/manual(手动)
+    is_active = Column(Boolean, default=True)  # 是否启用
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    standard = relationship("ComplianceStandard", back_populates="rules")
+
+    def __repr__(self):
+        return f"<ComplianceRule(rule_id={self.rule_id}, name={self.name}, severity={self.severity})>"
+
+
+class ComplianceAuditLog(Base):
+    """合规审核记录表 - 记录每次 AI 审核的结果"""
+    __tablename__ = "compliance_audit_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_name = Column(String(100))  # 设备名称（可选）
+    config_source = Column(String(50))  # 配置来源 (file/paste/device)
+    config_text = Column(Text)  # 配置文本（可存储或引用）
+    compliance_score = Column(Float)  # 合规分数
+    total_checks = Column(Integer)  # 总检查项
+    passed = Column(Integer)  # 通过项
+    failed = Column(Integer)  # 失败项
+    audit_mode = Column(String(20))  # 审核模式 (full/basic/ai_only)
+    ai_provider = Column(String(20))  # AI 服务提供商
+    ai_model = Column(String(100))  # AI 模型名称
+    result_detail = Column(Text)  # 审核结果详情（JSON）
+    created_at = Column(DateTime, default=datetime.utcnow)
+    created_by = Column(String(100))  # 操作用户
+
+    def __repr__(self):
+        return f"<ComplianceAuditLog(id={self.id}, score={self.compliance_score}, device={self.device_name})>"
+
+
+class AIConfig(Base):
+    """AI 服务配置表 - 存储 AI 服务的配置信息"""
+    __tablename__ = "ai_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(50), nullable=False)  # 配置名称
+    provider = Column(String(20), nullable=False)  # 服务提供商 (openai/anthropic)
+    api_key_encrypted = Column(String(200))  # API Key（加密存储）
+    base_url = Column(String(500))  # 自定义 API 地址
+    model_name = Column(String(100))  # 模型名称 (gpt-4, claude-3-opus)
+    temperature = Column(Float, default=0.7)  # 温度参数
+    max_tokens = Column(Integer, default=4096)  # 最大 token
+    timeout = Column(Integer, default=60)  # 请求超时（秒）
+    is_active = Column(Boolean, default=True)  # 是否启用
+    is_default = Column(Boolean, default=False)  # 是否默认配置
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AIConfig(id={self.id}, provider={self.provider}, model={self.model_name})>"

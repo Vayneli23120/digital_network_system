@@ -359,6 +359,20 @@ const routes = [
         meta: { title: '系统通知' }
       }
     ]
+  },
+  // 角色权限
+  {
+    path: '/permissions',
+    name: 'PermissionsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Permissions',
+        component: () => import('@/views/Permissions.vue'),
+        meta: { title: '角色权限' }
+      }
+    ]
   }
 ]
 

@@ -1,18 +1,25 @@
 """
-配置合规检查服务
+配置合规检查服务（ADK 版本）
 
-基于策略的配置自动审计，检查项包括：
-- 密码策略（enable secret, username 密码）
-- ACL 配置（是否有 ACL 保护管理平面）
-- 端口安全（未使用端口是否 shutdown）
-- VLAN 规范（Native VLAN 是否修改）
-- SSH 配置（SSH v2, timeout）
-- 日志配置（logging 是否启用）
-- NTP 配置（时间同步）
+流程：
+1. 获取所有激活的规则（内置 + AI生成）
+2. 将规则组合成提示词
+3. 使用 ADK chat 发送给 LLM，获取检查结果
+4. 结果包含配置行号，用于前端高亮显示
 """
 import re
+import json
 from typing import List, Dict, Optional
 from dataclasses import dataclass, field
+from datetime import datetime
+from loguru import logger
+
+from app.shared.database import get_db
+from app.shared.models import ComplianceRule, ComplianceAuditLog, AIConfig
+from app.features.compliance.builtin_rules import get_all_rules_for_audit, init_builtin_rules
+
+# 使用 ADK runner
+from app.services.adk.runner import adk_runner
 
 
 @dataclass
@@ -25,17 +32,27 @@ class ComplianceCheckResult:
     passed: bool
     detail: str
     recommendation: str = ""
+    pattern: str = ""  # 匹配模式
+    # 新增：配置行位置标注
+    line_numbers: List[int] = field(default_factory=list)  # 问题所在行号
+    line_content: str = ""  # 问题行内容
+    ai_analysis: Optional[str] = None  # AI 深度分析
 
 
 @dataclass
 class ComplianceReport:
     """合规检查报告"""
     device_name: str
-    device_ip: str
+    device_ip: str = ""
     total_checks: int = 0
     passed: int = 0
     failed: int = 0
     results: List[ComplianceCheckResult] = field(default_factory=list)
+    ai_score: Optional[float] = None  # AI 评估分数
+    ai_insights: Optional[str] = None  # AI 整体洞察
+    audit_mode: str = "full"  # full, basic, ai_only
+    # 新增：带行号标注的配置分析
+    config_analysis: List[Dict] = field(default_factory=list)  # 每行配置的分析结果
 
     @property
     def compliance_score(self) -> float:
@@ -45,194 +62,362 @@ class ComplianceReport:
 
 
 class ComplianceService:
-    """配置合规检查服务"""
+    """配置合规检查服务（优化版）"""
 
     def __init__(self):
-        self.checks = {
-            "SEC-001": self._check_enable_secret,
-            "SEC-002": self._check_ssh_version,
-            "SEC-003": self._check_password_encryption,
-            "SEC-004": self._check_acl_management,
-            "SEC-005": self._check_unused_ports,
-            "SEC-006": self._check_native_vlan,
-            "SEC-007": self._check_logging_enabled,
-            "SEC-008": self._check_ntp_config,
-            "SEC-009": self._check_banner,
-            "SEC-010": self._check_snmp_community,
-        }
+        # 初始化内置规则
+        try:
+            init_builtin_rules()
+        except Exception as e:
+            logger.warning(f"内置规则初始化检查: {e}")
 
-    def run_all_checks(self, config_text: str, device_name: str = "", device_ip: str = "") -> ComplianceReport:
-        """运行所有合规检查"""
-        report = ComplianceReport(device_name=device_name, device_ip=device_ip)
-        lines = config_text.split("\n")
+    async def audit_config(
+        self,
+        config_text: str,
+        device_name: str = "",
+        device_ip: str = "",
+        audit_mode: str = "full",
+        use_ai: bool = True
+    ) -> ComplianceReport:
+        """
+        执行配置审核（优化版）
 
-        for check_id, check_fn in self.checks.items():
-            try:
-                result = check_fn(lines, config_text)
-                report.results.append(result)
-                report.total_checks += 1
-                if result.passed:
-                    report.passed += 1
-                else:
-                    report.failed += 1
-            except Exception as e:
-                report.results.append(ComplianceCheckResult(
-                    check_id=check_id,
-                    check_name=f"Check {check_id}",
-                    category="compliance",
-                    severity="info",
-                    passed=False,
-                    detail=f"检查执行出错: {str(e)}",
-                    recommendation="联系管理员"
-                ))
-                report.total_checks += 1
-                report.failed += 1
+        Args:
+            config_text: 配置文本
+            device_name: 设备名称
+            device_ip: 设备 IP
+            audit_mode: 审核模式 (full, basic, ai_only)
+            use_ai: 是否使用 AI 审核
+
+        Returns:
+            ComplianceReport 审核报告
+        """
+        report = ComplianceReport(
+            device_name=device_name,
+            device_ip=device_ip,
+            audit_mode=audit_mode
+        )
+
+        # Step 1: 获取所有激活的规则（作为 AI 提示词）
+        active_rules = get_all_rules_for_audit()
+
+        if not active_rules:
+            logger.warning("没有激活的检查规则")
+            report.ai_insights = "没有配置检查规则，请先激活规则或上传标准文档生成规则"
+            return report
+
+        logger.info(f"获取到 {len(active_rules)} 条激活规则用于检查")
+
+        # Step 2: 使用 AI 根据规则提示词检查配置
+        if use_ai:
+            ai_result = await self._run_ai_rule_based_audit(config_text, active_rules, device_name)
+
+            if ai_result:
+                # 解析 AI 返回结果
+                self._parse_ai_result(report, ai_result, active_rules)
+            else:
+                # AI 调用失败，回退到基础检查
+                report.ai_insights = "AI 服务不可用，请检查 AI 配置"
+                self._run_basic_audit(report, config_text, active_rules)
+        else:
+            # 不使用 AI，执行基础正则检查
+            self._run_basic_audit(report, config_text, active_rules)
+
+        # Step 3: 生成配置行分析（用于前端高亮）
+        self._generate_config_analysis(report, config_text)
+
+        # Step 4: 保存审核记录
+        self._save_audit_log(report, config_text)
 
         return report
 
-    def _check_enable_secret(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-001: 检查是否配置了 enable secret"""
-        has_secret = any(re.match(r'^enable secret\s+\S', line) for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-001",
-            check_name="Enable Secret 密码",
-            category="security",
-            severity="critical",
-            passed=has_secret,
-            detail="已配置 enable secret" if has_secret else "未配置 enable secret，特权模式无密码保护",
-            recommendation="配置: enable secret <strong-password>"
+    async def _run_ai_rule_based_audit(self, config_text: str, rules: List[Dict], device_name: str) -> Optional[Dict]:
+        """使用 ADK chat 模式进行 AI 规则检查"""
+
+        # 构建规则提示词
+        rules_prompt = self._build_simple_rules_prompt(rules)
+
+        # 系统提示词 - 定义 AI 的角色
+        system_prompt = """你是网络设备配置合规审核专家。
+根据提供的规则检查设备配置，输出 JSON 格式的检查结果。
+只输出 JSON，不要包含其他文字说明。"""
+
+        # 用户消息 - 配置 + 规则
+        message = f"""请检查以下网络设备配置：
+
+设备名称: {device_name}
+
+检查规则（共 {len(rules)} 条）:
+{rules_prompt}
+
+设备配置:
+{config_text}
+
+输出格式（JSON）:
+{{"overall_score": 0-100, "ai_insights": "整体评估", "results": [{{"rule_id": "ID", "rule_name": "名称", "passed": true/false, "detail": "详情", "line_numbers": [行号]}}]}}"""
+
+        logger.info(f"开始 AI 规则检查，共 {len(rules)} 条规则")
+
+        # 使用 ADK chat 模式
+        result = await adk_runner.chat(
+            message=message,
+            system_prompt=system_prompt,
+            timeout=180  # 给更长的超时时间
         )
 
-    def _check_ssh_version(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-002: 检查 SSH 版本"""
-        has_ssh_v2 = any(line.strip() == 'ip ssh version 2' for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-002",
-            check_name="SSH 版本",
-            category="security",
-            severity="high",
-            passed=has_ssh_v2,
-            detail="SSH v2 已启用" if has_ssh_v2 else "未强制使用 SSH v2",
-            recommendation="配置: ip ssh version 2"
-        )
+        if result.get("success"):
+            response_text = result.get("response", "")
+            logger.info(f"AI 响应成功，长度: {len(response_text)}")
 
-    def _check_password_encryption(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-003: 检查密码加密"""
-        has_encryption = any('service password-encryption' in line for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-003",
-            check_name="密码加密服务",
-            category="security",
-            severity="high",
-            passed=has_encryption,
-            detail="密码加密已启用" if has_encryption else "明文密码可能暴露在配置中",
-            recommendation="配置: service password-encryption"
-        )
+            # 解析 JSON 结果
+            parsed = adk_runner.parse_json_response(response_text)
+            if parsed:
+                return parsed
+            else:
+                logger.warning("AI 返回内容无法解析为 JSON")
+                return None
+        else:
+            logger.warning(f"AI 调用失败: {result.get('error')}")
+            return None
+            return None
 
-    def _check_acl_management(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-004: 检查管理平面 ACL"""
-        has_acl = any(re.match(r'^access-list\s+\d+\s+permit\s+tcp', line) for line in lines) or \
-                  any('ip access-list' in line for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-004",
-            check_name="管理平面 ACL",
-            category="security",
-            severity="high",
-            passed=has_acl,
-            detail="ACL 已配置" if has_acl else "未发现管理平面访问控制",
-            recommendation="配置 ACL 限制管理平面访问来源 IP"
-        )
+    def _build_simple_rules_prompt(self, rules: List[Dict]) -> str:
+        """构建简化版规则提示词"""
+        prompt_lines = []
+        for rule in rules:
+            prompt_lines.append(f"{rule['rule_id']}: {rule['name']} - 检查 {rule['pattern']}")
+        return "\n".join(prompt_lines)
 
-    def _check_unused_ports(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-005: 检查未使用端口"""
-        shutdown_count = sum(1 for line in lines if 'shutdown' in line.lower())
-        total_interfaces = sum(1 for line in lines if re.match(r'^interface\s+', line))
-        if total_interfaces == 0:
-            return ComplianceCheckResult(
-                check_id="SEC-005",
-                check_name="端口安全",
-                category="security",
-                severity="medium",
-                passed=True,
-                detail="未检测到接口"
+    def _build_rules_prompt(self, rules: List[Dict]) -> str:
+        """构建规则提示词（详细版）"""
+        prompt_lines = []
+
+        for rule in rules:
+            prompt_lines.append(f"""
+### {rule['rule_id']}: {rule['name']}
+- **类别**: {rule['category']}
+- **严重程度**: {rule['severity']}
+- **检查要求**: {rule['check_logic']}
+- **匹配特征**: {rule['pattern']}
+- **修复建议**: {rule['recommendation']}
+""")
+
+        return "\n".join(prompt_lines)
+
+    def _parse_ai_result(self, report: ComplianceReport, ai_result, rules: List[Dict]):
+        """解析 AI 返回结果（支持字典或列表）"""
+        # 如果返回的是列表，转换为字典格式
+        if isinstance(ai_result, list):
+            # AI 返回了结果列表，需要处理
+            report.ai_score = 50
+            report.ai_insights = "AI 返回了检查结果列表"
+            results_data = ai_result
+        else:
+            # 字典格式
+            report.ai_score = ai_result.get("overall_score", 50)
+            report.ai_insights = ai_result.get("ai_insights", "")
+            results_data = ai_result.get("results", [])
+
+        # 解析检查结果，补充规则库中的信息
+        rules_map = {r["rule_id"]: r for r in rules}
+
+        for result_data in results_data:
+            if isinstance(result_data, dict):
+                rule_id = result_data.get("rule_id", result_data.get("id", ""))
+                # 从规则库获取补充信息
+                rule_info = rules_map.get(rule_id, {})
+
+                result = ComplianceCheckResult(
+                    check_id=rule_id,
+                    check_name=result_data.get("rule_name", result_data.get("name", rule_info.get("name", ""))),
+                    category=result_data.get("category", rule_info.get("category", "compliance")),
+                    severity=result_data.get("severity", rule_info.get("severity", "medium")),
+                    passed=result_data.get("passed", False),
+                    detail=result_data.get("detail", ""),
+                    recommendation=result_data.get("recommendation", "") or rule_info.get("recommendation", ""),
+                    line_numbers=result_data.get("line_numbers", []),
+                    line_content=result_data.get("line_content", "")
+                )
+                report.results.append(result)
+
+        # 统计
+        report.total_checks = len(report.results)
+        report.passed = sum(1 for r in report.results if r.passed)
+        report.failed = report.total_checks - report.passed
+
+        # 解析配置行分析
+        if isinstance(ai_result, dict):
+            report.config_analysis = ai_result.get("config_lines", [])
+        else:
+            report.config_analysis = []
+
+        logger.info(f"AI 检查完成: {report.passed} 通过, {report.failed} 失败, 分数 {report.compliance_score}")
+
+    def _run_basic_audit(self, report: ComplianceReport, config_text: str, rules: List[Dict]):
+        """基础正则检查（AI 不可用时的备用方案）"""
+        lines = config_text.split("\n")
+
+        for rule in rules:
+            passed = False
+            detail = ""
+            line_numbers = []
+            pattern = rule.get("pattern", "")
+
+            if pattern:
+                # 正则匹配
+                try:
+                    regex = re.compile(pattern, re.IGNORECASE)
+                    for i, line in enumerate(lines):
+                        if regex.search(line):
+                            passed = True
+                            line_numbers.append(i + 1)
+
+                    if passed:
+                        detail = f"配置符合要求，匹配行: {line_numbers}"
+                    else:
+                        detail = f"未发现匹配配置: {pattern}"
+                except:
+                    # 正则无效，使用关键词匹配
+                    pattern_lower = pattern.lower()
+                    for i, line in enumerate(lines):
+                        if pattern_lower in line.lower():
+                            passed = True
+                            line_numbers.append(i + 1)
+
+                    if passed:
+                        detail = f"发现关键词匹配，行: {line_numbers}"
+                    else:
+                        detail = f"未发现关键词: {pattern}"
+
+            result = ComplianceCheckResult(
+                check_id=rule["rule_id"],
+                check_name=rule["name"],
+                category=rule.get("category", "compliance"),
+                severity=rule.get("severity", "medium"),
+                passed=passed,
+                detail=detail,
+                recommendation=rule.get("recommendation", ""),
+                pattern=pattern,
+                line_numbers=line_numbers
             )
-        shutdown_ratio = shutdown_count / total_interfaces
-        passed = shutdown_ratio > 0.1  # 至少 10% 端口被 shutdown 算合理
-        return ComplianceCheckResult(
-            check_id="SEC-005",
-            check_name="未使用端口处理",
-            category="security",
-            severity="medium",
-            passed=passed,
-            detail=f"{total_interfaces} 个接口中 {shutdown_count} 个已 shutdown" if not passed else "未使用端口已合理处理",
-            recommendation="未使用的端口应执行 shutdown"
+            report.results.append(result)
+
+        report.total_checks = len(report.results)
+        report.passed = sum(1 for r in report.results if r.passed)
+        report.failed = report.total_checks - report.passed
+
+    def _generate_config_analysis(self, report: ComplianceReport, config_text: str):
+        """生成配置行分析（用于前端高亮）"""
+        if report.config_analysis:
+            # AI 已返回配置行分析
+            return
+
+        # 如果 AI 没有返回，根据检查结果生成
+        lines = config_text.split("\n")
+        analysis = []
+
+        # 收集每个规则的问题行
+        issue_lines = {}  # {行号: [rule_ids]}
+
+        for result in report.results:
+            if not result.passed and result.line_numbers:
+                for line_num in result.line_numbers:
+                    if line_num not in issue_lines:
+                        issue_lines[line_num] = []
+                    issue_lines[line_num].append({
+                        "rule_id": result.check_id,
+                        "severity": result.severity
+                    })
+
+        # 生成分析
+        for i, line in enumerate(lines):
+            line_num = i + 1
+            issues = issue_lines.get(line_num, [])
+
+            analysis.append({
+                "line_number": line_num,
+                "content": line,
+                "issues": issues,
+                "severity": max([i["severity"] for i in issues], default="ok")
+            })
+
+        report.config_analysis = analysis
+
+    def _save_audit_log(self, report: ComplianceReport, config_text: str):
+        """保存审核记录"""
+        db = next(get_db())
+        try:
+            ai_config = db.query(AIConfig).filter(AIConfig.is_active == True).first()
+
+            log = ComplianceAuditLog(
+                device_name=report.device_name,
+                config_source="audit",
+                config_text=config_text[:5000],
+                compliance_score=report.compliance_score,
+                total_checks=report.total_checks,
+                passed=report.passed,
+                failed=report.failed,
+                audit_mode=report.audit_mode,
+                ai_provider=ai_config.provider if ai_config else None,
+                ai_model=ai_config.model_name if ai_config else None,
+                result_detail=json.dumps({
+                    "ai_score": report.ai_score,
+                    "ai_insights": report.ai_insights,
+                    "results": [
+                        {
+                            "check_id": r.check_id,
+                            "check_name": r.check_name,
+                            "passed": r.passed,
+                            "detail": r.detail,
+                            "recommendation": r.recommendation,
+                            "line_numbers": r.line_numbers
+                        }
+                        for r in report.results
+                    ],
+                    "config_analysis": report.config_analysis[:200]  # 只保存前200行
+                }),
+                created_at=datetime.utcnow(),
+                created_by="Web"
+            )
+            db.add(log)
+            db.commit()
+            logger.info(f"保存审核记录: id={log.id}, score={report.compliance_score}")
+        except Exception as e:
+            logger.error(f"保存审核记录失败: {e}")
+            db.rollback()
+        finally:
+            db.close()
+
+    async def quick_audit(self, config_text: str) -> Dict:
+        """快速审核（使用 ADK chat 模式）"""
+
+        system_prompt = "你是网络设备配置安全审核专家。快速识别安全问题并输出 JSON 结果。"
+
+        message = f"""请快速审核以下网络设备配置：
+
+配置内容：
+{config_text[:2000]}
+
+识别：
+1. 安全问题（明文密码、默认配置、弱认证等）
+2. 合规问题（缺少必要配置、配置不规范等）
+
+输出 JSON 格式：
+{{"score": 0-100, "issues": [{{"rule": "问题", "line": 行号, "severity": "级别"}}]}}"""
+
+        # 使用 ADK chat
+        result = await adk_runner.chat(
+            message=message,
+            system_prompt=system_prompt,
+            timeout=60
         )
 
-    def _check_native_vlan(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-006: 检查 Native VLAN"""
-        has_native_vlan = any('switchport trunk native vlan' in line for line in lines)
-        uses_default = any('switchport trunk native vlan 1' in line for line in lines)
-        passed = has_native_vlan and not uses_default
-        return ComplianceCheckResult(
-            check_id="SEC-006",
-            check_name="Native VLAN 配置",
-            category="security",
-            severity="medium",
-            passed=passed,
-            detail="Native VLAN 已修改为非默认值" if passed else "Native VLAN 使用默认值 1，存在 VLAN Hopping 风险",
-            recommendation="配置: switchport trunk native vlan <非1的VLAN-ID>"
-        )
-
-    def _check_logging_enabled(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-007: 检查日志配置"""
-        has_logging = any(re.match(r'^logging\s+\d+\.\d+\.\d+\.\d+', line) for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-007",
-            check_name="日志服务器配置",
-            category="security",
-            severity="medium",
-            passed=has_logging,
-            detail="远程日志服务器已配置" if has_logging else "未配置远程日志服务器",
-            recommendation="配置: logging <syslog-server-ip>"
-        )
-
-    def _check_ntp_config(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-008: 检查 NTP 配置"""
-        has_ntp = any(re.match(r'^ntp\s+server\s+', line) for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-008",
-            check_name="NTP 时间同步",
-            category="availability",
-            severity="medium",
-            passed=has_ntp,
-            detail="NTP 已配置" if has_ntp else "未配置 NTP 服务器",
-            recommendation="配置: ntp server <ntp-server-ip>"
-        )
-
-    def _check_banner(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-009: 检查登录警告横幅"""
-        has_banner = any('banner motd' in line for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-009",
-            check_name="登录警告横幅",
-            category="compliance",
-            severity="low",
-            passed=has_banner,
-            detail="MOTD Banner 已配置" if has_banner else "未配置登录警告横幅",
-            recommendation="配置: banner motd # <警告信息> #"
-        )
-
-    def _check_snmp_community(self, lines: List[str], config: str) -> ComplianceCheckResult:
-        """SEC-010: 检查 SNMP Community"""
-        has_default = any(line.strip().startswith('snmp-server community public') or
-                         line.strip().startswith('snmp-server community private')
-                         for line in lines)
-        return ComplianceCheckResult(
-            check_id="SEC-010",
-            check_name="SNMP Community 安全",
-            category="security",
-            severity="critical",
-            passed=not has_default,
-            detail="未发现默认 SNMP Community" if not has_default else "使用默认 SNMP Community (public/private)",
-            recommendation="修改默认 SNMP Community 字符串"
-        )
+        if result.get("success"):
+            parsed = adk_runner.parse_json_response(result.get("response", ""))
+            if parsed:
+                return {
+                    "success": True,
+                    "score": parsed.get("score", 50),
+                    "results": parsed.get("issues", []),
+                }
+        return {"success": False, "error": result.get("error", "AI 服务不可用")}

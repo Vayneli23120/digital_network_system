@@ -52,96 +52,91 @@
         <!-- 总设备 -->
         <div class="stat-card-compact total" :class="{ active: activeFilter === '' }" @click="filterByType('')">
           <div class="stat-header">
-            <span class="stat-title">{{ t('deviceStatsTotal') }}</span>
+            <span class="stat-title">{{ t('deviceStatsDeployed') }}</span>
           </div>
           <div class="stat-body">
-            <span class="stat-value">{{ stats.total }}</span>
+            <span class="stat-value">{{ stats.totalDeployed }}</span>
             <div class="stat-bar-container">
-              <div class="stat-bar-segment online" :style="{ width: percent(stats.online, stats.total) + '%' }"></div>
-              <div class="stat-bar-segment offline" :style="{ width: percent(stats.offline, stats.total) + '%' }"></div>
-              <div class="stat-bar-segment maintenance" :style="{ width: percent(stats.maintenance, stats.total) + '%' }"></div>
+              <div class="stat-bar-segment reachable" :style="{ width: percent(stats.reachable, stats.totalDeployed) + '%' }"></div>
+              <div class="stat-bar-segment unreachable" :style="{ width: percent(stats.unreachable, stats.totalDeployed) + '%' }"></div>
+              <div class="stat-bar-segment unknown" v-if="stats.unknown > 0" :style="{ width: percent(stats.unknown, stats.totalDeployed) + '%' }"></div>
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ stats.online }} {{ t('statusOnline') }}</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', '')"><span class="indicator-dot"></span>{{ stats.offline }} {{ t('statusOffline') }}</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', '')"><span class="indicator-dot"></span>{{ stats.maintenance }} {{ t('statusMaintenance') }}</span>
+            <span class="stat-indicator reachable"><span class="indicator-dot"></span>{{ stats.reachable }} {{ t('statusReachable') }}</span>
+            <span class="stat-indicator unreachable clickable" @click.stop="filterByReachability('unreachable', '')"><span class="indicator-dot"></span>{{ stats.unreachable }} {{ t('statusUnreachable') }}</span>
           </div>
         </div>
         <!-- UCE -->
-        <div class="stat-card-compact uce" :class="{ active: activeFilter === 'uce' && !filterStatus }" @click="filterByType('uce')">
+        <div class="stat-card-compact uce" :class="{ active: activeFilter === 'uce' && !filterReachability }" @click="filterByType('uce')">
           <div class="stat-header">
             <span class="stat-title">UCE</span>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ uceStats.total }}</span>
             <div class="stat-bar-container">
-              <div class="stat-bar-segment online" :style="{ width: percent(uceStats.online, uceStats.total) + '%' }"></div>
-              <div class="stat-bar-segment offline" :style="{ width: percent(uceStats.offline, uceStats.total) + '%' }"></div>
-              <div class="stat-bar-segment maintenance" :style="{ width: percent(uceStats.maintenance, uceStats.total) + '%' }"></div>
+              <div class="stat-bar-segment reachable" :style="{ width: percent(uceStats.reachable, uceStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unreachable" :style="{ width: percent(uceStats.unreachable, uceStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unknown" v-if="uceStats.unknown > 0" :style="{ width: percent(uceStats.unknown, uceStats.total) + '%' }"></div>
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ uceStats.online }} {{ t('statusOnline') }}</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'uce')"><span class="indicator-dot"></span>{{ uceStats.offline }} {{ t('statusOffline') }}</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'uce')"><span class="indicator-dot"></span>{{ uceStats.maintenance }} {{ t('statusMaintenance') }}</span>
+            <span class="stat-indicator reachable"><span class="indicator-dot"></span>{{ uceStats.reachable }} {{ t('statusReachable') }}</span>
+            <span class="stat-indicator unreachable clickable" @click.stop="filterByReachability('unreachable', 'uce')"><span class="indicator-dot"></span>{{ uceStats.unreachable }} {{ t('statusUnreachable') }}</span>
           </div>
         </div>
         <!-- AP -->
-        <div class="stat-card-compact ap" :class="{ active: activeFilter === 'ap' && !filterStatus }" @click="filterByType('ap')">
+        <div class="stat-card-compact ap" :class="{ active: activeFilter === 'ap' && !filterReachability }" @click="filterByType('ap')">
           <div class="stat-header">
             <span class="stat-title">AP</span>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ apStats.total }}</span>
             <div class="stat-bar-container">
-              <div class="stat-bar-segment online" :style="{ width: percent(apStats.online, apStats.total) + '%' }"></div>
-              <div class="stat-bar-segment offline" :style="{ width: percent(apStats.offline, apStats.total) + '%' }"></div>
-              <div class="stat-bar-segment maintenance" :style="{ width: percent(apStats.maintenance, apStats.total) + '%' }"></div>
+              <div class="stat-bar-segment reachable" :style="{ width: percent(apStats.reachable, apStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unreachable" :style="{ width: percent(apStats.unreachable, apStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unknown" v-if="apStats.unknown > 0" :style="{ width: percent(apStats.unknown, apStats.total) + '%' }"></div>
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ apStats.online }} {{ t('statusOnline') }}</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'ap')"><span class="indicator-dot"></span>{{ apStats.offline }} {{ t('statusOffline') }}</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'ap')"><span class="indicator-dot"></span>{{ apStats.maintenance }} {{ t('statusMaintenance') }}</span>
+            <span class="stat-indicator reachable"><span class="indicator-dot"></span>{{ apStats.reachable }} {{ t('statusReachable') }}</span>
+            <span class="stat-indicator unreachable clickable" @click.stop="filterByReachability('unreachable', 'ap')"><span class="indicator-dot"></span>{{ apStats.unreachable }} {{ t('statusUnreachable') }}</span>
           </div>
         </div>
         <!-- 办公室交换机 -->
-        <div class="stat-card-compact office" :class="{ active: activeFilter === 'office_switch' && !filterStatus }" @click="filterByType('office_switch')">
+        <div class="stat-card-compact office" :class="{ active: activeFilter === 'office_switch' && !filterReachability }" @click="filterByType('office_switch')">
           <div class="stat-header">
             <span class="stat-title">{{ t('deviceTypeOfficeSwitch') }}</span>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ officeSwitchStats.total }}</span>
             <div class="stat-bar-container">
-              <div class="stat-bar-segment online" :style="{ width: percent(officeSwitchStats.online, officeSwitchStats.total) + '%' }"></div>
-              <div class="stat-bar-segment offline" :style="{ width: percent(officeSwitchStats.offline, officeSwitchStats.total) + '%' }"></div>
-              <div class="stat-bar-segment maintenance" :style="{ width: percent(officeSwitchStats.maintenance, officeSwitchStats.total) + '%' }"></div>
+              <div class="stat-bar-segment reachable" :style="{ width: percent(officeSwitchStats.reachable, officeSwitchStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unreachable" :style="{ width: percent(officeSwitchStats.unreachable, officeSwitchStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unknown" v-if="officeSwitchStats.unknown > 0" :style="{ width: percent(officeSwitchStats.unknown, officeSwitchStats.total) + '%' }"></div>
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ officeSwitchStats.online }} {{ t('statusOnline') }}</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.offline }} {{ t('statusOffline') }}</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.maintenance }} {{ t('statusMaintenance') }}</span>
+            <span class="stat-indicator reachable"><span class="indicator-dot"></span>{{ officeSwitchStats.reachable }} {{ t('statusReachable') }}</span>
+            <span class="stat-indicator unreachable clickable" @click.stop="filterByReachability('unreachable', 'office_switch')"><span class="indicator-dot"></span>{{ officeSwitchStats.unreachable }} {{ t('statusUnreachable') }}</span>
           </div>
         </div>
         <!-- 数据中心网络设备 -->
-        <div class="stat-card-compact datacenter" :class="{ active: activeFilter === 'datacenter' && !filterStatus }" @click="filterByType('datacenter')">
+        <div class="stat-card-compact datacenter" :class="{ active: activeFilter === 'datacenter' && !filterReachability }" @click="filterByType('datacenter')">
           <div class="stat-header">
             <span class="stat-title">{{ t('deviceLayerDatacenter') }}</span>
           </div>
           <div class="stat-body">
             <span class="stat-value">{{ datacenterStats.total }}</span>
             <div class="stat-bar-container">
-              <div class="stat-bar-segment online" :style="{ width: percent(datacenterStats.online, datacenterStats.total) + '%' }"></div>
-              <div class="stat-bar-segment offline" :style="{ width: percent(datacenterStats.offline, datacenterStats.total) + '%' }"></div>
-              <div class="stat-bar-segment maintenance" :style="{ width: percent(datacenterStats.maintenance, datacenterStats.total) + '%' }"></div>
+              <div class="stat-bar-segment reachable" :style="{ width: percent(datacenterStats.reachable, datacenterStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unreachable" :style="{ width: percent(datacenterStats.unreachable, datacenterStats.total) + '%' }"></div>
+              <div class="stat-bar-segment unknown" v-if="datacenterStats.unknown > 0" :style="{ width: percent(datacenterStats.unknown, datacenterStats.total) + '%' }"></div>
             </div>
           </div>
           <div class="stat-footer">
-            <span class="stat-indicator online"><span class="indicator-dot"></span>{{ datacenterStats.online }} {{ t('statusOnline') }}</span>
-            <span class="stat-indicator offline clickable" @click.stop="filterByStatus('offline', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.offline }} {{ t('statusOffline') }}</span>
-            <span class="stat-indicator maintenance clickable" @click.stop="filterByStatus('maintenance', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.maintenance }} {{ t('statusMaintenance') }}</span>
+            <span class="stat-indicator reachable"><span class="indicator-dot"></span>{{ datacenterStats.reachable }} {{ t('statusReachable') }}</span>
+            <span class="stat-indicator unreachable clickable" @click.stop="filterByReachability('unreachable', 'datacenter')"><span class="indicator-dot"></span>{{ datacenterStats.unreachable }} {{ t('statusUnreachable') }}</span>
           </div>
         </div>
       </div>
@@ -211,13 +206,29 @@
             </template>
           </template>
         </el-table-column>
-        <el-table-column prop="status" :label="t('deviceStatus')" min-width="110" align="center">
+        <el-table-column prop="deployment_status" :label="t('deviceDeployment')" min-width="110" align="center">
           <template #default="{ row }">
             <template v-if="!row.isLayer && !row.isType">
-              <div :class="['status-badge', row.status]">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getStatusText(row.status) }}</span>
+              <div :class="['deployment-badge', row.deployment_status]">
+                <span>{{ getDeploymentText(row.deployment_status) }}</span>
               </div>
+            </template>
+            <template v-else>
+              <span class="empty-cell">—</span>
+            </template>
+          </template>
+        </el-table-column>
+        <el-table-column prop="reachability" :label="t('deviceReachability')" min-width="120" align="center">
+          <template #default="{ row }">
+            <template v-if="!row.isLayer && !row.isType && row.deployment_status === 'in-use'">
+              <div :class="['reachability-badge', row.reachability]">
+                <span class="status-dot"></span>
+                <span class="status-text">{{ getReachabilityText(row.reachability) }}</span>
+                <span v-if="row.reachability_latency_ms" class="latency-text">{{ row.reachability_latency_ms }}ms</span>
+              </div>
+            </template>
+            <template v-else-if="!row.isLayer && !row.isType">
+              <span class="empty-cell">--</span>
             </template>
             <template v-else>
               <span class="empty-cell">—</span>
@@ -356,10 +367,10 @@
                 <el-option :label="t('deviceRoleCore')" value="core" />
               </el-select>
             </el-form-item>
-            <el-form-item :label="t('deviceStatus')">
-              <el-select v-model="newDevice.status">
-                <el-option :label="t('statusOnline')" value="online" />
-                <el-option :label="t('statusOffline')" value="offline" />
+            <el-form-item :label="t('deviceDeploymentStatus')">
+              <el-select v-model="newDevice.deployment_status">
+                <el-option :label="t('statusInUse')" value="in-use" />
+                <el-option :label="t('statusUnUsed')" value="un-used" />
                 <el-option :label="t('statusMaintenance')" value="maintenance" />
                 <el-option :label="t('statusRetired')" value="retired" />
               </el-select>
@@ -444,6 +455,7 @@ const devices = ref([])
 const tableRef = ref(null)  // el-table ref
 const searchText = ref('')
 const filterStatus = ref('')
+const filterReachability = ref('')  // 新字段：可达性筛选
 const filterRole = ref('')
 const activeFilter = ref('') // 统计卡片筛选激活状态
 const currentPage = ref(1)
@@ -469,7 +481,7 @@ const newDevice = ref({
   location: '',
   device_type: 'other',
   role: 'access',
-  status: 'online',
+  deployment_status: 'un-used',  // 新字段
   vendor: 'cisco',
   credential_group: 'default',
   modules: [{ type: 'main', serial_number: '' }] // 默认一个主机模块
@@ -492,7 +504,7 @@ const resetNewDevice = () => {
     location: '',
     device_type: 'other',
     role: 'access',
-    status: 'online',
+    deployment_status: 'un-used',  // 新字段
     vendor: 'cisco',
     credential_group: 'default',
     modules: [{ type: 'main', serial_number: '' }]
@@ -505,59 +517,85 @@ const percent = (value, total) => {
   return Math.round((value / total) * 100)
 }
 
-// 统计数据 - 总设备
+// 统计数据 - 总设备（只统计已部署设备的可达性）
 const stats = computed(() => {
-  const list = devices.value
+  const deployedList = devices.value.filter(d => d.deployment_status === 'in-use')
   return {
-    total: list.length,
-    online: list.filter(d => d.status === 'online').length,
-    offline: list.filter(d => d.status === 'offline').length,
-    maintenance: list.filter(d => d.status === 'maintenance').length,
-    retired: list.filter(d => d.status === 'retired').length
+    total: devices.value.length,  // 全设备总数
+    totalDeployed: deployedList.length,  // 已部署设备
+    reachable: deployedList.filter(d => d.reachability === 'reachable').length,
+    unreachable: deployedList.filter(d => d.reachability === 'unreachable').length,
+    unknown: deployedList.filter(d => d.reachability === 'unknown').length,
+    // 部署状态统计
+    deployment: {
+      in_use: devices.value.filter(d => d.deployment_status === 'in-use').length,
+      un_used: devices.value.filter(d => d.deployment_status === 'un-used').length,
+      maintenance: devices.value.filter(d => d.deployment_status === 'maintenance').length,
+      retired: devices.value.filter(d => d.deployment_status === 'retired').length,
+    },
+    // 兼容旧字段
+    online: deployedList.filter(d => d.reachability === 'reachable').length,
+    offline: deployedList.filter(d => d.reachability === 'unreachable').length,
   }
 })
 
-// UCE 统计
+// UCE 统计（只统计已部署设备）
 const uceStats = computed(() => {
-  const list = devices.value.filter(d => d.device_type === 'uce')
+  const deployedList = devices.value.filter(d => d.device_type === 'uce' && d.deployment_status === 'in-use')
   return {
-    total: list.length,
-    online: list.filter(d => d.status === 'online').length,
-    offline: list.filter(d => d.status === 'offline').length,
-    maintenance: list.filter(d => d.status === 'maintenance').length
+    total: deployedList.length,
+    reachable: deployedList.filter(d => d.reachability === 'reachable').length,
+    unreachable: deployedList.filter(d => d.reachability === 'unreachable').length,
+    unknown: deployedList.filter(d => d.reachability === 'unknown').length,
+    // 兼容旧字段
+    online: deployedList.filter(d => d.reachability === 'reachable').length,
+    offline: deployedList.filter(d => d.reachability === 'unreachable').length,
+    maintenance: deployedList.filter(d => d.deployment_status === 'maintenance').length
   }
 })
 
-// AP 统计
+// AP 统计（只统计已部署设备）
 const apStats = computed(() => {
-  const list = devices.value.filter(d => d.device_type === 'ap')
+  const deployedList = devices.value.filter(d => d.device_type === 'ap' && d.deployment_status === 'in-use')
   return {
-    total: list.length,
-    online: list.filter(d => d.status === 'online').length,
-    offline: list.filter(d => d.status === 'offline').length,
-    maintenance: list.filter(d => d.status === 'maintenance').length
+    total: deployedList.length,
+    reachable: deployedList.filter(d => d.reachability === 'reachable').length,
+    unreachable: deployedList.filter(d => d.reachability === 'unreachable').length,
+    unknown: deployedList.filter(d => d.reachability === 'unknown').length,
+    // 兼容旧字段
+    online: deployedList.filter(d => d.reachability === 'reachable').length,
+    offline: deployedList.filter(d => d.reachability === 'unreachable').length,
+    maintenance: deployedList.filter(d => d.deployment_status === 'maintenance').length
   }
 })
 
-// 办公室交换机统计
+// 办公室交换机统计（只统计已部署设备）
 const officeSwitchStats = computed(() => {
-  const list = devices.value.filter(d => d.device_type === 'office_switch')
+  const deployedList = devices.value.filter(d => d.device_type === 'office_switch' && d.deployment_status === 'in-use')
   return {
-    total: list.length,
-    online: list.filter(d => d.status === 'online').length,
-    offline: list.filter(d => d.status === 'offline').length,
-    maintenance: list.filter(d => d.status === 'maintenance').length
+    total: deployedList.length,
+    reachable: deployedList.filter(d => d.reachability === 'reachable').length,
+    unreachable: deployedList.filter(d => d.reachability === 'unreachable').length,
+    unknown: deployedList.filter(d => d.reachability === 'unknown').length,
+    // 兼容旧字段
+    online: deployedList.filter(d => d.reachability === 'reachable').length,
+    offline: deployedList.filter(d => d.reachability === 'unreachable').length,
+    maintenance: deployedList.filter(d => d.deployment_status === 'maintenance').length
   }
 })
 
-// 数据中心网络设备统计
+// 数据中心网络设备统计（只统计已部署设备）
 const datacenterStats = computed(() => {
-  const list = devices.value.filter(d => datacenterTypes.includes(d.device_type))
+  const deployedList = devices.value.filter(d => datacenterTypes.includes(d.device_type) && d.deployment_status === 'in-use')
   return {
-    total: list.length,
-    online: list.filter(d => d.status === 'online').length,
-    offline: list.filter(d => d.status === 'offline').length,
-    maintenance: list.filter(d => d.status === 'maintenance').length
+    total: deployedList.length,
+    reachable: deployedList.filter(d => d.reachability === 'reachable').length,
+    unreachable: deployedList.filter(d => d.reachability === 'unreachable').length,
+    unknown: deployedList.filter(d => d.reachability === 'unknown').length,
+    // 兼容旧字段
+    online: deployedList.filter(d => d.reachability === 'reachable').length,
+    offline: deployedList.filter(d => d.reachability === 'unreachable').length,
+    maintenance: deployedList.filter(d => d.deployment_status === 'maintenance').length
   }
 })
 
@@ -741,6 +779,25 @@ const getStatusText = (status) => {
   return texts[status] || status
 }
 
+const getDeploymentText = (deployment_status) => {
+  const texts = {
+    'in-use': t('statusInUse'),
+    'un-used': t('statusUnUsed'),
+    'maintenance': t('statusMaintenance'),
+    'retired': t('statusRetired')
+  }
+  return texts[deployment_status] || deployment_status
+}
+
+const getReachabilityText = (reachability) => {
+  const texts = {
+    reachable: t('statusReachable'),
+    unreachable: t('statusUnreachable'),
+    unknown: t('statusUnknown')
+  }
+  return texts[reachability] || reachability
+}
+
 const handleSelectionChange = (selection) => {
   selectedDevices.value = selection.map(d => d.id)
 }
@@ -829,7 +886,7 @@ const updateDevice = async () => {
       model: newDevice.value.model,
       location: newDevice.value.location,
       role: newDevice.value.role,
-      status: newDevice.value.status,
+      deployment_status: newDevice.value.deployment_status,  // 新字段
       credential_group: newDevice.value.credential_group,
       modules: newDevice.value.modules
     }
@@ -939,14 +996,23 @@ const scrollToTable = () => {
 // 统计卡片筛选
 const filterByType = (type) => {
   activeFilter.value = type
-  filterStatus.value = '' // 清除状态筛选
+  filterStatus.value = '' // 清除旧状态筛选
+  filterReachability.value = '' // 清除可达性筛选
   scrollToTable()
 }
 
-// 点击离线/维护数字筛选
+// 按状态筛选（点击离线数字）
 const filterByStatus = (status, type) => {
   filterStatus.value = status
   activeFilter.value = type
+  scrollToTable()
+}
+
+// 按可达性筛选（点击不可达数字）
+const filterByReachability = (reachability, type) => {
+  filterReachability.value = reachability
+  activeFilter.value = type
+  filterStatus.value = '' // 清除旧状态筛选
   scrollToTable()
 }
 
@@ -1229,9 +1295,13 @@ onMounted(() => {
   transition: width 0.4s ease;
 }
 
+.stat-bar-segment.reachable { background: #00b894; }
+.stat-bar-segment.unreachable { background: #d63031; }
+.stat-bar-segment.unknown { background: #94a3b8; }
+.stat-bar-segment.maintenance { background: #e17055; }
+/* 兼容旧字段 */
 .stat-bar-segment.online { background: #00b894; }
 .stat-bar-segment.offline { background: #d63031; }
-.stat-bar-segment.maintenance { background: #e17055; }
 
 .stat-footer {
   display: flex;
@@ -1256,9 +1326,13 @@ onMounted(() => {
   border-radius: 50%;
 }
 
+.stat-indicator.reachable .indicator-dot { background: #00b894; }
+.stat-indicator.unreachable .indicator-dot { background: #d63031; }
+.stat-indicator.unknown .indicator-dot { background: #94a3b8; }
+.stat-indicator.maintenance .indicator-dot { background: #e17055; }
+/* 兼容旧字段 */
 .stat-indicator.online .indicator-dot { background: #00b894; }
 .stat-indicator.offline .indicator-dot { background: #d63031; }
-.stat-indicator.maintenance .indicator-dot { background: #e17055; }
 
 .stat-indicator.clickable {
   cursor: pointer;
@@ -1504,7 +1578,7 @@ onMounted(() => {
   color: #475569;
 }
 
-/* 状态徽章 */
+/* 状态徽章 - 旧字段保留兼容 */
 .status-badge {
   display: inline-flex;
   align-items: center;
@@ -1531,6 +1605,92 @@ onMounted(() => {
 .status-badge.maintenance .status-dot { background: #e17055; }
 .status-badge.retired { border-color: rgba(116, 185, 255, 0.3); color: #74b9ff; }
 .status-badge.retired .status-dot { background: #74b9ff; }
+
+/* 部署状态徽章 - 静态、无动画 */
+.deployment-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.deployment-badge.in-use {
+  background: rgba(0, 184, 148, 0.12);
+  color: #00b894;
+}
+
+.deployment-badge.un-used {
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
+.deployment-badge.maintenance {
+  background: rgba(225, 112, 85, 0.12);
+  color: #e17055;
+}
+
+.deployment-badge.retired {
+  background: rgba(116, 185, 255, 0.12);
+  color: #74b9ff;
+}
+
+/* 可达性状态徽章 - 动态、带动画 */
+.reachability-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.reachability-badge.reachable {
+  background: rgba(0, 184, 148, 0.12);
+  border: 1px solid rgba(0, 184, 148, 0.3);
+  color: #00b894;
+}
+
+.reachability-badge.reachable .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #00b894;
+  animation: pulse 2s infinite;
+}
+
+.reachability-badge.unreachable {
+  background: rgba(214, 48, 49, 0.12);
+  border: 1px solid rgba(214, 48, 49, 0.3);
+  color: #d63031;
+}
+
+.reachability-badge.unreachable .status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #d63031;
+}
+
+.reachability-badge.unknown {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: #94a3b8;
+}
+
+.reachability-badge .latency-text {
+  font-size: 10px;
+  color: #64748b;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
 
 /* 操作按钮 */
 .action-group {

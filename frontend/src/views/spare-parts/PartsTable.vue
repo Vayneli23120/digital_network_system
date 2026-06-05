@@ -7,33 +7,54 @@
     </template>
 
     <!-- 表格 -->
-    <el-table :data="parts" stripe border v-loading="loading">
-      <el-table-column prop="name" :label="t('spareName')" width="150">
+    <el-table :data="parts" stripe border v-loading="loading" header-align="center">
+      <el-table-column prop="name" :label="t('spareName')" min-width="120">
         <template #default="{ row }">
           <el-button type="primary" link @click="$emit('show-detail', row)">
             {{ row.name }}
           </el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="part_number" :label="t('sparePartNumber')" width="150" />
-      <el-table-column prop="category" :label="t('spareCategory')" width="100" />
-      <el-table-column prop="manufacturer" :label="t('spareManufacturer')" width="120" />
-      <el-table-column prop="quantity_in_stock" :label="t('spareQuantity')" width="100">
+      <el-table-column prop="part_number" :label="t('sparePartNumber')" min-width="130" />
+      <el-table-column prop="category" :label="t('spareCategory')" min-width="80" align="center">
         <template #default="{ row }">
-          <el-tag :type="row.quantity_in_stock < row.min_quantity ? 'danger' : 'success'">
+          {{ getCategoryLabel(row.category) }}
+        </template>
+      </el-table-column>
+      <el-table-column prop="manufacturer" :label="t('spareManufacturer')" min-width="100" align="center" />
+      <el-table-column prop="quantity_in_stock" :label="t('spareQuantity')" min-width="90" align="center">
+        <template #default="{ row }">
+          <el-tag :type="row.quantity_in_stock < row.min_quantity ? 'danger' : 'success'" size="small">
             {{ row.quantity_in_stock }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="min_quantity" :label="t('spareMinQuantity')" width="100" />
-      <el-table-column :label="t('spareTotalPrice')" width="100">
-        <template #default="{ row }">¥{{ (row.unit_price * row.quantity_in_stock).toFixed(2) }}</template>
+      <el-table-column prop="min_quantity" :label="t('spareMinQuantity')" min-width="90" align="center" />
+      <el-table-column :label="t('spareTotalPrice')" min-width="90" align="center">
+        <template #default="{ row }">
+          <span v-if="row.total_value && row.total_value > 0">¥{{ row.total_value.toFixed(2) }}</span>
+          <span v-else class="text-muted">--</span>
+        </template>
       </el-table-column>
-      <el-table-column :label="t('dashAction')" width="160" fixed="right">
+      <el-table-column :label="t('dashAction')" min-width="280" fixed="right">
         <template #default="{ row }">
           <div class="table-actions">
-            <el-button size="small" type="success" @click="showManualInDialog(row)">{{ t('spareStockIn') }}</el-button>
-            <el-button size="small" type="warning" @click="showManualOutDialog(row)">{{ t('spareStockOut') }}</el-button>
+            <el-button size="small" plain @click="showEditDialog(row)">
+              <el-icon><Edit /></el-icon>
+              {{ t('actionEdit') }}
+            </el-button>
+            <el-button size="small" plain @click="showManualInDialog(row)">
+              <el-icon><Plus /></el-icon>
+              {{ t('spareStockIn') }}
+            </el-button>
+            <el-button size="small" plain @click="showManualOutDialog(row)">
+              <el-icon><Minus /></el-icon>
+              {{ t('spareStockOut') }}
+            </el-button>
+            <el-button size="small" plain @click="handleDelete(row)">
+              <el-icon><Delete /></el-icon>
+              {{ t('actionDelete') }}
+            </el-button>
           </div>
         </template>
       </el-table-column>
@@ -42,7 +63,7 @@
 
   <!-- 新增/编辑对话框 -->
   <el-dialog v-model="dialogVisible" :title="isEdit ? t('spareEdit') : t('spareNew')" width="600px" append-to-body draggable align-center>
-    <el-form :model="form" label-width="100px">
+    <el-form :model="form" label-width="auto" label-position="right">
       <el-form-item :label="t('spareName')" required>
         <el-input v-model="form.name" />
       </el-form-item>
@@ -60,20 +81,15 @@
       <el-form-item :label="t('spareManufacturer')">
         <el-input v-model="form.manufacturer" />
       </el-form-item>
-      <el-form-item :label="t('spareDescription')">
-        <el-input v-model="form.description" type="textarea" />
-      </el-form-item>
-      <el-form-item :label="t('spareInitialStock')">
-        <el-input-number v-model="form.quantity_in_stock" :min="0" />
-      </el-form-item>
       <el-form-item :label="t('spareMinQuantity')">
-        <el-input-number v-model="form.min_quantity" :min="0" />
-      </el-form-item>
-      <el-form-item :label="t('spareUnitPrice')">
-        <el-input-number v-model="form.unit_price" :min="0" :precision="2" />
+        <el-input-number v-model="form.min_quantity" :min="0" style="width: 100%" />
+        <div class="field-hint">{{ t('spareMinQuantityHint') || '库存低于此数量时显示低库存警告' }}</div>
       </el-form-item>
       <el-form-item :label="t('spareLocation')">
         <el-input v-model="form.location" />
+      </el-form-item>
+      <el-form-item :label="t('spareDescription')">
+        <el-input v-model="form.description" type="textarea" />
       </el-form-item>
     </el-form>
     <template #footer>
@@ -113,19 +129,15 @@
           <el-form-item :label="t('sparePoNumber')">
             <el-input v-model="manualInForm.po_number" :placeholder="t('sparePoNumberPlaceholder')" />
           </el-form-item>
-          <el-row :gutter="12">
-            <el-col :span="12">
-              <el-form-item :label="t('spareUnitPrice')">
-                <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" style="width: 110px" />
-                <span class="unit-text">元</span>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item :label="t('spareQuantity')">
-                <el-input-number v-model="manualInForm.quantity" :min="1" style="width: 110px" />
-              </el-form-item>
-            </el-col>
-          </el-row>
+          <el-form-item :label="t('spareUnitPrice')">
+            <div class="price-input-row">
+              <el-input-number v-model="manualInForm.unit_price" :min="0" :precision="2" class="price-number-input" />
+              <span class="unit-text">¥</span>
+            </div>
+          </el-form-item>
+          <el-form-item :label="t('scanStockInQuantity')">
+            <el-input-number v-model="manualInForm.quantity" :min="1" style="width: 100%" />
+          </el-form-item>
           <el-form-item :label="t('spareLocation')">
             <el-input v-model="manualInForm.location" :placeholder="t('spareLocationPlaceholder')" />
           </el-form-item>
@@ -229,9 +241,9 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
-import { Aim, InfoFilled, Edit } from '@element-plus/icons-vue'
-import { getPartList, createPart, updatePart, getPartStats, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Aim, InfoFilled, Edit, Delete, Plus, Minus } from '@element-plus/icons-vue'
+import { getPartList, createPart, updatePart, deletePart, getPartStats, manualStockIn, manualStockOut, getPartBySerialNumber } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import ScanSession from '@/components/ScanSession.vue'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
@@ -239,6 +251,22 @@ import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const emit = defineEmits(['show-detail', 'stats-loaded'])
+
+// 分类翻译
+const getCategoryLabel = (category) => {
+  const map = {
+    module: t('spareCategoryModule'),
+    power: t('spareCategoryPower'),
+    cable: t('spareCategoryCable'),
+    other: t('spareCategoryOther'),
+    // 兼容中文数据
+    '模块': t('spareCategoryModule'),
+    '电源': t('spareCategoryPower'),
+    '线缆': t('spareCategoryCable'),
+    '其他': t('spareCategoryOther'),
+  }
+  return map[category] || category || '--'
+}
 
 // 接收外部筛选参数
 const props = defineProps({
@@ -256,7 +284,7 @@ const isEdit = ref(false)
 const editId = ref(null)
 const form = reactive({
   name: '', part_number: '', category: '', manufacturer: '',
-  description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: ''
+  description: '', min_quantity: 0, location: ''
 })
 
 // 手动入库
@@ -327,8 +355,41 @@ const loadParts = debounce(async (force = false) => {
 
 const showAddDialog = () => {
   isEdit.value = false
-  Object.assign(form, { name: '', part_number: '', category: '', manufacturer: '', description: '', quantity_in_stock: 0, min_quantity: 0, unit_price: 0, location: '' })
+  Object.assign(form, { name: '', part_number: '', category: 'other', manufacturer: '', description: '', min_quantity: 0, location: '' })
   dialogVisible.value = true
+}
+
+const showEditDialog = (row) => {
+  isEdit.value = true
+  editId.value = row.id
+  Object.assign(form, {
+    name: row.name || '',
+    part_number: row.part_number || '',
+    category: row.category || 'other',
+    manufacturer: row.manufacturer || '',
+    description: row.description || '',
+    min_quantity: row.min_quantity || 0,
+    location: row.location || ''
+  })
+  dialogVisible.value = true
+}
+
+const handleDelete = async (row) => {
+  try {
+    await ElMessageBox.confirm(
+      t('spareDeleteConfirm') || `确定删除备件 "${row.name}" 吗？库存中的所有实例也将被删除。`,
+      t('msgConfirm'),
+      { type: 'warning' }
+    )
+    await deletePart(row.id)
+    clearCache('spareParts')
+    ElMessage.success(t('msgDeletedSuccess'))
+    loadParts(true)
+  } catch (e) {
+    if (e !== 'cancel') {
+      ElMessage.error(t('msgOpFailed') + ': ' + (e.response?.data?.detail || e.message))
+    }
+  }
 }
 
 const savePart = async () => {
@@ -516,9 +577,52 @@ defineExpose({ loadParts, parts })
   gap: 8px;
 }
 
+/* 表格表头居中 */
+:deep(.el-table th.el-table__cell) {
+  text-align: center;
+}
+
+/* 操作按钮区域 */
 .table-actions {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-actions .el-button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.field-hint {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-top: 4px;
+  line-height: 1.4;
+}
+
+.price-input-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.price-number-input {
+  flex: 1;
+  min-width: 140px;
+}
+
+.unit-text {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+  flex-shrink: 0;
+}
+
+.text-muted {
+  color: var(--text-tertiary);
 }
 
 /* 入库/出库对话框内容样式 */

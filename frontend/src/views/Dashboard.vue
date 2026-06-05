@@ -64,13 +64,13 @@
                       <span class="noc-layer-count">{{ coreTotal }} {{ t('dashDevices') }}</span>
                     </div>
                     <div class="noc-layer-bar">
-                      <div class="noc-segment online" :style="{ width: (coreTotal > 0 ? coreOnline / coreTotal * 100 : 0) + '%' }"></div>
-                      <div class="noc-segment offline" v-if="coreOffline > 0" :style="{ width: (coreTotal > 0 ? coreOffline / coreTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment reachable" :style="{ width: (coreTotal > 0 ? coreReachable / coreTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment unreachable" v-if="coreUnreachable > 0" :style="{ width: (coreTotal > 0 ? coreUnreachable / coreTotal * 100 : 0) + '%' }"></div>
                       <div class="noc-segment maintenance" v-if="coreMaintenance > 0" :style="{ width: (coreTotal > 0 ? coreMaintenance / coreTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
                       <div class="noc-type-pill" v-for="dtype in ['core_switch', 'server_switch', 'router']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
+                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
                         v-if="deviceByType(dtype, 'total') > 0">
                         <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
                         <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
@@ -84,13 +84,13 @@
                       <span class="noc-layer-count">{{ firewallTotal }} {{ t('dashDevices') }}</span>
                     </div>
                     <div class="noc-layer-bar">
-                      <div class="noc-segment online" :style="{ width: (firewallTotal > 0 ? firewallOnline / firewallTotal * 100 : 0) + '%' }"></div>
-                      <div class="noc-segment offline" v-if="firewallOffline > 0" :style="{ width: (firewallTotal > 0 ? firewallOffline / firewallTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment reachable" :style="{ width: (firewallTotal > 0 ? firewallReachable / firewallTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment unreachable" v-if="firewallUnreachable > 0" :style="{ width: (firewallTotal > 0 ? firewallUnreachable / firewallTotal * 100 : 0) + '%' }"></div>
                       <div class="noc-segment maintenance" v-if="firewallMaintenance > 0" :style="{ width: (firewallTotal > 0 ? firewallMaintenance / firewallTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
                       <div class="noc-type-pill" v-for="dtype in ['pa', 'ftd']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
+                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
                         v-if="deviceByType(dtype, 'total') > 0">
                         <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
                         <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
@@ -104,13 +104,13 @@
                       <span class="noc-layer-count">{{ wifiTotal }} {{ t('dashDevices') }}</span>
                     </div>
                     <div class="noc-layer-bar">
-                      <div class="noc-segment online" :style="{ width: (wifiTotal > 0 ? wifiOnline / wifiTotal * 100 : 0) + '%' }"></div>
-                      <div class="noc-segment offline" v-if="wifiOffline > 0" :style="{ width: (wifiTotal > 0 ? wifiOffline / wifiTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment reachable" :style="{ width: (wifiTotal > 0 ? wifiReachable / wifiTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment unreachable" v-if="wifiUnreachable > 0" :style="{ width: (wifiTotal > 0 ? wifiUnreachable / wifiTotal * 100 : 0) + '%' }"></div>
                       <div class="noc-segment maintenance" v-if="wifiMaintenance > 0" :style="{ width: (wifiTotal > 0 ? wifiMaintenance / wifiTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
                       <div class="noc-type-pill" v-for="dtype in ['ap', 'wlc']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
+                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
                         v-if="deviceByType(dtype, 'total') > 0">
                         <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
                         <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
@@ -124,13 +124,13 @@
                       <span class="noc-layer-count">{{ accessTotal }} {{ t('dashDevices') }}</span>
                     </div>
                     <div class="noc-layer-bar">
-                      <div class="noc-segment online" :style="{ width: (accessTotal > 0 ? accessOnline / accessTotal * 100 : 0) + '%' }"></div>
-                      <div class="noc-segment offline" v-if="accessOffline > 0" :style="{ width: (accessTotal > 0 ? accessOffline / accessTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment reachable" :style="{ width: (accessTotal > 0 ? accessReachable / accessTotal * 100 : 0) + '%' }"></div>
+                      <div class="noc-segment unreachable" v-if="accessUnreachable > 0" :style="{ width: (accessTotal > 0 ? accessUnreachable / accessTotal * 100 : 0) + '%' }"></div>
                       <div class="noc-segment maintenance" v-if="accessMaintenance > 0" :style="{ width: (accessTotal > 0 ? accessMaintenance / accessTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
                       <div class="noc-type-pill" v-for="dtype in ['uce', 'office_switch']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'offline') > 0 }"
+                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
                         v-if="deviceByType(dtype, 'total') > 0">
                         <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
                         <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
@@ -175,21 +175,34 @@
           <!-- 2. 故障事件 -->
           <div class="kpi-card" @click="navigateTo('/faults')">
             <div class="kpi-header">
-              <div class="kpi-icon faults">
+              <div class="kpi-icon faults" :class="{ 'has-alert': activeFaults > 0 }">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
                   <path d="M12 9v4M12 17h.01"/>
                   <path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.47a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
                 </svg>
               </div>
               <span class="kpi-title">{{ t('dashFaultEvents') }}</span>
-              <span class="trend-badge">{{ t('dashDays30') }}</span>
+              <span class="trend-badge" :class="{ 'alert': activeFaults > 0 }">{{ activeFaults > 0 ? t('dashActive') : t('dashAllResolved') }}</span>
             </div>
             <div class="kpi-body">
-              <div class="big-number danger">{{ stats.faults?.count_30days || 0 }}</div>
-              <div class="severity-row">
-                <div class="severity-tag"><span class="dot critical"></span><span class="severity-label">{{ t('dashCritical') }}</span><span class="severity-num">{{ stats.faults?.critical_count || 0 }}</span></div>
-                <div class="severity-tag"><span class="dot major"></span><span class="severity-label">{{ t('dashMajor') }}</span><span class="severity-num">{{ stats.faults?.major_count || 0 }}</span></div>
-                <div class="severity-tag"><span class="dot minor"></span><span class="severity-label">{{ t('dashMinor') }}</span><span class="severity-num">{{ stats.faults?.minor_count || 0 }}</span></div>
+              <!-- DNAC风格: 活跃故障数（大数字） -->
+              <div class="fault-active-section" :class="{ 'has-active': activeFaults > 0 }">
+                <div class="big-number" :class="{ danger: activeFaults > 0, success: activeFaults === 0 }">
+                  {{ activeFaults }}
+                </div>
+                <div class="active-label">{{ t('dashActiveFaults') }}</div>
+                <!-- 活跃故障按严重级别 -->
+                <div class="severity-row" v-if="activeFaults > 0">
+                  <div class="severity-tag" v-if="activeCritical > 0"><span class="dot critical"></span><span class="severity-label">{{ t('dashCritical') }}</span><span class="severity-num">{{ activeCritical }}</span></div>
+                  <div class="severity-tag" v-if="activeMajor > 0"><span class="dot major"></span><span class="severity-label">{{ t('dashMajor') }}</span><span class="severity-num">{{ activeMajor }}</span></div>
+                  <div class="severity-tag" v-if="activeMinor > 0"><span class="dot minor"></span><span class="severity-label">{{ t('dashMinor') }}</span><span class="severity-num">{{ activeMinor }}</span></div>
+                </div>
+              </div>
+              <!-- 已解决故障数（次要显示） -->
+              <div class="fault-resolved-section" v-if="resolvedFaults > 0">
+                <span class="resolved-label">{{ t('dashResolvedFaults') }}</span>
+                <span class="resolved-num">{{ resolvedFaults }}</span>
+                <span class="resolved-period">{{ t('dashDays30') }}</span>
               </div>
               <div class="fault-maintenance-footer">
                 <span class="maint-label">{{ t('dashMaintenance') }}</span>
@@ -455,50 +468,71 @@ const timeOptions = computed(() => [
 const onlinePercent = computed(() => {
   const total = stats.value.devices?.total || 0
   if (total === 0) return 0
-  return Math.round((stats.value.devices?.online || 0) / total * 100)
+  return Math.round((stats.value.devices?.reachable || 0) / total * 100)
 })
 
 const topFaultDeviceName = computed(() => faultDeviceList.value.length > 0 ? faultDeviceList.value[0].device_name : '—')
+
+// 故障统计 - DNAC风格：活跃故障（未解决）
+const activeFaults = computed(() => stats.value.faults?.active || 0)
+const activeCritical = computed(() => stats.value.faults?.active_critical || 0)
+const activeMajor = computed(() => stats.value.faults?.active_major || 0)
+const activeMinor = computed(() => stats.value.faults?.active_minor || 0)
+const resolvedFaults = computed(() => stats.value.faults?.resolved || 0)
 
 const coreDeviceTypes = ['core_switch', 'server_switch', 'router']
 const accessDeviceTypes = ['uce', 'office_switch']
 const wifiDeviceTypes = ['ap', 'wlc']
 const firewallDeviceTypes = ['pa', 'ftd']
 
-// Core/Access/WiFi/Firewall counts
+// Core/Access/WiFi/Firewall counts - 使用新的 reachable/unreachable 字段
 const coreTotal = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
-const coreOnline = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
-const coreOffline = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
+const coreReachable = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
+const coreUnreachable = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const coreMaintenance = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
 const coreRetired = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const coreOnline = computed(() => coreReachable.value)
+const coreOffline = computed(() => coreUnreachable.value)
 
 const accessTotal = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
-const accessOnline = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
-const accessOffline = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
+const accessReachable = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
+const accessUnreachable = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const accessMaintenance = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
 const accessRetired = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const accessOnline = computed(() => accessReachable.value)
+const accessOffline = computed(() => accessUnreachable.value)
 
 const wifiTotal = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
-const wifiOnline = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
-const wifiOffline = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
+const wifiReachable = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
+const wifiUnreachable = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const wifiMaintenance = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
 const wifiRetired = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const wifiOnline = computed(() => wifiReachable.value)
+const wifiOffline = computed(() => wifiUnreachable.value)
 
 const firewallTotal = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
-const firewallOnline = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'online'), 0))
-const firewallOffline = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'offline'), 0))
+const firewallReachable = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
+const firewallUnreachable = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const firewallMaintenance = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
 const firewallRetired = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const firewallOnline = computed(() => firewallReachable.value)
+const firewallOffline = computed(() => firewallUnreachable.value)
 
 const totalDevices = computed(() => stats.value.devices?.total || 0)
-const offlineDeviceCount = computed(() => stats.value.devices?.offline || 0)
+const unreachableDeviceCount = computed(() => stats.value.devices?.unreachable || 0)
+// 兼容旧字段
+const offlineDeviceCount = computed(() => unreachableDeviceCount.value)
 
-// Health Score (0-100): online devices / total devices * 100
+// Health Score (0-100): reachable devices / total devices * 100
 const healthScore = computed(() => {
   const total = stats.value.devices?.total || 0
   if (total === 0) return 100
-  const online = stats.value.devices?.online || 0
-  return Math.round((online / total) * 100)
+  const reachable = stats.value.devices?.reachable || 0
+  return Math.round((reachable / total) * 100)
 })
 
 const healthScoreClass = computed(() => {
@@ -554,8 +588,8 @@ const typeLabel = (dtype) => {
 const typeStatus = (dtype) => {
   const t2 = stats.value.devices?.by_type?.[dtype]
   if (!t2 || t2.total === 0) return 'empty'
-  if ((t2.offline || 0) > 0) return 'alert'
-  if ((t2.maintenance || 0) > 0) return 'warn'
+  if ((t2.unreachable || 0) > 0) return 'alert'
+  if ((t2.unknown || 0) > 0) return 'warn'
   return 'ok'
 }
 
@@ -1068,9 +1102,13 @@ onUnmounted(() => {
   display: flex;
 }
 .noc-segment { transition: width 0.4s ease; }
+.noc-segment.reachable { background: #00b894; }
+.noc-segment.unreachable { background: #ef4444; }
+.noc-segment.unknown { background: #94a3b8; }
+.noc-segment.maintenance { background: #f59e0b; }
+/* 兼容旧字段 */
 .noc-segment.online { background: #00b894; }
 .noc-segment.offline { background: #ef4444; }
-.noc-segment.maintenance { background: #f59e0b; }
 .noc-layer-types {
   display: flex;
   flex-wrap: wrap;
@@ -1097,6 +1135,7 @@ onUnmounted(() => {
 .noc-type-dot.ok { background: #00b894; }
 .noc-type-dot.warn { background: #f59e0b; }
 .noc-type-dot.alert { background: #ef4444; }
+.noc-type-dot.empty { background: #94a3b8; }
 .noc-type-name { color: #475569; }
 .noc-type-num {
   font-family: 'JetBrains Mono', monospace;
@@ -1218,6 +1257,60 @@ onUnmounted(() => {
 .maint-item.warn { color: #d97706; }
 .maint-item.active { color: #0984e3; }
 .maint-item.success { color: #059669; }
+
+/* DNAC-style fault active section */
+.fault-active-section {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.fault-active-section.has-active {
+  background: rgba(214, 48, 49, 0.04);
+  border-radius: 8px;
+  padding: 8px;
+}
+.active-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.big-number.success {
+  color: #00b894;
+}
+.kpi-icon.has-alert {
+  animation: pulse-warning 2s infinite;
+}
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.trend-badge.alert {
+  background: rgba(214, 48, 49, 0.12);
+  color: #d63031;
+  border: 1px solid rgba(214, 48, 49, 0.3);
+}
+.fault-resolved-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 184, 148, 0.06);
+  border-radius: 6px;
+}
+.resolved-label {
+  font-size: 11px;
+  color: #64748b;
+}
+.resolved-num {
+  font-size: 12px;
+  font-weight: 600;
+  color: #00b894;
+}
+.resolved-period {
+  font-size: 10px;
+  color: #94a3b8;
+}
 
 .dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.critical { background: #d63031; }

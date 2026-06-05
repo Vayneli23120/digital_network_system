@@ -39,7 +39,10 @@ class DeviceCreate(BaseModel):
     location: Optional[str] = None
     device_type: str = "other"
     role: str = "access"
-    status: str = "online"
+    # 新字段：部署状态
+    deployment_status: str = "un-used"  # in-use, un-used, maintenance, retired
+    # 兼容旧字段（将被映射到 deployment_status）
+    status: Optional[str] = None
     vendor: Optional[str] = None
     purchase_cost: float = 0
     credential_group: str = "default"
@@ -52,6 +55,9 @@ class DeviceUpdate(BaseModel):
     location: Optional[str] = None
     device_type: Optional[str] = None
     role: Optional[str] = None
+    # 新字段：部署状态
+    deployment_status: Optional[str] = None
+    # 兼容旧字段（将被映射到 deployment_status）
     status: Optional[str] = None
     vendor: Optional[str] = None
     purchase_cost: Optional[float] = None
@@ -62,11 +68,22 @@ class DeviceUpdate(BaseModel):
 
 @router.get("")
 async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
-                        device_type: Optional[str] = None, skip: int = 0, limit: int = 200,
+                        device_type: Optional[str] = None,
+                        deployment_status: Optional[str] = None,
+                        reachability: Optional[str] = None,
+                        skip: int = 0, limit: int = 200,
                         db: Session = Depends(get_db)):
-    """获取设备列表"""
+    """获取设备列表
+
+    Args:
+        status: 按旧状态过滤（兼容）
+        deployment_status: 按部署状态过滤 (in-use/un-used/maintenance/retired)
+        reachability: 按可达性过滤 (reachable/unreachable/unknown)
+    """
     from .device_service import list_devices as svc_list_devices
-    return svc_list_devices(db, status=status, role=role, device_type=device_type, skip=skip, limit=limit)
+    return svc_list_devices(db, status=status, role=role, device_type=device_type,
+                           deployment_status=deployment_status, reachability=reachability,
+                           skip=skip, limit=limit)
 
 
 @router.get("/export")
@@ -86,7 +103,8 @@ async def export_devices():
         ws.title = "Devices"
 
         # 表头
-        headers = ["name", "ip", "model", "serial_number", "location", "device_type", "role", "status", "credential_group", "vendor", "purchase_cost"]
+        headers = ["name", "ip", "model", "serial_number", "location", "device_type", "role",
+                   "deployment_status", "reachability", "credential_group", "vendor", "purchase_cost"]
         ws.append(headers)
 
         # 数据
@@ -99,7 +117,8 @@ async def export_devices():
                 device.location or "",
                 device.device_type or "other",
                 device.role or "",
-                device.status or "",
+                device.deployment_status or "un-used",
+                device.reachability or "unknown",
                 device.credential_group or "default",
                 device.vendor or "",
                 float(device.purchase_cost) if device.purchase_cost else 0
@@ -174,6 +193,10 @@ async def import_devices(file: UploadFile = File(...)):
                     serial_number=device_data.get("serial_number", ""),
                     location=device_data.get("location", ""),
                     role=device_data.get("role", "access"),
+                    # 新字段
+                    deployment_status=device_data.get("deployment_status", "un-used"),
+                    reachability=device_data.get("reachability", "unknown"),
+                    # 兼容旧字段
                     status=device_data.get("status", "online"),
                     credential_group=device_data.get("credential_group", "default"),
                     vendor=device_data.get("vendor", ""),
@@ -215,6 +238,101 @@ async def get_vendor(vendor: str):
     """获取厂商详细信息"""
     from .vendor_service import get_vendor_info
     return get_vendor_info(vendor)
+
+
+# ============ 可达性监控 API ============
+
+@router.post("/{device_id}/check-reachability")
+async def manual_check_reachability(device_id: int):
+    """手动触发单设备可达性检测
+
+    立即检测设备可达性并返回结果。
+    """
+    from app.services.reachability_monitor import get_reachability_monitor
+
+    db = next(get_db())
+    try:
+        device = db.query(Device).filter(Device.id == device_id).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+
+        monitor = get_reachability_monitor()
+        result = monitor.check_device_reachability(db, device)
+
+        return {
+            "device_id": device_id,
+            "device_name": device.name,
+            "reachability": device.reachability,
+            "latency_ms": device.reachability_latency_ms,
+            "method": device.reachability_method,
+            "last_check": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/reachability-stats")
+async def get_reachability_stats():
+    """获取可达性统计
+
+    返回已部署设备的可达性状态统计。
+    """
+    db = next(get_db())
+    try:
+        total = db.query(Device).filter(Device.deployment_status == 'in-use').count()
+        reachable = db.query(Device).filter(
+            Device.deployment_status == 'in-use',
+            Device.reachability == 'reachable'
+        ).count()
+        unreachable = db.query(Device).filter(
+            Device.deployment_status == 'in-use',
+            Device.reachability == 'unreachable'
+        ).count()
+        unknown = db.query(Device).filter(
+            Device.deployment_status == 'in-use',
+            Device.reachability == 'unknown'
+        ).count()
+
+        # 按设备类型统计
+        device_types = ['uce', 'core_switch', 'server_switch', 'office_switch', 'ap', 'wlc', 'router', 'pa', 'ftd', 'other']
+        by_type = {}
+        for dtype in device_types:
+            type_total = db.query(Device).filter(
+                Device.device_type == dtype,
+                Device.deployment_status == 'in-use'
+            ).count()
+            by_type[dtype] = {
+                'total': type_total,
+                'reachable': db.query(Device).filter(
+                    Device.device_type == dtype,
+                    Device.deployment_status == 'in-use',
+                    Device.reachability == 'reachable'
+                ).count(),
+                'unreachable': db.query(Device).filter(
+                    Device.device_type == dtype,
+                    Device.deployment_status == 'in-use',
+                    Device.reachability == 'unreachable'
+                ).count(),
+            }
+
+        return {
+            "total_deployed": total,
+            "reachable": reachable,
+            "unreachable": unreachable,
+            "unknown": unknown,
+            "online_rate": round(reachable / total * 100, 2) if total > 0 else 0,
+            "by_type": by_type,
+        }
+    finally:
+        db.close()
+
+
+@router.get("/monitor/status")
+async def get_monitor_status():
+    """获取可达性监控服务状态"""
+    from app.services.reachability_monitor import get_reachability_monitor
+    monitor = get_reachability_monitor()
+    return monitor.get_stats()
 
 
 @router.get("/{device_id}")
