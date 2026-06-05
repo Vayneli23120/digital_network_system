@@ -645,7 +645,7 @@ const faultDeviceList = ref([])
 const loadFaultDeviceList = async (force = false) => {
   try {
     const res = await cachedRequest(
-      () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5'),
+      () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5').then(r => r.json()),
       'dashboardTopFaultDevices',
       {},
       { forceRefresh: force }
@@ -689,7 +689,7 @@ const loadDashboardData = async (force = false) => {
     // Load cost trend
     try {
       const trendRes = await cachedRequest(
-        () => fetch('/api/dashboard/cost-trend?months=6'),
+        () => fetch('/api/dashboard/cost-trend?months=6').then(r => r.json()),
         'dashboardCostTrend',
         {},
         { forceRefresh: force }
