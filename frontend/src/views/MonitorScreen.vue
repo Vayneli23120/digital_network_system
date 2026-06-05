@@ -683,7 +683,7 @@ const _loadPlanNodes = async (planId, force = false) => {
       { forceRefresh: force, ttl: 60 }
     )
     nodes.value = data.items || []
-    imageLoaded.value = false
+    // 不要重置 imageLoaded，保持图片加载状态
   } catch (err) {
     if (err.name !== 'CanceledError') {
       console.error('Failed to load plan nodes:', err)
