@@ -653,11 +653,53 @@ const closeUploadDialog = () => {
 }
 
 // Methods
+// 内部加载函数（无 debounce，用于 refreshData 等需要立即执行的场景）
+const _loadFloorPlans = async (force = false) => {
+  try {
+    const data = await cachedRequest(
+      () => fetch('/api/floor-plans').then(r => r.json()),
+      'monitor_floor_plans',
+      {},
+      { forceRefresh: force, ttl: 120 }
+    )
+    floorPlans.value = data.items || []
+    // 如果没有选中平面图，选择第一个
+    if (floorPlans.value.length > 0 && !selectedPlanId.value) {
+      selectedPlanId.value = floorPlans.value[0].id
+    }
+  } catch (err) {
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load floor plans:', err)
+    }
+  }
+}
+
+const _loadPlanNodes = async (planId, force = false) => {
+  try {
+    const data = await cachedRequest(
+      () => fetch(`/api/floor-plans/${planId}/nodes`).then(r => r.json()),
+      `monitor_nodes_${planId}`,
+      { planId },
+      { forceRefresh: force, ttl: 60 }
+    )
+    nodes.value = data.items || []
+    imageLoaded.value = false
+  } catch (err) {
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load plan nodes:', err)
+    }
+  }
+}
+
 const refreshData = async () => {
   loading.value = true
-  await Promise.all([loadFloorPlans(true), loadStats(true), loadOfflineAlerts(true)])
+  // 先加载平面图列表，确保 selectedPlanId 有值
+  await _loadFloorPlans(true)
+  // 再并行加载其他数据
+  await Promise.all([loadStats(true), loadOfflineAlerts(true)])
+  // 最后加载节点（依赖 selectedPlanId）
   if (selectedPlanId.value) {
-    await loadPlanNodes(selectedPlanId.value, true)
+    await _loadPlanNodes(selectedPlanId.value, true)
   }
   loading.value = false
   ElMessage.success(t('msgDataRefreshed'))
@@ -673,10 +715,10 @@ const deletePlan = async () => {
     if (res.ok) {
       ElMessage.success(t('monitorScreenPlanDeleted'))
       // 重新加载列表并选择第一个
-      await loadFloorPlans(true)
+      await _loadFloorPlans(true)
       selectedPlanId.value = floorPlans.value[0]?.id || null
       if (selectedPlanId.value) {
-        await loadPlanNodes(selectedPlanId.value, true)
+        await _loadPlanNodes(selectedPlanId.value, true)
       }
     } else {
       const data = await res.json()
@@ -687,40 +729,11 @@ const deletePlan = async () => {
   }
 }
 
-const loadFloorPlans = debounce(async (force = false) => {
-  try {
-    const data = await cachedRequest(
-      () => fetch('/api/floor-plans').then(r => r.json()),
-      'monitor_floor_plans',
-      {},
-      { forceRefresh: force, ttl: 120 }
-    )
-    floorPlans.value = data.items || []
-    if (floorPlans.value.length > 0 && !selectedPlanId.value) {
-      selectedPlanId.value = floorPlans.value[0].id
-      await loadPlanNodes(selectedPlanId.value, force)
-    }
-  } catch (err) {
-    if (err.name !== 'CanceledError') {
-      console.error('Failed to load floor plans:', err)
-    }
-  }
-}, 300)
-
-const loadPlanNodes = debounce(async (planId, force = false) => {
-  try {
-    const data = await cachedRequest(
-      () => fetch(`/api/floor-plans/${planId}/nodes`).then(r => r.json()),
-      `monitor_nodes_${planId}`,
-      { planId },
-      { forceRefresh: force, ttl: 60 }
-    )
-    nodes.value = data.items || []
-    imageLoaded.value = false
-  } catch (err) {
-    if (err.name !== 'CanceledError') {
-      console.error('Failed to load nodes:', err)
-    }
+// Debounced 版本用于 el-select change 等需要防抖的场景
+const loadFloorPlans = debounce((force = false) => _loadFloorPlans(force), 300)
+const loadPlanNodes = debounce((planId, force = false) => {
+  if (selectedPlanId.value === planId) {
+    _loadPlanNodes(planId, force)
   }
 }, 300)
 
@@ -816,7 +829,7 @@ const confirmCreateNode = async () => {
     const data = await res.json()
     if (res.ok) {
       ElMessage.success(data.message || t('msgSaveSuccess'))
-      await loadPlanNodes(selectedPlanId.value, true)
+      await _loadPlanNodes(selectedPlanId.value, true)
     } else {
       ElMessage.error(data.detail || 'Failed')
     }
@@ -868,7 +881,7 @@ const deleteNodeFromPlan = async () => {
       if (res.ok) {
         ElMessage.success(t('msgSaveSuccess'))
         showDetailDialog.value = false
-        await loadPlanNodes(selectedPlanId.value, true)
+        await _loadPlanNodes(selectedPlanId.value, true)
       }
     }
   } catch {
@@ -902,7 +915,7 @@ const uploadFloorPlan = async () => {
     if (res.ok) {
       ElMessage.success(data.message || t('msgSaveSuccess'))
       closeUploadDialog()
-      await loadFloorPlans(true)
+      await _loadFloorPlans(true)
     } else {
       ElMessage.error(data.detail || t('monitorScreenUploadFailed'))
     }
@@ -993,11 +1006,11 @@ const handleRouteParams = async () => {
   const deviceId = route.query.device_id
   if (deviceId) {
     // 等待数据加载
-    await loadFloorPlans(true)
+    await _loadFloorPlans(true)
     await loadStats(true)
     await loadOfflineAlerts(true)
     if (selectedPlanId.value) {
-      await loadPlanNodes(selectedPlanId.value, true)
+      await _loadPlanNodes(selectedPlanId.value, true)
     }
 
     // 找到对应的节点并高亮
@@ -1034,7 +1047,7 @@ onMounted(() => {
     loadStats()
     loadOfflineAlerts()
     if (selectedPlanId.value) {
-      loadPlanNodes(selectedPlanId.value)
+      _loadPlanNodes(selectedPlanId.value)
     }
   }, 30000)
 })
