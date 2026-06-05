@@ -56,6 +56,26 @@ class RedisCacheConfig(BaseModel):
     default_ttl: int = 60  # seconds
 
 
+class CeleryConfig(BaseModel):
+    """Celery 任务队列配置"""
+    broker_url: str = Field(
+        default="redis://localhost:6379/1",
+        description="Celery broker URL，支持 redis:// 或 amqp://"
+    )
+    result_backend: str = Field(
+        default="redis://localhost:6379/1",
+        description="Celery result backend URL"
+    )
+
+    @field_validator('broker_url', 'result_backend')
+    @classmethod
+    def validate_redis_url(cls, v: str) -> str:
+        """验证 Celery broker/backend URL"""
+        if not v.startswith(('redis://', 'rediss://', 'amqp://')):
+            raise ValueError("Celery broker/backend 必须使用 redis:// 或 amqp:// URL")
+        return v
+
+
 class StorageConfig(BaseModel):
     backup_dir: str = "./backups"
     photo_dir: str = "./assets/devices"
@@ -90,8 +110,34 @@ class ConsoleConfig(BaseModel):
 
 
 class DatabaseConfig(BaseModel):
+    """数据库配置 - 支持 SQLite (开发) 和 PostgreSQL (生产)"""
+    # 数据库 URL（优先使用此字段）
+    url: str = Field(
+        default="sqlite+aiosqlite:///{os.path.join(os.getcwd(), 'data', 'nas.db')}",
+        description="数据库连接 URL，支持 sqlite+aiosqlite 和 postgresql+asyncpg"
+    )
+    # SQLite 专用配置（兼容旧配置）
     type: str = "sqlite"
     sqlite_path: str = "./data/nas.db"
+    # PostgreSQL 连接池配置
+    pool_size: int = Field(default=10, description="连接池基础连接数")
+    max_overflow: int = Field(default=20, description="连接池溢出连接数")
+    pool_timeout: int = Field(default=30, description="获取连接超时秒数")
+    pool_recycle: int = Field(default=1800, description="连接回收时间秒数")
+    echo: bool = Field(default=False, description="是否打印 SQL 语句")
+
+    @field_validator('url')
+    @classmethod
+    def validate_db_url(cls, v: str) -> str:
+        """验证数据库 URL 格式"""
+        allowed_schemes = [
+            'sqlite', 'sqlite+aiosqlite',
+            'postgresql', 'postgresql+asyncpg', 'postgresql+psycopg2'
+        ]
+        scheme = v.split('://')[0] if '://' in v else ''
+        if not any(v.startswith(s) for s in allowed_schemes):
+            raise ValueError(f"不支持的数据库类型，允许: {allowed_schemes}")
+        return v
 
     @field_validator('sqlite_path')
     @classmethod
@@ -105,11 +151,27 @@ class DatabaseConfig(BaseModel):
             except PermissionError:
                 print(f"[CONFIG ERROR] 无法创建数据库目录: {parent}", file=sys.stderr)
                 raise ValueError(f"无法创建数据库目录: {parent}")
-        # 如果文件已存在，检查是否可写
         if p.exists() and not os.access(v, os.W_OK):
             print(f"[CONFIG ERROR] 数据库文件无写权限: {v}", file=sys.stderr)
             raise ValueError(f"数据库文件无写权限: {v}")
         return v
+
+    @property
+    def is_postgresql(self) -> bool:
+        """是否使用 PostgreSQL"""
+        return 'postgresql' in self.url
+
+    @property
+    def is_sqlite(self) -> bool:
+        """是否使用 SQLite"""
+        return 'sqlite' in self.url and 'postgresql' not in self.url
+
+    def get_effective_url(self) -> str:
+        """获取有效的数据库 URL"""
+        # 优先使用 url 字段，否则根据 sqlite_path 构建
+        if self.url and not self.url.startswith("sqlite+aiosqlite:///{os.path.join"):
+            return self.url
+        return f"sqlite+aiosqlite:///{self.sqlite_path}"
 
 
 class SecurityConfig(BaseModel):
@@ -118,6 +180,20 @@ class SecurityConfig(BaseModel):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
+    # CORS 安全配置
+    cors_allowed_origins: List[str] = Field(
+        default=["http://localhost:3000", "http://localhost:5173"],
+        description="生产环境必须配置为实际域名，禁止使用 * 通配符"
+    )
+    cors_allow_credentials: bool = True
+
+    @field_validator('cors_allowed_origins')
+    @classmethod
+    def check_cors_origins(cls, v: List[str]) -> List[str]:
+        """CORS origins 安全检查"""
+        if "*" in v:
+            print("[CONFIG WARNING] CORS 使用 * 通配符，生产环境请配置具体域名", file=sys.stderr)
+        return v
 
     @field_validator('jwt_secret')
     @classmethod
@@ -161,6 +237,7 @@ class Config(BaseModel):
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     cache: RedisCacheConfig = Field(default_factory=RedisCacheConfig)
+    celery: CeleryConfig = Field(default_factory=CeleryConfig)
     logging: dict = Field(default_factory=lambda: {"level": "INFO"})
 
     @classmethod
@@ -200,25 +277,52 @@ class Config(BaseModel):
 
     def validate(self) -> "Config":
         """应用级配置验证 — 跨字段检查
-        
+
         在 Config.load() 后自动调用，失败时打印错误并退出。
         """
-        # 检查认证已启用时 JWT secret 是否为默认值
+        weak_secrets = [
+            'your-secret-key-change-in-production',
+            'secret',
+            'password',
+            'changeme',
+            '123456',
+        ]
+
+        # 检查认证已启用时的安全配置
         if self.security.auth_enabled:
-            if self.security.jwt_secret == "your-secret-key-change-in-production":
+            # JWT secret 不能是默认值或弱密码
+            if self.security.jwt_secret.lower() in weak_secrets:
                 print(
-                    "[CONFIG ERROR] auth_enabled=true 但 jwt_secret 仍为默认值！",
+                    "[CONFIG ERROR] auth_enabled=true 但 jwt_secret 仍为默认值或弱密码！",
                     file=sys.stderr
                 )
-                print("请在 config.yaml 中设置 security.jwt_secret 为强密码", file=sys.stderr)
+                print("请在 config.yaml 或环境变量中设置 security.jwt_secret 为强密码", file=sys.stderr)
                 sys.exit(1)
-        
+
+            # JWT secret 长度必须 >= 32
+            if len(self.security.jwt_secret) < 32:
+                print(
+                    f"[CONFIG ERROR] auth_enabled=true 但 jwt_secret 长度不足 32 位（当前 {len(self.security.jwt_secret)} 位）",
+                    file=sys.stderr
+                )
+                print("生产环境要求 JWT secret 长度 >= 32 位", file=sys.stderr)
+                sys.exit(1)
+
+            # CORS 不能使用 * 通配符
+            if "*" in self.security.cors_allowed_origins:
+                print(
+                    "[CONFIG ERROR] auth_enabled=true 时 cors_allowed_origins 禁止使用 * 通配符！",
+                    file=sys.stderr
+                )
+                print("请配置具体的域名，如: ['https://your-domain.com']", file=sys.stderr)
+                sys.exit(1)
+
         # 检查备份目录和存储目录不是同一路径
         dirs = [self.storage.backup_dir, self.storage.photo_dir, self.storage.log_dir]
         if len(set(dirs)) != len(dirs):
             print("[CONFIG ERROR] storage 目录下 backup_dir/photo_dir/log_dir 不能相同", file=sys.stderr)
             sys.exit(1)
-        
+
         return self
 
 

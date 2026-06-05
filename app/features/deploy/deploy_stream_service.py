@@ -97,17 +97,13 @@ class DeployStreamService:
 
         from netmiko import ConnectHandler
 
-        # 根据 vendor 字段确定 Netmiko device_type（厂商设备类型）
+        # 根据 vendor 字段确定 Netmiko device_type（使用统一驱动注册表）
         vendor = device.get('vendor', 'cisco').lower()
 
-        vendor_device_type_map = {
-            'cisco': 'cisco_ios',
-            'juniper': 'juniper_junos',
-            'huawei': 'huawei',
-            'h3c': 'hp_comware',
-            'arista': 'arista_eos',
-        }
-        netmiko_device_type = vendor_device_type_map.get(vendor, 'cisco_ios')
+        from app.features.devices.drivers.registry import DriverRegistry
+        driver_class = DriverRegistry.get(vendor)
+        netmiko_device_type = driver_class.NETMIKO_DRIVER
+
         log_lines.append(f"[INFO] 设备类型: {netmiko_device_type} (vendor: {vendor})")
 
         # 解析配置为命令列表

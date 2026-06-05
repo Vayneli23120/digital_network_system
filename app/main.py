@@ -50,6 +50,7 @@ from .features.health.router import router as health_router
 from .features.ai.router import router as ai_router
 from .features.workflows.router import router as workflow_router
 from .features.notifications.router import router as notifications_router
+from .features.jobs.router import router as jobs_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
 
@@ -67,8 +68,8 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: 生产环境改为具体域名
-    allow_credentials=True,
+    allow_origins=config.security.cors_allowed_origins,
+    allow_credentials=config.security.cors_allow_credentials,
     allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
     allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-Request-ID"],
@@ -160,6 +161,7 @@ app.include_router(health_router)      # 健康评分路由
 app.include_router(ai_router)          # AI分析路由
 app.include_router(workflow_router)    # 自动化工作流路由
 app.include_router(notifications_router)  # 系统通知路由
+app.include_router(jobs_router)        # 作业监控路由
 
 
 # ============ 健康检查 ============

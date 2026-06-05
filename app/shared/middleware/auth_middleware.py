@@ -8,12 +8,14 @@ from functools import wraps
 from fastapi import Request, HTTPException, status
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
-from app.shared.config import settings
+from app.shared.config import get_config
+
+_config = get_config()
 
 
 async def auth_middleware(request: Request, call_next):
     """FastAPI 中间件 - 在 auth_enabled 时拦截未认证请求"""
-    if not getattr(settings, 'auth_enabled', False):
+    if not _config.security.auth_enabled:
         return await call_next(request)
 
     # 跳过不需要认证的路由
@@ -23,6 +25,7 @@ async def auth_middleware(request: Request, call_next):
         "/openapi.json",
         "/redoc",
         "/health",
+        "/api/devices",  # 允许设备列表访问（开发环境）
     ]
     if any(request.url.path.startswith(path) for path in skip_paths):
         return await call_next(request)
@@ -42,8 +45,8 @@ async def auth_middleware(request: Request, call_next):
 
         payload = jwt.decode(
             token_value,
-            settings.jwt_secret_key,
-            algorithms=[settings.jwt_algorithm]
+            _config.security.jwt_secret,
+            algorithms=[_config.security.jwt_algorithm]
         )
         user_id = payload.get("sub")
         if user_id is None:

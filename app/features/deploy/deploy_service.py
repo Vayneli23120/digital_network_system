@@ -8,6 +8,8 @@ from typing import List, Dict, Optional
 from datetime import datetime
 import re
 
+from app.core.command_guard import validate_commands, CommandGuardError
+
 try:
     from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
     NETMIKO_AVAILABLE = True
@@ -55,19 +57,13 @@ class DeployService:
         if not NETMIKO_AVAILABLE:
             raise RuntimeError("netmiko 未安装，无法连接设备")
 
-        # 根据 vendor 字段确定 Netmiko device_type（厂商设备类型）
+        # 根据 vendor 字段确定 Netmiko device_type（使用统一驱动注册表）
         # vendor: cisco, juniper, huawei, arista 等
-        # device_type 是业务角色类型，不用于确定 device_type
         vendor = device.get('vendor', 'cisco').lower()
 
-        vendor_device_type_map = {
-            'cisco': 'cisco_ios',       # Cisco IOS/IOS-XE 设备
-            'juniper': 'juniper_junos', # Juniper 设备
-            'huawei': 'huawei',         # 华为设备
-            'h3c': 'hp_comware',        # H3C 设备
-            'arista': 'arista_eos',     # Arista 设备
-        }
-        netmiko_device_type = vendor_device_type_map.get(vendor, 'cisco_ios')
+        from app.features.devices.drivers.registry import DriverRegistry
+        driver_class = DriverRegistry.get(vendor)
+        netmiko_device_type = driver_class.NETMIKO_DRIVER
 
         netmiko_device = {
             'device_type': netmiko_device_type,
@@ -156,8 +152,27 @@ class DeployService:
             # 解析配置行为单位命令
             commands = self.parse_config_commands(config)
 
+            # ====== 命令安全守卫检查 ======
+            vendor = connection.device_type if hasattr(connection, 'device_type') else 'cisco'
+            try:
+                safe_commands, warnings = validate_commands(
+                    commands,
+                    vendor=vendor,
+                    allow_high_risk=False,
+                    context=f"deploy to {device.get('name', 'unknown')}"
+                )
+                if warnings:
+                    result['warnings'] = warnings
+            except CommandGuardError as e:
+                result['success'] = False
+                result['errors'].append(str(e))
+                result['blocked_command'] = e.command
+                result['message'] = f'命令安全检查失败：{e.reason}'
+                logger.error(f"命令安全检查失败: {e}")
+                return result
+
             # 发送配置命令
-            output = connection.send_config_set(commands)
+            output = connection.send_config_set(safe_commands)
 
             # 保存配置
             save_output = connection.save_config()

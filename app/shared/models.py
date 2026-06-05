@@ -726,50 +726,6 @@ class DeviceHealthScore(Base):
         return []
 
 
-class AIAnalysisRecord(Base):
-    """AI分析记录表 - 记录所有AI分析调用"""
-    __tablename__ = "ai_analysis_records"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    analysis_type = Column(String(50), nullable=False, index=True)  # fault/root_cause/health/pm_recommend/summary
-    target_type = Column(String(50), nullable=False, index=True)  # device/fault/maintenance
-    target_id = Column(Integer, nullable=False, index=True)
-    input_data = Column(Text)  # JSON格式输入数据
-    ai_provider = Column(String(50))  # deepseek/claude/qwen/openai
-    model_name = Column(String(100))  # 模型名称
-    output_result = Column(Text)  # JSON格式输出结果
-    confidence_score = Column(DECIMAL(3, 2))  # 0.00-1.00 置信度
-    processing_time_ms = Column(Integer)  # 处理耗时毫秒
-    tokens_used = Column(Integer)  # Token使用量
-    cost = Column(DECIMAL(10, 4))  # 成本（元）
-    status = Column(String(20), default="completed")  # pending/completed/failed
-    error_message = Column(Text)  # 错误信息
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-
-    def __repr__(self):
-        return f"<AIAnalysisRecord(type={self.analysis_type}, target={self.target_type}:{self.target_id})>"
-
-    def get_input_dict(self):
-        """解析输入数据JSON"""
-        if self.input_data:
-            try:
-                import json
-                return json.loads(self.input_data)
-            except:
-                return {}
-        return {}
-
-    def get_output_dict(self):
-        """解析输出结果JSON"""
-        if self.output_result:
-            try:
-                import json
-                return json.loads(self.output_result)
-            except:
-                return {}
-        return {}
-
-
 class WorkflowRule(Base):
     """自动化工作流规则表"""
     __tablename__ = "workflow_rules"
@@ -1023,3 +979,93 @@ class AIConfig(Base):
 
     def __repr__(self):
         return f"<AIConfig(id={self.id}, provider={self.provider}, model={self.model_name})>"
+
+
+class AIKnowledgeDocument(Base):
+    """
+    AI 知识库文档表（RAG 向量索引）
+
+    存储设备配置、故障记录、SOP 等知识文档，
+    用于 AI 分析时的语义检索。
+    """
+    __tablename__ = "ai_knowledge_documents"
+
+    id = Column(String(36), primary_key=True)
+    # id 使用 UUID，由应用层生成
+
+    doc_type = Column(String(50), nullable=False, index=True)
+    # doc_type 枚举值：
+    # - device_config: 设备配置快照
+    # - fault_record: 故障记录及解决方案
+    # - sop: 标准操作手册
+    # - vendor_doc: 厂商设备手册
+    # - compliance_rule: 合规规则说明
+    # - change_record: 变更记录
+
+    title = Column(String(300), nullable=False)
+    content = Column(Text, nullable=False)
+
+    # 关联的目标设备（可选）
+    device_id = Column(Integer, index=True)
+
+    # 元数据（JSON），如：设备厂商、备份时间、故障编号等
+    metadata_json = Column(Text)
+
+    # 向量嵌入（PostgreSQL + pgvector 时使用）
+    # 注意：SQLite 不支持 vector 类型，此列仅在 PG 环境创建
+    # embedding = Column(Vector(1536))  # 需在 PG migration 中添加
+
+    # 索引状态
+    indexed_at = Column(DateTime)
+    embedding_model = Column(String(100))  # 使用的 embedding 模型
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<AIKnowledgeDocument(id={self.id}, type={self.doc_type}, title={self.title})>"
+
+
+class AIAnalysisRecord(Base):
+    """AI分析记录表 - 记录所有AI分析调用"""
+    __tablename__ = "ai_analysis_records"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    analysis_type = Column(String(50), nullable=False, index=True)  # fault/root_cause/health/pm_recommend/summary
+    target_type = Column(String(50), nullable=False, index=True)  # device/fault/maintenance
+    target_id = Column(Integer, nullable=False, index=True)
+    input_data = Column(Text)  # JSON格式输入数据
+    ai_provider = Column(String(50))  # deepseek/claude/qwen/openai
+    model_name = Column(String(100))  # 模型名称
+    output_result = Column(Text)  # JSON格式输出结果
+    confidence_score = Column(DECIMAL(3, 2))  # 0.00-1.00 置信度
+    processing_time_ms = Column(Integer)  # 处理耗时毫秒
+    tokens_used = Column(Integer)  # Token使用量
+    cost = Column(DECIMAL(10, 4))  # 成本（元）
+    status = Column(String(20), default="completed")  # pending/completed/failed
+    error_message = Column(Text)  # 错误信息
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<AIAnalysisRecord(type={self.analysis_type}, target={self.target_type}:{self.target_id})>"
+
+    def get_input_dict(self):
+        """解析输入数据JSON"""
+        if self.input_data:
+            try:
+                import json
+                return json.loads(self.input_data)
+            except:
+                return {}
+        return {}
+
+    def get_output_dict(self):
+        """解析输出结果JSON"""
+        if self.output_result:
+            try:
+                import json
+                return json.loads(self.output_result)
+            except:
+                return {}
+        return {}
+        return f"<AIAnalysisRecord(id={self.id}, type={self.analysis_type}, success={self.success})>"

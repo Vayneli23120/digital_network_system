@@ -8,6 +8,11 @@ python-multipart==0.0.6
 
 # Database
 sqlalchemy==2.0.25
+alembic==1.13.1
+# PostgreSQL drivers
+asyncpg==0.29.0
+psycopg2-binary==2.9.9
+aiosqlite==0.20.0
 
 # Data Validation
 pydantic==2.5.3
@@ -65,6 +70,17 @@ jira==3.5.2
 # AI Framework - Google ADK
 google-adk>=0.1.0
 litellm>=1.60.0
+
+# AI/RAG (Phase 3)
+pgvector==0.3.2
+langchain==0.2.16
+langchain-openai==0.1.23
+langchain-community==0.2.16
+openai==1.40.0
+
+# Task Queue (Phase 2)
+celery==5.4.0
+redis==5.0.3
 
 # Testing
 pytest==7.4.4

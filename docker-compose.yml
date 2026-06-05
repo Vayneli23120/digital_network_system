@@ -1,6 +1,39 @@
-version: '3.8'
+version: '3.9'
 
 services:
+  postgres:
+    image: pgvector/pgvector:pg15
+    container_name: nas-postgres
+    environment:
+      POSTGRES_DB: nas
+      POSTGRES_USER: ${DB_USER:-nasuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-nasuser} -d nas"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: nas-redis
+    command: redis-server --requirepass ${REDIS_PASSWORD:-changeme_redis}
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-changeme_redis}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
   backend:
     build:
       context: .
@@ -9,35 +42,86 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - nas-data:/app/data
       - nas-backups:/app/backups
       - nas-logs:/app/logs
       - nas-assets:/app/assets
     environment:
-      - DATABASE_URL=sqlite:///data/nas.db
-      - AUTH_ENABLED=false
+      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
+      AUTH_ENABLED: "${AUTH_ENABLED:-true}"
+      CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required in production}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 15s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: nas-frontend
+    container_name: nas-frontend-vue
     ports:
-      - "3000:3000"
+      - "3000:80"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
 
+  frontend-react:
+    build:
+      context: ./frontend-react
+      dockerfile: Dockerfile
+    container_name: nas-frontend-react
+    ports:
+      - "3001:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nas-worker
+    command: celery -A app.core.celery_app worker -Q device_ops,backups,ai_tasks -c 4 -l info
+    volumes:
+      - nas-backups:/app/backups
+      - nas-logs:/app/logs
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
+    depends_on:
+      - backend
+      - redis
+    restart: unless-stopped
+
+  beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nas-beat
+    command: celery -A app.core.celery_app beat -l info
+    environment:
+      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
+    depends_on:
+      - backend
+      - redis
+    restart: unless-stopped
+
 volumes:
-  nas-data:
+  pg_data:
+  redis_data:
   nas-backups:
   nas-logs:
   nas-assets:

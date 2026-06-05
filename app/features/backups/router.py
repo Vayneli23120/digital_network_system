@@ -165,6 +165,58 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
         db.close()
 
 
+@router.post("/backup/{device_id}/async")
+async def backup_device_async(
+    device_id: int,
+    operator: Optional[str] = "system",
+    db: Session = Depends(get_db)
+):
+    """
+    异步备份设备配置（推荐方式）
+
+    将备份任务提交到 Celery 队列，返回 job_id 供轮询状态。
+    适用场景：大批量备份、长时间操作、避免阻塞 HTTP 请求。
+    """
+    import uuid
+    from app.shared.models_jobs import Job, JobType, JobStatus, create_job
+    from app.tasks.backup_tasks import backup_device as backup_task
+
+    # 检查设备是否存在
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    # 创建 Job 记录
+    job = create_job(
+        db,
+        job_type=JobType.BACKUP,
+        device_id=device_id,
+        operator=operator or "system",
+        parameters={"device_name": device.name, "ip": device.ip}
+    )
+
+    # 提交 Celery 任务
+    try:
+        backup_task.delay(job_id=job.id, device_id=device_id, operator=operator or "system")
+    except Exception as e:
+        # Celery 可能不可用，回退到同步模式
+        from loguru import logger
+        logger.warning(f"Celery unavailable, falling back to sync: {e}")
+        job.status = JobStatus.FAILED
+        job.error_message = f"Celery unavailable: {e}"
+        db.commit()
+        raise HTTPException(status_code=503, detail="任务队列不可用，请使用同步备份接口")
+
+    return {
+        "success": True,
+        "job_id": job.id,
+        "status": job.status,
+        "message": "备份任务已提交到队列",
+        "device_id": device_id,
+        "device_name": device.name,
+    }
+
+
 @router.get("")
 async def list_backups(device_id: Optional[int] = None, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
     """获取备份记录列表"""

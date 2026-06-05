@@ -1,5 +1,7 @@
 """
 Pytest configuration and shared fixtures
+
+支持 SQLite（默认）和 PostgreSQL（TEST_DATABASE_URL 环境变量）测试。
 """
 
 import os
@@ -23,21 +25,44 @@ def reset_config():
 
 
 @pytest.fixture
-def db_manager():
-    """Create an in-memory SQLite database manager"""
+def test_db_url():
+    """
+    测试数据库 URL
+
+    - 默认使用内存 SQLite（CI 环境友好）
+    - 可通过 TEST_DATABASE_URL 环境变量指定 PostgreSQL
+    """
+    return os.getenv(
+        "TEST_DATABASE_URL",
+        "sqlite:///:memory:"  # 默认内存 SQLite
+    )
+
+
+@pytest.fixture
+def db_manager(test_db_url):
+    """
+    测试数据库管理器 — function 级别
+
+    每个测试独立数据库，测试后清理。
+    """
     from app.shared.database import DatabaseManager
     from app.shared.models import Base
 
-    manager = DatabaseManager(":memory:")
+    manager = DatabaseManager(db_url=test_db_url, echo=False)
     manager.init_db()
     yield manager
-    # Cleanup
+
+    # Cleanup - 仅 SQLite 时清理，PostgreSQL 保留数据
     manager.engine.dispose()
 
 
 @pytest.fixture
 def db_session(db_manager):
-    """Provide a database session with automatic cleanup"""
+    """
+    每个测试函数独立事务，测试后回滚
+
+    确保测试之间数据隔离，不互相影响。
+    """
     session = db_manager.get_session()
     try:
         yield session
@@ -139,3 +164,27 @@ def mock_netmiko(monkeypatch):
         return MockConnectHandler(**kwargs)
 
     monkeypatch.setattr("app.features.backups.netmiko_service.ConnectHandler", mock_connect)
+
+
+# PostgreSQL 专用测试标记
+def pytest_configure(config):
+    """注册自定义标记"""
+    config.addinivalue_line(
+        "markers", "postgresql: mark test as requiring PostgreSQL database"
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    """
+    处理 PostgreSQL 专用测试
+
+    如果未配置 TEST_DATABASE_URL 且有 postgresql 标记的测试，
+    则跳过这些测试。
+    """
+    test_db_url = os.getenv("TEST_DATABASE_URL", "")
+
+    skip_pg = pytest.mark.skip(reason="需要 PostgreSQL：设置 TEST_DATABASE_URL 环境变量")
+
+    for item in items:
+        if "postgresql" in item.keywords and "postgresql" not in test_db_url:
+            item.add_marker(skip_pg)

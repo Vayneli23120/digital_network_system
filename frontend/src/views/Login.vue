@@ -96,6 +96,40 @@ const loginRules = {
   ]
 }
 
+/**
+ * 验证 JWT Token 格式
+ * 确保 token 是有效的 JWT 结构（三段 base64url）
+ */
+const validateTokenFormat = (token) => {
+  if (!token || typeof token !== 'string') {
+    throw new Error('Invalid token format')
+  }
+  const parts = token.split('.')
+  if (parts.length !== 3) {
+    throw new Error('Invalid JWT structure')
+  }
+  // 验证每段是否为有效的 base64url
+  for (const part of parts) {
+    if (!part || !/^[A-Za-z0-9_-]+$/.test(part)) {
+      throw new Error('Invalid JWT segment')
+    }
+  }
+  return true
+}
+
+/**
+ * 安全存储 Token
+ * - 验证 token 格式
+ * - 不在 URL 参数中传递 token
+ * - 不在日志中打印 token
+ */
+const secureStoreToken = (token) => {
+  validateTokenFormat(token)
+  // 存储到 localStorage（短期方案）
+  // 中期目标：后端使用 httpOnly Cookie，前端不再手动管理 token
+  localStorage.setItem('accessToken', token)
+}
+
 const handleLogin = async () => {
   try {
     await loginFormRef.value.validate()
@@ -104,10 +138,18 @@ const handleLogin = async () => {
 
     const result = await login(loginForm)
 
+    // 安全存储 Token
+    try {
+      secureStoreToken(result.access_token)
+    } catch (tokenError) {
+      console.error('Token validation failed')
+      errorMsg.value = t('loginFailed')
+      return
+    }
+
     // Store login state and username (use backend returned username for consistency)
     localStorage.setItem('isLoggedIn', 'true')
     localStorage.setItem('currentUser', result.username || loginForm.username)
-    localStorage.setItem('accessToken', result.access_token)
 
     ElMessage.success(t('loginSuccess'))
 
