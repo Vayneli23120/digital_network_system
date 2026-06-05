@@ -95,9 +95,9 @@
               <div
                 v-for="node in filteredNodes"
                 :key="node.id"
-                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id }]"
+                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, dragging: dragState && dragState.nodeId === node.id }]"
                 :style="{ left: node.x_percent + '%', top: node.y_percent + '%' }"
-                @click.stop="showNodeDetail(node)"
+                @mousedown.stop="onNodeMouseDown($event, node)"
               >
               <!-- Switch Icon -->
               <div class="node-icon switch-icon" v-if="node.device_type === 'switch'">
@@ -122,6 +122,12 @@
                   <circle cx="12" cy="12" r="8" fill="currentColor"/>
                 </svg>
               </div>
+              <!-- Fault severity indicator dot -->
+              <div
+                v-if="node.active_fault_severity"
+                :class="['fault-indicator', `fault-${node.active_fault_severity}`]"
+                :title="`活跃故障: ${node.active_fault_severity}`"
+              ></div>
               <span class="node-label">{{ node.device_name }}</span>
             </div>
 
@@ -397,6 +403,83 @@ const nodes = ref([])
 const stats = ref({ total: 0, online: 0, offline: 0, switch_count: 0, ap_count: 0 })
 const offlineAlerts = ref([])
 const highlightedNodeId = ref(null)
+
+// Drag state (drag-to-reposition existing nodes)
+const dragState = ref(null)
+
+// WebSocket for real-time device status
+let deviceStatusWs = null
+let wsPingTimer = null
+
+const connectDeviceStatusWs = () => {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  const wsUrl = `${protocol}//${window.location.host}/ws/device-status`
+  try {
+    deviceStatusWs = new WebSocket(wsUrl)
+
+    deviceStatusWs.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg.event === 'device_status_change') {
+          handleDeviceStatusChange(msg)
+        }
+      } catch {}
+    }
+
+    deviceStatusWs.onclose = () => {
+      if (wsPingTimer) clearInterval(wsPingTimer)
+      // Reconnect after 5s
+      setTimeout(connectDeviceStatusWs, 5000)
+    }
+
+    deviceStatusWs.onopen = () => {
+      // Keep-alive ping every 30s
+      wsPingTimer = setInterval(() => {
+        if (deviceStatusWs && deviceStatusWs.readyState === WebSocket.OPEN) {
+          deviceStatusWs.send('ping')
+        }
+      }, 30000)
+    }
+  } catch (e) {
+    console.error('WebSocket connect failed:', e)
+    setTimeout(connectDeviceStatusWs, 5000)
+  }
+}
+
+const handleDeviceStatusChange = (msg) => {
+  const { device_id, new_state, device_name, ip, location, device_type } = msg
+  const newStatus = new_state === 'unreachable' ? 'offline' : 'online'
+
+  // Update node status on map immediately
+  const node = nodes.value.find(n => n.device_id === device_id)
+  if (node) {
+    node.status = newStatus
+  }
+
+  // Update stats counters
+  if (new_state === 'unreachable') {
+    stats.value.online = Math.max(0, (stats.value.online || 0) - 1)
+    stats.value.offline = (stats.value.offline || 0) + 1
+    // Add to offline alerts panel
+    if (!offlineAlerts.value.find(a => a.device_id === device_id)) {
+      offlineAlerts.value.unshift({
+        device_id,
+        device_name,
+        ip,
+        location,
+        device_type,
+        offline_hours: 0,
+        offline_str: '刚刚',
+        last_online: new Date().toISOString(),
+      })
+    }
+  } else if (new_state === 'reachable') {
+    stats.value.offline = Math.max(0, (stats.value.offline || 0) - 1)
+    stats.value.online = (stats.value.online || 0) + 1
+    // Remove from offline alerts panel
+    offlineAlerts.value = offlineAlerts.value.filter(a => a.device_id !== device_id)
+  }
+}
 
 // Filter State
 const filterArea = ref('')
@@ -831,6 +914,76 @@ const uploadFloorPlan = async () => {
   }
 }
 
+// Node drag-to-reposition
+const onNodeMouseDown = (e, node) => {
+  if (e.button !== 0) return
+  dragState.value = {
+    nodeId: node.id,
+    deviceId: node.device_id,
+    startClientX: e.clientX,
+    startClientY: e.clientY,
+    startXPercent: node.x_percent,
+    startYPercent: node.y_percent,
+    moved: false,
+  }
+  window.addEventListener('mousemove', onDragMove)
+  window.addEventListener('mouseup', onDragEnd)
+}
+
+const onDragMove = (e) => {
+  if (!dragState.value) return
+  const dx = e.clientX - dragState.value.startClientX
+  const dy = e.clientY - dragState.value.startClientY
+  if (!dragState.value.moved && (Math.abs(dx) > 4 || Math.abs(dy) > 4)) {
+    dragState.value.moved = true
+  }
+  if (dragState.value.moved && planWrapper.value) {
+    const rect = planWrapper.value.getBoundingClientRect()
+    const x = Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100))
+    const y = Math.max(0, Math.min(100, (e.clientY - rect.top) / rect.height * 100))
+    const node = nodes.value.find(n => n.id === dragState.value.nodeId)
+    if (node) {
+      node.x_percent = Math.round(x * 100) / 100
+      node.y_percent = Math.round(y * 100) / 100
+    }
+  }
+}
+
+const onDragEnd = async (e) => {
+  if (!dragState.value) return
+  window.removeEventListener('mousemove', onDragMove)
+  window.removeEventListener('mouseup', onDragEnd)
+  const state = { ...dragState.value }
+  dragState.value = null
+
+  if (!state.moved) {
+    // Short press without movement → open detail dialog
+    const node = nodes.value.find(n => n.id === state.nodeId)
+    if (node) showNodeDetail(node)
+    return
+  }
+
+  // Save new position to backend
+  const node = nodes.value.find(n => n.id === state.nodeId)
+  if (!node || !selectedPlanId.value) return
+  try {
+    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/nodes/${state.nodeId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ x_percent: node.x_percent, y_percent: node.y_percent }),
+    })
+    if (!res.ok) {
+      node.x_percent = state.startXPercent
+      node.y_percent = state.startYPercent
+      ElMessage.error('保存节点位置失败')
+    }
+  } catch {
+    node.x_percent = state.startXPercent
+    node.y_percent = state.startYPercent
+    ElMessage.error('保存节点位置失败')
+  }
+}
+
 // Lifecycle
 let refreshInterval = null
 let timeTimerId = null
@@ -869,13 +1022,14 @@ watch(route, (newRoute) => {
 
 onMounted(() => {
   refreshData()
+  connectDeviceStatusWs()
 
   // Update time every second
   timeTimerId = setInterval(() => {
     currentTime.value = dayjs().format('HH:mm:ss')
   }, 1000)
 
-  // Refresh data every 30 seconds
+  // Refresh data every 30 seconds (fallback when WebSocket is unavailable)
   refreshInterval = setInterval(() => {
     loadStats()
     loadOfflineAlerts()
@@ -892,6 +1046,16 @@ onUnmounted(() => {
   if (refreshInterval) {
     clearInterval(refreshInterval)
   }
+  if (wsPingTimer) {
+    clearInterval(wsPingTimer)
+  }
+  if (deviceStatusWs) {
+    deviceStatusWs.onclose = null // prevent reconnect on intentional close
+    deviceStatusWs.close()
+  }
+  // Cleanup drag handlers if any
+  window.removeEventListener('mousemove', onDragMove)
+  window.removeEventListener('mouseup', onDragEnd)
 })
 </script>
 
@@ -1158,6 +1322,14 @@ onUnmounted(() => {
   z-index: 10;
 }
 
+.device-node.dragging {
+  transform: translate(-50%, -50%) scale(1.2);
+  z-index: 20;
+  cursor: grabbing;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
+  transition: none; /* disable transition while dragging for responsiveness */
+}
+
 .node-icon {
   display: flex;
   align-items: center;
@@ -1193,6 +1365,41 @@ onUnmounted(() => {
   padding: 2px 6px;
   border-radius: 3px;
   white-space: nowrap;
+}
+
+/* Fault severity indicator dot */
+.fault-indicator {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--bg-secondary);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.fault-critical {
+  background: #ff4757;
+  animation: fault-pulse 1s infinite;
+}
+
+.fault-high {
+  background: #ff6b35;
+}
+
+.fault-medium {
+  background: #ffd32a;
+}
+
+.fault-low {
+  background: #7efff5;
+}
+
+@keyframes fault-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 71, 87, 0.5); }
+  50% { box-shadow: 0 0 0 5px rgba(255, 71, 87, 0); }
 }
 
 .temp-node-marker {

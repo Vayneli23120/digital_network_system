@@ -1,13 +1,13 @@
 """
-WebSocket 端点 - 实时日志推送
+WebSocket 端点 - 实时日志推送 & 设备状态推送
 
-前端通过 WebSocket 连接订阅工具执行日志。
-支持按 tool_type / operation 过滤。
+前端通过 WebSocket 连接订阅工具执行日志或设备实时状态变化。
+支持按 tool_type / operation 过滤日志；设备状态通道独立分离。
 """
 import asyncio
 import json
 import uuid
-from typing import Dict, Set
+from typing import Dict, Optional, Set
 from datetime import datetime
 from pathlib import Path
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
@@ -50,6 +50,27 @@ class ConnectionManager:
 
 
 manager = ConnectionManager()
+
+# ============ 跨线程 WebSocket 推送桥接 ============
+# APScheduler 在后台线程运行，需要通过主事件循环来调用 async broadcast
+
+_main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+
+
+def set_main_loop(loop: asyncio.AbstractEventLoop) -> None:
+    """在 FastAPI startup 时注册主事件循环，供后台线程调用 WebSocket 推送。"""
+    global _main_event_loop
+    _main_event_loop = loop
+
+
+def broadcast_device_status_sync(message: dict) -> None:
+    """从后台线程（APScheduler）线程安全地推送设备状态变化到 WebSocket 客户端。"""
+    global _main_event_loop
+    if _main_event_loop and not _main_event_loop.is_closed():
+        asyncio.run_coroutine_threadsafe(
+            manager.broadcast(message, "device-status"),
+            _main_event_loop,
+        )
 
 
 @router.websocket("/ws/logs")
@@ -105,6 +126,35 @@ async def websocket_logs_by_op(websocket: WebSocket, operation: str):
         manager.disconnect(websocket, f"op:{operation}")
     finally:
         tool_executor.unregister_callback(push_log)
+
+
+@router.websocket("/ws/device-status")
+async def websocket_device_status(websocket: WebSocket):
+    """
+    WebSocket 端点 - 订阅设备实时可达性状态变化
+
+    消息格式（服务端推送）：
+    {
+        "event": "device_status_change",
+        "device_id": 123,
+        "device_name": "SW-Core-01",
+        "ip": "192.168.1.1",
+        "location": "车间A",
+        "device_type": "switch",
+        "old_state": "reachable",
+        "new_state": "unreachable",
+        "latency_ms": null,
+        "timestamp": "2026-06-05T10:30:00"
+    }
+    """
+    await manager.connect(websocket, "device-status")
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, "device-status")
 
 
 @router.websocket("/ws/cli/{session_id}")

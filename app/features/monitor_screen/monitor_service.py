@@ -7,7 +7,7 @@ Monitor Screen 服务层
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, case
 
 from app.shared.models import Device, FloorPlan, DeviceNode, BackupRecord, FaultRecord
 
@@ -103,6 +103,19 @@ def get_floor_plan_nodes(db: Session, plan_id: int) -> List[Dict[str, Any]]:
             if device.purchase_date:
                 lifespan_days = (datetime.utcnow() - device.purchase_date).days
 
+            # 最严重的活跃故障（critical > high > medium > low）
+            active_fault = db.query(FaultRecord).filter(
+                FaultRecord.device_id == device.id,
+                FaultRecord.status.in_(['open', 'in_progress']),
+            ).order_by(
+                case(
+                    (FaultRecord.severity == 'critical', 0),
+                    (FaultRecord.severity == 'high', 1),
+                    (FaultRecord.severity == 'medium', 2),
+                    else_=3,
+                )
+            ).first()
+
             result.append({
                 "id": node.id,
                 "device_id": device.id,
@@ -111,11 +124,14 @@ def get_floor_plan_nodes(db: Session, plan_id: int) -> List[Dict[str, Any]]:
                 "ip": device.ip,
                 "model": device.model,
                 "status": device.status,
+                "reachability": device.reachability,
+                "latency_ms": device.reachability_latency_ms,
                 "location": device.location,
                 "x_percent": float(node.x_percent),
                 "y_percent": float(node.y_percent),
                 "uptime_hours": round(uptime_hours, 1),
                 "lifespan_days": lifespan_days,
+                "active_fault_severity": active_fault.severity if active_fault else None,
                 "created_at": node.created_at.isoformat() if node.created_at else None,
             })
     return result
@@ -276,7 +292,7 @@ def get_device_detail(db: Session, device_id: int) -> Optional[Dict[str, Any]]:
         # 实时状态
         "uptime_hours": round(uptime_hours, 1),
         "uptime_str": uptime_str,
-        "ping_latency": None,  # Ping延迟需要实时检测，暂时返回null
+        "ping_latency": f"{device.reachability_latency_ms}ms" if device.reachability_latency_ms else None,
         # 使用寿命
         "lifespan_days": lifespan_days,
         "lifespan_str": lifespan_str,

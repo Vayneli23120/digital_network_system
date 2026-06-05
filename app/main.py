@@ -261,6 +261,7 @@ async def spa_fallback(full_path: str):
 @app.on_event("startup")
 async def startup_event():
     """应用启动时执行"""
+    import asyncio
     db_manager = get_db_manager()
     db_manager.init_db()
     logger.info(f"Network Automation System v{config.app.version} 启动")
@@ -268,6 +269,10 @@ async def startup_event():
     logger.info(f"备份目录：{config.storage.backup_dir}")
     init_default_templates()
     init_default_roles()
+
+    # 注册主事件循环，供 APScheduler 后台线程推送 WebSocket 状态变化
+    from .features.websocket.router import set_main_loop
+    set_main_loop(asyncio.get_event_loop())
 
     # 启动设备可达性监控服务
     try:

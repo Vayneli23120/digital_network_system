@@ -363,6 +363,24 @@ class ReachabilityMonitor:
         except Exception as e:
             logger.error(f"Failed to send reachability alert: {e}")
 
+        # 推送实时状态变化到 WebSocket 前端（监控大屏立即感知）
+        try:
+            from app.features.websocket.router import broadcast_device_status_sync
+            broadcast_device_status_sync({
+                "event": "device_status_change",
+                "device_id": device.id,
+                "device_name": device.name,
+                "ip": device.ip or "",
+                "location": device.location or "",
+                "device_type": device.device_type or "switch",
+                "old_state": old_state,
+                "new_state": new_state,
+                "latency_ms": device.reachability_latency_ms,
+                "timestamp": datetime.utcnow().isoformat(),
+            })
+        except Exception as e:
+            logger.error(f"Failed to push device status to WebSocket: {e}")
+
     def _estimate_downtime(self, device: Device) -> Optional[int]:
         """估算设备离线时间（分钟）
 
