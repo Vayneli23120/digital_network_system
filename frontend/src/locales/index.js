@@ -227,6 +227,22 @@ export const languages = {
     executiveSummaryPrefix: '风险提示',
     executiveSummaryStable: '系统运行平稳，各项指标正常',
 
+    // MTTR 四段
+    mttrStageResponse: '响应',
+    mttrStageDiagnose: '诊断',
+    mttrStageRepair: '修复',
+    mttrStageVerify: '验证',
+    mttrBreakdownTitle: '修复链路分析',
+
+    // 根因类型
+    rootCauseHardware: '硬件故障',
+    rootCauseSoftware: '软件故障',
+    rootCauseConfig: '配置问题',
+    rootCauseNetwork: '网络问题',
+    rootCausePower: '电源问题',
+    rootCauseOther: '其他',
+    paretoChartTitle: '根因分布',
+
     // 状态
     statusLive: '实时',
     statusOnline: '在线',
@@ -3119,6 +3135,22 @@ export const languages = {
     executiveStable: 'Stable',
     executiveSummaryPrefix: 'Risk Alert',
     executiveSummaryStable: 'System stable, all metrics within targets',
+
+    // MTTR stages
+    mttrStageResponse: 'Response',
+    mttrStageDiagnose: 'Diagnose',
+    mttrStageRepair: 'Repair',
+    mttrStageVerify: 'Verify',
+    mttrBreakdownTitle: 'Repair Pipeline',
+
+    // Root cause types
+    rootCauseHardware: 'Hardware',
+    rootCauseSoftware: 'Software',
+    rootCauseConfig: 'Config',
+    rootCauseNetwork: 'Network',
+    rootCausePower: 'Power',
+    rootCauseOther: 'Other',
+    paretoChartTitle: 'Root Cause Distribution',
 
     // 状态
     statusLive: 'LIVE',

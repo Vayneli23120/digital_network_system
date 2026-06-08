@@ -72,6 +72,20 @@
             :title="t('kpiMtbf')"
           />
         </div>
+
+        <!-- V2 P0: MTTR 四段拆解 + 根因帕累托 -->
+        <div class="v2-analytics-row" v-if="executiveSummary?.mttr_breakdown || executiveSummary?.root_cause_pareto">
+          <MttrFunnel
+            v-if="executiveSummary.mttr_breakdown"
+            :breakdown="executiveSummary.mttr_breakdown"
+            :title="t('mttrBreakdownTitle')"
+          />
+          <ParetoChart
+            v-if="executiveSummary.root_cause_pareto?.length"
+            :data="executiveSummary.root_cause_pareto"
+            :title="t('paretoChartTitle')"
+          />
+        </div>
       </section>
 
       <!-- KPI Cards: 每个模块只出现一次 -->
@@ -516,6 +530,8 @@ import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
 import KpiStat from '@/components/ui/KpiStat.vue'
+import MttrFunnel from '@/components/ui/MttrFunnel.vue'
+import ParetoChart from '@/components/ui/ParetoChart.vue'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -2072,5 +2088,18 @@ onUnmounted(() => {
 
 .dark .summary-bar.risk {
   background: linear-gradient(135deg, rgba(239, 83, 80, 0.15), rgba(15, 23, 42, 0.72));
+}
+
+/* ===== V2 Analytics Row ===== */
+.v2-analytics-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .v2-analytics-row {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
