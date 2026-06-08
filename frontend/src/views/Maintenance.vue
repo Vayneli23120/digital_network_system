@@ -343,159 +343,14 @@
       </div>
     </section>
 
-    <!-- 添加/编辑维修记录对话框 -->
-    <!-- 添加/编辑维修记录对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('maintDialogEdit') : t('maintDialogAdd')" width="560px" append-to-body draggable align-center class="maint-add-dialog">
-      <el-form :model="maintForm" label-width="80px" size="default">
-        <!-- 基础信息 -->
-        <div class="form-section">
-          <div class="section-header">
-            <el-icon><Document /></el-icon>
-            <span>{{ t('maintBasicSection') }}</span>
-          </div>
-          <el-form-item :label="t('faultDeviceLabel')" required>
-            <el-select v-model="maintForm.device_id" :placeholder="t('maintSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
-              <el-option v-for="device in devices" :key="device.id" :label="device.name" :value="device.id" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('maintType')">
-            <el-select v-model="maintForm.maint_type" style="width: 100%">
-              <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
-              <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
-              <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
-              <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
-            </el-select>
-          </el-form-item>
-          <el-form-item :label="t('maintDescription')" required>
-            <el-input v-model="maintForm.description" type="textarea" :rows="2" :placeholder="t('maintDescPlaceholder')" />
-          </el-form-item>
-        </div>
-
-        <!-- 备件更换 -->
-        <div class="form-section">
-          <div class="section-header">
-            <el-icon><Box /></el-icon>
-            <span>{{ t('maintSparePartsSection') }}</span>
-          </div>
-          <div class="section-action-bar">
-            <el-select
-              v-model="selectedSparePart"
-              :placeholder="t('maintSpareSearchPlaceholder')"
-              filterable
-              remote
-              :remote-method="searchSpareParts"
-              :loading="spareLoading"
-              style="width: 200px"
-              @change="addSparePartToForm"
-              clearable
-            />
-            <el-button type="primary" size="small" @click="openScanDialog">
-              <el-icon><Aim /></el-icon>
-              {{ t('maintScanAddSpare') }}
-            </el-button>
-          </div>
-          <el-table v-if="maintForm.spare_parts.length > 0" :data="maintForm.spare_parts" size="small" border style="margin-top: 8px">
-            <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="100">
-              <template #default="{ row }"><span class="text-primary">{{ row.serial_number || '-' }}</span></template>
-            </el-table-column>
-            <el-table-column prop="po_number" :label="t('sparePoNumber')" width="80">
-              <template #default="{ row }">{{ row.po_number || '-' }}</template>
-            </el-table-column>
-            <el-table-column prop="part_number" :label="t('maintColModel')" width="90" />
-            <el-table-column prop="name" :label="t('maintColName')" min-width="80" />
-            <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
-              <template #default="{ row }">
-                <el-input-number v-model="row.quantity" :min="1" size="small" controls-position="right" style="width: 50px" @change="updatePartsCost" />
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('colOperation')" width="40">
-              <template #default="{ $index }">
-                <el-button type="danger" size="small" link @click="removeSparePart($index)"><el-icon><Delete /></el-icon></el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-          <el-form-item :label="t('maintPartsCost')">
-            <el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" style="width: 120px" />
-            <span class="unit-text">元</span>
-          </el-form-item>
-        </div>
-
-        <!-- 返回件 -->
-        <div class="form-section">
-          <div class="section-header">
-            <el-icon><RefreshRight /></el-icon>
-            <span>{{ t('maintReturnPartsSection') }}</span>
-          </div>
-          <div class="section-action-bar">
-            <el-input
-              v-model="returnScanInput"
-              :placeholder="t('maintReturnScanPlaceholder')"
-              style="width: 160px"
-              @keyup.enter="scanReturnPart"
-              clearable
-            />
-            <el-button size="small" @click="scanReturnPart" :loading="returnScanLoading">{{ t('spareQuery') }}</el-button>
-          </div>
-          <el-table v-if="maintForm.return_parts.length > 0" :data="maintForm.return_parts" size="small" border style="margin-top: 8px">
-            <el-table-column prop="serial_number" :label="t('maintColSerialNumber')" width="100">
-              <template #default="{ row }"><span class="text-primary">{{ row.serial_number || '-' }}</span></template>
-            </el-table-column>
-            <el-table-column prop="part_number" :label="t('maintColModel')" width="90" />
-            <el-table-column prop="name" :label="t('maintColName')" min-width="80" />
-            <el-table-column :label="t('maintReturnScrap')" width="70">
-              <template #default="{ row }">
-                <el-checkbox v-model="row.scrap_in" size="small" />
-              </template>
-            </el-table-column>
-            <el-table-column :label="t('colOperation')" width="40">
-              <template #default="{ $index }">
-                <el-button type="danger" size="small" link @click="removeReturnPart($index)"><el-icon><Delete /></el-icon></el-button>
-              </template>
-            </el-table-column>
-          </el-table>
-        </div>
-
-        <!-- 工时成本 -->
-        <div class="form-section">
-          <div class="section-header">
-            <el-icon><Coin /></el-icon>
-            <span>{{ t('maintCostSection') }}</span>
-          </div>
-          <el-row :gutter="12">
-            <el-col :span="12">
-              <el-form-item :label="t('maintLaborHours')">
-                <el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" style="width: 100px" />
-                <span class="unit-text">{{ t('maintHoursUnit') }}</span>
-              </el-form-item>
-            </el-col>
-            <el-col :span="12">
-              <el-form-item :label="t('maintLaborCost')">
-                <el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" style="width: 100px" />
-                <span class="unit-text">元</span>
-              </el-form-item>
-            </el-col>
-          </el-row>
-          <el-form-item :label="t('maintVendor')">
-            <el-input v-model="maintForm.vendor" style="width: 200px" />
-          </el-form-item>
-        </div>
-      </el-form>
-      <template #footer>
-        <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="editMode ? updateMaintenance() : addMaintenance()">{{ t('maintConfirm') }}</el-button>
-      </template>
-    </el-dialog>
-
-    <!-- 扫码添加备件对话框 -->
-    <el-dialog v-model="scanDialogVisible" :title="t('maintScanSpareDialog')" width="700px" append-to-body draggable align-center>
-      <ScanSession
-        ref="scanSessionRef"
-        default-type="out"
-        :auto-start="scanDialogVisible"
-        @complete="onScanSessionComplete"
-        @cancel="scanDialogVisible = false"
-      />
-    </el-dialog>
+    <!-- 添加/编辑维修记录对话框（使用共享组件） -->
+    <MaintenanceFormDialog
+      v-model="showAddDialog"
+      :editData="editMaintData"
+      :showScanButton="true"
+      :showReturnParts="true"
+      @success="handleMaintSuccess"
+    />
   </div>
 </template>
 
@@ -503,10 +358,10 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, InfoFilled, Aim, Setting, Box, RefreshRight, Document, Edit, Delete, View, ArrowRight, Refresh, CircleCheck, SuccessFilled, WarningFilled, Warning, Connection } from '@element-plus/icons-vue'
-import { getMaintenances, getDevices, createMaintenance, updateMaintenance as updateMaintenanceApi, deleteMaintenance as deleteMaintenanceApi, searchInStockParts, createMovement, getPartBySerialNumber, transitionMaintenanceStatus } from '@/api'
+import { Plus, Search, InfoFilled, Setting, Edit, Delete, View, ArrowRight, Refresh, CircleCheck, SuccessFilled, WarningFilled, Warning, Connection } from '@element-plus/icons-vue'
+import { getMaintenances, getDevices, deleteMaintenance as deleteMaintenanceApi, transitionMaintenanceStatus } from '@/api'
 import api from '@/api/request'
-import ScanSession from '@/components/ScanSession.vue'
+import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
 import { formatDateTime, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { debounce } from '@/utils/requestManager.js'
@@ -523,7 +378,7 @@ const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
 const showAddDialog = ref(false)
-const editMode = ref(false)
+const editMaintData = ref(null)  // 维修编辑数据
 
 const searchText = ref('')
 const filterStatus = ref('')
@@ -680,186 +535,20 @@ const getNextStatusLabel = (status) => {
   return labels[status] || status
 }
 
-const sparePartOptions = ref([])
-const spareLoading = ref(false)
-const selectedSparePart = ref(null)
-const currentFoundPart = ref(null)
-const scanDialogVisible = ref(false)
-const scanSessionRef = ref(null)
-const returnScanInput = ref('')
-const returnScanLoading = ref(false)
-const returnFoundInfo = ref(null)
-const selectedReturnPart = ref(null)
-const returnPartSerial = ref('')
-const returnPartNumber = ref('')
-const returnPartName = ref('')
-const returnPartQty = ref(1)
-const returnPartScrap = ref(true)
-
-const openAddDialog = async () => {
-  editMode.value = false
-  resetForm()
-  await loadInitialSpareParts()
+const openAddDialog = () => {
+  editMaintData.value = null
   showAddDialog.value = true
 }
 
-const loadInitialSpareParts = async () => {
-  spareLoading.value = true
-  try {
-    const result = await getPartList({ limit: 50 })
-    sparePartOptions.value = result.items || []
-  } catch (e) { console.error(t('spareLoadFailed'), e) }
-  finally { spareLoading.value = false }
+const handleMaintSuccess = () => {
+  clearCache('maintenance')
+  loadMaintenances(true)
 }
-
-const maintForm = ref({
-  device_id: null, maint_type: 'corrective', spare_parts: [], return_parts: [],
-  parts_cost: 0, labor_hours: 0, labor_cost: 0, vendor: '', description: ''
-})
 
 const getMaintTypeText = (type) => {
   const texts = { preventive: t('maintTypePreventive'), corrective: t('maintTypeCorrective'), upgrade: t('maintTypeUpgrade'), emergency: t('maintTypeEmergency') }
   return texts[type] || type || '--'
 }
-
-const searchSpareParts = async (query) => {
-  if (!query || query.length < 1) { sparePartOptions.value = []; return }
-  spareLoading.value = true
-  try {
-    // 使用 search-in-stock API 搜索库存中的备件实例（维修出库需要实例）
-    const result = await searchInStockParts(query)
-    sparePartOptions.value = (result.items || []).map(item => ({
-      id: item.instance_id,  // 备件实例ID
-      part_id: item.id,      // 备件型号ID
-      part_number: item.part_number,
-      name: item.name,
-      serial_number: item.serial_number,
-      po_number: item.po_number,  // PO号（跟随备件整个生命周期）
-      unit_price: item.unit_price,
-      location: item.location,
-      quantity_in_stock: item.quantity_in_stock || 0
-    }))
-  } catch (e) { ElMessage.error(t('maintSearchFailed')) }
-  finally { spareLoading.value = false }
-}
-
-const searchReturnParts = async (query) => { await searchSpareParts(query) }
-
-const onScanPartAdded = (item) => {
-  const existing = maintForm.value.spare_parts.find(p => p.serial_number === item.serial_number)
-  if (existing) { existing.quantity += 1; ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`) }
-  else {
-    maintForm.value.spare_parts.push({ part_id: item.id, part_number: item.part_number, name: item.name, serial_number: item.serial_number, unit_price: item.unit_price || 0, quantity: 1 })
-    ElMessage.success(item.action === 'out' ? `${t('maintAlreadyOut')}: ${item.name}` : `${t('maintPartAdded')}: ${item.name}`)
-  }
-  updatePartsCost(); currentFoundPart.value = null
-}
-
-const openScanDialog = () => { scanDialogVisible.value = true }
-
-const onScanSessionComplete = async (result) => {
-  for (const item of result.items) {
-    const existing = maintForm.value.spare_parts.find(p => p.serial_number === item.serial_number)
-    if (existing) {
-      existing.quantity += 1
-      ElMessage.info(`${item.name} ${t('maintPartQtyAdded')}`)
-    } else {
-      maintForm.value.spare_parts.push({
-        part_id: item.part_id,
-        part_number: item.part_number,
-        name: item.name,
-        serial_number: item.serial_number,
-        po_number: item.po_number,  // 扫码也保留PO号
-        unit_price: item.unit_price || 0,
-        quantity: 1,
-        is_from_scan: true
-      })
-      ElMessage.success(`${t('maintPartAdded')}: ${item.name}`)
-    }
-  }
-  updatePartsCost(); scanDialogVisible.value = false
-  ElMessage.success(`${t('maintAddedCount')} ${result.items.length} ${t('maintPartAdded')}`)
-}
-
-const addSparePartToForm = () => {
-  if (!selectedSparePart.value) return
-  const part = sparePartOptions.value.find(p => p.id === selectedSparePart.value)
-  if (!part) return
-  // 检查是否已添加该序列号的备件
-  const existing = maintForm.value.spare_parts.find(p => p.serial_number === part.serial_number)
-  if (existing) {
-    existing.quantity += 1
-    ElMessage.info(`${part.name} ${t('maintPartQtyAdded')}`)
-  } else {
-    maintForm.value.spare_parts.push({
-      part_id: part.part_id,      // 备件型号ID
-      instance_id: part.id,       // 备件实例ID
-      part_number: part.part_number,
-      name: part.name,
-      serial_number: part.serial_number,
-      po_number: part.po_number,  // PO号（跟随备件整个生命周期）
-      unit_price: part.unit_price || 0,
-      location: part.location,
-      quantity: 1
-    })
-    ElMessage.success(`${t('maintPartAdded')}: ${part.name}`)
-  }
-  updatePartsCost(); selectedSparePart.value = null
-}
-
-const removeSparePart = (index) => { maintForm.value.spare_parts.splice(index, 1); updatePartsCost() }
-
-const scanReturnPart = async () => {
-  const serial = returnScanInput.value.trim()
-  if (!serial || serial.length < 4) { ElMessage.warning(t('maintSerialMinLength')); return }
-  returnScanLoading.value = true
-  try {
-    const info = await getPartBySerialNumber(serial)
-    returnFoundInfo.value = info
-    ElMessage.success(`${t('maintIdentified')}: ${info.name || info.part_number}`)
-    returnPartSerial.value = info.serial_number; returnPartNumber.value = info.part_number
-    returnPartName.value = info.name; selectedReturnPart.value = info.id; returnPartScrap.value = true
-  } catch (e) { returnFoundInfo.value = null; returnPartSerial.value = serial; ElMessage.info(t('maintSerialNotFound')) }
-  finally { returnScanLoading.value = false }
-}
-
-const clearReturnFound = () => {
-  returnFoundInfo.value = null; returnScanInput.value = ''; returnPartSerial.value = ''
-  returnPartNumber.value = ''; returnPartName.value = ''; selectedReturnPart.value = null
-  returnPartQty.value = 1
-}
-
-const addFoundReturnPart = () => {
-  if (!returnFoundInfo.value) return
-  maintForm.value.return_parts.push({ part_id: returnFoundInfo.value.id, part_number: returnFoundInfo.value.part_number, name: returnFoundInfo.value.name, serial_number: returnFoundInfo.value.serial_number, unit_price: returnFoundInfo.value.unit_price || 0, quantity: returnPartQty.value, scrap_in: returnPartScrap.value, is_from_scan: true, history: returnFoundInfo.value.history })
-  ElMessage.success(`${t('maintReturnAdded')}: ${returnFoundInfo.value.serial_number}`)
-  clearReturnFound()
-}
-
-const onReturnPartSelect = () => {
-  if (!selectedReturnPart.value) return
-  const part = sparePartOptions.value.find(p => p.id === selectedReturnPart.value)
-  if (part) { returnPartNumber.value = part.part_number; returnPartName.value = part.name || part.part_number; returnPartScrap.value = true }
-}
-
-const addReturnPart = () => {
-  if (!returnPartSerial.value) { ElMessage.warning(t('maintSerialPrompt')); return }
-  const existing = maintForm.value.return_parts.find(p => p.serial_number === returnPartSerial.value)
-  if (existing) { ElMessage.warning(`${t('maintSerialDuplicate')} ${returnPartSerial.value}`); return }
-  let partNumber = returnPartNumber.value, partName = returnPartName.value || returnPartNumber.value, partId = null
-  if (selectedReturnPart.value) {
-    const part = sparePartOptions.value.find(p => p.id === selectedReturnPart.value)
-    if (part) { partId = part.id; partNumber = part.part_number; partName = part.name || part.part_number }
-  }
-  maintForm.value.return_parts.push({ part_id: partId, part_number: partNumber, name: partName, serial_number: returnPartSerial.value, quantity: returnPartQty.value, scrap_in: selectedReturnPart.value ? returnPartScrap.value : false, is_from_scan: false })
-  ElMessage.success(`${t('maintReturnAdded')}: ${returnPartSerial.value}`)
-  returnScanInput.value = ''; returnFoundInfo.value = null; selectedReturnPart.value = null
-  returnPartSerial.value = ''; returnPartNumber.value = ''; returnPartName.value = ''
-  returnPartQty.value = 1; returnPartScrap.value = true
-}
-
-const removeReturnPart = (index) => { maintForm.value.return_parts.splice(index, 1) }
-const updatePartsCost = () => { maintForm.value.parts_cost = maintForm.value.spare_parts.reduce((sum, p) => sum + p.quantity * p.unit_price, 0) }
 
 const filterMaintenances = () => {
   let result = [...maintenances.value]
@@ -913,60 +602,19 @@ const loadDevices = async () => {
   catch (error) { ElMessage.error(t('maintDeviceLoadFailed')) }
 }
 
-const addMaintenance = async () => {
-  if (!maintForm.value.device_id) { ElMessage.warning(t('maintSelectDevicePrompt')); return }
-  if (!maintForm.value.description) { ElMessage.warning(t('maintDescPrompt')); return }
-  try {
-    const device = devices.value.find(d => d.id === maintForm.value.device_id)
-    const combinedParts = [...maintForm.value.spare_parts.map(p => ({ ...p, is_return: false })), ...maintForm.value.return_parts.map(p => ({ ...p, is_return: true }))]
-    await createMaintenance({ ...maintForm.value, device_name: device?.name, parts_replaced: JSON.stringify(combinedParts) })
-    // 备件出库：关联到设备，保留PO号等信息
-    for (const part of maintForm.value.spare_parts) {
-      if (part.part_id && !part.is_from_scan) {
-        await createMovement({
-          part_id: part.part_id,
-          movement_type: 'out',
-          quantity: part.quantity,
-          serial_number: part.serial_number,
-          reason: `${t('spareReasonMaintenanceReplace')} - ${maintForm.value.maint_type}`,
-          operator: 'Web',
-          reference: device?.name,
-          target_device_id: maintForm.value.device_id  // 关联目标设备，PO号等信息会保留在实例中
-        })
-      }
-    }
-    // 返回件入库：记录来源设备
-    for (const part of maintForm.value.return_parts) {
-      if (part.scrap_in && part.part_id) {
-        await createMovement({
-          part_id: part.part_id,
-          movement_type: 'scrap_in',
-          quantity: part.quantity,
-          serial_number: part.serial_number,
-          reason: t('spareReasonReturnPartScrap'),
-          operator: 'Web',
-          reference: device?.name,
-          source_device_id: maintForm.value.device_id  // 记录来源设备
-        })
-      }
-    }
-    ElMessage.success(t('maintAddSuccess')); clearCache('maintenance'); showAddDialog.value = false; resetForm(); loadMaintenances(true)
-  } catch (error) { ElMessage.error(`${t('maintAddFailed')}: ${error.response?.data?.detail || error.message}`) }
-}
-
 const editMaintenance = (row) => {
-  editMode.value = true
-  maintForm.value = { id: row.id, device_id: row.device_id, maint_type: row.maint_type, spare_parts: [], return_parts: [], parts_cost: row.parts_cost || 0, labor_hours: row.labor_hours || 0, labor_cost: row.labor_cost || 0, vendor: row.vendor || '', description: row.description }
+  editMaintData.value = {
+    id: row.id,
+    device_id: row.device_id,
+    maint_type: row.maint_type || 'corrective',
+    spare_parts: row.spare_parts || [],
+    parts_cost: row.parts_cost || 0,
+    labor_hours: row.labor_hours || 0,
+    labor_cost: row.labor_cost || 0,
+    vendor: row.vendor || '',
+    description: row.description || ''
+  }
   showAddDialog.value = true
-}
-
-const updateMaintenance = async () => {
-  if (!maintForm.value.description) { ElMessage.warning(t('maintDescPrompt')); return }
-  try {
-    const device = devices.value.find(d => d.id === maintForm.value.device_id)
-    await updateMaintenanceApi(maintForm.value.id, { ...maintForm.value, device_name: device?.name, parts_replaced: JSON.stringify(maintForm.value.spare_parts) })
-    ElMessage.success(t('maintUpdateSuccess')); clearCache('maintenance'); showAddDialog.value = false; editMode.value = false; resetForm(); loadMaintenances(true)
-  } catch (error) { ElMessage.error(t('maintUpdateFailed')) }
 }
 
 const deleteMaintenance = async (row) => {
@@ -974,14 +622,6 @@ const deleteMaintenance = async (row) => {
     await ElMessageBox.confirm(`${t('maintConfirmDeletePrompt')} "${row.maint_no}"?`, t('msgConfirmDelete'), { confirmButtonText: t('actionConfirm'), cancelButtonText: t('actionCancel'), type: 'warning' })
     await deleteMaintenanceApi(row.id); clearCache('maintenance'); ElMessage.success(t('maintDeleteSuccess')); loadMaintenances(true)
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('maintDeleteFailed')) }
-}
-
-const resetForm = () => {
-  maintForm.value = { device_id: null, maint_type: 'corrective', spare_parts: [], return_parts: [], parts_cost: 0, labor_hours: 0, labor_cost: 0, vendor: '', description: '' }
-  selectedSparePart.value = null; sparePartOptions.value = []; currentFoundPart.value = null
-  returnScanInput.value = ''; returnFoundInfo.value = null; selectedReturnPart.value = null
-  returnPartSerial.value = ''; returnPartNumber.value = ''; returnPartName.value = ''
-  returnPartQty.value = 1; returnPartScrap.value = true
 }
 
 onMounted(() => { loadMaintenances(); loadDevices() })
@@ -996,7 +636,6 @@ onMounted(() => { loadMaintenances(); loadDevices() })
 
 .maintenance-page {
   padding: 0;
-  min-height: calc(100vh - 60px);
   background: linear-gradient(135deg, #f8fafc 0%, #e8f4fc 50%, #f0f7ff 100%);
   display: flex;
   flex-direction: column;

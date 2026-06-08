@@ -1109,7 +1109,8 @@ onUnmounted(() => {
 
 <style scoped>
 .monitor-screen {
-  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   background: var(--bg-primary);
   color: var(--text-primary);
 }
@@ -1200,9 +1201,9 @@ onUnmounted(() => {
 /* Main Body */
 .screen-body {
   display: flex;
+  flex: 1;
   padding: 16px;
   gap: 16px;
-  min-height: calc(100vh - 72px);
 }
 
 /* Floor Plan Area */

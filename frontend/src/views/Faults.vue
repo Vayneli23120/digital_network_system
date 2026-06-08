@@ -357,7 +357,7 @@
             <el-icon><Warning /></el-icon>
             {{ t('faultBasicInfo') || '基础信息' }}
           </div>
-          <el-form :model="faultForm" label-width="100px">
+          <el-form :model="faultForm" label-width="120px">
             <el-form-item :label="t('faultDeviceLabel')" required>
               <el-select v-model="faultForm.device_id" :placeholder="t('faultSelectDevice')" style="width: 100%" :disabled="editMode" filterable>
                 <el-option
@@ -413,7 +413,7 @@
             <el-icon><Document /></el-icon>
             {{ t('faultImpactDesc') || '影响与描述' }}
           </div>
-          <el-form :model="faultForm" label-width="100px">
+          <el-form :model="faultForm" label-width="120px">
             <el-form-item :label="t('faultImpact')">
               <el-input v-model="faultForm.impact" type="textarea" :rows="2" :placeholder="t('faultImpactPlaceholder')" />
             </el-form-item>
@@ -861,7 +861,6 @@ onMounted(() => {
 /* ===== 页面整体背景 ===== */
 .faults-page {
   padding: 0;
-  min-height: calc(100vh - 60px);
   background: linear-gradient(135deg, #f8fafc 0%, #e8f4fc 50%, #f0f7ff 100%);
   display: flex;
   flex-direction: column;
@@ -1759,6 +1758,15 @@ onMounted(() => {
   font-size: 12px;
   color: var(--text-tertiary);
   margin-top: 4px;
+}
+
+/* 修复输入数字组件单位换行 */
+.edit-fault-dialog .el-form-item__content {
+  flex-wrap: nowrap;
+}
+
+.edit-fault-dialog .el-input-number {
+  width: 100%;
 }
 
 @media (max-width: 768px) {

@@ -1320,7 +1320,6 @@ onMounted(() => {
 /* ===== 页面整体背景 ===== */
 .scrap-page {
   padding: 0;
-  min-height: calc(100vh - 60px);
   background: linear-gradient(135deg, #f8fafc 0%, #e8f4fc 50%, #f0f7ff 100%);
   display: flex;
   flex-direction: column;

@@ -279,7 +279,6 @@ onMounted(() => {
 
 .credentials-page {
   padding: 0;
-  min-height: 100vh;
   background: var(--bg-primary);
 }
 

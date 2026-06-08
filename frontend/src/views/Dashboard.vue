@@ -837,7 +837,6 @@ onUnmounted(() => {
 
 <style scoped>
 .dashboard {
-  min-height: 100vh;
   background:
     radial-gradient(circle at top left, rgba(9, 132, 227, 0.08), transparent 28%),
     radial-gradient(circle at top right, rgba(0, 184, 148, 0.08), transparent 24%),

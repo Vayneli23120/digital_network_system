@@ -1050,7 +1050,6 @@ onMounted(async () => {
   margin: 0 auto;
   padding: 24px;
   background: #f5f7fa;
-  min-height: 100vh;
 }
 
 /* ===== 进度条顶部 ===== */
