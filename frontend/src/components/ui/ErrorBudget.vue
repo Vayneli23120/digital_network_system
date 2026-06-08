@@ -2,7 +2,7 @@
   <div class="error-budget-panel">
     <div class="budget-header">
       <span class="budget-title">{{ title }}</span>
-      <span class="budget-subtitle">错误预算</span>
+      <span class="budget-subtitle">{{ t('sloErrorBudget') }}</span>
     </div>
     <div class="budget-content">
       <!-- SLO 服务列表 -->
@@ -25,10 +25,10 @@
           </div>
           <div class="progress-labels">
             <span class="remaining-label">
-              剩余 {{ slo.remaining_pct >= 0 ? slo.remaining_pct.toFixed(1) : 0 }}%
+              {{ t('sloRemaining') }} {{ slo.remaining_pct >= 0 ? slo.remaining_pct.toFixed(1) : 0 }}%
             </span>
             <span class="consumed-label">
-              已消耗 {{ slo.consumed_min.toFixed(0) }} / {{ slo.error_budget_min.toFixed(0) }} 分钟
+              {{ t('sloConsumed') }} {{ slo.consumed_min.toFixed(0) }} / {{ slo.error_budget_min.toFixed(0) }} {{ t('sloMinutes') }}
             </span>
           </div>
         </div>
@@ -36,31 +36,31 @@
         <!-- 燃尽率指标 -->
         <div class="burn-rate-section">
           <div class="burn-rate-value">
-            <span class="burn-label">燃尽率</span>
+            <span class="burn-label">{{ t('sloBurnRate') }}</span>
             <span class="burn-number" :class="{ warning: slo.burn_rate >= 2 }">
               {{ slo.burn_rate.toFixed(2) }}x
             </span>
           </div>
           <div class="burn-rate-desc">
-            <span v-if="slo.burn_rate < 1">正常消耗（低于平均速率）</span>
+            <span v-if="slo.burn_rate < 1">{{ t('sloBurnNormal') }}</span>
             <span v-else-if="slo.burn_rate >= 2" class="warning-text">
-              警告：消耗过快，建议冻结变更
+              {{ t('sloBurnWarning') }}
             </span>
-            <span v-else>高于平均消耗速率</span>
+            <span v-else>{{ t('sloBurnAboveAvg') }}</span>
           </div>
         </div>
 
         <!-- 警报标识 -->
         <div v-if="slo.alert" class="slo-alert">
           <span class="alert-icon">⚠️</span>
-          <span class="alert-text">建议冻结变更</span>
+          <span class="alert-text">{{ t('sloFreezeChange') }}</span>
         </div>
       </div>
 
       <!-- 无 SLO 配置时的默认提示 -->
       <div v-if="sloData.length === 1 && sloData[0].service === 'default'" class="no-slo-config">
         <span class="no-config-icon">📊</span>
-        <span class="no-config-text">未配置 SLO 目标，请在系统设置中添加服务 SLO</span>
+        <span class="no-config-text">{{ t('sloNoConfigHint') }}</span>
       </div>
     </div>
   </div>
@@ -78,7 +78,7 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: 'SLO 错误预算'
+    default() { return this.t?.('sloErrorBudgetTitle') || 'SLO 错误预算' }
   }
 })
 

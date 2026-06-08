@@ -258,6 +258,18 @@ export const languages = {
     sloBurnRateWarning: '消耗过快',
     sloNoConfig: '未配置 SLO 目标',
 
+    // SLO ErrorBudget 组件
+    sloErrorBudget: '错误预算',
+    sloRemaining: '剩余',
+    sloConsumed: '已消耗',
+    sloMinutes: '分钟',
+    sloBurnRate: '燃尽率',
+    sloBurnNormal: '正常消耗（低于平均速率）',
+    sloBurnWarning: '警告：消耗过快，建议冻结变更',
+    sloBurnAboveAvg: '高于平均消耗速率',
+    sloFreezeChange: '建议冻结变更',
+    sloNoConfigHint: '未配置 SLO 目标，请在系统设置中添加服务 SLO',
+
     // 变更-故障关联分析
     changeCorrelationTitle: '变更-故障关联',
     changeTotalChanges: '总变更数',
@@ -3193,6 +3205,18 @@ export const languages = {
     sloBurnRateNormal: 'Normal burn',
     sloBurnRateWarning: 'Burn rate too fast',
     sloNoConfig: 'No SLO configured',
+
+    // SLO ErrorBudget component
+    sloErrorBudget: 'Error Budget',
+    sloRemaining: 'Remaining',
+    sloConsumed: 'Consumed',
+    sloMinutes: 'min',
+    sloBurnRate: 'Burn Rate',
+    sloBurnNormal: 'Normal burn (below avg rate)',
+    sloBurnWarning: 'Warning: burn too fast, freeze changes',
+    sloBurnAboveAvg: 'Above average burn rate',
+    sloFreezeChange: 'Freeze changes recommended',
+    sloNoConfigHint: 'No SLO configured, add service SLO in settings',
 
     // Change-Fault Correlation
     changeCorrelationTitle: 'Change-Fault Correlation',
