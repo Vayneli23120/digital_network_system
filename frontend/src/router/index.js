@@ -23,6 +23,19 @@ const routes = [
     ]
   },
   {
+    path: '/operations',
+    name: 'OperationsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Operations',
+        component: () => import('@/views/Operations.vue'),
+        meta: { title: '运维总览' }
+      }
+    ]
+  },
+  {
     path: '/devices',
     name: 'DevicesLayout',
     component: Layout,

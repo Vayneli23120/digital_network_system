@@ -33,6 +33,8 @@ export const languages = {
 
     // 侧边栏菜单
     menuDashboard: '仪表板',
+    menuOperations: '运维总览',
+    operationsTitle: '运维工作台',
     menuDevices: '设备列表',
     menuDiscovery: '设备发现',
     menuBackups: '备份管理',
@@ -2981,6 +2983,8 @@ export const languages = {
 
     // 侧边栏菜单
     menuDashboard: 'Dashboard',
+    menuOperations: 'Operations',
+    operationsTitle: 'Operations Workbench',
     menuDevices: 'Device List',
     menuDiscovery: 'Device Discovery',
     menuBackups: 'Backup Management',
