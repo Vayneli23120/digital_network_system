@@ -1,7 +1,7 @@
 <template>
   <div class="pareto-chart">
     <div class="pareto-header">
-      <span class="pareto-title">{{ title }}</span>
+      <span class="pareto-title">{{ displayTitle }}</span>
       <span class="pareto-subtitle">{{ t('pareto80Analysis') }}</span>
     </div>
     <div class="pareto-body" ref="chartRef"></div>
@@ -9,7 +9,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, onUnmounted } from 'vue'
+import { ref, onMounted, watch, onUnmounted, computed } from 'vue'
 import * as echarts from 'echarts'
 import { useI18n } from '@/composables/useI18n'
 
@@ -21,13 +21,16 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: '根因分布'
+    default: ''  // 空串，由 computed 兜底 i18n
   }
 })
 
 const { t, currentLang } = useI18n()
 const chartRef = ref(null)
 let chartInstance = null
+
+// title 兜底：未传入时使用 i18n 默认值
+const displayTitle = computed(() => props.title || t('paretoChartTitle'))
 
 // 使用 i18n 映射根因类型标签
 const getTypeLabel = (type) => {

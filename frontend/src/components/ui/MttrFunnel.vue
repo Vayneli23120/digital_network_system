@@ -1,7 +1,7 @@
 <template>
   <div class="mttr-funnel">
     <div class="funnel-header">
-      <span class="funnel-title">{{ title }}</span>
+      <span class="funnel-title">{{ displayTitle }}</span>
       <span class="funnel-total">{{ t('mttrEndToEnd') }} {{ breakdown.total_h }}h</span>
     </div>
     <div class="funnel-body">
@@ -53,11 +53,14 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: '修复链路分析'
+    default: ''  // 空串，由 computed 兜底 i18n
   }
 })
 
 const { t } = useI18n()
+
+// title 兜底：未传入时使用 i18n 默认值
+const displayTitle = computed(() => props.title || t('mttrBreakdownTitle'))
 
 const stages = computed(() => [
   { key: 'mtta', name: t('mttrStageResponse'), value: props.breakdown.mtta_min, unit: 'min', target: props.breakdown.target_mtta },
