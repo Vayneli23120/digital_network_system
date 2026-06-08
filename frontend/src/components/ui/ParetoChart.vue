@@ -107,7 +107,7 @@ const initChart = () => {
     ],
     series: [
       {
-        name: '故障数',
+        name: t('paretoFaultCount'),
         type: 'bar',
         data: props.data.map(d => ({
           value: d.count,
@@ -116,7 +116,7 @@ const initChart = () => {
         barWidth: '50%'
       },
       {
-        name: '累计占比',
+        name: t('paretoCumulativePct'),
         type: 'line',
         yAxisIndex: 1,
         data: cumulative,
