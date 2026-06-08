@@ -7,9 +7,112 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from datetime import datetime
 
-from app.shared.models import Device
+from app.shared.models import Device, SparePart, SparePartInstance
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
+
+
+def _sync_modules_to_inventory(db: Session, device_id: int, modules: List[Dict[str, Any]]) -> None:
+    """同步设备模块到资产库存
+
+    将模块信息同步到 SparePartInstance 表，状态为 inuse（安装在设备上）。
+    这些模块不会出现在备件库存（in_stock）中。
+
+    Args:
+        db: 数据库会话
+        device_id: 设备 ID
+        modules: 模块列表，格式 [{"type": "main", "pid": "C9300-24P", "serial_number": "ABC123"}]
+    """
+    if not modules:
+        return
+
+    for module in modules:
+        pid = module.get("pid", "")
+        serial_number = module.get("serial_number", "")
+        module_type = module.get("type", "other")
+
+        if not pid or not serial_number:
+            continue
+
+        # 检查序列号是否已存在
+        existing_instance = db.query(SparePartInstance).filter(
+            SparePartInstance.serial_number == serial_number
+        ).first()
+
+        if existing_instance:
+            # 如果已存在，更新设备关联和分类信息
+            if existing_instance.installed_device_id != device_id:
+                # 如果之前安装在其他设备上，记录拆卸信息
+                if existing_instance.installed_device_id:
+                    existing_instance.removed_from_device_id = existing_instance.installed_device_id
+                    existing_instance.removed_at = datetime.utcnow()
+                # 更新为当前设备
+                existing_instance.installed_device_id = device_id
+                existing_instance.installed_at = datetime.utcnow()
+                existing_instance.status = "inuse"
+
+            # 更新 SparePart 的分类（根据模块类型）
+            if existing_instance.part:
+                category_map = {
+                    "main": "主机模块",
+                    "expansion": "扩展模块",
+                    "power": "电源模块",
+                    "sfp": "光模块",
+                    "fan": "风扇模块",
+                    "other": "其他"
+                }
+                new_category = category_map.get(module_type, "其他")
+                if existing_instance.part.category != new_category:
+                    existing_instance.part.category = new_category
+
+            # 更新备注中的模块类型
+            existing_instance.notes = f"设备自带模块，类型: {module_type}"
+            continue
+
+        # 查找或创建 SparePart（型号基础信息）
+        spare_part = db.query(SparePart).filter(
+            SparePart.part_number == pid
+        ).first()
+
+        if not spare_part:
+            # 根据模块类型确定分类
+            category_map = {
+                "main": "主机模块",
+                "expansion": "扩展模块",
+                "power": "电源模块",
+                "sfp": "光模块",
+                "fan": "风扇模块",
+                "other": "其他"
+            }
+            category = category_map.get(module_type, "其他")
+
+            # 创建新的 SparePart
+            spare_part = SparePart(
+                name=pid,  # 使用型号作为名称
+                part_number=pid,
+                category=category,
+                manufacturer="",  # 可以后续补充
+                description=f"设备自带模块，通过SSH自动获取",
+                quantity_in_stock=0,  # 不计入库存
+                min_quantity=0
+            )
+            db.add(spare_part)
+            db.flush()  # 获取 part_id
+
+        # 创建 SparePartInstance
+        instance = SparePartInstance(
+            part_id=spare_part.id,
+            serial_number=serial_number,
+            status="inuse",  # 直接标记为在设备上使用
+            installed_device_id=device_id,
+            installed_at=datetime.utcnow(),
+            installed_by="system",  # 系统自动创建
+            notes=f"设备自带模块，类型: {module_type}"
+        )
+        db.add(instance)
+
+    db.commit()
 
 
 def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None,
@@ -49,6 +152,23 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
     total = query.count()
     devices = query.offset(skip).limit(limit).all()
 
+    # 一次性批量查询活跃故障计数，避免 n+1 查询
+    device_ids = [d.id for d in devices]
+    fault_counts: dict = {}
+    if device_ids:
+        from sqlalchemy import func
+        from app.shared.models import FaultRecord
+        rows = (
+            db.query(FaultRecord.device_id, func.count(FaultRecord.id))
+            .filter(
+                FaultRecord.device_id.in_(device_ids),
+                FaultRecord.status.in_(["open", "in_progress"]),
+            )
+            .group_by(FaultRecord.device_id)
+            .all()
+        )
+        fault_counts = {row[0]: row[1] for row in rows}
+
     return {
         "total": total,
         "items": [
@@ -71,6 +191,7 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
                 "device_type": d.device_type,
                 "credential_group": d.credential_group,
                 "last_backup_time": d.last_backup_time.isoformat() if d.last_backup_time else None,
+                "active_fault_count": fault_counts.get(d.id, 0),
             }
             for d in devices
         ]
@@ -121,6 +242,10 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
     db.add(device)
     db.commit()
     db.refresh(device)
+
+    # 同步模块到设备资产
+    if modules_data:
+        _sync_modules_to_inventory(db, device.id, modules_data)
 
     return {
         "id": device.id,
@@ -229,15 +354,21 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
                 setattr(device, key, value)
 
     # 处理 modules 字段
+    modules_data = None
     if "modules" in update_data:
         import json
-        if update_data["modules"]:
-            device.modules = json.dumps(update_data["modules"])
+        modules_data = update_data["modules"]
+        if modules_data:
+            device.modules = json.dumps(modules_data)
         else:
             device.modules = None
 
     db.commit()
     db.refresh(device)
+
+    # 同步模块到设备资产
+    if modules_data:
+        _sync_modules_to_inventory(db, device.id, modules_data)
 
     return {
         "id": device.id,

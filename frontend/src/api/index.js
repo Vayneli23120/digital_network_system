@@ -26,6 +26,29 @@ export function deleteDevice(id) {
   return api.delete(`/devices/${id}`)
 }
 
+// 设备预检 API
+export function testDeviceReachability(ip) {
+  return api.post('/devices/test-reachability', { ip })
+}
+
+export function testDeviceConnection(ip, credential_group, vendor = 'cisco', device_type = null) {
+  return api.post('/devices/test-connection', {
+    ip,
+    credential_group,
+    vendor,
+    device_type
+  })
+}
+
+export function fetchDeviceInfo(ip, credential_group, vendor = 'cisco', device_type = null) {
+  return api.post('/devices/fetch-info', {
+    ip,
+    credential_group,
+    vendor,
+    device_type
+  }, { timeout: 60000 }) // 获取设备信息可能需要较长时间
+}
+
 // 照片相关
 export function getDevicePhotos(deviceId) {
   return api.get(`/devices/${deviceId}/photos`)
@@ -46,6 +69,11 @@ export function deletePhoto(deviceId, photoId) {
 
 export function getDeviceInventory(deviceId) {
   return api.get(`/devices/${deviceId}/inventory`)
+}
+
+// 设备性能指标（SNMP）
+export function getDeviceMetrics(deviceId) {
+  return api.get(`/devices/${deviceId}/metrics`, { timeout: 15000 })
 }
 
 // 备份相关

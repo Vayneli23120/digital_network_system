@@ -157,129 +157,124 @@
           </el-tag>
         </div>
         <span class="table-count">{{ treeData.length }} {{ t('deviceRecords') }}</span>
+          <button
+            v-if="selectedDevices.length > 0"
+            class="nav-action-btn"
+            @click="batchBackupSelected"
+            style="margin-left: 12px;"
+          >
+            批量备份 ({{ selectedDevices.length }})
+          </button>
+      </div>
+
+      <!-- 筛选工具栏 -->
+      <div class="filter-bar">
+        <el-select v-model="filterDeployStatus" placeholder="部署状态" clearable size="small" style="width: 120px;">
+          <el-option label="在用" value="in-use" />
+          <el-option label="备用" value="un-used" />
+          <el-option label="维护中" value="maintenance" />
+          <el-option label="已退役" value="retired" />
+        </el-select>
+        <el-select v-model="filterVendor" placeholder="厂商" clearable size="small" style="width: 100px;">
+          <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
+        </el-select>
+        <el-select v-model="filterLocation" placeholder="位置" clearable size="small" style="width: 130px;">
+          <el-option v-for="loc in locationList" :key="loc" :label="loc" :value="loc" />
+        </el-select>
+        <span
+          v-if="filterDeployStatus || filterVendor || filterLocation"
+          class="filter-clear-btn"
+          @click="clearFilters"
+        >
+          清除筛选
+        </span>
       </div>
 
       <el-table
         ref="tableRef"
         :data="treeData"
         row-key="id"
-        :tree-props="{ children: 'children', hasChildren: 'hasChildren' }"
         class="enterprise-tree-table"
         v-loading="loading"
         :row-class-name="treeRowClassName"
         :header-cell-style="{ background: 'transparent' }"
-        default-expand-all
+        :row-style="{ height: '36px' }"
+        @selection-change="selectedDevices = $event"
       >
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="name" :label="t('deviceName')" min-width="180">
           <template #default="{ row }">
-            <template v-if="row.isLayer">
-              <div class="layer-row">
-                <span class="layer-icon" :class="row.layerClass"></span>
-                <span class="layer-name">{{ row.name }}</span>
-                <span class="layer-count-badge">{{ row.onlineCount }}/{{ row.totalCount }}</span>
-              </div>
-            </template>
-            <template v-else-if="row.isType">
-              <div class="type-row">
-                <span class="type-dot" :class="row.layerClass"></span>
-                <span class="type-name">{{ row.name }}</span>
-                <span class="type-stats">{{ row.onlineCount }} {{ t('statusOnline') }}</span>
-              </div>
-            </template>
-            <template v-else>
-              <router-link :to="`/devices/${row.id}`" class="device-link">
-                <span class="device-name">{{ row.name }}</span>
-                <el-icon class="link-arrow"><ArrowRight /></el-icon>
-              </router-link>
-            </template>
+            <router-link :to="`/devices/${row.id}`" class="device-link">
+              <span class="device-name">{{ row.name }}</span>
+              <el-icon class="link-arrow"><ArrowRight /></el-icon>
+            </router-link>
           </template>
         </el-table-column>
         <el-table-column prop="ip" :label="t('deviceIp')" min-width="130">
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType">
-              <div class="ip-cell">
-                <span class="ip-text">{{ row.ip }}</span>
-              </div>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <span class="ip-text">{{ row.ip }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="deployment_status" :label="t('deviceDeployment')" min-width="110" align="center">
+        <el-table-column prop="deployment_status" :label="t('deviceDeployment')" width="110" align="center">
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType">
-              <div :class="['deployment-badge', row.deployment_status]">
-                <span>{{ getDeploymentText(row.deployment_status) }}</span>
-              </div>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <div :class="['deployment-badge', row.deployment_status]">
+              <span>{{ getDeploymentText(row.deployment_status) }}</span>
+            </div>
           </template>
         </el-table-column>
         <el-table-column prop="reachability" :label="t('deviceReachability')" min-width="120" align="center">
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType && row.deployment_status === 'in-use'">
-              <div :class="['reachability-badge', row.reachability]">
-                <span class="status-dot"></span>
-                <span class="status-text">{{ getReachabilityText(row.reachability) }}</span>
-                <span v-if="row.reachability_latency_ms" class="latency-text">{{ row.reachability_latency_ms }}ms</span>
-              </div>
-            </template>
-            <template v-else-if="!row.isLayer && !row.isType">
-              <span class="empty-cell">--</span>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <div v-if="row.deployment_status === 'in-use'" :class="['reachability-badge', row.reachability]">
+              <span class="status-dot"></span>
+              <span class="status-text">{{ getReachabilityText(row.reachability) }}</span>
+              <span v-if="row.reachability_latency_ms" class="latency-text">{{ row.reachability_latency_ms }}ms</span>
+            </div>
+            <span v-else class="empty-cell">--</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="故障" width="90" align="center">
+          <template #default="{ row }">
+            <span v-if="row.active_fault_count > 0" class="fault-badge">{{ row.active_fault_count }}</span>
+            <span v-else class="empty-cell">—</span>
           </template>
         </el-table-column>
         <el-table-column prop="model" :label="t('deviceModel')" min-width="140" show-overflow-tooltip>
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType">
-              <span class="model-text">{{ row.model || '--' }}</span>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <span class="model-text">{{ row.model || '--' }}</span>
           </template>
         </el-table-column>
         <el-table-column prop="location" :label="t('deviceLocation')" min-width="120" show-overflow-tooltip>
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType">
-              <span class="location-text">{{ row.location || '--' }}</span>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <span class="location-text">{{ row.location || '--' }}</span>
           </template>
         </el-table-column>
-        <el-table-column :label="t('deviceAction')" width="120" fixed="right" align="center">
+        <el-table-column label="上次备份" width="110" align="center">
           <template #default="{ row }">
-            <template v-if="!row.isLayer && !row.isType">
-              <div class="action-group">
-                <button class="action-btn backup" @click="backupDevice(row)" title="备份配置">
-                  <el-icon><Download /></el-icon>
-                </button>
-                <button class="action-btn edit" @click="editDevice(row)" title="编辑">
-                  <el-icon><Edit /></el-icon>
-                </button>
-                <button class="action-btn delete" @click="deleteDevice(row)" title="删除">
-                  <el-icon><Delete /></el-icon>
-                </button>
-              </div>
-            </template>
-            <template v-else>
-              <span class="empty-cell">—</span>
-            </template>
+            <span :class="['backup-age-text', backupAgeClass(row.last_backup_time)]">
+              {{ formatBackupAge(row.last_backup_time) }}
+            </span>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('deviceAction')" width="100" fixed="right" align="center">
+          <template #default="{ row }">
+            <div class="action-group">
+              <button class="action-btn backup" @click="backupDevice(row)" title="备份配置">
+                <el-icon><Download /></el-icon>
+              </button>
+              <button class="action-btn edit" @click="editDevice(row)" title="编辑">
+                <el-icon><Edit /></el-icon>
+              </button>
+              <button class="action-btn delete" @click="deleteDevice(row)" title="删除">
+                <el-icon><Delete /></el-icon>
+              </button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
     </section>
 
     <!-- 添加/编辑设备对话框 -->
-    <el-dialog v-model="showAddDialog" :title="editMode ? t('editDeviceTitle') : t('addDeviceTitle')" width="600px" class="edit-device-dialog" @close="resetNewDevice">
+    <el-dialog v-model="showAddDialog" :title="editMode ? t('editDeviceTitle') : t('addDeviceTitle')" width="650px" class="edit-device-dialog" @close="resetNewDevice">
       <div class="edit-dialog-content">
         <!-- 基础信息 Section -->
         <div class="form-section">
@@ -292,7 +287,17 @@
               <el-input v-model="newDevice.name" :placeholder="t('editDeviceNamePlaceholder')" :disabled="editMode" />
             </el-form-item>
             <el-form-item :label="t('deviceIp')" required>
-              <el-input v-model="newDevice.ip" :placeholder="t('editDeviceIpPlaceholder')" />
+              <div class="input-with-btn">
+                <el-input v-model="newDevice.ip" :placeholder="t('editDeviceIpPlaceholder')" />
+                <el-button size="small" @click="testReachability" :loading="probeLoading.ip" :disabled="!newDevice.ip">
+                  测试连通
+                </el-button>
+              </div>
+              <div v-if="probeResult.ip" class="probe-result">
+                <el-tag :type="probeResult.ip.reachable ? 'success' : 'danger'" size="small">
+                  {{ probeResult.ip.message }}
+                </el-tag>
+              </div>
             </el-form-item>
             <el-form-item :label="t('deviceModel')">
               <el-input v-model="newDevice.model" :placeholder="t('editDeviceModelPlaceholder')" />
@@ -307,11 +312,29 @@
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Box /></el-icon>
-            {{ t('deviceModules') }}
+            模块序列号
+            <el-button
+              v-if="!editMode"
+              size="small"
+              type="primary"
+              style="margin-left: auto;"
+              @click="fetchDeviceInfoHandler"
+              :loading="probeLoading.fetch"
+              :disabled="!newDevice.ip || !newDevice.credential_group || sshDisabled"
+            >
+              一键获取设备信息
+            </el-button>
+          </div>
+          <!-- SSH能力提示 -->
+          <div v-if="sshDisabled" class="ssh-warning">
+            <el-tag type="warning" size="small">AP设备不支持SSH，无法自动获取信息</el-tag>
+          </div>
+          <div v-if="sshSpecialPermission" class="ssh-warning">
+            <el-tag type="info" size="small">防火墙需要GoVault权限才能SSH连接</el-tag>
           </div>
           <div class="modules-container">
             <div v-for="(module, index) in newDevice.modules" :key="index" class="module-row">
-              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 140px;">
+              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 120px;">
                 <el-option :label="t('deviceMainModule')" value="main" />
                 <el-option :label="t('deviceExpansionModule')" value="expansion" />
                 <el-option :label="t('devicePowerModule')" value="power" />
@@ -319,7 +342,8 @@
                 <el-option :label="t('deviceFanModule')" value="fan" />
                 <el-option :label="t('deviceTypeOther')" value="other" />
               </el-select>
-              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 180px;" />
+              <el-input v-model="module.pid" placeholder="型号 (如 C9300-24P)" size="small" style="width: 150px;" />
+              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 160px;" />
               <el-button type="danger" size="small" :icon="Close" circle @click="removeModule(index)" v-if="newDevice.modules.length > 1" />
             </div>
             <el-button type="primary" size="small" :icon="Plus" @click="addModule">{{ t('deviceAddModule') }}</el-button>
@@ -376,17 +400,27 @@
               </el-select>
             </el-form-item>
             <el-form-item :label="t('deviceCredentialGroup')">
-              <el-select v-model="newDevice.credential_group" :placeholder="t('deviceSelectCredential')">
-                <el-option label="default" value="default" />
-                <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
-              </el-select>
+              <div class="input-with-btn">
+                <el-select v-model="newDevice.credential_group" :placeholder="t('deviceSelectCredential')">
+                  <el-option label="default" value="default" />
+                  <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
+                </el-select>
+                <el-button size="small" @click="testConnection" :loading="probeLoading.connection" :disabled="!newDevice.ip || !newDevice.credential_group || sshDisabled">
+                  测试连接
+                </el-button>
+              </div>
+              <div v-if="probeResult.connection" class="probe-result">
+                <el-tag :type="probeResult.connection.connected ? 'success' : 'danger'" size="small">
+                  {{ probeResult.connection.message }}
+                </el-tag>
+              </div>
             </el-form-item>
           </el-form>
         </div>
       </div>
       <template #footer>
         <el-button @click="showAddDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="editMode ? updateDevice() : addDevice()">{{ t('actionConfirm') }}</el-button>
+        <el-button type="primary" @click="editMode ? updateDevice() : addDevice()" :loading="submitLoading">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -442,7 +476,7 @@ import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, ArrowDown, Connection, Location, Warning, Box, Close } from '@element-plus/icons-vue'
-import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors } from '@/api'
+import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import { debounce, throttle } from '@/utils/requestManager.js'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
@@ -457,6 +491,22 @@ const searchText = ref('')
 const filterStatus = ref('')
 const filterReachability = ref('')  // 新字段：可达性筛选
 const filterRole = ref('')
+const filterDeployStatus = ref('')
+const filterVendor = ref('')
+const filterLocation = ref('')
+
+// 从设备数据动态提取位置列表
+const locationList = computed(() => {
+  const locs = new Set(devices.value.map(d => d.location).filter(Boolean))
+  return Array.from(locs).sort()
+})
+
+const clearFilters = () => {
+  filterDeployStatus.value = ''
+  filterVendor.value = ''
+  filterLocation.value = ''
+}
+
 const activeFilter = ref('') // 统计卡片筛选激活状态
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -468,6 +518,31 @@ const selectedDevices = ref([])
 const credentialGroups = ref([])
 const selectedFile = ref(null)
 const vendors = ref([])
+
+// 设备探测状态
+const probeLoading = ref({
+  ip: false,
+  connection: false,
+  fetch: false
+})
+
+const submitLoading = ref(false)
+
+const probeResult = ref({
+  ip: null,
+  connection: null
+})
+
+// SSH能力判断
+const sshDisabled = computed(() => {
+  // AP设备不支持SSH
+  return newDevice.value.device_type === 'ap'
+})
+
+const sshSpecialPermission = computed(() => {
+  // 防火墙需要GoVault权限
+  return ['pa', 'ftd'].includes(newDevice.value.device_type)
+})
 
 // 设备层级类型映射
 const datacenterTypes = ['core_switch', 'server_switch', 'router', 'pa', 'ftd']
@@ -484,16 +559,83 @@ const newDevice = ref({
   deployment_status: 'un-used',  // 新字段
   vendor: 'cisco',
   credential_group: 'default',
-  modules: [{ type: 'main', serial_number: '' }] // 默认一个主机模块
+  modules: [{ type: 'main', pid: '', serial_number: '' }] // 默认一个主机模块
 })
 
 // 模块管理
 const addModule = () => {
-  newDevice.value.modules.push({ type: 'other', serial_number: '' })
+  newDevice.value.modules.push({ type: 'other', pid: '', serial_number: '' })
 }
 
 const removeModule = (index) => {
   newDevice.value.modules.splice(index, 1)
+}
+
+// 设备探测函数
+const testReachability = async () => {
+  if (!newDevice.value.ip) return
+  probeLoading.value.ip = true
+  probeResult.value.ip = null
+  try {
+    const result = await testDeviceReachability(newDevice.value.ip)
+    probeResult.value.ip = result
+  } catch (error) {
+    probeResult.value.ip = { reachable: false, message: '测试失败: ' + (error.response?.data?.detail || error.message) }
+  } finally {
+    probeLoading.value.ip = false
+  }
+}
+
+const testConnection = async () => {
+  if (!newDevice.value.ip || !newDevice.value.credential_group) return
+  probeLoading.value.connection = true
+  probeResult.value.connection = null
+  try {
+    const result = await testDeviceConnection(
+      newDevice.value.ip,
+      newDevice.value.credential_group,
+      newDevice.value.vendor,
+      newDevice.value.device_type
+    )
+    probeResult.value.connection = result
+  } catch (error) {
+    probeResult.value.connection = { connected: false, message: '连接失败: ' + (error.response?.data?.detail || error.message) }
+  } finally {
+    probeLoading.value.connection = false
+  }
+}
+
+const fetchDeviceInfoHandler = async () => {
+  if (!newDevice.value.ip || !newDevice.value.credential_group) return
+  probeLoading.value.fetch = true
+  try {
+    const result = await fetchDeviceInfo(
+      newDevice.value.ip,
+      newDevice.value.credential_group,
+      newDevice.value.vendor,
+      newDevice.value.device_type
+    )
+    if (result.success) {
+      // 自动填充设备信息
+      if (result.model) newDevice.value.model = result.model
+      if (result.serial_number && newDevice.value.modules.length > 0) {
+        newDevice.value.modules[0].serial_number = result.serial_number
+      }
+      if (result.location) newDevice.value.location = result.location
+      // 添加获取到的模块信息
+      if (result.modules && result.modules.length > 0) {
+        // 清空现有模块，用获取到的模块替换
+        newDevice.value.modules = result.modules
+      }
+      ElMessage.success('设备信息获取成功')
+    } else {
+      ElMessage.warning(result.message || '获取设备信息失败')
+    }
+  } catch (error) {
+    ElMessage.error('获取设备信息失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    probeLoading.value.fetch = false
+  }
 }
 
 const resetNewDevice = () => {
@@ -507,8 +649,29 @@ const resetNewDevice = () => {
     deployment_status: 'un-used',  // 新字段
     vendor: 'cisco',
     credential_group: 'default',
-    modules: [{ type: 'main', serial_number: '' }]
+    modules: [{ type: 'main', pid: '', serial_number: '' }]
   }
+  // 重置探测状态
+  probeResult.value = { ip: null, connection: null }
+  editMode.value = false
+}
+
+// 格式化备份时间为「X小时前」或「X天前」
+const formatBackupAge = (isoTime) => {
+  if (!isoTime) return '从未'
+  const hours = (Date.now() - new Date(isoTime)) / 3600000
+  if (hours < 1) return '1小时内'
+  if (hours < 24) return `${Math.floor(hours)}小时前`
+  return `${Math.floor(hours / 24)}天前`
+}
+
+// 根据备份时间返回 CSS class
+const backupAgeClass = (isoTime) => {
+  if (!isoTime) return 'backup-never'
+  const hours = (Date.now() - new Date(isoTime)) / 3600000
+  if (hours < 24) return 'backup-fresh'
+  if (hours < 168) return 'backup-warn'
+  return 'backup-stale'
 }
 
 // 百分比计算函数
@@ -599,25 +762,7 @@ const datacenterStats = computed(() => {
   }
 })
 
-// 设备类型标签
-const typeLabel = (dtype) => {
-  const map = {
-    uce: t('deviceTypeUCE'),
-    core_switch: t('deviceTypeCoreSwitch'),
-    server_switch: t('deviceTypeServerSwitch'),
-    office_switch: t('deviceTypeOfficeSwitch'),
-    firewall: t('deviceTypeFirewall'),
-    ap: t('deviceTypeAP'),
-    wlc: t('deviceTypeWLC'),
-    router: t('deviceTypeRouter'),
-    pa: t('deviceTypePA'),
-    ftd: t('deviceTypeFTD'),
-    other: t('deviceTypeOther'),
-  }
-  return map[dtype] || dtype
-}
-
-// 构建树形数据
+// 构建设备列表数据（扁平列表，无树形分组）
 const treeData = computed(() => {
   let list = searchText.value
     ? devices.value.filter(d =>
@@ -635,142 +780,34 @@ const treeData = computed(() => {
     }
   }
 
+  // 可达性筛选（点击不可达数字）
+  if (filterReachability.value) {
+    list = list.filter(d => d.reachability === filterReachability.value)
+  }
+
   // 状态筛选（点击离线/维护数字）
   if (filterStatus.value) {
     list = list.filter(d => d.status === filterStatus.value)
   }
 
-  // 有筛选时返回扁平列表
-  if (activeFilter.value || filterStatus.value) {
-    return list.map(d => ({ ...d }))
+  // 筛选工具栏条件
+  if (filterDeployStatus.value) {
+    list = list.filter(d => d.deployment_status === filterDeployStatus.value)
+  }
+  if (filterVendor.value) {
+    list = list.filter(d => d.vendor === filterVendor.value)
+  }
+  if (filterLocation.value) {
+    list = list.filter(d => d.location === filterLocation.value)
   }
 
-  // 无筛选时显示树形结构
-  const tree = []
-
-  // 数据中心网络设备层级
-  const datacenterDevices = list.filter(d => datacenterTypes.includes(d.device_type))
-  if (datacenterDevices.length > 0) {
-    const datacenterChildren = []
-    // 按类型分组
-    const typeGroups = {}
-    datacenterDevices.forEach(d => {
-      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
-      typeGroups[d.device_type].push(d)
-    })
-    Object.entries(typeGroups).forEach(([dtype, devs]) => {
-      const onlineCount = devs.filter(d => d.status === 'online').length
-      datacenterChildren.push({
-        id: `type-${dtype}`,
-        name: typeLabel(dtype),
-        isType: true,
-        layerClass: 'datacenter',
-        onlineCount,
-        totalCount: devs.length,
-        children: devs.map(d => ({ ...d, device_type: dtype }))
-      })
-    })
-    tree.push({
-      id: 'layer-datacenter',
-      name: t('deviceLayerDatacenter'),
-      isLayer: true,
-      layerClass: 'datacenter',
-      onlineCount: datacenterDevices.filter(d => d.status === 'online').length,
-      totalCount: datacenterDevices.length,
-      children: datacenterChildren
-    })
-  }
-
-  // 无线网络层级
-  const wifiDevices = list.filter(d => wifiTypes.includes(d.device_type))
-  if (wifiDevices.length > 0) {
-    const wifiChildren = []
-    const typeGroups = {}
-    wifiDevices.forEach(d => {
-      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
-      typeGroups[d.device_type].push(d)
-    })
-    Object.entries(typeGroups).forEach(([dtype, devs]) => {
-      const onlineCount = devs.filter(d => d.status === 'online').length
-      wifiChildren.push({
-        id: `type-${dtype}`,
-        name: typeLabel(dtype),
-        isType: true,
-        layerClass: 'wifi',
-        onlineCount,
-        totalCount: devs.length,
-        children: devs.map(d => ({ ...d, device_type: dtype }))
-      })
-    })
-    tree.push({
-      id: 'layer-wifi',
-      name: t('deviceLayerWiFi'),
-      isLayer: true,
-      layerClass: 'wifi',
-      onlineCount: wifiDevices.filter(d => d.status === 'online').length,
-      totalCount: wifiDevices.length,
-      children: wifiChildren
-    })
-  }
-
-  // 接入层层级
-  const accessDevices = list.filter(d => accessTypes.includes(d.device_type))
-  if (accessDevices.length > 0) {
-    const accessChildren = []
-    const typeGroups = {}
-    accessDevices.forEach(d => {
-      if (!typeGroups[d.device_type]) typeGroups[d.device_type] = []
-      typeGroups[d.device_type].push(d)
-    })
-    Object.entries(typeGroups).forEach(([dtype, devs]) => {
-      const onlineCount = devs.filter(d => d.status === 'online').length
-      accessChildren.push({
-        id: `type-${dtype}`,
-        name: typeLabel(dtype),
-        isType: true,
-        layerClass: 'access',
-        onlineCount,
-        totalCount: devs.length,
-        children: devs.map(d => ({ ...d, device_type: dtype }))
-      })
-    })
-    tree.push({
-      id: 'layer-access',
-      name: t('deviceLayerAccess'),
-      isLayer: true,
-      layerClass: 'access',
-      onlineCount: accessDevices.filter(d => d.status === 'online').length,
-      totalCount: accessDevices.length,
-      children: accessChildren
-    })
-  }
-
-  // 其他设备层级
-  const otherDevices = list.filter(d =>
-    !datacenterTypes.includes(d.device_type) &&
-    !wifiTypes.includes(d.device_type) &&
-    !accessTypes.includes(d.device_type)
-  )
-  if (otherDevices.length > 0) {
-    tree.push({
-      id: 'layer-other',
-      name: t('deviceTypeOther'),
-      isLayer: true,
-      layerClass: 'other',
-      onlineCount: otherDevices.filter(d => d.status === 'online').length,
-      totalCount: otherDevices.length,
-      children: otherDevices.map(d => ({ ...d }))
-    })
-  }
-
-  return tree
+  // 直接返回扁平设备列表
+  return list.map(d => ({ ...d }))
 })
 
 // 表格行样式
 const treeRowClassName = ({ row }) => {
-  if (row.isLayer) return 'layer-row'
-  if (row.isType) return 'type-row'
-  if (row.status === 'offline') return 'offline-row'
+  if (row.reachability === 'unreachable') return 'offline-row'
   return ''
 }
 
@@ -846,6 +883,18 @@ const backupDevice = async (row) => {
   }
 }
 
+const batchBackupSelected = async () => {
+  const ids = selectedDevices.value.map(d => d.id)
+  if (ids.length === 0) return
+  try {
+    await batchBackupApi(ids)
+    ElMessage.success(`已触发 ${ids.length} 台设备备份任务`)
+    selectedDevices.value = []
+  } catch {
+    ElMessage.error('批量备份触发失败')
+  }
+}
+
 const batchBackup = async () => {
   if (selectedDevices.value.length === 0) return
 
@@ -868,16 +917,23 @@ const batchBackup = async () => {
 
 const editDevice = (row) => {
   editMode.value = true
-  // 解析 modules 数据
-  const modules = row.modules || [{ type: 'main', serial_number: '' }]
+  // 解析 modules 数据（兼容旧数据无 pid 字段）
+  const modules = row.modules || [{ type: 'main', pid: '', serial_number: '' }]
+  // 确保每个模块都有 pid 字段
+  const normalizedModules = modules.map(m => ({
+    type: m.type || 'other',
+    pid: m.pid || '',
+    serial_number: m.serial_number || ''
+  }))
   newDevice.value = {
     ...row,
-    modules: Array.isArray(modules) && modules.length > 0 ? modules : [{ type: 'main', serial_number: '' }]
+    modules: Array.isArray(normalizedModules) && normalizedModules.length > 0 ? normalizedModules : [{ type: 'main', pid: '', serial_number: '' }]
   }
   showAddDialog.value = true
 }
 
 const updateDevice = async () => {
+  submitLoading.value = true
   try {
     const updateData = {
       id: newDevice.value.id,
@@ -897,8 +953,9 @@ const updateDevice = async () => {
     editMode.value = false
     loadDevices(true)  // 强制刷新
   } catch (error) {
-    ElMessage.error(t('msgDeviceUpdateFailed'))
     ElMessage.error(error.response?.data?.detail || t('msgDeviceUpdateFailed'))
+  } finally {
+    submitLoading.value = false
   }
 }
 
@@ -922,6 +979,7 @@ const deleteDevice = async (row) => {
 }
 
 const addDevice = async () => {
+  submitLoading.value = true
   try {
     await createDevice(newDevice.value)
     clearCache('devices')  // 清除缓存
@@ -930,6 +988,8 @@ const addDevice = async () => {
     loadDevices(true)  // 强制刷新
   } catch (error) {
     ElMessage.error(t('msgDeviceAddFailed'))
+  } finally {
+    submitLoading.value = false
   }
 }
 
@@ -1025,36 +1085,6 @@ const getFilterLabel = (type) => {
     'datacenter': t('deviceLayerDatacenter')
   }
   return labels[type] || type
-}
-
-const expandAndScrollTo = (typeOrLayer) => {
-  scrollToTable()
-
-  // 根据点击的卡片类型，确定要展开的层级或类型节点
-  let targetNodeId = ''
-
-  if (typeOrLayer === 'datacenter') {
-    targetNodeId = 'layer-datacenter'
-  } else if (typeOrLayer === 'ap' || typeOrLayer === 'wlc') {
-    targetNodeId = 'layer-wifi'
-  } else if (typeOrLayer === 'uce' || typeOrLayer === 'office_switch') {
-    targetNodeId = 'layer-access'
-  } else if (typeOrLayer === 'other') {
-    targetNodeId = 'layer-other'
-  }
-
-  // 等待 DOM 更新后展开节点
-  setTimeout(() => {
-    if (tableRef.value) {
-      // 展开所有节点（因为已经有 default-expand-all）
-      // 尝试滚动到特定层级行
-      const rows = document.querySelectorAll('.el-table__row')
-      rows.forEach(row => {
-        // Element Plus 的树形表格会通过 data-row-key 属性标识行
-        // 由于层级行带有特殊 class，可以尝试找到它
-      })
-    }
-  }, 100)
 }
 
 onMounted(() => {
@@ -1399,328 +1429,247 @@ onMounted(() => {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* ===== 树形表格 ===== */
+/* ===== DNAC风格树形表格 ===== */
 .enterprise-tree-table {
   width: 100%;
+  --dnac-header-bg: #f5f7fa;
+  --dnac-row-hover: #e8f4f8;
+  --dnac-border: #e4e7eb;
+  --dnac-text: #1d2129;
+  --dnac-text-secondary: #86909c;
+  --dnac-success: #00b42a;
+  --dnac-danger: #f53f3f;
+  --dnac-warning: #ff7d00;
+  --dnac-info: #165dff;
 }
 
 .enterprise-tree-table :deep(.el-table__inner-wrapper::before) {
   display: none;
 }
 
+/* 表格单元格内部容器 */
+.enterprise-tree-table :deep(.cell) {
+  padding: 0 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+}
+
+/* 表头 - DNAC风格 */
 .enterprise-tree-table :deep(th.el-table__cell) {
-  background: transparent;
-  font-size: 11px;
-  font-weight: 600;
-  color: #64748b;
-  letter-spacing: 0.03em;
-  padding: 12px 0;
-  border-bottom: 1px solid rgba(0, 48, 135, 0.1);
-}
-
-.enterprise-tree-table :deep(td.el-table__cell) {
-  border-bottom: 1px solid rgba(0, 48, 135, 0.06);
+  background: var(--dnac-header-bg) !important;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--dnac-text-secondary);
   padding: 10px 0;
-  background: transparent;
+  border-bottom: 1px solid var(--dnac-border);
+  text-transform: none;
 }
 
+/* 数据单元格 */
+.enterprise-tree-table :deep(td.el-table__cell) {
+  border-bottom: 1px solid var(--dnac-border);
+  padding: 8px 0;
+  background: transparent;
+  color: var(--dnac-text);
+}
+
+/* 行hover效果 */
 .enterprise-tree-table :deep(.el-table__row) {
-  transition: all 0.2s ease;
+  transition: background 0.15s ease;
 }
 
 .enterprise-tree-table :deep(.el-table__row:hover > td) {
-  background: rgba(9, 132, 227, 0.04) !important;
+  background: var(--dnac-row-hover) !important;
 }
 
-/* 层级行样式 */
-.enterprise-tree-table :deep(.layer-row) {
-  background: rgba(0, 48, 135, 0.04) !important;
-}
-
-.enterprise-tree-table :deep(.layer-row > td) {
-  background: rgba(0, 48, 135, 0.04) !important;
-  border-bottom: 1px solid rgba(0, 48, 135, 0.1);
-}
-
-.enterprise-tree-table :deep(.type-row) {
-  background: rgba(248, 250, 252, 0.6) !important;
-}
-
-/* 层级行内容 */
-.layer-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.layer-icon {
-  width: 24px;
-  height: 24px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-}
-
-.layer-icon.datacenter {
-  background: rgba(9, 132, 227, 0.12);
-  color: #0984e3;
-}
-
-.layer-icon.wifi {
-  background: rgba(0, 184, 148, 0.12);
-  color: #00b894;
-}
-
-.layer-icon.access {
-  background: rgba(225, 112, 85, 0.12);
-  color: #e17055;
-}
-
-.layer-icon.other {
-  background: rgba(148, 163, 184, 0.12);
-  color: #64748b;
-}
-
-.layer-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #0f172a;
-}
-
-.layer-count-badge {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 3px 8px;
-  border-radius: 6px;
-  background: rgba(0, 184, 148, 0.12);
-  color: #00b894;
-}
-
-/* 类型行内容 */
-.type-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.type-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-}
-
-.type-dot.datacenter { background: #0984e3; }
-.type-dot.wifi { background: #00b894; }
-.type-dot.access { background: #e17055; }
-.type-dot.other { background: #64748b; }
-
-.type-name {
-  font-size: 13px;
-  font-weight: 500;
-  color: #475569;
-}
-
-.type-stats {
-  font-size: 11px;
-  color: #00b894;
-  font-weight: 500;
-}
-
-/* 设备链接 */
+/* 设备链接 - DNAC风格 */
 .device-link {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: #0984e3;
+  gap: 4px;
+  color: var(--dnac-info);
   text-decoration: none;
-  transition: all 0.2s;
+  transition: color 0.15s;
 }
 
 .device-link:hover {
-  color: #74b9ff;
+  color: #4080ff;
 }
 
 .device-name {
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .link-arrow {
   opacity: 0;
   font-size: 12px;
-  transition: all 0.2s;
+  transition: opacity 0.15s;
 }
 
 .device-link:hover .link-arrow {
   opacity: 1;
-  transform: translateX(3px);
 }
 
 /* 空单元格 */
 .empty-cell {
-  color: #94a3b8;
-  font-size: 12px;
+  color: var(--dnac-text-secondary);
+  font-size: 13px;
 }
 
 /* IP单元格 */
 .ip-text {
   font-size: 13px;
-  color: #475569;
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--dnac-text);
 }
 
 /* 型号/位置 */
 .model-text, .location-text {
   font-size: 13px;
-  color: #475569;
+  color: var(--dnac-text);
 }
 
-/* 状态徽章 - 旧字段保留兼容 */
+/* DNAC风格状态指示 - 简洁圆点 */
 .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 400;
+  background: transparent;
+  border: none;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
-.status-badge.online { border-color: rgba(0, 184, 148, 0.3); color: #00b894; }
-.status-badge.online .status-dot { background: #00b894; }
-.status-badge.offline { border-color: rgba(214, 48, 49, 0.3); color: #d63031; }
-.status-badge.offline .status-dot { background: #d63031; }
-.status-badge.maintenance { border-color: rgba(225, 112, 85, 0.3); color: #e17055; }
-.status-badge.maintenance .status-dot { background: #e17055; }
-.status-badge.retired { border-color: rgba(116, 185, 255, 0.3); color: #74b9ff; }
-.status-badge.retired .status-dot { background: #74b9ff; }
+.status-badge.online { color: var(--dnac-text); }
+.status-badge.online .status-dot { background: var(--dnac-success); }
+.status-badge.offline { color: var(--dnac-text); }
+.status-badge.offline .status-dot { background: var(--dnac-danger); }
+.status-badge.maintenance { color: var(--dnac-text); }
+.status-badge.maintenance .status-dot { background: var(--dnac-warning); }
+.status-badge.retired { color: var(--dnac-text-secondary); }
+.status-badge.retired .status-dot { background: var(--dnac-text-secondary); }
 
-/* 部署状态徽章 - 静态、无动画 */
+/* 部署状态 - DNAC简洁标签 */
 .deployment-badge {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
 }
 
 .deployment-badge.in-use {
-  background: rgba(0, 184, 148, 0.12);
-  color: #00b894;
+  background: rgba(0, 180, 42, 0.1);
+  color: var(--dnac-success);
 }
 
 .deployment-badge.un-used {
-  background: rgba(148, 163, 184, 0.12);
-  color: #64748b;
+  background: rgba(134, 144, 156, 0.1);
+  color: var(--dnac-text-secondary);
 }
 
 .deployment-badge.maintenance {
-  background: rgba(225, 112, 85, 0.12);
-  color: #e17055;
+  background: rgba(255, 125, 0, 0.1);
+  color: var(--dnac-warning);
 }
 
 .deployment-badge.retired {
-  background: rgba(116, 185, 255, 0.12);
-  color: #74b9ff;
+  background: rgba(22, 93, 255, 0.1);
+  color: var(--dnac-info);
 }
 
-/* 可达性状态徽章 - 动态、带动画 */
+/* 可达性状态 - DNAC简洁风格 */
 .reachability-badge {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 4px 10px;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 500;
+  padding: 0;
+  border-radius: 0;
+  font-size: 13px;
+  font-weight: 400;
+  background: transparent;
+  border: none;
 }
 
 .reachability-badge.reachable {
-  background: rgba(0, 184, 148, 0.12);
-  border: 1px solid rgba(0, 184, 148, 0.3);
-  color: #00b894;
+  color: var(--dnac-text);
 }
 
 .reachability-badge.reachable .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #00b894;
-  animation: pulse 2s infinite;
+  background: var(--dnac-success);
 }
 
 .reachability-badge.unreachable {
-  background: rgba(214, 48, 49, 0.12);
-  border: 1px solid rgba(214, 48, 49, 0.3);
-  color: #d63031;
+  color: var(--dnac-text);
 }
 
 .reachability-badge.unreachable .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  background: #d63031;
+  background: var(--dnac-danger);
 }
 
 .reachability-badge.unknown {
-  background: rgba(148, 163, 184, 0.12);
-  border: 1px solid rgba(148, 163, 184, 0.3);
-  color: #94a3b8;
+  color: var(--dnac-text-secondary);
+}
+
+.reachability-badge.unknown .status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dnac-text-secondary);
 }
 
 .reachability-badge .latency-text {
-  font-size: 10px;
-  color: #64748b;
-  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--dnac-text-secondary);
 }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-/* 操作按钮 */
+/* 操作按钮 - DNAC简洁图标 */
 .action-group {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   justify-content: center;
 }
 
 .action-btn {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  border: 1px solid transparent;
-  background: rgba(255, 255, 255, 0.9);
-  color: #64748b;
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--dnac-text-secondary);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: color 0.15s;
   display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .action-btn:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(0, 48, 135, 0.12);
+  background: transparent;
+  transform: none;
+  box-shadow: none;
 }
 
-.action-btn.backup:hover { background: rgba(0, 184, 148, 0.08); color: #00b894; }
-.action-btn.edit:hover { background: rgba(245, 158, 11, 0.08); color: #f59e0b; }
-.action-btn.delete:hover { background: rgba(214, 48, 49, 0.08); color: #d63031; }
+.action-btn.backup:hover { color: var(--dnac-success); }
+.action-btn.edit:hover { color: var(--dnac-info); }
+.action-btn.delete:hover { color: var(--dnac-danger); }
 
 /* 搜索框 */
 .search-box {
@@ -1766,117 +1715,126 @@ onMounted(() => {
   .search-input { width: 100%; }
 }
 
-/* ===== 暗黑模式 ===== */
+/* ===== 暗黑模式 - DNAC风格 ===== */
 .dark .devices-page {
-  background: linear-gradient(135deg, #1a1f2e 0%, #0d1117 50%, #161b22 100%);
+  background: #1d2129;
 }
 
 .dark .page-nav-bar {
-  background: rgba(22, 27, 34, 0.9);
-  border-color: rgba(48, 54, 61, 0.8);
+  background: #232730;
+  border-color: #3d4451;
 }
 
-.dark .page-title { color: #f0f6fc; }
+.dark .page-title { color: #c9cdd4; }
 
 .dark .nav-action-btn {
-  background: linear-gradient(135deg, #00b894, #55efc4);
-}
-
-.dark .nav-action-btn.export {
-  background: linear-gradient(135deg, #00b894, #55efc4);
+  background: var(--dnac-info);
 }
 
 .dark .nav-action-btn.secondary {
-  background: rgba(48, 54, 61, 0.8);
-  color: #8b949e;
-  border-color: #30363d;
+  background: #3d4451;
+  color: #86909c;
+  border-color: #4e5766;
 }
 
 .dark .stats-dashboard-compact {
-  background: rgba(22, 27, 34, 0.85);
-  border-color: rgba(48, 54, 61, 0.6);
+  background: #232730;
+  border-color: #3d4451;
 }
 
 .dark .stat-card-compact {
-  background: rgba(13, 17, 23, 0.9);
-  border-color: rgba(48, 54, 61, 0.4);
+  background: #1d2129;
+  border-color: #3d4451;
 }
 
-.dark .stat-title { color: #8b949e; }
-.dark .stat-value { color: #f0f6fc; }
-.dark .stat-card-compact.total .stat-value { color: #58a6ff; }
-.dark .stat-card-compact.uce .stat-value { color: #e17055; }
-.dark .stat-card-compact.ap .stat-value { color: #3fb950; }
-.dark .stat-card-compact.office .stat-value { color: #d29922; }
-.dark .stat-card-compact.datacenter .stat-value { color: #58a6ff; }
+.dark .stat-title { color: #86909c; }
+.dark .stat-value { color: #c9cdd4; }
+.dark .stat-card-compact.total .stat-value { color: var(--dnac-info); }
+.dark .stat-card-compact.uce .stat-value { color: var(--dnac-warning); }
+.dark .stat-card-compact.ap .stat-value { color: var(--dnac-success); }
+.dark .stat-card-compact.office .stat-value { color: #ff7d00; }
+.dark .stat-card-compact.datacenter .stat-value { color: var(--dnac-info); }
 
 .dark .stat-card-compact.active {
-  border: 2px solid #58a6ff;
-  box-shadow: 0 4px 16px rgba(88, 166, 255, 0.25);
-  background: rgba(88, 166, 255, 0.1);
+  border: 1px solid var(--dnac-info);
+  background: rgba(22, 93, 255, 0.1);
 }
 
-.dark .stat-bar-container { background: rgba(48, 54, 61, 0.3); }
-.dark .stat-indicator { background: rgba(48, 54, 61, 0.3); color: #8b949e; }
+.dark .stat-bar-container { background: #3d4451; }
+.dark .stat-indicator { background: #3d4451; color: #86909c; }
 
 .dark .search-input :deep(.el-input__wrapper) {
-  background: rgba(13, 17, 23, 0.95);
-  border-color: #30363d;
+  background: #1d2129;
+  border-color: #3d4451;
 }
 
-.dark .search-icon { color: #8b949e; }
+.dark .search-icon { color: #86909c; }
 
 .dark .data-section {
-  background: rgba(22, 27, 34, 0.85);
-  border-color: rgba(48, 54, 61, 0.6);
+  background: #232730;
+  border-color: #3d4451;
 }
 
-.dark .table-title { color: #f0f6fc; }
-.dark .table-count { color: #8b949e; }
+.dark .table-title { color: #c9cdd4; }
+.dark .table-count { color: #86909c; }
 
-.dark .enterprise-tree-table :deep(th.el-table__cell) { color: #8b949e; }
-.dark .enterprise-tree-table :deep(td.el-table__cell) { border-bottom-color: rgba(48, 54, 61, 0.3); }
-.dark .enterprise-tree-table :deep(.el-table__row:hover > td) { background: rgba(88, 166, 255, 0.08) !important; }
+/* DNAC暗黑表格 */
+.dark .enterprise-tree-table {
+  --dnac-header-bg: #232730;
+  --dnac-border: #3d4451;
+  --dnac-text: #c9cdd4;
+  --dnac-text-secondary: #86909c;
+  --dnac-row-hover: #2d333b;
+}
 
-.dark .enterprise-tree-table :deep(.layer-row) { background: rgba(22, 27, 34, 0.95) !important; }
-.dark .enterprise-tree-table :deep(.layer-row > td) { background: rgba(22, 27, 34, 0.95) !important; border-bottom-color: rgba(48, 54, 61, 0.5); }
-.dark .enterprise-tree-table :deep(.type-row) { background: rgba(13, 17, 23, 0.7) !important; }
-.dark .enterprise-tree-table :deep(.type-row > td) { background: rgba(13, 17, 23, 0.7) !important; border-bottom-color: rgba(48, 54, 61, 0.4); }
+.dark .enterprise-tree-table :deep(.cell) { color: #c9cdd4; }
 
-.dark .layer-icon.datacenter { background: rgba(88, 166, 255, 0.2); color: #58a6ff; }
-.dark .layer-icon.wifi { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
-.dark .layer-icon.access { background: rgba(225, 112, 85, 0.2); color: #e17055; }
+.dark .device-link { color: var(--dnac-info); }
+.dark .device-link:hover { color: #4080ff; }
+.dark .device-name { color: #c9cdd4; }
 
-.dark .layer-name { color: #f0f6fc; }
-.dark .layer-count-badge { background: rgba(63, 185, 80, 0.2); color: #3fb950; }
+.dark .empty-cell { color: #86909c; }
+.dark .ip-text, .dark .model-text, .dark .location-text { color: #c9cdd4; }
 
-.dark .type-dot.datacenter { background: #58a6ff; }
-.dark .type-dot.wifi { background: #3fb950; }
-.dark .type-dot.access { background: #e17055; }
+.dark .filter-bar {
+  background: #232730;
+}
 
-.dark .type-name { color: #8b949e; }
-.dark .type-stats { color: #3fb950; }
+.dark .filter-clear-btn { color: var(--dnac-info); }
 
-.dark .device-link { color: #58a6ff; }
-.dark .device-link:hover { color: #74b9ff; }
-.dark .device-name { color: #f0f6fc; }
+/* 编辑对话框 */
+.dark .form-section {
+  background: #1d2129;
+  border-color: #3d4451;
+}
 
-.dark .empty-cell { color: #6e7681; }
-.dark .ip-text, .dark .model-text, .dark .location-text { color: #8b949e; }
+.dark .form-section-title { color: #86909c; }
 
-.dark .status-badge { background: rgba(13, 17, 23, 0.9); }
-.dark .status-badge.online { border-color: rgba(63, 185, 80, 0.4); color: #3fb950; }
-.dark .status-badge.online .status-dot { background: #3fb950; }
-.dark .status-badge.offline { border-color: rgba(248, 81, 73, 0.4); color: #f85149; }
-.dark .status-badge.offline .status-dot { background: #f85149; }
-.dark .status-badge.maintenance { border-color: rgba(225, 112, 85, 0.4); color: #e17055; }
-.dark .status-badge.maintenance .status-dot { background: #e17055; }
+/* ===== 设备探测 UI ===== */
+.input-with-btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
 
-.dark .action-btn { background: rgba(13, 17, 23, 0.9); color: #8b949e; }
-.dark .action-btn:hover { box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); }
-.dark .action-btn.backup:hover { background: rgba(63, 185, 80, 0.15); color: #3fb950; }
-.dark .action-btn.edit:hover { background: rgba(210, 153, 34, 0.15); color: #d29922; }
-.dark .action-btn.delete:hover { background: rgba(248, 81, 73, 0.15); color: #f85149; }
+.input-with-btn > .el-input,
+.input-with-btn > .el-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-with-btn > .el-button {
+  flex-shrink: 0;
+}
+
+.probe-result {
+  margin-top: 8px;
+}
+
+.ssh-warning {
+  margin-bottom: 12px;
+}
 
 /* ===== 编辑对话框 ===== */
 .edit-dialog-content {
@@ -1886,10 +1844,10 @@ onMounted(() => {
 }
 
 .form-section {
-  background: rgba(0, 48, 135, 0.04);
-  border-radius: 10px;
+  background: #f5f7fa;
+  border-radius: 6px;
   padding: 16px;
-  border: 1px solid rgba(0, 48, 135, 0.08);
+  border: 1px solid #e4e7eb;
 }
 
 .form-section-title {
@@ -1897,8 +1855,8 @@ onMounted(() => {
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  font-weight: 600;
-  color: #475569;
+  font-weight: 500;
+  color: var(--dnac-text);
   margin-bottom: 12px;
 }
 
@@ -1914,10 +1872,54 @@ onMounted(() => {
   gap: 8px;
 }
 
-.dark .form-section {
-  background: rgba(13, 17, 23, 0.6);
-  border-color: rgba(48, 54, 61, 0.4);
+/* 活跃故障数 - DNAC简洁数字 */
+.fault-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: var(--dnac-danger);
+  color: #fff;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
-.dark .form-section-title { color: #8b949e; }
+/* 上次备份 - DNAC简洁文字 */
+.backup-age-text {
+  font-size: 13px;
+  white-space: nowrap;
+}
+.backup-fresh    { color: var(--dnac-success); }
+.backup-warn     { color: var(--dnac-warning); }
+.backup-stale    { color: var(--dnac-danger); }
+.backup-never    { color: var(--dnac-text-secondary); }
+
+/* 筛选工具栏 */
+.filter-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  flex-wrap: wrap;
+  background: var(--dnac-header-bg);
+  border-radius: 4px;
+  margin-bottom: 8px;
+}
+
+.filter-clear-btn {
+  font-size: 13px;
+  color: var(--dnac-info);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.filter-clear-btn:hover {
+  color: var(--dnac-danger);
+}
 </style>

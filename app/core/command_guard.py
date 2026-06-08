@@ -110,6 +110,9 @@ def validate_commands(
     safe_commands = []
     warnings = []
 
+    # 处理 vendor 为 None 的情况
+    if vendor is None:
+        vendor = "cisco"
     vendor_lower = vendor.lower()
     vendor_rules = VENDOR_DANGEROUS_COMMANDS.get(vendor_lower, VENDOR_DANGEROUS_COMMANDS["cisco"])
 

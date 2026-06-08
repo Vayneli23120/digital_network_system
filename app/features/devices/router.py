@@ -66,6 +66,71 @@ class DeviceUpdate(BaseModel):
     modules: Optional[List[dict]] = None
 
 
+class ProbeRequest(BaseModel):
+    """设备探测请求"""
+    ip: str
+    credential_group: Optional[str] = None
+    vendor: Optional[str] = "cisco"
+    device_type: Optional[str] = None
+
+
+# ============ 设备预检 API ============
+
+@router.post("/test-reachability")
+async def test_device_reachability(request: ProbeRequest):
+    """测试设备IP可达性（ping测试）
+
+    所有设备类型都可用此API测试网络连通性。
+    """
+    from .device_probe_service import get_probe_service
+    service = get_probe_service()
+    return service.test_ip_reachability(request.ip)
+
+
+@router.post("/test-connection")
+async def test_device_connection(request: ProbeRequest):
+    """测试设备SSH连接
+
+    仅支持SSH的设备类型可用此API。
+    AP设备不支持SSH，防火墙需要特殊权限。
+    """
+    from .device_probe_service import get_probe_service
+    db = next(get_db())
+    try:
+        service = get_probe_service()
+        return service.test_ssh_connection(
+            db,
+            request.ip,
+            request.credential_group or "default",
+            request.vendor or "cisco",
+            request.device_type
+        )
+    finally:
+        db.close()
+
+
+@router.post("/fetch-info")
+async def fetch_device_info(request: ProbeRequest):
+    """获取设备信息
+
+    通过SSH连接设备执行show inventory和show snmp获取信息。
+    仅支持SSH的设备类型可用此API。
+    """
+    from .device_probe_service import get_probe_service
+    db = next(get_db())
+    try:
+        service = get_probe_service()
+        return service.fetch_device_info(
+            db,
+            request.ip,
+            request.credential_group or "default",
+            request.vendor or "cisco",
+            request.device_type
+        )
+    finally:
+        db.close()
+
+
 @router.get("")
 async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
                         device_type: Optional[str] = None,
@@ -333,6 +398,65 @@ async def get_monitor_status():
     from app.services.reachability_monitor import get_reachability_monitor
     monitor = get_reachability_monitor()
     return monitor.get_stats()
+
+
+@router.get("/{device_id}/metrics")
+async def get_device_performance_metrics(device_id: int, db: Session = Depends(get_db)):
+    """获取设备性能指标
+
+    通过 SNMP 查询获取 CPU、内存、温度、上行链路带宽利用率。
+
+    Returns:
+        {
+            "cpu": {"value": 45, "status": "normal"},
+            "memory": {"used_percent": 60, "used_mb": 512, "total_mb": 1024, "status": "normal"},
+            "temperature": {"value": 35, "status": "normal", "threshold": 70},
+            "uplinks": [{"interface": "Gi1/0/1", "alias": "上行核心", "utilization": 25, ...}],
+            "timestamp": "2024-01-15T10:30:00",
+            "snmp_available": true
+        }
+    """
+    from .snmp_service import get_snmp_service
+
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    if not device.ip:
+        raise HTTPException(status_code=400, detail="设备未配置 IP 地址")
+
+    # 获取 SNMP community（从设备配置或默认值）
+    # 可以扩展为从 CredentialGroup 或设备配置中获取
+    community = "public"  # 默认值
+    vendor = device.vendor or "cisco"
+
+    service = get_snmp_service()
+
+    if not service.is_available():
+        return {
+            "cpu": {"value": None, "status": "unknown", "message": "SNMP 服务未安装"},
+            "memory": {"value": None, "status": "unknown"},
+            "temperature": {"value": None, "status": "unknown"},
+            "uplinks": [],
+            "snmp_available": False,
+            "device_ip": device.ip
+        }
+
+    try:
+        metrics = service.get_device_metrics(device.ip, community, vendor)
+        metrics["snmp_available"] = True
+        metrics["device_ip"] = device.ip
+        return metrics
+    except Exception as e:
+        return {
+            "cpu": {"value": None, "status": "unknown", "message": str(e)},
+            "memory": {"value": None, "status": "unknown"},
+            "temperature": {"value": None, "status": "unknown"},
+            "uplinks": [],
+            "snmp_available": True,
+            "device_ip": device.ip,
+            "error": str(e)
+        }
 
 
 @router.get("/{device_id}")

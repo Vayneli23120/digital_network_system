@@ -16,79 +16,136 @@
       </div>
     </div>
 
-    <!-- 主体：左右布局 -->
-    <div class="detail-header">
-      <!-- 左侧：主信息卡片 -->
-      <div class="detail-main-card" v-loading="loading">
-        <div class="detail-title">{{ t('deviceInfo') }}</div>
-        <div class="detail-meta" v-if="device">
-          <span>{{ t('labelIp') }}: {{ device.ip || t('valueNa') }}</span>
-          <span>{{ t('labelModel') }}: {{ device.model || t('valueNa') }}</span>
-          <span>{{ t('labelLocation') }}: {{ device.location || t('valueNa') }}</span>
-          <el-tag :type="getVendorTagType(device.vendor)" size="small">{{ getVendorText(device.vendor) }}</el-tag>
-        </div>
-
-        <!-- 信息列表 -->
-        <div class="info-list" v-if="device">
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceSerialNumber') }}</span>
-            <span class="info-value">{{ device.serial_number || t('valueNa') }}</span>
+    <!-- 主体：设备健康仪表盘 -->
+    <div class="device-dashboard">
+      <!-- 设备状态卡片 -->
+      <div class="status-card" :class="healthStatusClass" v-loading="loading">
+        <!-- 状态头部：一目了然的健康状态 -->
+        <div class="status-header">
+          <div class="status-indicator">
+            <div class="status-dot" :class="healthDotClass"></div>
+            <span class="status-label">{{ healthStatusLabel }}</span>
           </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceRole') }}</span>
-            <span class="info-value">{{ getRoleText(device.role) }}</span>
+          <div class="device-identity">
+            <span class="device-ip-large">{{ device?.ip || '--' }}</span>
+            <span class="device-name-sub">{{ device?.name || '' }}</span>
           </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceCredentialGroup') }}</span>
-            <span class="info-value">{{ device.credential_group || 'default' }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('devicePurchaseDate') }}</span>
-            <span class="info-value">{{ device.purchase_date ? formatDate(device.purchase_date) : t('valueNa') }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceLifeSpan') }}</span>
-            <span class="info-value">{{ calculateLifeSpan() }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('devicePurchaseCost') }}</span>
-            <span class="info-value">{{ device.purchase_cost ? '¥' + device.purchase_cost.toLocaleString() : t('valueNa') }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceLastBackup') }}</span>
-            <span class="info-value">{{ device.last_backup_time ? formatDateTime(device.last_backup_time) : t('deviceNeverBackup') }}</span>
-          </div>
-          <div class="info-item">
-            <span class="info-label">{{ t('deviceSupplier') }}</span>
-            <span class="info-value">{{ device.vendor || t('valueNa') }}</span>
+          <div class="header-actions">
+            <el-button class="action-btn-refresh" @click="refreshMetrics" :loading="metricsLoading" circle>
+              <el-icon><Refresh /></el-icon>
+            </el-button>
+            <el-button class="action-btn-edit" @click="showEditDialog = true" circle>
+              <el-icon><Setting /></el-icon>
+            </el-button>
           </div>
         </div>
-      </div>
 
-      <!-- 右侧：快速操作卡片 -->
-      <div class="detail-side-card">
-        <div class="card-title">{{ t('deviceQuickActions') }}</div>
-        <div class="quick-actions">
-          <button class="quick-action-btn quick-action-btn-success" @click="backupNow">
-            <i class="action-icon"><Download /></i>
-            <span class="action-text">{{ t('deviceBackupNow') }}</span>
-          </button>
-          <button class="quick-action-btn" @click="viewLatestConfig">
-            <i class="action-icon"><View /></i>
-            <span class="action-text">{{ t('backupViewConfig') }}</span>
-          </button>
-          <button class="quick-action-btn" @click="testConnection">
-            <i class="action-icon"><Connection /></i>
-            <span class="action-text">{{ t('deviceConnectTest') }}</span>
-          </button>
-          <button class="quick-action-btn" @click="openMaintDialog">
-            <i class="action-icon"><Tools /></i>
-            <span class="action-text">{{ t('maintAddRecord') }}</span>
-          </button>
-          <button class="quick-action-btn quick-action-btn-danger" @click="confirmDeleteDevice" v-if="device">
-            <i class="action-icon"><Delete /></i>
-            <span class="action-text">{{ t('deviceDelete') }}</span>
-          </button>
+        <!-- 核心指标：四个关键数据 -->
+        <div class="core-metrics">
+          <div class="metric-block">
+            <div class="metric-ring" :style="{ borderColor: getMetricColor(metricsData.cpu?.value) }">
+              <span class="metric-number" :style="{ color: getMetricColor(metricsData.cpu?.value) }">{{ metricsData.cpu?.value || '--' }}</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <span class="metric-name">{{ t('metricCpu') }}</span>
+            <span class="metric-status" :class="getMetricStatus(metricsData.cpu?.value)">{{ getMetricStatusText(metricsData.cpu?.value) }}</span>
+          </div>
+          <div class="metric-block">
+            <div class="metric-ring" :style="{ borderColor: getMetricColor(metricsData.memory?.used_percent) }">
+              <span class="metric-number" :style="{ color: getMetricColor(metricsData.memory?.used_percent) }">{{ metricsData.memory?.used_percent || '--' }}</span>
+              <span class="metric-unit">%</span>
+            </div>
+            <span class="metric-name">{{ t('metricMemory') }}</span>
+            <span class="metric-status" :class="getMetricStatus(metricsData.memory?.used_percent)">{{ getMetricStatusText(metricsData.memory?.used_percent) }}</span>
+          </div>
+          <div class="metric-block">
+            <div class="metric-ring" :style="{ borderColor: getTempColor(metricsData.temperature?.value) }">
+              <span class="metric-number" :style="{ color: getTempColor(metricsData.temperature?.value) }">{{ metricsData.temperature?.value || '--' }}</span>
+              <span class="metric-unit">°C</span>
+            </div>
+            <span class="metric-name">{{ t('metricTemperature') }}</span>
+            <span class="metric-status" :class="getTempStatus(metricsData.temperature?.value)">{{ getTempStatusText(metricsData.temperature?.value) }}</span>
+          </div>
+          <div class="metric-block uptime-block">
+            <div class="uptime-display">
+              <el-icon class="uptime-icon"><Timer /></el-icon>
+              <span class="uptime-value">{{ metricsData.uptime?.uptime_days || '--' }}</span>
+              <span class="uptime-unit">{{ t('metricDays') }}</span>
+            </div>
+            <span class="metric-name">{{ t('metricUptime') }}</span>
+            <span class="metric-status uptime-detail">{{ metricsData.uptime?.uptime_hours || 0 }}h</span>
+          </div>
+        </div>
+
+        <!-- 网络健康状态 -->
+        <div class="network-health">
+          <div class="health-item" :class="{ 'health-ok': metricsData.interfaces?.down === 0 }">
+            <el-icon><Connection /></el-icon>
+            <span class="health-value">{{ metricsData.interfaces?.up || '--' }}/{{ metricsData.interfaces?.total || '--' }}</span>
+            <span class="health-label">{{ t('metricPortsOnline') }}</span>
+            <el-tag v-if="metricsData.interfaces?.down > 0" type="danger" size="small" effect="dark" class="health-alert">
+              {{ metricsData.interfaces?.down }} {{ t('metricDown') }}
+            </el-tag>
+            <el-tag v-else type="success" size="small" effect="dark" class="health-ok-tag">{{ t('metricAllOk') }}</el-tag>
+          </div>
+          <div class="health-item" :class="{ 'health-ok': !metricsData.errors?.has_errors }">
+            <el-icon><WarningFilled /></el-icon>
+            <span class="health-value">{{ formatErrorCount(metricsData.errors?.total_errors) }}</span>
+            <span class="health-label">{{ t('metricErrors') }}</span>
+            <el-tag v-if="metricsData.errors?.has_errors" type="warning" size="small" effect="dark" class="health-alert">{{ t('metricHasIssues') }}</el-tag>
+            <el-tag v-else type="success" size="small" effect="dark" class="health-ok-tag">{{ t('metricClean') }}</el-tag>
+          </div>
+          <div class="health-item" :class="{ 'health-ok': metricsData.uplinks?.length > 0 }">
+            <el-icon><Promotion /></el-icon>
+            <span class="health-value">{{ metricsData.uplinks?.length || 0 }}</span>
+            <span class="health-label">{{ t('metricUplinks') }}</span>
+          </div>
+        </div>
+
+        <!-- 设备基本信息（可折叠） -->
+        <el-collapse class="info-collapse">
+          <el-collapse-item :title="t('deviceInfoDetails')" name="info">
+            <div class="info-compact-grid">
+              <div class="info-row-item">
+                <span class="info-key">{{ t('labelModel') }}</span>
+                <span class="info-val">{{ device?.model || '--' }}</span>
+              </div>
+              <div class="info-row-item">
+                <span class="info-key">{{ t('labelLocation') }}</span>
+                <span class="info-val">{{ device?.location || '--' }}</span>
+              </div>
+              <div class="info-row-item">
+                <span class="info-key">{{ t('deviceRole') }}</span>
+                <span class="info-val">{{ getRoleText(device?.role) }}</span>
+              </div>
+              <div class="info-row-item">
+                <span class="info-key">{{ t('deviceLastBackup') }}</span>
+                <span class="info-val">{{ device?.last_backup_time ? formatDateTime(device.last_backup_time) : '--' }}</span>
+              </div>
+            </div>
+          </el-collapse-item>
+          <el-collapse-item v-if="metricsData.uplinks?.length > 0" :title="t('metricUplinkBandwidth')" name="uplinks">
+            <div class="uplinks-detail">
+              <div class="uplink-row" v-for="link in metricsData.uplinks" :key="link.index">
+                <span class="uplink-interface">{{ link.alias || link.interface }}</span>
+                <div class="uplink-util-visual">
+                  <div class="uplink-bar-bg">
+                    <div class="uplink-bar-fill" :style="{ width: (link.utilization || 0) + '%', background: getUtilizationColor(link.utilization) }"></div>
+                  </div>
+                  <span class="uplink-percent">{{ link.utilization ? link.utilization + '%' : '--' }}</span>
+                </div>
+                <span class="uplink-speed">{{ link.speed_mbps }}M</span>
+              </div>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+
+        <!-- 快捷操作 -->
+        <div class="quick-actions-bar">
+          <el-button type="success" @click="backupNow" :icon="Download" round size="default">{{ t('deviceBackupNow') }}</el-button>
+          <el-button @click="viewLatestConfig" :icon="View" round size="default">{{ t('backupViewConfig') }}</el-button>
+          <el-button type="warning" @click="openFaultDialog" :icon="Warning" round size="default">{{ t('faultAddRecord') }}</el-button>
+          <el-button type="danger" @click="confirmDeleteDevice" :icon="Delete" round v-if="device">{{ t('deviceDelete') }}</el-button>
         </div>
       </div>
     </div>
@@ -254,7 +311,17 @@
               <el-input v-model="editForm.name" :placeholder="t('editDeviceNamePlaceholder')" :disabled="true" />
             </el-form-item>
             <el-form-item :label="t('deviceIp')" required>
-              <el-input v-model="editForm.ip" :placeholder="t('editDeviceIpPlaceholder')" />
+              <div class="input-with-btn">
+                <el-input v-model="editForm.ip" :placeholder="t('editDeviceIpPlaceholder')" />
+                <el-button size="small" @click="testReachability" :loading="probeLoading.ip" :disabled="!editForm.ip">
+                  测试连通
+                </el-button>
+              </div>
+              <div v-if="probeResult.ip" class="probe-result">
+                <el-tag :type="probeResult.ip.reachable ? 'success' : 'danger'" size="small">
+                  {{ probeResult.ip.message }}
+                </el-tag>
+              </div>
             </el-form-item>
             <el-form-item :label="t('deviceModel')">
               <el-input v-model="editForm.model" :placeholder="t('editDeviceModelPlaceholder')" />
@@ -270,10 +337,27 @@
           <div class="form-section-title">
             <el-icon><Box /></el-icon>
             {{ t('deviceModules') }}
+            <el-button
+              size="small"
+              type="primary"
+              style="margin-left: auto;"
+              @click="fetchDeviceInfoHandler"
+              :loading="probeLoading.fetch"
+              :disabled="!editForm.ip || !editForm.credential_group || sshDisabled"
+            >
+              一键获取设备信息
+            </el-button>
+          </div>
+          <!-- SSH能力提示 -->
+          <div v-if="sshDisabled" class="ssh-warning">
+            <el-tag type="warning" size="small">AP设备不支持SSH，无法自动获取信息</el-tag>
+          </div>
+          <div v-if="sshSpecialPermission" class="ssh-warning">
+            <el-tag type="info" size="small">防火墙需要GoVault权限才能SSH连接</el-tag>
           </div>
           <div class="modules-container">
             <div v-for="(module, index) in editForm.modules" :key="index" class="module-row">
-              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 140px;">
+              <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 120px;">
                 <el-option :label="t('deviceMainModule')" value="main" />
                 <el-option :label="t('deviceExpansionModule')" value="expansion" />
                 <el-option :label="t('devicePowerModule')" value="power" />
@@ -281,7 +365,8 @@
                 <el-option :label="t('deviceFanModule')" value="fan" />
                 <el-option :label="t('deviceTypeOther')" value="other" />
               </el-select>
-              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 180px;" />
+              <el-input v-model="module.pid" placeholder="型号 (如 C9300-24P)" size="small" style="width: 150px;" />
+              <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 160px;" />
               <el-button type="danger" size="small" :icon="Close" circle @click="removeModule(index)" v-if="editForm.modules && editForm.modules.length > 1" />
             </div>
             <el-button type="primary" size="small" :icon="Plus" @click="addModule">{{ t('deviceAddModule') }}</el-button>
@@ -329,6 +414,14 @@
                 <el-option :label="t('deviceRoleCore')" value="core" />
               </el-select>
             </el-form-item>
+            <el-form-item :label="t('deviceDeploymentStatus')">
+              <el-select v-model="editForm.deployment_status">
+                <el-option :label="t('statusInUse')" value="in-use" />
+                <el-option :label="t('statusUnUsed')" value="un-used" />
+                <el-option :label="t('statusMaintenance')" value="maintenance" />
+                <el-option :label="t('statusRetired')" value="retired" />
+              </el-select>
+            </el-form-item>
             <el-form-item :label="t('deviceStatus')">
               <el-select v-model="editForm.status">
                 <el-option :label="t('statusOnline')" value="online" />
@@ -338,10 +431,20 @@
               </el-select>
             </el-form-item>
             <el-form-item :label="t('deviceCredentialGroup')">
-              <el-select v-model="editForm.credential_group" :placeholder="t('deviceSelectCredential')">
-                <el-option label="default" value="default" />
-                <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
-              </el-select>
+              <div class="input-with-btn">
+                <el-select v-model="editForm.credential_group" :placeholder="t('deviceSelectCredential')">
+                  <el-option label="default" value="default" />
+                  <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
+                </el-select>
+                <el-button size="small" @click="testConnection" :loading="probeLoading.connection" :disabled="!editForm.ip || !editForm.credential_group || sshDisabled">
+                  测试连接
+                </el-button>
+              </div>
+              <div v-if="probeResult.connection" class="probe-result">
+                <el-tag :type="probeResult.connection.connected ? 'success' : 'danger'" size="small">
+                  {{ probeResult.connection.message }}
+                </el-tag>
+              </div>
             </el-form-item>
           </el-form>
         </div>
@@ -359,19 +462,70 @@
     </el-dialog>
 
     <!-- 添加故障记录对话框 -->
-    <el-dialog v-model="showFaultDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="500px" append-to-body draggable align-center>
-      <el-form :model="faultForm" label-width="100px">
-        <el-form-item :label="t('faultSeverity')" required>
-          <el-select v-model="faultForm.severity">
-            <el-option :label="t('faultSeverityCritical')" value="critical" />
-            <el-option :label="t('faultSeverityMajor')" value="major" />
-            <el-option :label="t('faultSeverityMinor')" value="minor" />
-            <el-option :label="t('faultSeverityWarning')" value="warning" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('faultDowntimeMinutes')"><el-input-number v-model="faultForm.downtime_minutes" :min="0" /></el-form-item>
-        <el-form-item :label="t('faultDescription')" required><el-input v-model="faultForm.description" type="textarea" :rows="4" /></el-form-item>
-      </el-form>
+    <el-dialog v-model="showFaultDialog" :title="editMode ? t('faultEditRecord') : t('faultAddRecord')" width="650px" class="edit-fault-dialog" append-to-body draggable align-center>
+      <div class="edit-dialog-content">
+        <!-- 基础信息 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Warning /></el-icon>
+            {{ t('faultBasicInfo') || '基础信息' }}
+          </div>
+          <el-form :model="faultForm" label-width="120px">
+            <el-form-item :label="t('faultAssignTo')">
+              <el-select v-model="faultForm.assigned_to" :placeholder="t('faultAssignPlaceholder')" style="width: 100%" clearable>
+                <el-option v-for="user in users" :key="user" :label="user" :value="user" />
+              </el-select>
+              <div class="assign-tip">{{ t('faultAssignTip') || '指派后将自动通知负责人' }}</div>
+            </el-form-item>
+            <el-form-item :label="t('faultType')">
+              <el-select v-model="faultForm.fault_type" clearable style="width: 100%">
+                <el-option :label="t('faultTypeHardware')" value="hardware" />
+                <el-option :label="t('faultTypeSoftware')" value="software" />
+                <el-option :label="t('faultTypeConfig')" value="config" />
+                <el-option :label="t('faultTypeNetwork')" value="network" />
+                <el-option :label="t('faultTypeOther')" value="other" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultPriority')" required>
+              <el-select v-model="faultForm.severity" style="width: 100%">
+                <el-option label="P1 - Critical" value="critical" />
+                <el-option label="P2 - Major" value="major" />
+                <el-option label="P3 - Minor" value="minor" />
+                <el-option label="P4 - Warning" value="warning" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultStatus')" v-if="editMode">
+              <el-select v-model="faultForm.status" style="width: 100%">
+                <el-option :label="t('faultStatusOpen')" value="open" />
+                <el-option :label="t('faultStatusAssigned')" value="assigned" />
+                <el-option :label="t('faultStatusDiagnosing')" value="diagnosing" />
+                <el-option :label="t('faultStatusTransferred')" value="transferred" />
+                <el-option :label="t('faultStatusResolved')" value="resolved" />
+                <el-option :label="t('faultStatusClosed')" value="closed" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="t('faultDowntimeMinutes')">
+              <el-input-number v-model="faultForm.downtime_minutes" :min="0" style="width: 100%" />
+            </el-form-item>
+          </el-form>
+        </div>
+
+        <!-- 影响与描述 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Document /></el-icon>
+            {{ t('faultImpactDesc') || '影响与描述' }}
+          </div>
+          <el-form :model="faultForm" label-width="120px">
+            <el-form-item :label="t('faultImpact')">
+              <el-input v-model="faultForm.impact" type="textarea" :rows="2" :placeholder="t('faultImpactPlaceholder')" />
+            </el-form-item>
+            <el-form-item :label="t('faultDescription')" required>
+              <el-input v-model="faultForm.description" type="textarea" :rows="4" :placeholder="t('faultDescPlaceholder')" />
+            </el-form-item>
+          </el-form>
+        </div>
+      </div>
       <template #footer>
         <el-button @click="showFaultDialog = false">{{ t('actionCancel') }}</el-button>
         <el-button type="primary" @click="editMode ? updateFaultInDetail() : addFault()">{{ t('actionConfirm') }}</el-button>
@@ -379,28 +533,16 @@
     </el-dialog>
 
     <!-- 添加维修记录对话框 -->
-    <el-dialog v-model="showMaintDialog" :title="editMode ? t('maintEditRecord') : t('maintAddRecord')" width="600px" append-to-body draggable align-center>
-      <el-form :model="maintForm" label-width="120px">
-        <el-form-item :label="t('maintType')" required>
-          <el-select v-model="maintForm.maint_type">
-            <el-option :label="t('maintTypePreventiveFull')" value="preventive" />
-            <el-option :label="t('maintTypeCorrectiveFull')" value="corrective" />
-            <el-option :label="t('maintTypeUpgradeFull')" value="upgrade" />
-            <el-option :label="t('maintTypeEmergencyFull')" value="emergency" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('maintReplaceParts')"><el-input v-model="maintForm.parts_replaced" type="textarea" :rows="2" /></el-form-item>
-        <el-form-item :label="t('maintPartsCost')"><el-input-number v-model="maintForm.parts_cost" :min="0" :precision="2" /></el-form-item>
-        <el-form-item :label="t('maintLaborHours')"><el-input-number v-model="maintForm.labor_hours" :min="0" :precision="1" /></el-form-item>
-        <el-form-item :label="t('maintLaborCost')"><el-input-number v-model="maintForm.labor_cost" :min="0" :precision="2" /></el-form-item>
-        <el-form-item :label="t('maintVendor')"><el-input v-model="maintForm.vendor" /></el-form-item>
-        <el-form-item :label="t('maintDescription')" required><el-input v-model="maintForm.description" type="textarea" :rows="4" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showMaintDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="editMode ? updateMaintInDetail() : addMaintenance()">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <!-- 维修表单对话框（使用共享组件） -->
+    <MaintenanceFormDialog
+      v-model="showMaintDialog"
+      :presetDeviceId="device?.id"
+      :presetDeviceName="device?.name"
+      :editData="editMaintData"
+      :showScanButton="true"
+      :showReturnParts="true"
+      @success="handleMaintSuccess"
+    />
   </div>
 </template>
 
@@ -408,12 +550,13 @@
 import { ref, onMounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close } from '@element-plus/icons-vue'
-import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors } from '@/api'
+import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close, Warning, Document, Refresh, Timer, WarningFilled, Promotion } from '@element-plus/icons-vue'
+import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
+import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -426,17 +569,129 @@ const showMaintDialog = ref(false)
 const showEditDialog = ref(false)
 const showConfigDialog = ref(false)
 const editMode = ref(false)
+const editMaintData = ref(null)  // 维修编辑数据
 const configContent = ref('')
 const credentialGroups = ref([])
 const vendors = ref([])
+const users = ref([])
+
+// 设备探测状态
+const probeLoading = ref({
+  ip: false,
+  connection: false,
+  fetch: false
+})
+
+const probeResult = ref({
+  ip: null,
+  connection: null
+})
+
+// 设备性能指标
+const metricsLoading = ref(false)
+const metricsData = ref({
+  cpu: { value: null, status: 'unknown' },
+  memory: { used_percent: null, status: 'unknown' },
+  temperature: { value: null, status: 'unknown' },
+  uptime: { uptime_days: null, human: null },
+  interfaces: { up: null, down: null, total: null },
+  errors: { total_errors: null, has_errors: false },
+  uplinks: [],
+  timestamp: null,
+  snmp_available: false
+})
+
+// 设备整体健康状态计算
+const healthStatusClass = computed(() => {
+  const cpu = metricsData.value.cpu?.value
+  const mem = metricsData.value.memory?.used_percent
+  const temp = metricsData.value.temperature?.value
+  const hasDownPorts = metricsData.value.interfaces?.down > 0
+  const hasErrors = metricsData.value.errors?.has_errors
+
+  if (cpu >= 90 || mem >= 90 || temp >= 70) return 'status-critical'
+  if (cpu >= 75 || mem >= 75 || temp >= 55 || hasDownPorts || hasErrors) return 'status-warning'
+  return 'status-healthy'
+})
+
+const healthDotClass = computed(() => {
+  return healthStatusClass.value.replace('status-', '')
+})
+
+const healthStatusLabel = computed(() => {
+  const status = healthStatusClass.value
+  const labels = {
+    'status-healthy': t('healthGood'),
+    'status-warning': t('healthWarning'),
+    'status-critical': t('healthCritical')
+  }
+  return labels[status] || '--'
+})
+
+// 状态辅助函数
+const getMetricStatus = (value) => {
+  if (value === null || value === undefined) return 'status-unknown'
+  if (value < 50) return 'status-ok'
+  if (value < 75) return 'status-warn'
+  if (value < 90) return 'status-danger'
+  return 'status-critical'
+}
+
+const getMetricStatusText = (value) => {
+  if (value === null || value === undefined) return '--'
+  if (value < 50) return t('statusOk')
+  if (value < 75) return t('statusWarn')
+  return t('statusHigh')
+}
+
+const getTempStatus = (value) => {
+  if (value === null || value === undefined) return 'status-unknown'
+  if (value < 40) return 'status-ok'
+  if (value < 55) return 'status-warn'
+  return 'status-danger'
+}
+
+const getTempStatusText = (value) => {
+  if (value === null || value === undefined) return '--'
+  if (value < 40) return t('statusOk')
+  if (value < 55) return t('statusWarm')
+  return t('statusHot')
+}
+
+const formatErrorCount = (count) => {
+  if (count === null || count === undefined) return '0'
+  if (count >= 1000000) return (count / 1000000).toFixed(1) + 'M'
+  if (count >= 1000) return (count / 1000).toFixed(1) + 'K'
+  return count.toString()
+}
+
+// SSH能力判断
+const sshDisabled = computed(() => {
+  // AP设备不支持SSH
+  return editForm.value.device_type === 'ap'
+})
+
+const sshSpecialPermission = computed(() => {
+  // 防火墙需要GoVault权限
+  return ['pa', 'ftd'].includes(editForm.value.device_type)
+})
 
 // 设备资产
 const deviceInventory = ref([])
 const inventoryLoading = ref(false)
 const inventoryTotalValue = computed(() => deviceInventory.value.reduce((sum, item) => sum + (item.unit_price || 0), 0))
 
-const faultForm = ref({ severity: 'major', downtime_minutes: 0, description: '' })
-const maintForm = ref({ maint_type: 'corrective', parts_replaced: '', parts_cost: 0, labor_hours: 0, labor_cost: 0, vendor: '', description: '' })
+const faultForm = ref({
+  id: null,
+  severity: 'major',
+  fault_type: '',
+  downtime_minutes: 0,
+  impact: '',
+  description: '',
+  status: 'open',
+  assigned_to: ''
+})
+
 const editForm = ref({})
 
 const uploadUrl = computed(() => `/api/devices/${route.params.id}/photos`)
@@ -455,13 +710,31 @@ const getPhotoTypeText = (type) => ({ front: t('devicePhotoFront'), back: t('dev
 const getMaintTypeText = (type) => ({ preventive: t('maintTypePreventive'), corrective: t('maintTypeCorrective'), upgrade: t('maintTypeUpgrade'), emergency: t('maintTypeEmergency') }[type] || type)
 const getMaintTypeType = (type) => ({ preventive: 'success', corrective: 'warning', upgrade: 'info', emergency: 'danger' }[type] || '')
 
-const calculateLifeSpan = () => {
-  if (!device.value?.purchase_date) return t('valueNa')
-  const purchase = new Date(device.value.purchase_date)
-  const now = new Date()
-  const years = Math.floor((now - purchase) / (365 * 24 * 60 * 60 * 1000))
-  const months = Math.floor(((now - purchase) % (365 * 24 * 60 * 60 * 1000)) / (30 * 24 * 60 * 60 * 1000))
-  return `${years} ${t('yearUnit')} ${months} ${t('monthUnit')}`
+// 获取利用率颜色
+const getUtilizationColor = (value) => {
+  if (value === null || value === undefined) return '#b0b0b0'
+  if (value < 50) return '#00b894'
+  if (value < 75) return '#fdcb6e'
+  if (value < 90) return '#e17055'
+  return '#d63031'
+}
+
+// 获取指标颜色（CPU/内存）
+const getMetricColor = (value) => {
+  if (value === null || value === undefined) return '#94a3b8'
+  if (value < 50) return '#22c55e'
+  if (value < 75) return '#eab308'
+  if (value < 90) return '#f97316'
+  return '#ef4444'
+}
+
+// 获取温度颜色
+const getTempColor = (value) => {
+  if (value === null || value === undefined) return '#94a3b8'
+  if (value < 40) return '#22c55e'
+  if (value < 55) return '#eab308'
+  if (value < 70) return '#f97316'
+  return '#ef4444'
 }
 
 const calculateMaintCost = () => {
@@ -479,11 +752,17 @@ const loadDevice = debounce(async (force = false) => {
       { forceRefresh: force }
     )
     device.value = data
-    // 解析 modules 数据
-    const modules = data.modules || [{ type: 'main', serial_number: '' }]
+    // 解析 modules 数据（兼容旧数据无 pid 字段）
+    const modules = data.modules || [{ type: 'main', pid: '', serial_number: '' }]
+    // 确保每个模块都有 pid 字段
+    const normalizedModules = modules.map(m => ({
+      type: m.type || 'other',
+      pid: m.pid || '',
+      serial_number: m.serial_number || ''
+    }))
     editForm.value = {
       ...data,
-      modules: Array.isArray(modules) && modules.length > 0 ? modules : [{ type: 'main', serial_number: '' }]
+      modules: Array.isArray(normalizedModules) && normalizedModules.length > 0 ? normalizedModules : [{ type: 'main', pid: '', serial_number: '' }]
     }
   } catch (error) {
     if (error.name !== 'CanceledError') {
@@ -517,16 +796,92 @@ const loadVendors = async () => {
   }
 }
 
+const loadUsers = async () => {
+  try {
+    const res = await getUsers()
+    users.value = res || []
+  } catch (error) {
+    // Silent fail
+  }
+}
+
 const addModule = () => {
   if (!editForm.value.modules) {
-    editForm.value.modules = [{ type: 'main', serial_number: '' }]
+    editForm.value.modules = [{ type: 'main', pid: '', serial_number: '' }]
   }
-  editForm.value.modules.push({ type: 'other', serial_number: '' })
+  editForm.value.modules.push({ type: 'other', pid: '', serial_number: '' })
 }
 
 const removeModule = (index) => {
   if (editForm.value.modules && editForm.value.modules.length > 1) {
     editForm.value.modules.splice(index, 1)
+  }
+}
+
+// 设备探测函数
+const testReachability = async () => {
+  if (!editForm.value.ip) return
+  probeLoading.value.ip = true
+  probeResult.value.ip = null
+  try {
+    const result = await testDeviceReachability(editForm.value.ip)
+    probeResult.value.ip = result
+  } catch (error) {
+    probeResult.value.ip = { reachable: false, message: '测试失败: ' + (error.response?.data?.detail || error.message) }
+  } finally {
+    probeLoading.value.ip = false
+  }
+}
+
+const testConnection = async () => {
+  if (!editForm.value.ip || !editForm.value.credential_group) return
+  probeLoading.value.connection = true
+  probeResult.value.connection = null
+  try {
+    const result = await testDeviceConnection(
+      editForm.value.ip,
+      editForm.value.credential_group,
+      editForm.value.vendor,
+      editForm.value.device_type
+    )
+    probeResult.value.connection = result
+  } catch (error) {
+    probeResult.value.connection = { connected: false, message: '连接失败: ' + (error.response?.data?.detail || error.message) }
+  } finally {
+    probeLoading.value.connection = false
+  }
+}
+
+const fetchDeviceInfoHandler = async () => {
+  if (!editForm.value.ip || !editForm.value.credential_group) return
+  probeLoading.value.fetch = true
+  try {
+    const result = await fetchDeviceInfo(
+      editForm.value.ip,
+      editForm.value.credential_group,
+      editForm.value.vendor,
+      editForm.value.device_type
+    )
+    if (result.success) {
+      // 自动填充设备信息
+      if (result.model) editForm.value.model = result.model
+      if (result.serial_number && editForm.value.modules.length > 0) {
+        editForm.value.modules[0].serial_number = result.serial_number
+      }
+      if (result.location) editForm.value.location = result.location
+      // 添加获取到的模块信息
+      if (result.modules && result.modules.length > 0) {
+        // 清空现有模块，用获取到的模块替换
+        editForm.value.modules = result.modules
+      }
+      ElMessage.success('设备信息获取成功')
+    } else {
+      ElMessage.warning(result.message || '获取设备信息失败')
+    }
+  } catch (error) {
+    ElMessage.error('获取设备信息失败: ' + (error.response?.data?.detail || error.message))
+  } finally {
+    probeLoading.value.fetch = false
   }
 }
 
@@ -552,7 +907,20 @@ const loadDeviceInventory = debounce(async (force = false) => {
 
 watch(activeTab, (newTab) => { if (newTab === 'inventory') loadDeviceInventory() })
 
-const testConnection = async () => { ElMessage.info(t('msgTestWaitApi')) }
+// 刷新设备性能指标
+const refreshMetrics = async () => {
+  if (!route.params.id) return
+  metricsLoading.value = true
+  try {
+    const data = await getDeviceMetrics(route.params.id)
+    metricsData.value = data
+  } catch (error) {
+    ElMessage.error(t('msgMetricsLoadFailed') || '性能指标获取失败')
+  } finally {
+    metricsLoading.value = false
+  }
+}
+
 const backupNow = async () => {
   try {
     const { backupDevice } = await import('@/api')
@@ -598,9 +966,11 @@ const updateDevice = async () => {
       modules: editForm.value.modules
     })
     clearCache('device_detail')
+    clearCache('device_inventory')
     ElMessage.success(t('msgDeviceUpdateSuccess'))
     showEditDialog.value = false
     loadDevice(true)
+    loadDeviceInventory(true)  // 刷新设备资产
   } catch (error) { ElMessage.error(t('msgDeviceUpdateFailed')) }
 }
 
@@ -615,19 +985,49 @@ const confirmDeleteDevice = async () => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgDeviceDeleteFailed')) }
 }
 
-const openFaultDialog = () => { editMode.value = false; faultForm.value = { severity: 'major', downtime_minutes: 0, description: '' }; showFaultDialog.value = true }
+const openFaultDialog = () => {
+  editMode.value = false
+  faultForm.value = {
+    id: null,
+    severity: 'major',
+    fault_type: '',
+    downtime_minutes: 0,
+    impact: '',
+    description: '',
+    status: 'open',
+    assigned_to: ''
+  }
+  showFaultDialog.value = true
+}
 const addFault = async () => {
   try {
-    await createFault({ device_id: device.value.id, device_name: device.value.name, ...faultForm.value, status: 'open' })
+    const status = faultForm.value.assigned_to ? 'assigned' : 'open'
+    await createFault({
+      device_id: device.value.id,
+      device_name: device.value.name,
+      ...faultForm.value,
+      status,
+      reporter: 'Web'
+    })
     clearCache('device_detail')
     ElMessage.success(t('msgFaultAddSuccess'))
     showFaultDialog.value = false
     loadDevice(true)
+    window.dispatchEvent(new CustomEvent('fault-status-change'))
   } catch (error) { ElMessage.error(t('msgFaultAddFailed')) }
 }
 const editFaultInDetail = (row) => {
   editMode.value = true
-  faultForm.value = { id: row.id, severity: row.severity, downtime_minutes: row.downtime_minutes || 0, description: row.description }
+  faultForm.value = {
+    id: row.id,
+    severity: row.severity,
+    fault_type: row.fault_type || '',
+    downtime_minutes: row.downtime_minutes || 0,
+    impact: row.impact || '',
+    description: row.description,
+    status: row.status,
+    assigned_to: row.assigned_to || ''
+  }
   showFaultDialog.value = true
 }
 const updateFaultInDetail = async () => {
@@ -650,31 +1050,32 @@ const closeFaultInDetail = async (row) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgFaultCloseFailed')) }
 }
 
-const openMaintDialog = () => { editMode.value = false; maintForm.value = { maint_type: 'corrective', parts_replaced: '', parts_cost: 0, labor_hours: 0, labor_cost: 0, vendor: '', description: '' }; showMaintDialog.value = true }
-const addMaintenance = async () => {
-  try {
-    await createMaintenance({ device_id: device.value.id, device_name: device.value.name, ...maintForm.value })
-    clearCache('device_detail')
-    ElMessage.success(t('msgMaintAddSuccess'))
-    showMaintDialog.value = false
-    loadDevice(true)
-  } catch (error) { ElMessage.error(t('msgMaintAddFailed')) }
-}
-const editMaintInDetail = (row) => {
-  editMode.value = true
-  maintForm.value = { id: row.id, maint_type: row.maint_type, parts_replaced: row.parts_replaced || '', parts_cost: row.parts_cost || 0, labor_hours: row.labor_hours || 0, labor_cost: row.labor_cost || 0, vendor: row.vendor || '', description: row.description }
+// 维修表单相关 - 使用共享组件
+const openMaintDialog = () => {
+  editMaintData.value = null
   showMaintDialog.value = true
 }
-const updateMaintInDetail = async () => {
-  try {
-    await updateMaintenance(maintForm.value.id, maintForm.value)
-    clearCache('device_detail')
-    ElMessage.success(t('msgMaintUpdateSuccess'))
-    showMaintDialog.value = false
-    editMode.value = false
-    loadDevice(true)
-  } catch (error) { ElMessage.error(t('msgMaintUpdateFailed')) }
+
+const editMaintInDetail = (row) => {
+  editMaintData.value = {
+    id: row.id,
+    device_id: device.value?.id,
+    maint_type: row.maint_type,
+    spare_parts: row.spare_parts || [],
+    parts_cost: row.parts_cost || 0,
+    labor_hours: row.labor_hours || 0,
+    labor_cost: row.labor_cost || 0,
+    vendor: row.vendor || '',
+    description: row.description
+  }
+  showMaintDialog.value = true
 }
+
+const handleMaintSuccess = () => {
+  clearCache('device_detail')
+  loadDevice(true)
+}
+
 const deleteMaintInDetail = async (maintId) => {
   try {
     await ElMessageBox.confirm(t('confirmDeleteMaint'), t('msgConfirmDelete'), { type: 'warning' })
@@ -685,27 +1086,34 @@ const deleteMaintInDetail = async (maintId) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 
-onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors() })
+onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics() })
 </script>
 
 <style scoped>
+/* ═══════════════════════════════════════════════════════════════════════════
+   设备详情页 - 现代极简设计 (OpenAI/SpaceX风格)
+   设计理念: 状态优先、数据驱动、简洁高效
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 .device-detail-page {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
+  padding: 0 16px;
 }
 
-/* 页面头部 */
+/* ─────────────────────────────────────────────────────────────────────────
+   页面头部 - 精简
+   ───────────────────────────────────────────────────────────────────────── */
 .page-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-default);
+  margin-bottom: 20px;
+  padding: 16px 0;
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 18px;
   font-weight: 600;
   color: var(--text-primary);
   margin: 0;
@@ -722,208 +1130,560 @@ onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors() })
   gap: 8px;
 }
 
-/* 主体布局 */
-.detail-header {
-  display: flex;
-  gap: 24px;
+/* ─────────────────────────────────────────────────────────────────────────
+   设备健康仪表盘 - 核心组件
+   ───────────────────────────────────────────────────────────────────────── */
+.device-dashboard {
   margin-bottom: 24px;
 }
 
-.detail-main-card {
-  flex: 1;
+.status-card {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
+  border-radius: 16px;
   padding: 24px;
-  box-shadow: var(--shadow-card);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
-.detail-side-card {
-  width: 300px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-card);
+/* 健康状态边框指示 */
+.status-card.status-healthy {
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.08), 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.detail-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
+.status-card.status-warning {
+  border-color: rgba(234, 179, 8, 0.4);
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.12), 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.detail-meta {
+.status-card.status-critical {
+  border-color: rgba(239, 68, 68, 0.4);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.12), 0 2px 8px rgba(239, 68, 68, 0.08);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   状态头部 - 一目了然的健康状态
+   ───────────────────────────────────────────────────────────────────────── */
+.status-header {
   display: flex;
-  gap: 16px;
-  color: var(--text-secondary);
-  font-size: 13px;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 24px;
-  flex-wrap: wrap;
-}
-
-.card-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  padding-bottom: 8px;
+  padding-bottom: 16px;
   border-bottom: 1px solid var(--border-subtle);
 }
 
-/* 信息列表 */
-.info-list {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+
+.status-dot.healthy {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+
+.status-dot.warning {
+  background: #eab308;
+  box-shadow: 0 0 8px rgba(234, 179, 8, 0.6);
+}
+
+.status-dot.critical {
+  background: #ef4444;
+  box-shadow: 0 0 12px rgba(239, 68, 68, 0.8);
+  animation: pulse-critical 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.7; transform: scale(0.95); }
+}
+
+@keyframes pulse-critical {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+.status-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+}
+
+.device-identity {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+}
+
+.device-ip-large {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+}
+
+.device-name-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.header-actions {
+  display: flex;
   gap: 8px;
 }
 
-.info-item {
-  display: flex;
-  padding: 8px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-sm);
-}
-
-.info-label {
-  width: 100px;
-  font-size: 13px;
-  color: var(--text-muted);
-}
-
-.info-value {
-  font-size: 14px;
-  color: var(--text-primary);
-  font-weight: 500;
-}
-
-/* 快速操作按钮 - 重做 */
-.quick-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.quick-action-btn {
-  width: 100%;
-  height: 40px;
-  padding: 0 16px;
+.action-btn-refresh,
+.action-btn-edit {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-sm);
-  background: var(--bg-card);
-  color: var(--text-primary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 14px;
-  line-height: 1;
-  font-weight: 500;
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
   transition: all 0.2s ease;
 }
 
-.quick-action-btn:hover {
-  background: var(--bg-tertiary);
+.action-btn-refresh:hover,
+.action-btn-edit:hover {
+  background: var(--bg-hover);
   border-color: var(--border-hover);
+  color: var(--text-primary);
 }
 
-.quick-action-btn .action-icon {
-  width: 16px;
-  height: 16px;
+/* ─────────────────────────────────────────────────────────────────────────
+   核心指标 - 四个关键数据（CPU、内存、温度、运行时长）
+   ───────────────────────────────────────────────────────────────────────── */
+.core-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 24px;
+}
+
+.metric-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 20px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 12px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.metric-block:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+/* 环形指标显示 */
+.metric-ring {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: 4px solid;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
+  position: relative;
+  margin-bottom: 12px;
 }
 
-.quick-action-btn .action-icon svg {
-  width: 16px;
-  height: 16px;
+.metric-number {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
 }
 
-.quick-action-btn .action-text {
-  margin-left: 8px;
+.metric-unit {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: 1px;
 }
 
-/* 立即备份按钮 - 绿色 */
-.quick-action-btn-success {
-  background: #52c41a;
-  border-color: #52c41a;
-  color: #fff;
+.metric-name {
+  font-size: 12px;
+  color: var(--text-muted);
+  font-weight: 500;
+  margin-bottom: 4px;
 }
 
-.quick-action-btn-success:hover {
-  background: #73d13d;
-  border-color: #73d13d;
+.metric-status {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.02em;
 }
 
-/* 删除按钮 - 红色 */
-.quick-action-btn-danger {
-  background: #ff4d4f;
-  border-color: #ff4d4f;
-  color: #fff;
+.metric-status.status-ok {
+  background: rgba(34, 197, 94, 0.12);
+  color: #16a34a;
 }
 
-.quick-action-btn-danger:hover {
-  background: #ff7875;
-  border-color: #ff7875;
+.metric-status.status-warn {
+  background: rgba(234, 179, 8, 0.12);
+  color: #a16207;
 }
 
-/* Tabs */
+.metric-status.status-danger {
+  background: rgba(249, 115, 22, 0.12);
+  color: #ea580c;
+}
+
+.metric-status.status-critical {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.metric-status.status-unknown {
+  background: rgba(148, 163, 184, 0.12);
+  color: #64748b;
+}
+
+/* 运行时长特殊样式 */
+.uptime-block {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(22, 163, 74, 0.04) 100%);
+}
+
+.uptime-display {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.uptime-icon {
+  font-size: 20px;
+  color: #22c55e;
+}
+
+.uptime-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: #22c55e;
+  letter-spacing: -0.03em;
+}
+
+.uptime-unit {
+  font-size: 14px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.metric-status.uptime-detail {
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   网络健康状态 - 端口、错误、上行链路
+   ───────────────────────────────────────────────────────────────────────── */
+.network-health {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.health-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.health-item:hover {
+  background: var(--bg-hover);
+}
+
+.health-item.health-ok {
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.health-item .el-icon {
+  font-size: 18px;
+  color: var(--text-secondary);
+}
+
+.health-item.health-ok .el-icon {
+  color: #22c55e;
+}
+
+.health-value {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 40px;
+}
+
+.health-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.health-alert,
+.health-ok-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   折叠信息区
+   ───────────────────────────────────────────────────────────────────────── */
+.info-collapse {
+  margin-bottom: 20px;
+  border: none;
+}
+
+.info-collapse .el-collapse-item__header {
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border: none;
+  margin-bottom: 8px;
+}
+
+.info-collapse .el-collapse-item__wrap {
+  border: none;
+}
+
+.info-collapse .el-collapse-item__content {
+  padding: 0 8px 8px 8px;
+}
+
+.info-compact-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+
+.info-row-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.info-key {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.info-val {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+/* 上行链路详情 */
+.uplinks-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.uplink-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.uplink-interface {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  min-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.uplink-util-visual {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.uplink-bar-bg {
+  width: 100px;
+  height: 6px;
+  background: rgba(148, 163, 184, 0.2);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.uplink-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.5s ease, background 0.5s ease;
+}
+
+.uplink-percent {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  min-width: 36px;
+}
+
+.uplink-speed {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   快捷操作栏
+   ───────────────────────────────────────────────────────────────────────── */
+.quick-actions-bar {
+  display: flex;
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid var(--border-subtle);
+  margin-top: 4px;
+}
+
+.quick-actions-bar .el-button {
+  flex: 1;
+  height: 40px;
+  font-weight: 500;
+  border-radius: 10px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.quick-actions-bar .el-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   Tabs 区域
+   ───────────────────────────────────────────────────────────────────────── */
 .tabs-wrapper {
   background: var(--bg-card);
   border: 1px solid var(--border-default);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-card);
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-/* 配置内容 */
+.tabs-wrapper .el-tabs__header {
+  margin-bottom: 20px;
+}
+
+.tabs-wrapper .el-tabs__nav-wrap::after {
+  height: 1px;
+  background: var(--border-subtle);
+}
+
+.tabs-wrapper .el-tabs__item {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.tabs-wrapper .el-tabs__item.is-active {
+  font-weight: 600;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   配置内容
+   ───────────────────────────────────────────────────────────────────────── */
 .config-content {
-  background: #1e1e1e;
-  color: #d4d4d4;
-  padding: 15px;
-  border-radius: 4px;
-  font-family: 'Consolas', 'Monaco', monospace;
+  background: #1a1a2e;
+  color: #e0e0e0;
+  padding: 16px;
+  border-radius: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 13px;
+  line-height: 1.6;
   white-space: pre-wrap;
   max-height: 500px;
   overflow-y: auto;
 }
 
-/* 链接 */
+/* ─────────────────────────────────────────────────────────────────────────
+   其他组件样式
+   ───────────────────────────────────────────────────────────────────────── */
 .fault-link, .maint-link {
   color: var(--accent-secondary);
   text-decoration: none;
   font-weight: 500;
+  transition: color 0.2s ease;
 }
-.fault-link:hover, .maint-link:hover { text-decoration: underline; }
 
-/* 成本统计 */
+.fault-link:hover, .maint-link:hover {
+  color: var(--accent-primary);
+}
+
 .cost-summary {
   display: flex;
   justify-content: space-around;
   padding: 20px;
 }
 
-/* 照片网格 */
-.photo-toolbar { margin-bottom: 16px; }
+.photo-toolbar {
+  margin-bottom: 16px;
+}
+
 .photo-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 15px;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 16px;
 }
-.photo-item { position: relative; border-radius: 4px; overflow: hidden; }
-.photo-image { width: 100%; height: 120px; }
+
+.photo-item {
+  position: relative;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.photo-image {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+}
+
 .photo-actions {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px;
+  padding: 10px;
   background: var(--bg-tertiary);
 }
-.photo-type { font-size: 12px; color: var(--text-secondary); }
+
+.photo-type {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .image-error {
   display: flex;
   justify-content: center;
@@ -933,68 +1693,77 @@ onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors() })
   color: var(--text-muted);
 }
 
-/* 紧凑头部 */
 .compact-header {
   display: flex;
-  gap: 12px;
-  padding: 8px 12px;
+  gap: 16px;
+  padding: 10px 14px;
   background: var(--bg-tertiary);
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 13px;
 }
-.text-primary { color: var(--accent-secondary); font-weight: 500; }
-.text-success { color: var(--accent-success); font-weight: 600; }
 
-/* 响应式 */
-@media (max-width: 1024px) {
-  .detail-header { flex-direction: column; }
-  .detail-side-card { width: 100%; }
-  .info-list { grid-template-columns: 1fr; }
+.text-primary {
+  color: var(--accent-secondary);
+  font-weight: 500;
 }
 
-@media (max-width: 768px) {
-  .page-header { flex-direction: column; gap: 12px; align-items: flex-start; }
-  .page-actions { width: 100%; flex-wrap: wrap; }
+.text-success {
+  color: var(--accent-success);
+  font-weight: 600;
 }
 
-/* 编辑对话框样式 */
-.edit-device-dialog .edit-dialog-content {
+/* ─────────────────────────────────────────────────────────────────────────
+   编辑对话框样式
+   ───────────────────────────────────────────────────────────────────────── */
+.edit-device-dialog .edit-dialog-content,
+.edit-fault-dialog .edit-dialog-content {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
-.edit-device-dialog .form-section {
+.edit-device-dialog .form-section,
+.edit-fault-dialog .form-section {
   background: rgba(0, 48, 135, 0.04);
-  border-radius: 10px;
-  padding: 14px 16px;
+  border-radius: 12px;
+  padding: 16px;
   border: 1px solid rgba(0, 48, 135, 0.08);
 }
 
-.edit-device-dialog .form-section-title {
+.edit-device-dialog .form-section-title,
+.edit-fault-dialog .form-section-title {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 13px;
   font-weight: 600;
   color: var(--text-secondary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 10px;
   border-bottom: 1px solid rgba(0, 48, 135, 0.06);
 }
 
-.edit-device-dialog .form-section-title .el-icon {
+.edit-device-dialog .form-section-title .el-icon,
+.edit-fault-dialog .form-section-title .el-icon {
   color: var(--accent-primary);
 }
 
-.edit-device-dialog .el-form-item {
-  margin-bottom: 10px;
+.edit-device-dialog .el-form-item,
+.edit-fault-dialog .el-form-item {
+  margin-bottom: 12px;
 }
 
+.edit-fault-dialog .assign-tip {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+/* 模块容器 */
 .modules-container {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .module-row {
@@ -1003,18 +1772,202 @@ onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors() })
   gap: 8px;
 }
 
-/* 暗黑模式 */
-.dark .edit-device-dialog .form-section {
+/* 设备探测 UI */
+.input-with-btn {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+}
+
+.input-with-btn > .el-input,
+.input-with-btn > .el-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.input-with-btn > .el-button {
+  flex-shrink: 0;
+}
+
+.probe-result {
+  margin-top: 8px;
+}
+
+.ssh-warning {
+  margin-bottom: 12px;
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   暗黑模式适配
+   ───────────────────────────────────────────────────────────────────────── */
+.dark .status-card {
+  background: rgba(22, 27, 34, 0.8);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+.dark .status-card.status-healthy {
+  border-color: rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 0 1px rgba(34, 197, 94, 0.1);
+}
+
+.dark .status-card.status-warning {
+  border-color: rgba(234, 179, 8, 0.35);
+  box-shadow: 0 0 0 1px rgba(234, 179, 8, 0.12);
+}
+
+.dark .status-card.status-critical {
+  border-color: rgba(239, 68, 68, 0.35);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.15), 0 2px 12px rgba(239, 68, 68, 0.1);
+}
+
+.dark .metric-block,
+.dark .health-item,
+.dark .info-row-item,
+.dark .uplink-row {
+  background: rgba(33, 38, 45, 0.6);
+}
+
+.dark .metric-block:hover,
+.dark .health-item:hover {
+  background: rgba(48, 54, 61, 0.6);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+}
+
+.dark .uptime-block {
+  background: linear-gradient(135deg, rgba(34, 197, 94, 0.12) 0%, rgba(22, 163, 74, 0.06) 100%);
+}
+
+.dark .health-item.health-ok {
+  background: rgba(34, 197, 94, 0.1);
+}
+
+.dark .info-collapse .el-collapse-item__header {
+  background: rgba(33, 38, 45, 0.6);
+}
+
+.dark .edit-device-dialog .form-section,
+.dark .edit-fault-dialog .form-section {
   background: rgba(13, 17, 23, 0.6);
   border-color: rgba(48, 54, 61, 0.4);
 }
 
-.dark .edit-device-dialog .form-section-title {
+.dark .edit-device-dialog .form-section-title,
+.dark .edit-fault-dialog .form-section-title {
   color: #8b949e;
   border-bottom-color: rgba(48, 54, 61, 0.4);
 }
 
-.dark .edit-device-dialog .form-section-title .el-icon {
+.dark .edit-device-dialog .form-section-title .el-icon,
+.dark .edit-fault-dialog .form-section-title .el-icon {
   color: #58a6ff;
+}
+
+.dark .tabs-wrapper {
+  background: rgba(22, 27, 34, 0.8);
+  border-color: rgba(48, 54, 61, 0.4);
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+   响应式布局
+   ───────────────────────────────────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .core-metrics {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .network-health {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .info-compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .device-detail-page {
+    padding: 0 12px;
+  }
+
+  .page-header {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .page-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .status-header {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .device-identity {
+    order: -1;
+    width: 100%;
+  }
+
+  .device-ip-large {
+    font-size: 18px;
+  }
+
+  .header-actions {
+    margin-left: auto;
+  }
+
+  .core-metrics {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .metric-ring {
+    width: 60px;
+    height: 60px;
+  }
+
+  .metric-number {
+    font-size: 18px;
+  }
+
+  .network-health {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-actions-bar {
+    flex-wrap: wrap;
+  }
+
+  .quick-actions-bar .el-button {
+    flex: none;
+    width: calc(50% - 6px);
+  }
+
+  .tabs-wrapper {
+    padding: 16px;
+  }
+
+  .cost-summary {
+    flex-direction: column;
+    gap: 16px;
+    padding: 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .core-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .metric-block {
+    padding: 16px 12px;
+  }
+
+  .quick-actions-bar .el-button {
+    width: 100%;
+  }
 }
 </style>

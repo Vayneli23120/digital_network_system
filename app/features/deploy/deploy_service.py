@@ -153,7 +153,11 @@ class DeployService:
             commands = self.parse_config_commands(config)
 
             # ====== 命令安全守卫检查 ======
-            vendor = connection.device_type if hasattr(connection, 'device_type') else 'cisco'
+            # 优先使用设备记录中的 vendor，否则从 device_type 推断
+            vendor = device.get('vendor') or 'cisco'
+            if vendor == 'cisco' and hasattr(connection, 'device_type') and connection.device_type:
+                # 从 'cisco_ios' 等格式提取厂商名
+                vendor = connection.device_type.split('_')[0] if '_' in connection.device_type else connection.device_type
             try:
                 safe_commands, warnings = validate_commands(
                     commands,

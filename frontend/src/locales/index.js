@@ -1038,6 +1038,36 @@ export const languages = {
     devicePhotoOther: '其他',
     deviceNoPhotos: '暂无照片',
 
+    // 性能指标
+    metricCpu: 'CPU',
+    metricMemory: '内存',
+    metricTemperature: '温度',
+    metricUplinks: '上行链路',
+    metricUplinkBandwidth: '上行链路带宽',
+    metricUptime: '运行时长',
+    metricPortsOnline: '端口在线',
+    metricPortsDown: '端口离线',
+    metricDays: '天',
+    metricDown: '离线',
+    metricClean: '无错误',
+    metricErrors: '错误包',
+    metricHasErrors: '有异常',
+    metricLastUpdate: '更新时间',
+    metricSnmpUnavailable: 'SNMP 服务未配置',
+    deviceInfoDetails: '设备详细信息',
+
+    // 健康状态
+    healthGood: '健康',
+    healthWarning: '警告',
+    healthCritical: '严重',
+
+    // 指标状态
+    statusOk: '正常',
+    statusWarn: '偏高',
+    statusHigh: '过高',
+    statusWarm: '偏高',
+    statusHot: '过热',
+
     // Tab 标签
     tabBackupRecords: '备份记录',
     tabFaultRecords: '故障记录',
@@ -1082,6 +1112,7 @@ export const languages = {
     msgTestConnecting: '正在测试连接...',
     msgTestWaitApi: '连接测试功能待后端 API 实现',
     msgBackupSuccessShort: '备份成功',
+    msgMetricsLoadFailed: '性能指标获取失败',
     msgPhotoUploadSuccess: '照片上传成功',
     msgPhotoUploadFailed: '照片上传失败',
     msgPhotoDeleteSuccess: '照片删除成功',
@@ -3956,6 +3987,36 @@ export const languages = {
     devicePhotoOther: 'Other',
     deviceNoPhotos: 'No Photos',
 
+    // Performance Metrics
+    metricCpu: 'CPU',
+    metricMemory: 'Memory',
+    metricTemperature: 'Temp',
+    metricUplinks: 'Uplinks',
+    metricUplinkBandwidth: 'Uplink Bandwidth',
+    metricUptime: 'Uptime',
+    metricPortsOnline: 'Ports Online',
+    metricPortsDown: 'Down',
+    metricDays: 'days',
+    metricDown: 'Down',
+    metricClean: 'Clean',
+    metricErrors: 'Errors',
+    metricHasErrors: 'Issues',
+    metricLastUpdate: 'Last Update',
+    metricSnmpUnavailable: 'SNMP service unavailable',
+    deviceInfoDetails: 'Device Details',
+
+    // Health Status
+    healthGood: 'Healthy',
+    healthWarning: 'Warning',
+    healthCritical: 'Critical',
+
+    // Metric Status
+    statusOk: 'Normal',
+    statusWarn: 'High',
+    statusHigh: 'Very High',
+    statusWarm: 'Warm',
+    statusHot: 'Hot',
+
     // Tab Labels
     tabBackupRecords: 'Backup Records',
     tabFaultRecords: 'Fault Records',
@@ -4000,6 +4061,7 @@ export const languages = {
     msgTestConnecting: 'Testing connection...',
     msgTestWaitApi: 'Connection test requires backend API',
     msgBackupSuccessShort: 'Backup successful',
+    msgMetricsLoadFailed: 'Failed to load performance metrics',
     msgPhotoUploadSuccess: 'Photo uploaded successfully',
     msgPhotoUploadFailed: 'Failed to upload photo',
     msgPhotoDeleteSuccess: 'Photo deleted successfully',

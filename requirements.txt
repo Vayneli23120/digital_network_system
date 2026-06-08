@@ -21,6 +21,8 @@ pydantic-settings==2.1.0
 # Network Devices
 netmiko==4.3.0
 paramiko==3.4.0
+pysnmp-lextudio==6.3.0  # SNMP support (modern fork for Python 3.12)
+pyasyncore==1.0.5       # asyncore compatibility for Python 3.12
 
 # Serial Communication (Console)
 pyserial==3.5
