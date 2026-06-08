@@ -287,6 +287,7 @@ export const languages = {
 
     // 变更-故障关联分析
     changeCorrelationTitle: '变更-故障关联',
+    changeCorrelationSubtitle: '变更风险分析',
     changeTotalChanges: '总变更数',
     changeFaultCorrelation: '引发故障',
     changeSuccessRate: '变更成功率',
@@ -3250,6 +3251,7 @@ export const languages = {
 
     // Change-Fault Correlation
     changeCorrelationTitle: 'Change-Fault Correlation',
+    changeCorrelationSubtitle: 'Change Risk Analysis',
     changeTotalChanges: 'Total Changes',
     changeFaultCorrelation: 'Faults Caused',
     changeSuccessRate: 'Change Success',

@@ -1,8 +1,8 @@
 <template>
   <div class="change-correlation-panel">
     <div class="panel-header">
-      <span class="panel-title">{{ title }}</span>
-      <span class="panel-subtitle">变更风险分析</span>
+      <span class="panel-title">{{ displayTitle }}</span>
+      <span class="panel-subtitle">{{ t('changeCorrelationSubtitle') }}</span>
     </div>
     <div class="panel-content">
       <!-- 变更成功率指标 -->
@@ -86,11 +86,14 @@ const props = defineProps({
   },
   title: {
     type: String,
-    default: '变更-故障关联'
+    default: ''  // 空串，由 computed 兜底 i18n
   }
 })
 
 const { t } = useI18n()
+
+// title 兜底：未传入时使用 i18n 默认值
+const displayTitle = computed(() => props.title || t('changeCorrelationTitle'))
 
 const correlationData = computed(() => props.data || {})
 
