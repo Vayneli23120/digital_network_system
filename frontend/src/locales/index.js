@@ -237,6 +237,8 @@ export const languages = {
     mttrUnclosedTimely: '条未及时关单',
     mttrFunnelNote: '验证段为解决→正式关闭时间，不计入端到端MTTR',
     mttrBreakdownTitle: '修复链路分析',
+    mttrEndToEnd: '端到端',
+    mttrTarget: '目标',
 
     // 根因类型
     rootCauseHardware: '硬件故障',
@@ -246,6 +248,10 @@ export const languages = {
     rootCausePower: '电源问题',
     rootCauseOther: '其他',
     paretoChartTitle: '根因分布',
+    pareto80Analysis: '80/20 分析',
+    paretoFaultCount: '故障数',
+    paretoCumulativePct: '累计占比',
+    paretoThreshold80: '80%阈值',
 
     // SLO 错误预算
     sloErrorBudgetTitle: 'SLO 错误预算',
@@ -271,6 +277,13 @@ export const languages = {
     sloBurnAboveAvg: '高于平均消耗速率',
     sloFreezeChange: '建议冻结变更',
     sloNoConfigHint: '未配置 SLO 目标，请在系统设置中添加服务 SLO',
+
+    // SLO 服务名称 i18n 映射
+    sloServiceCore_network: '核心网络可达性',
+    sloServiceDatacenter_network: '数据中心网络',
+    sloServiceCampus_access: '园区接入网络',
+    sloServiceWifi_network: 'WiFi 无线网络',
+    sloServiceDefault: '默认服务',
 
     // 变更-故障关联分析
     changeCorrelationTitle: '变更-故障关联',
@@ -3187,6 +3200,8 @@ export const languages = {
     mttrUnclosedTimely: 'unclosed timely',
     mttrFunnelNote: 'Verify = resolved→closed, not part of end-to-end MTTR',
     mttrBreakdownTitle: 'Repair Pipeline',
+    mttrEndToEnd: 'End-to-End',
+    mttrTarget: 'Target',
 
     // Root cause types
     rootCauseHardware: 'Hardware',
@@ -3196,6 +3211,10 @@ export const languages = {
     rootCausePower: 'Power',
     rootCauseOther: 'Other',
     paretoChartTitle: 'Root Cause Distribution',
+    pareto80Analysis: '80/20 Analysis',
+    paretoFaultCount: 'Fault Count',
+    paretoCumulativePct: 'Cumulative %',
+    paretoThreshold80: '80% Threshold',
 
     // SLO Error Budget
     sloErrorBudgetTitle: 'SLO Error Budget',
@@ -3221,6 +3240,13 @@ export const languages = {
     sloBurnAboveAvg: 'Above average burn rate',
     sloFreezeChange: 'Freeze changes recommended',
     sloNoConfigHint: 'No SLO configured, add service SLO in settings',
+
+    // SLO Service Names i18n mapping
+    sloServiceCore_network: 'Core Network Availability',
+    sloServiceDatacenter_network: 'Datacenter Network',
+    sloServiceCampus_access: 'Campus Access Network',
+    sloServiceWifi_network: 'WiFi Network',
+    sloServiceDefault: 'Default Service',
 
     // Change-Fault Correlation
     changeCorrelationTitle: 'Change-Fault Correlation',

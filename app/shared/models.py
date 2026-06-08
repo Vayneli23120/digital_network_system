@@ -1091,7 +1091,8 @@ class ServiceSlo(Base):
     __tablename__ = "service_slo"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    service_name = Column(String(100), nullable=False, unique=True, index=True)  # 服务/设备组名
+    service_key = Column(String(50), nullable=False, unique=True, index=True)  # 语言无关的服务标识 key
+    service_name = Column(String(100), nullable=False)  # 服务显示名称（可翻译，仅作为兜底）
     slo_target = Column(DECIMAL(7, 4), nullable=False)  # 目标可用率，如 99.9000（百分比，最大支持 999.9999）
     device_types = Column(String(200))  # 该服务包含的设备类型，逗号分隔，如 "core_switch,router"；为空表示全局
     window_days = Column(Integer, default=30)  # 统计窗口天数
@@ -1101,4 +1102,4 @@ class ServiceSlo(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
-        return f"<ServiceSlo(service='{self.service_name}', target={self.slo_target}%)>"
+        return f"<ServiceSlo(key='{self.service_key}', target={self.slo_target}%)>"

@@ -937,7 +937,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             slo_status = "green"
 
         slo_results.append({
-            "service": slo.service_name,
+            "service_key": slo.service_key or slo.service_name.lower().replace(' ', '_'),  # 语言无关标识
+            "service": slo.service_name,  # 兜底显示名称
             "target": slo_target_pct,
             "window_days": window_days,
             "device_types": type_list,
@@ -955,6 +956,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         default_target = 99.9
         default_budget = default_window * 24 * 60 * (1 - default_target / 100)  # = 43.2
         slo_results.append({
+            "service_key": "default",
             "service": "default",
             "target": default_target,
             "window_days": default_window,

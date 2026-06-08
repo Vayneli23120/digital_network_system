@@ -2,7 +2,7 @@
   <div class="pareto-chart">
     <div class="pareto-header">
       <span class="pareto-title">{{ title }}</span>
-      <span class="pareto-subtitle">80/20 分析</span>
+      <span class="pareto-subtitle">{{ t('pareto80Analysis') }}</span>
     </div>
     <div class="pareto-body" ref="chartRef"></div>
   </div>
@@ -29,13 +29,17 @@ const { t, currentLang } = useI18n()
 const chartRef = ref(null)
 let chartInstance = null
 
-const typeLabels = {
-  hardware: '硬件故障',
-  software: '软件故障',
-  config: '配置问题',
-  network: '网络问题',
-  power: '电源问题',
-  other: '其他'
+// 使用 i18n 映射根因类型标签
+const getTypeLabel = (type) => {
+  const labelMap = {
+    hardware: t('rootCauseHardware'),
+    software: t('rootCauseSoftware'),
+    config: t('rootCauseConfig'),
+    network: t('rootCauseNetwork'),
+    power: t('rootCausePower'),
+    other: t('rootCauseOther')
+  }
+  return labelMap[type] || type
 }
 
 const typeColors = {
@@ -57,7 +61,7 @@ const initChart = () => {
   const textColor = isDark ? '#f8fafc' : '#1e293b'
   const gridColor = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'
 
-  const types = props.data.map(d => typeLabels[d.type] || d.type)
+  const types = props.data.map(d => getTypeLabel(d.type))
   const counts = props.data.map(d => d.count)
   const cumulative = props.data.map(d => d.cumulative_pct)
 
@@ -68,7 +72,7 @@ const initChart = () => {
       formatter: (params) => {
         const bar = params[0]
         const line = params[1]
-        return `${bar.name}<br/>故障数: ${bar.value}<br/>累计占比: ${line.value}%`
+        return `${bar.name}<br/>${t('paretoFaultCount')}: ${bar.value}<br/>${t('paretoCumulativePct')}: ${line.value}%`
       }
     },
     grid: {
@@ -87,14 +91,14 @@ const initChart = () => {
     yAxis: [
       {
         type: 'value',
-        name: '故障数',
+        name: t('paretoFaultCount'),
         axisLabel: { color: textColor },
         axisLine: { lineStyle: { color: gridColor } },
         splitLine: { lineStyle: { color: gridColor } }
       },
       {
         type: 'value',
-        name: '累计%',
+        name: t('paretoCumulativePct'),
         max: 100,
         axisLabel: { color: textColor, formatter: '{value}%' },
         axisLine: { lineStyle: { color: gridColor } },
@@ -124,7 +128,7 @@ const initChart = () => {
         markLine: {
           silent: true,
           data: [
-            { yAxis: 80, lineStyle: { color: '#ef4444', type: 'dashed' }, label: { formatter: '80%阈值' } }
+            { yAxis: 80, lineStyle: { color: '#ef4444', type: 'dashed' }, label: { formatter: t('paretoThreshold80') } }
           ]
         }
       }

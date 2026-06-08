@@ -6,11 +6,11 @@
     </div>
     <div class="budget-content">
       <!-- SLO 服务列表 -->
-      <div v-for="slo in sloData" :key="slo.service" class="slo-item" :class="slo.status">
+      <div v-for="slo in sloData" :key="slo.service_key || slo.service" class="slo-item" :class="slo.status">
         <!-- 服务名称 -->
         <div class="slo-service-name">
           <span class="slo-status-dot" :class="slo.status"></span>
-          <span>{{ slo.service }}</span>
+          <span>{{ sloServiceName(slo) }}</span>
           <span class="slo-target">SLO {{ slo.target }}%</span>
         </div>
 
@@ -58,7 +58,7 @@
       </div>
 
       <!-- 无 SLO 配置时的默认提示 -->
-      <div v-if="sloData.length === 1 && sloData[0].service === 'default'" class="no-slo-config">
+      <div v-if="sloData.length === 1 && (sloData[0].service_key === 'default' || sloData[0].service === 'default')" class="no-slo-config">
         <span class="no-config-icon">📊</span>
         <span class="no-config-text">{{ t('sloNoConfigHint') }}</span>
       </div>
@@ -85,6 +85,21 @@ const props = defineProps({
 const { t } = useI18n()
 
 const sloData = computed(() => props.data || [])
+
+// SLO 服务名称 i18n 映射函数
+const sloServiceName = (slo) => {
+  const serviceKey = slo.service_key || slo.service
+  // 直接尝试获取对应 key 的翻译
+  const i18nMap = {
+    'core_network': t('sloServiceCore_network'),
+    'datacenter_network': t('sloServiceDatacenter_network'),
+    'campus_access': t('sloServiceCampus_access'),
+    'wifi_network': t('sloServiceWifi_network'),
+    'default': t('sloServiceDefault'),
+  }
+  // 返回翻译或兜底使用原始 service 名称
+  return i18nMap[serviceKey] || slo.service || serviceKey
+}
 </script>
 
 <style scoped>

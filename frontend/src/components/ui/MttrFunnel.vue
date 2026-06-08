@@ -2,7 +2,7 @@
   <div class="mttr-funnel">
     <div class="funnel-header">
       <span class="funnel-title">{{ title }}</span>
-      <span class="funnel-total">端到端 {{ breakdown.total_h }}h</span>
+      <span class="funnel-total">{{ t('mttrEndToEnd') }} {{ breakdown.total_h }}h</span>
     </div>
     <div class="funnel-body">
       <div class="funnel-stage" v-for="(stage, idx) in stages" :key="stage.key">
@@ -23,7 +23,7 @@
             </span>
           </span>
           <span class="stage-target" :class="getStageStatus(stage)">
-            目标 ≤{{ stage.target }}{{ stage.unit }}
+            {{ t('mttrTarget') }} ≤{{ stage.target }}{{ stage.unit }}
           </span>
         </div>
         <div class="stage-arrow" v-if="idx < stages.length - 1">

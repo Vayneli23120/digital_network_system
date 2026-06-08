@@ -1,11 +1,12 @@
 <template>
   <div class="dashboard">
     <div class="dashboard-shell">
+
       <!-- KPI Cards: 每个模块只出现一次 -->
       <section class="kpi-section">
         <div class="section-heading">
           <div>
-            <h2 class="section-title">{{ t('operationsTitle') }}</h2>
+            <h2 class="section-title">{{ t('dashHeroTitle') }}</h2>
           </div>
           <p class="section-desc">{{ t('dashSectionMetricsDesc') }}</p>
         </div>
@@ -25,6 +26,7 @@
             </div>
             <div class="kpi-body">
               <div class="noc-device-panel">
+                <!-- Top: Health Ring + Key Metrics -->
                 <div class="noc-top-section">
                   <div class="noc-health-gauge">
                     <svg class="noc-ring" viewBox="0 0 100 100">
@@ -54,6 +56,8 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Middle: Architecture Layers -->
                 <div class="noc-layers">
                   <div class="noc-layer">
                     <div class="noc-layer-header">
@@ -136,6 +140,8 @@
                     </div>
                   </div>
                 </div>
+
+                <!-- Bottom: Configuration & Compliance Summary -->
                 <div class="noc-compliance">
                   <div class="noc-compliance-header">
                     <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -180,17 +186,20 @@
               <span class="trend-badge" :class="{ 'alert': activeFaults > 0 }">{{ activeFaults > 0 ? t('dashActive') : t('dashAllResolved') }}</span>
             </div>
             <div class="kpi-body">
+              <!-- DNAC风格: 活跃故障数（大数字） -->
               <div class="fault-active-section" :class="{ 'has-active': activeFaults > 0 }">
                 <div class="big-number" :class="{ danger: activeFaults > 0, success: activeFaults === 0 }">
                   {{ activeFaults }}
                 </div>
                 <div class="active-label">{{ t('dashActiveFaults') }}</div>
+                <!-- 活跃故障按严重级别 -->
                 <div class="severity-row" v-if="activeFaults > 0">
                   <div class="severity-tag" v-if="activeCritical > 0"><span class="dot critical"></span><span class="severity-label">{{ t('dashCritical') }}</span><span class="severity-num">{{ activeCritical }}</span></div>
                   <div class="severity-tag" v-if="activeMajor > 0"><span class="dot major"></span><span class="severity-label">{{ t('dashMajor') }}</span><span class="severity-num">{{ activeMajor }}</span></div>
                   <div class="severity-tag" v-if="activeMinor > 0"><span class="dot minor"></span><span class="severity-label">{{ t('dashMinor') }}</span><span class="severity-num">{{ activeMinor }}</span></div>
                 </div>
               </div>
+              <!-- 已解决故障数（次要显示） -->
               <div class="fault-resolved-section" v-if="resolvedFaults > 0">
                 <span class="resolved-label">{{ t('dashResolvedFaults') }}</span>
                 <span class="resolved-num">{{ resolvedFaults }}</span>
@@ -213,7 +222,7 @@
                   <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>
                 </svg>
               </div>
-              <span class="kpi-title">{{ t('dashCostTrend') }}</span>
+              <span class="kpi-title">{{ t('dashMonthlyOpEx') }}</span>
             </div>
             <div class="kpi-body">
               <div class="big-number">¥{{ formatCost(stats.costs?.month_total || 0) }}</div>
@@ -352,7 +361,7 @@
         </div>
       </section>
 
-      <!-- Activity Section: Event Stream + Activity Feed -->
+      <!-- Activity Section: Event Stream + Activity Feed (无重复数据) -->
       <section class="activity-section">
         <div class="section-heading">
           <div>
@@ -446,10 +455,9 @@ const faultTimeRange = ref('30d')
 const customStartDate = ref(dayjs().subtract(30, 'day').format('YYYY-MM-DD'))
 const customEndDate = ref(dayjs().format('YYYY-MM-DD'))
 const faultChartInstance = ref(null)
+const faultTotal = ref(0)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 const costTrend = ref({ labels: [], total: [], parts: [], labor: [] })
-const faultDeviceList = ref([])
-const realAlerts = ref([])
 let timerId = null
 
 const timeOptions = computed(() => [
@@ -466,26 +474,9 @@ const onlinePercent = computed(() => {
   return Math.round((stats.value.devices?.reachable || 0) / total * 100)
 })
 
-const totalDevices = computed(() => stats.value.devices?.total || 0)
-const offlineDeviceCount = computed(() => stats.value.devices?.unreachable || 0)
+const topFaultDeviceName = computed(() => faultDeviceList.value.length > 0 ? faultDeviceList.value[0].device_name : '—')
 
-const healthScore = computed(() => {
-  const total = totalDevices.value
-  const reachable = stats.value.devices?.reachable || 0
-  const issues = stats.value.faults?.active || 0
-  if (total === 0) return 100
-  const base = Math.round((reachable / total) * 80)
-  const penalty = Math.min(issues * 5, 20)
-  return Math.max(base - penalty, 0)
-})
-
-const healthScoreClass = computed(() => {
-  const score = healthScore.value
-  if (score >= 90) return 'good'
-  if (score >= 70) return 'warn'
-  return 'critical'
-})
-
+// 故障统计 - DNAC风格：活跃故障（未解决）
 const activeFaults = computed(() => stats.value.faults?.active || 0)
 const activeCritical = computed(() => stats.value.faults?.active_critical || 0)
 const activeMajor = computed(() => stats.value.faults?.active_major || 0)
@@ -497,86 +488,134 @@ const accessDeviceTypes = ['uce', 'office_switch']
 const wifiDeviceTypes = ['ap', 'wlc']
 const firewallDeviceTypes = ['pa', 'ftd']
 
-const deviceByType = (type, field) => {
-  const devices = stats.value.devices_by_type?.[type] || {}
-  return devices[field] || 0
-}
-
+// Core/Access/WiFi/Firewall counts - 使用新的 reachable/unreachable 字段
 const coreTotal = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
 const coreReachable = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
 const coreUnreachable = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const coreMaintenance = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
+const coreRetired = computed(() => coreDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const coreOnline = computed(() => coreReachable.value)
+const coreOffline = computed(() => coreUnreachable.value)
 
 const accessTotal = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
 const accessReachable = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
 const accessUnreachable = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const accessMaintenance = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
+const accessRetired = computed(() => accessDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const accessOnline = computed(() => accessReachable.value)
+const accessOffline = computed(() => accessUnreachable.value)
 
 const wifiTotal = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
 const wifiReachable = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
 const wifiUnreachable = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const wifiMaintenance = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
+const wifiRetired = computed(() => wifiDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const wifiOnline = computed(() => wifiReachable.value)
+const wifiOffline = computed(() => wifiUnreachable.value)
 
 const firewallTotal = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'total'), 0))
 const firewallReachable = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'reachable'), 0))
 const firewallUnreachable = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'unreachable'), 0))
 const firewallMaintenance = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'maintenance'), 0))
+const firewallRetired = computed(() => firewallDeviceTypes.reduce((sum, t) => sum + deviceByType(t, 'retired'), 0))
+// 兼容旧字段
+const firewallOnline = computed(() => firewallReachable.value)
+const firewallOffline = computed(() => firewallUnreachable.value)
 
-const typeLabel = (type) => {
-  const labels = {
-    uce: 'UCE',
-    core_switch: 'Core SW',
-    server_switch: 'Server SW',
-    office_switch: 'Office SW',
-    firewall: 'FW',
-    ap: 'AP',
-    wlc: 'WLC',
-    router: 'Router',
-    pa: 'PA',
-    ftd: 'FTD',
-    other: 'Other'
-  }
-  return labels[type] || type
-}
+const totalDevices = computed(() => stats.value.devices?.total || 0)
+const unreachableDeviceCount = computed(() => stats.value.devices?.unreachable || 0)
+// 兼容旧字段
+const offlineDeviceCount = computed(() => unreachableDeviceCount.value)
 
-const typeStatus = (type) => {
-  const unreachable = deviceByType(type, 'unreachable')
-  const maintenance = deviceByType(type, 'maintenance')
-  if (unreachable > 0) return 'unreachable'
-  if (maintenance > 0) return 'maintenance'
-  return 'reachable'
-}
+// Health Score (0-100): reachable devices / total devices * 100
+const healthScore = computed(() => {
+  const total = stats.value.devices?.total || 0
+  if (total === 0) return 100
+  const reachable = stats.value.devices?.reachable || 0
+  return Math.round((reachable / total) * 100)
+})
 
+const healthScoreClass = computed(() => {
+  if (healthScore.value >= 95) return 'healthy'
+  if (healthScore.value >= 80) return 'warning'
+  return 'critical'
+})
+
+// Config Compliance metrics
 const backupCoverage = computed(() => {
   const total = stats.value.devices?.total || 0
   const backedUp = stats.value.backups?.backed_up_devices || 0
   return total > 0 ? Math.round((backedUp / total) * 100) : 0
 })
 
-const recentConfigChanges = computed(() => recentBackups.value.filter(b => b.has_change).length)
+const recentConfigChanges = computed(() => {
+  // Count backups with changes in last 7 days
+  const sevenDaysAgo = dayjs().subtract(7, 'day')
+  return recentBackups.value.filter(b => b.has_change && dayjs(b.backup_time).isAfter(sevenDaysAgo)).length
+})
 
 const devicesWithIssues = computed(() => {
-  return Object.entries(stats.value.devices_by_type || {})
-    .filter(([type, data]) => data.unreachable > 0)
-    .map(([type]) => type)
+  return faultDeviceList.value.filter(d => d.count > 0)
 })
 
 const topIssueDevice = computed(() => {
-  if (faultDeviceList.value.length > 0) return faultDeviceList.value[0].device_name
-  if (devicesWithIssues.value.length > 0) return typeLabel(devicesWithIssues.value[0])
-  return '—'
+  return devicesWithIssues.value.length > 0 ? devicesWithIssues.value[0].device_name : '—'
 })
 
-const monthlyLaborCost = computed(() => stats.value.costs?.month_labor || 0)
+const deviceByType = (type, status) => {
+  return stats.value.devices?.by_type?.[type]?.[status] || 0
+}
 
-const costTrendMax = computed(() => {
-  const allValues = [...(costTrend.value.parts || []), ...(costTrend.value.labor || [])]
-  return Math.max(...allValues, 1)
-})
+const typeLabel = (dtype) => {
+  const map = {
+    uce: t('deviceTypeUCE'),
+    core_switch: t('deviceTypeCoreSwitch'),
+    server_switch: t('deviceTypeServerSwitch'),
+    office_switch: t('deviceTypeOfficeSwitch'),
+    firewall: t('deviceTypeFirewall'),
+    ap: t('deviceTypeAP'),
+    wlc: t('deviceTypeWLC'),
+    router: t('deviceTypeRouter'),
+    pa: t('deviceTypePA'),
+    ftd: t('deviceTypeFTD'),
+    other: t('deviceTypeOther'),
+  }
+  return map[dtype] || dtype
+}
+
+const typeStatus = (dtype) => {
+  const t2 = stats.value.devices?.by_type?.[dtype]
+  if (!t2 || t2.total === 0) return 'empty'
+  if ((t2.unreachable || 0) > 0) return 'alert'
+  if ((t2.unknown || 0) > 0) return 'warn'
+  return 'ok'
+}
+
+// 真实告警数据
+const realAlerts = ref([])
+
+const loadAlerts = async () => {
+  try {
+    const res = await getAlerts()
+    realAlerts.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load alerts:', e)
+    realAlerts.value = []
+  }
+}
 
 const alerts = computed(() => realAlerts.value)
 
 const alertCount = computed(() => alerts.value.filter(a => a.severity === 'warn' || a.severity === 'danger').length)
+const monthlyLaborCost = computed(() => stats.value.costs?.month_labor || 0)
+
+const lastBackupTime = computed(() => {
+  if (recentBackups.value.length > 0) return formatDate(recentBackups.value[0].backup_time)
+  return 'N/A'
+})
 
 const activityFeed = computed(() => {
   const items = []
@@ -610,34 +649,42 @@ const activityFeed = computed(() => {
 const formatCost = (val) => val.toLocaleString()
 const formatDate = (dateStr) => dayjs(dateStr).format('MM-DD HH:mm')
 
-const navigateTo = (path) => router.push(path)
+const costTrendMax = computed(() => Math.max(...costTrend.value.total, 1))
 
-const loadAlerts = async () => {
-  try {
-    const res = await getAlerts()
-    realAlerts.value = res.data || []
-  } catch (e) {
-    console.error('Failed to load alerts:', e)
-    realAlerts.value = []
-  }
-}
+// Top fault devices — from API
+const faultDeviceList = ref([])
 
 const loadFaultDeviceList = async (force = false) => {
   try {
     const res = await cachedRequest(
       () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5').then(r => r.json()),
-      'dashboardTopFaults',
+      'dashboardTopFaultDevices',
       {},
       { forceRefresh: force }
     )
-    faultDeviceList.value = res || []
+    const data = res
+    const max = Math.max(...data.map(d => d.count), 1)
+    faultDeviceList.value = data.map(d => ({
+      device_id: d.device_id,
+      device_name: d.device_name,
+      count: d.count,
+      barWidth: (d.count / max * 100) + '%',
+    }))
   } catch (err) {
     console.error('Failed to load top fault devices:', err)
-    faultDeviceList.value = []
   }
 }
 
-const loadData = async (force = false) => {
+const navigateTo = (path) => router.push(path)
+
+const refreshData = async () => {
+  loading.value = true
+  await loadDashboardData()
+  loading.value = false
+  ElMessage.success(t('dashDataRefreshed'))
+}
+
+const loadDashboardData = async (force = false) => {
   try {
     const data = await cachedRequest(
       () => getDashboardSummary(),
@@ -651,6 +698,7 @@ const loadData = async (force = false) => {
       initFaultLineChart()
       updateFaultChart()
     })
+    // Load cost trend
     try {
       const trendRes = await cachedRequest(
         () => fetch('/api/dashboard/cost-trend?months=6').then(r => r.json()),
@@ -662,7 +710,9 @@ const loadData = async (force = false) => {
     } catch (err) {
       console.error('Failed to load cost trend:', err)
     }
+    // Load top fault devices
     await loadFaultDeviceList(force)
+    // Load alerts
     loadAlerts()
   } catch (error) {
     ElMessage.error(t('dashLoadFailed'))
@@ -706,10 +756,34 @@ const initFaultLineChart = () => {
       splitLine: { lineStyle: { color: splitColor, type: 'dashed' } }
     },
     series: [
-      { name: t('dashCritical'), type: 'line', stack: 'Total', smooth: true, symbol: 'circle', symbolSize: 4, showSymbol: false, itemStyle: { color: '#d63031' }, lineStyle: { width: 2.5 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(214,48,49,0.35)' }, { offset: 1, color: 'rgba(214,48,49,0.02)' }] } }, data: [] },
-      { name: t('dashMajor'), type: 'line', stack: 'Total', smooth: true, symbol: 'circle', symbolSize: 4, showSymbol: false, itemStyle: { color: '#e17055' }, lineStyle: { width: 2.5 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(225,112,85,0.3)' }, { offset: 1, color: 'rgba(225,112,85,0.02)' }] } }, data: [] },
-      { name: t('dashMinor'), type: 'line', stack: 'Total', smooth: true, symbol: 'circle', symbolSize: 4, showSymbol: false, itemStyle: { color: '#0984e3' }, lineStyle: { width: 2.5 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(9,132,227,0.25)' }, { offset: 1, color: 'rgba(9,132,227,0.02)' }] } }, data: [] },
-      { name: t('dashWarning'), type: 'line', stack: 'Total', smooth: true, symbol: 'circle', symbolSize: 4, showSymbol: false, itemStyle: { color: '#636e72' }, lineStyle: { width: 2 }, areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(99,110,114,0.15)' }, { offset: 1, color: 'rgba(99,110,114,0.02)' }] } }, data: [] }
+      {
+        name: t('dashCritical'), type: 'line', stack: 'Total', smooth: true,
+        symbol: 'circle', symbolSize: 4, showSymbol: false,
+        itemStyle: { color: '#d63031' }, lineStyle: { width: 2.5 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(214,48,49,0.35)' }, { offset: 1, color: 'rgba(214,48,49,0.02)' }] } },
+        data: []
+      },
+      {
+        name: t('dashMajor'), type: 'line', stack: 'Total', smooth: true,
+        symbol: 'circle', symbolSize: 4, showSymbol: false,
+        itemStyle: { color: '#e17055' }, lineStyle: { width: 2.5 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(225,112,85,0.3)' }, { offset: 1, color: 'rgba(225,112,85,0.02)' }] } },
+        data: []
+      },
+      {
+        name: t('dashMinor'), type: 'line', stack: 'Total', smooth: true,
+        symbol: 'circle', symbolSize: 4, showSymbol: false,
+        itemStyle: { color: '#0984e3' }, lineStyle: { width: 2.5 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(9,132,227,0.25)' }, { offset: 1, color: 'rgba(9,132,227,0.02)' }] } },
+        data: []
+      },
+      {
+        name: t('dashWarning'), type: 'line', stack: 'Total', smooth: true,
+        symbol: 'circle', symbolSize: 4, showSymbol: false,
+        itemStyle: { color: '#636e72' }, lineStyle: { width: 2 },
+        areaStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: 'rgba(99,110,114,0.15)' }, { offset: 1, color: 'rgba(99,110,114,0.02)' }] } },
+        data: []
+      }
     ]
   })
 }
@@ -736,6 +810,12 @@ const updateFaultChart = async () => {
       xAxis: { data: data.labels || [] },
       series: [{ data: severityData.critical }, { data: severityData.major }, { data: severityData.minor }, { data: severityData.warning }]
     })
+    let total = 0
+    ;(data.labels || []).forEach((label) => {
+      const counts = data.by_severity?.[label] || {}
+      total += (counts.critical || 0) + (counts.major || 0) + (counts.minor || 0) + (counts.warning || 0)
+    })
+    faultTotal.value = total
   } catch (error) {
     ElMessage.error(t('dashFaultTrendFailed'))
   }
@@ -755,7 +835,7 @@ watch(currentLang, () => {
 })
 
 onMounted(() => {
-  loadData()
+  loadDashboardData()
   window.addEventListener('resize', handleResize)
   window.addEventListener('theme-change', handleThemeChange)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
@@ -770,7 +850,6 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-/* 继承 Dashboard.vue 的样式 */
 .dashboard {
   background:
     radial-gradient(circle at top left, rgba(9, 132, 227, 0.08), transparent 28%),
@@ -787,35 +866,1034 @@ onUnmounted(() => {
   gap: 24px;
   max-width: 1600px;
   margin: 0 auto;
-  min-height: 100vh;
 }
 
-/* 复用 Dashboard.vue 中 kpi/charts/activity 的样式 */
-.kpi-section,
-.charts-section,
-.activity-section {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
+/* ===== Section Heading ===== */
 .section-heading {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: end;
+  gap: 18px;
+  margin-bottom: 16px;
 }
 
 .section-title {
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
+  margin: 0;
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.03em;
 }
 
 .section-desc {
-  font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 4px;
+  margin: 0;
+  max-width: 460px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748b;
+  text-align: right;
 }
 
-/* 复用其他样式... (需要从 Dashboard.vue 复制完整样式) */
+/* ===== KPI Cards (single grid, 6 cards) ===== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.kpi-card {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+  padding: 20px;
+  transition: all 0.25s ease;
+  cursor: pointer;
+}
+
+.kpi-card:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 18px 48px rgba(9, 132, 227, 0.1);
+}
+.kpi-card.span-row { grid-row: span 2; }
+
+.kpi-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.kpi-icon {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.kpi-icon svg { width: 16px; height: 16px; }
+.kpi-icon.devices { background: rgba(9, 132, 227, 0.12); color: #0984e3; }
+.kpi-icon.faults { background: rgba(214, 48, 49, 0.12); color: #d63031; }
+.kpi-icon.cost { background: rgba(225, 112, 85, 0.12); color: #e17055; }
+.kpi-icon.maintenance { background: rgba(245, 158, 11, 0.12); color: #d97706; }
+.kpi-icon.backups { background: rgba(0, 184, 148, 0.12); color: #059669; }
+.kpi-icon.inventory { background: rgba(46, 139, 87, 0.12); color: #2e8b57; }
+
+.kpi-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  letter-spacing: 0.03em;
+}
+
+.kpi-total {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.trend-badge {
+  margin-left: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(0, 184, 148, 0.08);
+  color: #059669;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.big-number {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 32px;
+  font-weight: 700;
+  color: #0f172a;
+  letter-spacing: -0.03em;
+  margin-bottom: 10px;
+}
+
+.big-number.danger { color: #d63031; }
+
+/* NOC Device Panel - DNA Center / ServiceNow inspired */
+.noc-device-panel { display: flex; flex-direction: column; gap: 16px; }
+
+/* Top Section: Health Gauge + Quick Stats */
+.noc-top-section {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+}
+.noc-health-gauge {
+  position: relative;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+}
+.noc-ring {
+  width: 100%;
+  height: 100%;
+  transform: rotate(-90deg);
+}
+.noc-ring-bg {
+  fill: none;
+  stroke: rgba(148, 163, 184, 0.12);
+  stroke-width: 8;
+}
+.noc-ring-progress {
+  fill: none;
+  stroke-width: 8;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.6s ease;
+}
+.noc-ring-progress.healthy { stroke: #00b894; }
+.noc-ring-progress.warning { stroke: #f59e0b; }
+.noc-ring-progress.critical { stroke: #ef4444; }
+.noc-health-center {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.noc-health-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1;
+}
+.noc-health-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+.noc-quick-stats {
+  flex: 1;
+  display: flex;
+  gap: 8px;
+}
+.noc-stat-box {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 6px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.92);
+}
+.noc-stat-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.noc-stat-value.reachability { color: #00b894; }
+.noc-stat-value.warning { color: #f59e0b; }
+.noc-stat-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Health Score Badge in Header */
+.device-health-score {
+  margin-left: auto;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+.device-health-score.healthy { background: rgba(0, 184, 148, 0.12); color: #00b894; }
+.device-health-score.warning { background: rgba(245, 158, 11, 0.12); color: #f59e0b; }
+.device-health-score.critical { background: rgba(239, 68, 68, 0.12); color: #ef4444; }
+
+/* Architecture Layers */
+.noc-layers { display: flex; flex-direction: column; gap: 12px; }
+.noc-layer {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.noc-layer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.noc-layer-name {
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.noc-layer-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  color: #94a3b8;
+}
+.noc-layer-bar {
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(148, 163, 184, 0.1);
+  display: flex;
+}
+.noc-segment { transition: width 0.4s ease; }
+.noc-segment.reachable { background: #00b894; }
+.noc-segment.unreachable { background: #ef4444; }
+.noc-segment.unknown { background: #94a3b8; }
+.noc-segment.maintenance { background: #f59e0b; }
+/* 兼容旧字段 */
+.noc-segment.online { background: #00b894; }
+.noc-segment.offline { background: #ef4444; }
+.noc-layer-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+.noc-type-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(248, 250, 252, 0.92);
+  font-size: 11px;
+  opacity: 0.4;
+}
+.noc-type-pill.active { opacity: 1; }
+.noc-type-pill.alert { background: rgba(239, 68, 68, 0.08); }
+.noc-type-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+.noc-type-dot.ok { background: #00b894; }
+.noc-type-dot.warn { background: #f59e0b; }
+.noc-type-dot.alert { background: #ef4444; }
+.noc-type-dot.empty { background: #94a3b8; }
+.noc-type-name { color: #475569; }
+.noc-type-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Compliance Section */
+.noc-compliance {
+  background: rgba(9, 132, 227, 0.04);
+  border: 1px solid rgba(9, 132, 227, 0.1);
+  border-radius: 10px;
+  padding: 10px 12px;
+}
+.noc-compliance-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #0984e3;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+}
+.noc-compliance-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.noc-compliance-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.noc-compliance-bar {
+  width: 60px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 163, 184, 0.1);
+  overflow: hidden;
+}
+.noc-compliance-fill {
+  height: 100%;
+  border-radius: 2px;
+  background: #00b894;
+}
+.noc-compliance-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.noc-compliance-dot.changed { background: #f59e0b; }
+.noc-compliance-dot.issue { background: #ef4444; }
+.noc-compliance-label {
+  color: #64748b;
+  flex: 1;
+}
+.noc-compliance-value {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+  color: #0f172a;
+}
+.noc-compliance-value.noc-ellipsis {
+  max-width: 80px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Severity Row */
+.severity-row { display: flex; gap: 10px; }
+.severity-tag {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+}
+.severity-tag .dot { flex-shrink: 0; }
+.severity-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+}
+.severity-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Fault maintenance footer */
+.fault-maintenance-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(148, 163, 184, 0.1);
+}
+.maint-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.maint-item {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(248, 250, 252, 0.6);
+}
+.maint-item.warn { color: #d97706; }
+.maint-item.active { color: #0984e3; }
+.maint-item.success { color: #059669; }
+
+/* DNAC-style fault active section */
+.fault-active-section {
+  text-align: center;
+  margin-bottom: 8px;
+}
+.fault-active-section.has-active {
+  background: rgba(214, 48, 49, 0.04);
+  border-radius: 8px;
+  padding: 8px;
+}
+.active-label {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+.big-number.success {
+  color: #00b894;
+}
+.kpi-icon.has-alert {
+  animation: pulse-warning 2s infinite;
+}
+@keyframes pulse-warning {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.trend-badge.alert {
+  background: rgba(214, 48, 49, 0.12);
+  color: #d63031;
+  border: 1px solid rgba(214, 48, 49, 0.3);
+}
+.fault-resolved-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 6px;
+  padding: 4px 8px;
+  background: rgba(0, 184, 148, 0.06);
+  border-radius: 6px;
+}
+.resolved-label {
+  font-size: 11px;
+  color: #64748b;
+}
+.resolved-num {
+  font-size: 12px;
+  font-weight: 600;
+  color: #00b894;
+}
+.resolved-period {
+  font-size: 10px;
+  color: #94a3b8;
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; }
+.dot.critical { background: #d63031; }
+.dot.major { background: #e17055; }
+.dot.minor { background: #0984e3; }
+
+/* Status Pills (Maintenance) */
+.status-pills { display: flex; flex-direction: column; gap: 6px; }
+.status-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  background: rgba(248, 250, 252, 0.92);
+}
+
+.status-pill.warning { color: #d97706; }
+.status-pill.active { color: #0984e3; }
+.status-pill.success { color: #059669; }
+
+/* Cost Split */
+.cost-split { display: flex; gap: 12px; }
+.cost-item-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+  font-size: 12px;
+  color: #475569;
+}
+.cost-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.cost-dot.parts { background: rgba(225, 112, 85, 0.9); }
+.cost-dot.labor { background: rgba(9, 132, 227, 0.9); }
+
+/* Cost Trend Bar Chart */
+.cost-trend { margin-top: 12px; }
+.cost-bar-chart { height: 70px; }
+.bar-group {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 56px;
+  padding: 0 2px;
+  gap: 4px;
+}
+.cost-bar-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+}
+.cost-bar-track {
+  width: 100%;
+  height: 50px;
+  position: relative;
+  background: rgba(148, 163, 184, 0.08);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.cost-bar-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  border-radius: 4px;
+  transition: height 0.4s ease;
+}
+.cost-bar-fill.parts { background: rgba(225, 112, 85, 0.7); }
+.cost-bar-fill.labor { background: rgba(9, 132, 227, 0.7); }
+.cost-bar-label {
+  font-size: 9px;
+  color: #94a3b8;
+  font-family: 'JetBrains Mono', monospace;
+  white-space: nowrap;
+}
+
+/* Backup Row */
+.backup-row { display: flex; flex-direction: column; gap: 6px; }
+.backup-stat {
+  font-size: 12px;
+  color: #475569;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+}
+.backup-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+.backup-num.success { color: #059669; }
+.backup-num.warning { color: #d97706; }
+
+/* Spare Row */
+.spare-row { display: flex; gap: 8px; }
+.spare-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(248, 250, 252, 0.92);
+  font-size: 11px;
+  color: #64748b;
+  text-align: center;
+}
+.spare-num {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+}
+.spare-num.warning { color: #d97706; }
+
+/* Top 5 List in KPI card */
+.kpi-card.kpi-top5 .kpi-body { padding-top: 12px; }
+.top5-list { display: flex; flex-direction: column; gap: 6px; }
+.top5-item {
+  display: grid;
+  grid-template-columns: 18px 1fr 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  background: rgba(248, 250, 252, 0.92);
+  transition: background 0.15s;
+}
+.top5-item:hover { background: rgba(148, 163, 184, 0.12); }
+.top5-rank {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+  text-align: center;
+}
+.top5-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.top5-count {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: #d63031;
+  text-align: right;
+}
+
+/* Backup Panel List (in charts section) */
+.backup-panel-list { display: flex; flex-direction: column; gap: 0; }
+.backup-panel-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+  font-size: 12px;
+}
+.backup-panel-item:last-child { border-bottom: none; }
+.backup-panel-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #00b894;
+  flex-shrink: 0;
+}
+.backup-panel-dot.changed { background: #f59e0b; }
+.backup-panel-name { flex: 1; color: #0f172a; font-weight: 500; }
+.backup-panel-time {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* ===== Charts ===== */
+.chart-panel {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.chart-panel.emphasis {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(243, 248, 252, 0.92));
+}
+
+.panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.12);
+}
+
+.panel-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.panel-body { padding: 20px; }
+
+.panel-controls { display: flex; align-items: center; gap: 8px; }
+
+.link-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0984e3;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.link-btn:hover { color: #0b6ec2; }
+
+/* Pill Tabs */
+.pill-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 3px;
+  background: rgba(148, 163, 184, 0.1);
+  border-radius: 10px;
+}
+
+.pill-tab {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.pill-tab:hover { color: #0f172a; }
+.pill-tab.active {
+  background: #ffffff;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.date-input {
+  padding: 5px 8px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 8px;
+  color: #334155;
+  font-family: 'JetBrains Mono', monospace;
+  width: 110px;
+}
+
+.date-separator { color: #64748b; font-size: 11px; }
+
+.line-chart-container { height: 220px; }
+
+/* ===== Charts Split: 2/3 + 1/3 ===== */
+.charts-split {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 16px;
+}
+
+.risk-panel {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+/* Risk panel - single full height */
+.risk-panel.single-panel {
+  align-self: stretch;
+  min-height: 260px;
+}
+
+.empty-text {
+  padding: 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* Risk panel - single full height */
+.risk-panel.single-panel {
+  align-self: stretch;
+}
+
+/* ===== Activity Section ===== */
+.activity-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.activity-panel {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 18px;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.06);
+  backdrop-filter: blur(14px);
+  overflow: hidden;
+}
+
+.alert-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: white;
+  background: #d63031;
+  border-radius: 999px;
+}
+
+/* Event Stream */
+.event-stream { display: flex; flex-direction: column; gap: 0; }
+.event-item { display: flex; gap: 12px; padding: 14px 20px; transition: background 0.2s; }
+.event-item:hover { background: rgba(248, 250, 252, 0.6); }
+
+.event-timeline-marker {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  padding-top: 4px;
+}
+
+.event-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.event-dot.warn { background: #e17055; }
+.event-dot.info { background: #0984e3; }
+.event-dot.success { background: #00b894; }
+.event-dot.danger { background: #d63031; }
+
+.event-line { width: 2px; flex: 1; background: rgba(148, 163, 184, 0.15); margin-top: 4px; }
+.event-item:last-child .event-line { display: none; }
+
+.event-content { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.event-title { font-size: 13px; font-weight: 600; color: #0f172a; }
+.event-summary { font-size: 12px; color: #64748b; }
+.event-time { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #94a3b8; }
+
+.event-empty {
+  padding: 32px 20px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+/* Activity Feed */
+.activity-feed { display: flex; flex-direction: column; gap: 0; }
+.activity-item { display: flex; gap: 12px; padding: 14px 20px; transition: background 0.2s; }
+.activity-item:hover { background: rgba(248, 250, 252, 0.6); }
+
+.activity-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-icon.backup { background: rgba(0, 184, 148, 0.1); color: #059669; }
+.activity-icon.fault { background: rgba(214, 48, 49, 0.1); color: #d63031; }
+.activity-icon.maintenance { background: rgba(245, 158, 11, 0.1); color: #d97706; }
+.activity-icon.health { background: rgba(71, 85, 105, 0.08); color: #475569; }
+
+.activity-body { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+.activity-text { font-size: 13px; color: #0f172a; line-height: 1.4; }
+.activity-time { font-size: 11px; font-family: 'JetBrains Mono', monospace; color: #94a3b8; }
+
+/* ===== Footer ===== */
+.dashboard-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 24px;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.footer-version { font-size: 11px; color: rgba(203, 213, 225, 0.35); }
+.footer-sync { font-size: 12px; color: rgba(203, 213, 225, 0.55); }
+
+/* ===== Responsive ===== */
+@media (max-width: 1200px) {
+  .kpi-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .kpi-card.span-row { grid-row: span 1; }
+}
+
+@media (max-width: 1024px) {
+  .dashboard-shell { padding: 16px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  .kpi-card.span-row { grid-row: span 1; }
+  .charts-split { grid-template-columns: 1fr; }
+  .risk-panel { min-height: 200px; }
+  .activity-grid { grid-template-columns: 1fr; }
+  .section-heading { flex-direction: column; align-items: flex-start; }
+  .section-desc { text-align: left; }
+}
+
+@media (max-width: 640px) {
+  .severity-row { flex-wrap: wrap; }
+  .spare-row { flex-direction: column; }
+  .cost-split { flex-direction: column; }
+  .dashboard-footer { flex-direction: column; gap: 8px; align-items: flex-start; }
+}
+
+/* ===== Dark Mode ===== */
+.dark .dashboard {
+  background:
+    radial-gradient(circle at top left, rgba(9, 132, 227, 0.1), transparent 28%),
+    radial-gradient(circle at top right, rgba(0, 184, 148, 0.08), transparent 24%),
+    linear-gradient(180deg, #070b14 0%, #0a0e14 48%, #070b14 100%);
+}
+
+.dark .kpi-card,
+.dark .chart-panel,
+.dark .activity-panel {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(71, 85, 105, 0.28);
+  box-shadow: 0 16px 48px rgba(2, 6, 23, 0.3);
+}
+
+.dark .chart-panel.emphasis {
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.86), rgba(13, 17, 23, 0.82));
+}
+
+.dark .section-title,
+.dark .panel-title,
+.dark .big-number,
+.dark .event-title,
+.dark .activity-text,
+.dark .spare-num,
+.dark .backup-num,
+.dark .kpi-total {
+  color: #f8fafc;
+}
+
+.dark .section-desc,
+.dark .kpi-title,
+.dark .event-summary,
+.dark .event-time,
+.dark .activity-time,
+.dark .cost-item-label,
+.dark .spare-stat,
+.dark .backup-stat {
+  color: rgba(203, 213, 225, 0.65);
+}
+
+.dark .severity-tag,
+.dark .status-pill,
+.dark .cost-item-label,
+.dark .maint-item,
+.dark .backup-stat,
+.dark .spare-stat {
+  background: rgba(30, 41, 59, 0.6);
+}
+.dark .severity-label { color: rgba(203, 213, 225, 0.6); }
+.dark .severity-num { color: #f8fafc; }
+.dark .fault-maintenance-footer { border-top-color: rgba(71, 85, 105, 0.2); }
+.dark .maint-label { color: rgba(203, 213, 225, 0.4); }
+
+.dark .event-item:hover,
+.dark .activity-item:hover {
+  background: rgba(30, 41, 59, 0.4);
+}
+
+.dark .event-line { background: rgba(71, 85, 105, 0.2); }
+
+.dark .pill-tabs { background: rgba(71, 85, 105, 0.15); }
+.dark .pill-tab { color: rgba(203, 213, 225, 0.6); }
+.dark .pill-tab.active {
+  background: rgba(30, 41, 59, 0.8);
+  color: #f8fafc;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.dark .date-input {
+  background: rgba(30, 41, 59, 0.7);
+  border-color: rgba(71, 85, 105, 0.3);
+  color: #e2e8f0;
+}
+
+.dark .date-separator { color: rgba(203, 213, 225, 0.5); }
+
+/* Cost trend bar chart dark mode */
+.dark .cost-bar-track { background: rgba(71, 85, 105, 0.15); }
+.dark .cost-bar-label { color: rgba(203, 213, 225, 0.4); }
+.dark .cost-bar-fill.parts { background: rgba(225, 112, 85, 0.5); }
+.dark .cost-bar-fill.labor { background: rgba(9, 132, 227, 0.5); }
+
+/* NOC Device Panel dark mode */
+.dark .noc-health-value { color: #f8fafc; }
+.dark .noc-health-label { color: rgba(203, 213, 225, 0.4); }
+.dark .noc-stat-box { background: rgba(30, 41, 59, 0.5); }
+.dark .noc-stat-value { color: #f8fafc; }
+.dark .noc-stat-label { color: rgba(203, 213, 225, 0.5); }
+.dark .device-health-score.healthy { background: rgba(0, 184, 148, 0.15); color: #55efc4; }
+.dark .device-health-score.warning { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.dark .device-health-score.critical { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.dark .noc-layer-name { color: rgba(203, 213, 225, 0.6); }
+.dark .noc-layer-count { color: rgba(203, 213, 225, 0.4); }
+.dark .noc-layer-bar { background: rgba(71, 85, 105, 0.15); }
+.dark .noc-type-pill { background: rgba(30, 41, 59, 0.5); }
+.dark .noc-type-pill.alert { background: rgba(239, 68, 68, 0.08); }
+.dark .noc-type-name { color: rgba(203, 213, 225, 0.6); }
+.dark .noc-type-num { color: #f8fafc; }
+.dark .noc-compliance { background: rgba(9, 132, 227, 0.06); border-color: rgba(9, 132, 227, 0.15); }
+.dark .noc-compliance-header { color: #74b9ff; }
+.dark .noc-compliance-bar { background: rgba(71, 85, 105, 0.15); }
+.dark .noc-compliance-fill { background: #55efc4; }
+.dark .noc-compliance-label { color: rgba(203, 213, 225, 0.5); }
+.dark .noc-compliance-value { color: #f8fafc; }
+
+/* Cost trend bar chart dark mode */
+
+.dark .dashboard-footer { background: rgba(2, 6, 23, 0.85); }
+
+/* Top 5 list dark mode */
+.dark .top5-item { background: rgba(30, 41, 59, 0.5); }
+.dark .top5-item:hover { background: rgba(71, 85, 105, 0.25); }
+.dark .top5-name { color: #f8fafc; }
+.dark .top5-count { color: #ef4444; }
+.dark .top5-rank { color: rgba(203, 213, 225, 0.4); }
+
+/* Backup panel dark mode */
+.dark .backup-panel-item { border-bottom-color: rgba(71, 85, 105, 0.2); }
+.dark .backup-panel-name { color: #f8fafc; }
+.dark .backup-panel-dot { background: rgba(0, 184, 148, 0.6); }
+.dark .backup-panel-dot.changed { background: rgba(245, 158, 11, 0.6); }
+
+/* Risk panels dark mode */
+.dark .risk-panel {
+  background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(71, 85, 105, 0.28);
+}
+.dark .risk-panel.single-panel { min-height: 220px; }
 </style>
