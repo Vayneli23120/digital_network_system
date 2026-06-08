@@ -124,6 +124,7 @@ const sidebarGroups = computed(() => {
   const groups = {
     dashboard: [
       {
+        key: 'overview',
         label: t('groupOverview'),
         items: [
           { path: '/', text: t('menuDashboard'), icon: DataBoard },
@@ -136,6 +137,7 @@ const sidebarGroups = computed(() => {
     ],
     devices: [
       {
+        key: 'device-manage',
         label: t('groupDeviceManage'),
         items: [
           { path: '/devices', text: t('menuDevices'), icon: Connection },
@@ -149,6 +151,7 @@ const sidebarGroups = computed(() => {
     ],
     config: [
       {
+        key: 'config-manage',
         label: t('groupConfigManage'),
         items: [
           { path: '/console', text: t('menuConsole'), icon: Connection },
@@ -162,6 +165,7 @@ const sidebarGroups = computed(() => {
     ],
     spare: [
       {
+        key: 'spare-parts',
         label: t('groupSpare'),
         items: [
           { path: '/spare-parts', text: t('menuSpareParts'), icon: Box },
@@ -172,6 +176,7 @@ const sidebarGroups = computed(() => {
     ],
     system: [
       {
+        key: 'system',
         label: t('groupSystem'),
         items: [
           { path: '/notifications', text: t('menuNotifications') || '通知中心', icon: Bell },

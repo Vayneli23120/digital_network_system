@@ -8,7 +8,7 @@
 
       <!-- Sidebar Groups -->
       <div class="sidebar-groups">
-        <div v-for="(group, idx) in sidebarGroups" :key="idx" class="sg">
+        <div v-for="group in sidebarGroups" :key="group.key" class="sg">
           <router-link
             v-for="item in group.items"
             :key="item.path"
