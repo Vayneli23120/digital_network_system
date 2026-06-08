@@ -807,45 +807,58 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     # MTTA (平均响应时间): accepted_at - created_at
     # 诊断时间: diagnosing_at - accepted_at
     # 修复时间: resolved_at - diagnosing_at（修复段不含诊断）
-    # 验证时间: closed_at - resolved_at
+    # 验证时间: closed_at - resolved_at（解决→正式关闭）
+    # 注：验证段不计入端到端 MTTR，因 resolved 后故障已恢复
     mtta_minutes = 0
     diagnose_minutes = 0
     repair_hours = 0
     verify_hours = 0
-    mttr_breakdown_count = 0
+    verify_count = 0
+    verify_anomalies = 0  # 超过72h的异常样本数
+    VERIFY_THRESHOLD_H = 72  # 验证段异常阈值
 
     for f in resolved_faults:
         if f.created_at and f.accepted_at:
             mtta_minutes += (f.accepted_at - f.created_at).total_seconds() / 60
-            mttr_breakdown_count += 1
             # 诊断段：受理 → 开始诊断
             if f.diagnosing_at and f.accepted_at:
                 diagnose_minutes += (f.diagnosing_at - f.accepted_at).total_seconds() / 60
-            # 修复段：开始诊断 → 解决（改前是 resolved - accepted，会包含诊断段）
+            # 修复段：开始诊断 → 解决
             if f.resolved_at and f.diagnosing_at:
                 repair_hours += (f.resolved_at - f.diagnosing_at).total_seconds() / 3600
             elif f.resolved_at and f.accepted_at:
-                # 无诊断时间戳时回退（避免丢数据）
                 repair_hours += (f.resolved_at - f.accepted_at).total_seconds() / 3600
+        # 验证段：解决 → 正式关闭（异常值保护）
         if f.closed_at and f.resolved_at:
-            verify_hours += (f.closed_at - f.resolved_at).total_seconds() / 3600
+            verify_duration = (f.closed_at - f.resolved_at).total_seconds() / 3600
+            if verify_duration <= VERIFY_THRESHOLD_H:
+                verify_hours += verify_duration
+                verify_count += 1
+            else:
+                # 超过阈值视为"未及时关单"，不计入平均
+                verify_anomalies += 1
 
+    # 各段平均值（只统计有效样本）
+    mttr_breakdown_count = len(resolved_faults)
     if mttr_breakdown_count > 0:
         mtta_minutes = mtta_minutes / mttr_breakdown_count
         diagnose_minutes = diagnose_minutes / mttr_breakdown_count
         repair_hours = repair_hours / mttr_breakdown_count
-        verify_hours = verify_hours / mttr_breakdown_count
+    if verify_count > 0:
+        verify_hours = verify_hours / verify_count
 
     mttr_breakdown = {
         "mtta_min": round(mtta_minutes, 1),
         "diagnose_min": round(diagnose_minutes, 1),
         "repair_h": round(repair_hours, 2),
         "verify_h": round(verify_hours, 2),
-        "total_h": round(mttr_hours, 2),
+        "verify_anomalies": verify_anomalies,  # 未及时关单数
+        "total_h": round(mttr_hours, 2),  # 端到端 = 响应+诊断+修复，不含验证
         "target_mtta": 30,      # 目标 ≤30min
         "target_diagnose": 60,  # 目标 ≤1h
         "target_repair": 4,     # 目标 ≤4h
         "target_verify": 2,     # 目标 ≤2h
+        "note": "验证段为解决→正式关闭时间，不计入端到端MTTR",
     }
 
     # ===== 15. 根因帕累托分析 =====
