@@ -731,7 +731,64 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                 "fault_type": fault_type or "other"
             })
 
-    # ===== 13. 自动生成摘要文本 =====
+    # ===== 14. MTTR 四段拆解 =====
+    # MTTA (平均响应时间): accepted_at - created_at
+    # 诊断时间: diagnosing_at - accepted_at
+    # 修复时间: resolved_at - accepted_at (已受理的修复)
+    # 验证时间: closed_at - resolved_at
+    mtta_minutes = 0
+    diagnose_minutes = 0
+    repair_hours = 0
+    verify_hours = 0
+    mttr_breakdown_count = 0
+
+    for f in resolved_faults:
+        if f.created_at and f.accepted_at:
+            mtta_minutes += (f.accepted_at - f.created_at).total_seconds() / 60
+            mttr_breakdown_count += 1
+            if f.diagnosing_at and f.accepted_at:
+                diagnose_minutes += (f.diagnosing_at - f.accepted_at).total_seconds() / 60
+            if f.resolved_at and f.accepted_at:
+                repair_hours += (f.resolved_at - f.accepted_at).total_seconds() / 3600
+        if f.closed_at and f.resolved_at:
+            verify_hours += (f.closed_at - f.resolved_at).total_seconds() / 3600
+
+    if mttr_breakdown_count > 0:
+        mtta_minutes = mtta_minutes / mttr_breakdown_count
+        diagnose_minutes = diagnose_minutes / mttr_breakdown_count
+        repair_hours = repair_hours / mttr_breakdown_count
+        verify_hours = verify_hours / mttr_breakdown_count
+
+    mttr_breakdown = {
+        "mtta_min": round(mtta_minutes, 1),
+        "diagnose_min": round(diagnose_minutes, 1),
+        "repair_h": round(repair_hours, 2),
+        "verify_h": round(verify_hours, 2),
+        "total_h": round(mttr_hours, 2),
+        "target_mtta": 30,      # 目标 ≤30min
+        "target_diagnose": 60,  # 目标 ≤1h
+        "target_repair": 4,     # 目标 ≤4h
+        "target_verify": 2,     # 目标 ≤2h
+    }
+
+    # ===== 15. 根因帕累托分析 =====
+    # 按 fault_type 分组计数并降序，计算累计占比
+    fault_type_counts = Counter(f.fault_type or "other" for f in all_faults_30d)
+    total_faults_for_pareto = sum(fault_type_counts.values())
+
+    root_cause_pareto = []
+    cumulative = 0
+    for fault_type, count in fault_type_counts.most_common(10):
+        pct = (count / total_faults_for_pareto * 100) if total_faults_for_pareto > 0 else 0
+        cumulative += pct
+        root_cause_pareto.append({
+            "type": fault_type,
+            "count": count,
+            "pct": round(pct, 1),
+            "cumulative_pct": round(cumulative, 1)
+        })
+
+    # ===== 16. 自动生成摘要文本 =====
     summary_parts = []
     if offlineDeviceCount := (total_deployed - reachable_devices):
         summary_parts.append(f"离线设备 {offlineDeviceCount} 台")
@@ -780,6 +837,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         },
         "summary_text": summary_text,
         "root_cause_distribution": root_cause_distribution,
+        "root_cause_pareto": root_cause_pareto,
+        "mttr_breakdown": mttr_breakdown,
         "recurring_devices": recurring_devices,
     }
 
