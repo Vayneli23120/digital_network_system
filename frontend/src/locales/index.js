@@ -243,6 +243,19 @@ export const languages = {
     rootCauseOther: '其他',
     paretoChartTitle: '根因分布',
 
+    // SLO 错误预算
+    sloErrorBudgetTitle: 'SLO 错误预算',
+    sloServiceName: '服务',
+    sloTarget: 'SLO 目标',
+    sloRemainingBudget: '剩余预算',
+    sloConsumedBudget: '已消耗',
+    sloBurnRate: '燃尽率',
+    sloWindowDays: '窗口天数',
+    sloAlertFreezeChanges: '建议冻结变更',
+    sloBurnRateNormal: '正常消耗',
+    sloBurnRateWarning: '消耗过快',
+    sloNoConfig: '未配置 SLO 目标',
+
     // 状态
     statusLive: '实时',
     statusOnline: '在线',
@@ -3151,6 +3164,19 @@ export const languages = {
     rootCausePower: 'Power',
     rootCauseOther: 'Other',
     paretoChartTitle: 'Root Cause Distribution',
+
+    // SLO Error Budget
+    sloErrorBudgetTitle: 'SLO Error Budget',
+    sloServiceName: 'Service',
+    sloTarget: 'SLO Target',
+    sloRemainingBudget: 'Remaining',
+    sloConsumedBudget: 'Consumed',
+    sloBurnRate: 'Burn Rate',
+    sloWindowDays: 'Window Days',
+    sloAlertFreezeChanges: 'Recommend freezing changes',
+    sloBurnRateNormal: 'Normal burn',
+    sloBurnRateWarning: 'Burn rate too fast',
+    sloNoConfig: 'No SLO configured',
 
     // 状态
     statusLive: 'LIVE',

@@ -1084,3 +1084,20 @@ class SystemConfig(Base):
 
     def __repr__(self):
         return f"<SystemConfig(key='{self.key}', value='{self.value}')>"
+
+
+class ServiceSlo(Base):
+    """服务 SLO 配置表 - 定义服务可用率目标和统计窗口"""
+    __tablename__ = "service_slo"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    service_name = Column(String(100), nullable=False, unique=True, index=True)  # 服务/设备组名
+    slo_target = Column(DECIMAL(5, 4), nullable=False)  # 目标可用率，如 99.9 (百分比)
+    window_days = Column(Integer, default=30)  # 统计窗口天数
+    description = Column(String(200))
+    is_active = Column(Boolean, default=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<ServiceSlo(service='{self.service_name}', target={self.slo_target}%)>"

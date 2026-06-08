@@ -86,6 +86,14 @@
             :title="t('paretoChartTitle')"
           />
         </div>
+
+        <!-- V2 P1: SLO 错误预算 -->
+        <div class="v2-slo-row" v-if="executiveSummary?.slo?.length">
+          <ErrorBudget
+            :data="executiveSummary.slo"
+            :title="t('sloErrorBudgetTitle')"
+          />
+        </div>
       </section>
 
       <!-- KPI Cards: 每个模块只出现一次 -->
@@ -532,6 +540,7 @@ import { cachedRequest } from '@/utils/cache.js'
 import KpiStat from '@/components/ui/KpiStat.vue'
 import MttrFunnel from '@/components/ui/MttrFunnel.vue'
 import ParetoChart from '@/components/ui/ParetoChart.vue'
+import ErrorBudget from '@/components/ui/ErrorBudget.vue'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -2101,5 +2110,10 @@ onUnmounted(() => {
   .v2-analytics-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* ===== V2 SLO Row ===== */
+.v2-slo-row {
+  margin-top: 16px;
 }
 </style>

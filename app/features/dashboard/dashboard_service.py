@@ -479,7 +479,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     Returns:
         包含所有管理层 KPI 的字典，每个 KPI 带 value/unit/target/threshold/trend/status
     """
-    from app.shared.models import SystemConfig, SparePartMovement
+    from app.shared.models import SystemConfig, SparePartMovement, ServiceSlo
     from collections import Counter
 
     # 计算时间范围
@@ -788,6 +788,75 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             "cumulative_pct": round(cumulative, 1)
         })
 
+    # ===== 15. SLO 错误预算 =====
+    # 查询配置的 SLO 目标
+    slo_configs = db.query(ServiceSlo).filter(ServiceSlo.is_active == True).all()
+
+    slo_results = []
+    for slo in slo_configs:
+        window_days = slo.window_days or 30
+        window_minutes = window_days * 24 * 60  # 窗口总分钟数
+        slo_target_pct = float(slo.slo_target)  # 如 99.9
+
+        # 错误预算 = 窗口分钟数 * (1 - SLO目标)
+        error_budget_minutes = window_minutes * (1 - slo_target_pct / 100)
+
+        # 已消耗：窗口内的停机分钟数
+        window_start = now - timedelta(days=window_days)
+        consumed_minutes = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
+            FaultRecord.created_at >= window_start,
+            FaultRecord.status.in_(('resolved', 'closed'))
+        ).scalar() or 0
+
+        # 剩余预算百分比
+        remaining_minutes = error_budget_minutes - float(consumed_minutes)
+        remaining_pct = (remaining_minutes / error_budget_minutes * 100) if error_budget_minutes > 0 else 100
+
+        # 燃尽率 burn_rate = 近24h消耗速率 / 允许平均速率
+        last_24h_start = now - timedelta(hours=24)
+        last_24h_consumed = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
+            FaultRecord.created_at >= last_24h_start,
+            FaultRecord.status.in_(('resolved', 'closed'))
+        ).scalar() or 0
+
+        allowed_avg_rate = error_budget_minutes / window_days  # 每天允许消耗
+        actual_24h_rate = float(last_24h_consumed)  # 24小时实际消耗
+        burn_rate = actual_24h_rate / allowed_avg_rate if allowed_avg_rate > 0 else 0
+
+        # 状态判定
+        if remaining_pct < 0:
+            slo_status = "red"  # 预算耗尽
+        elif remaining_pct < 30 or burn_rate >= 2:
+            slo_status = "yellow"  # 预警（剩余<30%或燃尽率>=2）
+        else:
+            slo_status = "green"
+
+        slo_results.append({
+            "service": slo.service_name,
+            "target": slo_target_pct,
+            "window_days": window_days,
+            "error_budget_min": round(error_budget_minutes, 0),
+            "consumed_min": float(consumed_minutes),
+            "remaining_pct": round(remaining_pct, 1),
+            "burn_rate": round(burn_rate, 2),
+            "status": slo_status,
+            "alert": burn_rate >= 2 and remaining_pct < 50  # 建议冻结变更
+        })
+
+    # 默认 SLO（如未配置）
+    if not slo_results:
+        slo_results.append({
+            "service": "default",
+            "target": 99.9,
+            "window_days": 30,
+            "error_budget_min": 4320,  # 30天 * (1-99.9%) * 24*60
+            "consumed_min": 0,
+            "remaining_pct": 100,
+            "burn_rate": 0,
+            "status": "gray",
+            "alert": False
+        })
+
     # ===== 16. 自动生成摘要文本 =====
     summary_parts = []
     if offlineDeviceCount := (total_deployed - reachable_devices):
@@ -840,6 +909,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         "root_cause_pareto": root_cause_pareto,
         "mttr_breakdown": mttr_breakdown,
         "recurring_devices": recurring_devices,
+        "slo": slo_results,
     }
 
 
