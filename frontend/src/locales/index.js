@@ -298,6 +298,15 @@ export const languages = {
     changeNoRiskDetected: '本周期未发现变更引发故障',
     kpiChangeSuccessRate: '变更成功率',
 
+    // 告警 i18n
+    alertFault: '故障',
+    alertUnknownDevice: '未知设备',
+    alertNoDescription: '无描述',
+    alertBackupOverdue: '备份超期',
+    alertDaysNoBackup: '{device} 已 {days} 天未备份',
+    alertSystemHealthy: '系统健康',
+    alertAllNormal: '所有设备运行正常，无高危故障或备份超期',
+
     // 状态
     statusLive: '实时',
     statusOnline: '在线',
@@ -3261,6 +3270,15 @@ export const languages = {
     changeDeviceStats: '{changes} changes / {faults} faults',
     changeNoRiskDetected: 'No change-induced faults this period',
     kpiChangeSuccessRate: 'Change Success Rate',
+
+    // Alert i18n
+    alertFault: 'Fault',
+    alertUnknownDevice: 'Unknown Device',
+    alertNoDescription: 'No description',
+    alertBackupOverdue: 'Backup Overdue',
+    alertDaysNoBackup: '{device}: {days} days without backup',
+    alertSystemHealthy: 'System Healthy',
+    alertAllNormal: 'All devices operating normally, no critical faults or overdue backups',
 
     // 状态
     statusLive: 'LIVE',

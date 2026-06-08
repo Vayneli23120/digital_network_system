@@ -385,8 +385,8 @@
                   <span class="event-line"></span>
                 </div>
                 <div class="event-content">
-                  <span class="event-title">{{ alert.title }}</span>
-                  <span class="event-summary">{{ alert.summary }}</span>
+                  <span class="event-title">{{ alertTitle(alert) }}</span>
+                  <span class="event-summary">{{ alertSummary(alert) }}</span>
                   <span class="event-time">{{ alert.time }}</span>
                 </div>
               </div>
@@ -608,6 +608,32 @@ const loadAlerts = async () => {
 }
 
 const alerts = computed(() => realAlerts.value)
+
+// Alert i18n 渲染函数
+const alertTitle = (a) => {
+  switch (a.alert_key) {
+    case 'fault':
+      return `${t('alertFault')}: ${a.device_name || t('alertUnknownDevice')}`
+    case 'backup_overdue':
+      return t('alertBackupOverdue')
+    case 'system_healthy':
+      return t('alertSystemHealthy')
+    default:
+      return a.title || ''  // 兜底：兼容旧数据
+  }
+}
+const alertSummary = (a) => {
+  switch (a.alert_key) {
+    case 'fault':
+      return a.description || t('alertNoDescription')
+    case 'backup_overdue':
+      return t('alertDaysNoBackup', { device: a.device_name, days: a.days_overdue })
+    case 'system_healthy':
+      return t('alertAllNormal')
+    default:
+      return a.summary || ''  // 兜底：兼容旧数据
+  }
+}
 
 const alertCount = computed(() => alerts.value.filter(a => a.severity === 'warn' || a.severity === 'danger').length)
 const monthlyLaborCost = computed(() => stats.value.costs?.month_labor || 0)

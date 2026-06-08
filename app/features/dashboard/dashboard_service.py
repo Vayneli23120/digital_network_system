@@ -477,7 +477,7 @@ def get_alerts(db: Session) -> List[Dict[str, Any]]:
     """获取实时告警列表
 
     Returns:
-        告警列表，每条包含 severity, title, summary, time, link
+        告警列表，每条包含 alert_key + 结构化参数，前端负责 i18n 渲染
     """
     from datetime import datetime, timedelta
     from app.shared.models import FaultRecord, Device
@@ -504,8 +504,9 @@ def get_alerts(db: Session) -> List[Dict[str, Any]]:
         severity_map = {'critical': 'danger', 'major': 'warn'}
         alerts.append({
             "severity": severity_map.get(fault.severity, 'warn'),
-            "title": f"故障: {fault.device_name or '未知设备'}",
-            "summary": fault.description[:50] if fault.description else "无描述",
+            "alert_key": "fault",
+            "device_name": fault.device_name,  # None 表示未知，前端兜底
+            "description": fault.description[:50] if fault.description else None,  # None → 前端显示"无描述"
             "time": time_str,
             "link": "/faults?status=open"
         })
@@ -522,8 +523,9 @@ def get_alerts(db: Session) -> List[Dict[str, Any]]:
             days_overdue = (now - device.last_backup_time).days
             alerts.append({
                 "severity": "warn",
-                "title": "备份超期",
-                "summary": f"{device.name} 已 {days_overdue} 天未备份",
+                "alert_key": "backup_overdue",
+                "device_name": device.name,
+                "days_overdue": days_overdue,
                 "time": f"{days_overdue}d",
                 "link": "/backups"
             })
@@ -532,8 +534,7 @@ def get_alerts(db: Session) -> List[Dict[str, Any]]:
     if not alerts:
         alerts.append({
             "severity": "success",
-            "title": "系统健康",
-            "summary": "所有设备运行正常，无高危故障或备份超期",
+            "alert_key": "system_healthy",
             "time": "now",
             "link": None
         })
