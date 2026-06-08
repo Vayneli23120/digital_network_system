@@ -487,7 +487,9 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     days_map = {"7d": 7, "30d": 30, "90d": 90, "12m": 365}
     days = days_map.get(time_range, 30)
     range_start = now - timedelta(days=days)
+    prev_range_start = range_start - timedelta(days=days)  # 上一周期起点
     current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    prev_month_start = (current_month_start.replace(day=1) - timedelta(days=1)).replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
     # ===== 1. 系统可用率 =====
     total_deployed = db.query(Device).filter(Device.deployment_status == "in-use").count()
@@ -499,6 +501,10 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     availability_value = (reachable_devices / total_deployed * 100) if total_deployed > 0 else 0
     availability_status = _get_status(availability_value, 99.5, 98, higher_is_good=True)
 
+    # 可用率趋势：与上一周期对比（百分点差）
+    # 注：可达性是实时状态，无法回溯历史，故 trend=0
+    availability_trend = 0
+
     # ===== 2. 活跃故障数 =====
     ACTIVE_STATUS = ('open', 'assigned', 'accepted', 'diagnosing', 'resolving', 'transferred')
     active_faults = db.query(FaultRecord).filter(
@@ -506,7 +512,6 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     ).count()
 
     # 计算趋势（与上一周期对比）
-    prev_range_start = range_start - timedelta(days=days)
     prev_active_faults = db.query(FaultRecord).filter(
         FaultRecord.created_at >= prev_range_start,
         FaultRecord.created_at < range_start,
@@ -516,7 +521,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     active_faults_status = "green" if active_faults == 0 else ("yellow" if active_faults <= 5 else "red")
 
     # ===== 3. SLA 达标率 =====
-    # 基于 MaintenanceRecord 的 sla_deadline
+    # 本期：基于 MaintenanceRecord 的 sla_deadline
     completed_maints = db.query(MaintenanceRecord).filter(
         MaintenanceRecord.status == "completed",
         MaintenanceRecord.completed_at >= range_start
@@ -530,8 +535,26 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             if m.completed_at <= m.sla_deadline:
                 sla_compliant += 1
 
-    sla_rate_value = (sla_compliant / sla_total * 100) if sla_total > 0 else 100  # 无数据时默认达标
+    sla_rate_value = (sla_compliant / sla_total * 100) if sla_total > 0 else 100
     sla_rate_status = _get_status(sla_rate_value, 95, 90, higher_is_good=True) if sla_total > 0 else "gray"
+
+    # 上期 SLA 达标率
+    prev_completed_maints = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.status == "completed",
+        MaintenanceRecord.completed_at >= prev_range_start,
+        MaintenanceRecord.completed_at < range_start
+    ).limit(1000).all()
+
+    prev_sla_compliant = 0
+    prev_sla_total = 0
+    for m in prev_completed_maints:
+        if m.sla_deadline and m.completed_at:
+            prev_sla_total += 1
+            if m.completed_at <= m.sla_deadline:
+                prev_sla_compliant += 1
+
+    prev_sla_rate = (prev_sla_compliant / prev_sla_total * 100) if prev_sla_total > 0 else None
+    sla_rate_trend = (sla_rate_value - prev_sla_rate) if prev_sla_rate is not None else 0
 
     # ===== 4. MTTR（平均修复时长） =====
     resolved_faults = db.query(FaultRecord).filter(
@@ -550,14 +573,40 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
 
     mttr_status = _get_status(mttr_hours, 4, 8, higher_is_good=False) if resolved_faults else "gray"
 
+    # 上期 MTTR
+    prev_resolved_faults = db.query(FaultRecord).filter(
+        FaultRecord.status.in_(('resolved', 'closed')),
+        FaultRecord.resolved_at.isnot(None),
+        FaultRecord.created_at >= prev_range_start,
+        FaultRecord.created_at < range_start
+    ).limit(1000).all()
+
+    prev_mttr_hours = 0
+    if prev_resolved_faults:
+        prev_total_hours = sum(
+            (f.resolved_at - f.created_at).total_seconds() / 3600
+            for f in prev_resolved_faults
+        )
+        prev_mttr_hours = prev_total_hours / len(prev_resolved_faults)
+
+    mttr_trend = mttr_hours - prev_mttr_hours if prev_resolved_faults else 0
+
     # ===== 5. MTBF（平均无故障间隔） =====
     total_faults_in_range = db.query(FaultRecord).filter(
         FaultRecord.created_at >= range_start
     ).count()
 
-    # MTBF = 范围天数 * 设备数 / 故障数
     mtbf_days = (days * total_deployed / total_faults_in_range) if total_faults_in_range > 0 else 999
     mtbf_status = "green" if mtbf_days >= 30 else ("yellow" if mtbf_days >= 14 else "red")
+
+    # 上期 MTBF
+    prev_faults = db.query(FaultRecord).filter(
+        FaultRecord.created_at >= prev_range_start,
+        FaultRecord.created_at < range_start
+    ).count()
+
+    prev_mtbf_days = (days * total_deployed / prev_faults) if prev_faults > 0 else 999
+    mtbf_trend = mtbf_days - prev_mtbf_days if prev_faults > 0 else 0
 
     # ===== 6. 复发故障占比 =====
     # 30天内同设备同类型出现 ≥2 次的故障
@@ -578,6 +627,21 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     recurring_rate = (recurring_count / len(all_faults_30d) * 100) if all_faults_30d else 0
     recurring_status = _get_status(recurring_rate, 15, 25, higher_is_good=False)
 
+    # 上期复发率（前30-60天）
+    prev_faults_30d = db.query(FaultRecord).filter(
+        FaultRecord.created_at >= now - timedelta(days=60),
+        FaultRecord.created_at < now - timedelta(days=30)
+    ).limit(2000).all()
+
+    prev_device_type_counter = Counter()
+    for f in prev_faults_30d:
+        key = (f.device_id, f.fault_type)
+        prev_device_type_counter[key] += 1
+
+    prev_recurring_count = sum(count for count in prev_device_type_counter.values() if count >= 2)
+    prev_recurring_rate = (prev_recurring_count / len(prev_faults_30d) * 100) if prev_faults_30d else None
+    recurring_trend = (recurring_rate - prev_recurring_rate) if prev_recurring_rate is not None else 0
+
     # ===== 7. 本月运维成本 =====
     month_maints = db.query(MaintenanceRecord).filter(
         MaintenanceRecord.created_at >= current_month_start
@@ -587,18 +651,28 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     month_labor_cost = sum(m.labor_cost or 0 for m in month_maints)
     month_total_cost = month_parts_cost + month_labor_cost
 
+    # 上月成本
+    prev_month_maints = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.created_at >= prev_month_start,
+        MaintenanceRecord.created_at < current_month_start
+    ).limit(1000).all()
+
+    prev_month_cost = sum((m.parts_cost or 0) + (m.labor_cost or 0) for m in prev_month_maints)
+    month_cost_trend = ((month_total_cost - prev_month_cost) / prev_month_cost * 100) if prev_month_cost > 0 else 0
+
     # ===== 8. 预算偏差率 =====
     budget_config = db.query(SystemConfig).filter(SystemConfig.key == "monthly_it_budget").first()
     budget_value = float(budget_config.value) if budget_config and budget_config.value else None
 
-    if budget_value and budget_value > 0:
+    if budget_value is not None and budget_value > 0:
         budget_variance = (month_total_cost - budget_value) / budget_value * 100
         budget_status = _get_status(abs(budget_variance), 5, 10, higher_is_good=False)
     else:
         budget_variance = None
         budget_status = "gray"
 
-    month_cost_status = "green" if budget_value and month_total_cost <= budget_value else "yellow"
+    month_cost_status = "green" if budget_value is not None and month_total_cost <= budget_value else "yellow"
+    budget_variance_trend = month_cost_trend  # 预算偏差趋势与成本趋势一致
 
     # ===== 9. 低库存备件数 =====
     spare_parts = db.query(SparePart).filter(SparePart.status == "active").all()
@@ -606,22 +680,23 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                            if sp.quantity_in_stock <= (sp.min_quantity or 0) and (sp.min_quantity or 0) > 0])
     low_stock_status = "green" if low_stock_count == 0 else ("yellow" if low_stock_count < 3 else "red")
 
+    # 低库存趋势：当前与上月对比（数量差）
+    # 注：备件库存是实时状态，无法回溯历史，故 trend=0
+    low_stock_trend = 0
+
     # ===== 10. 备件保障天数 =====
-    # 计算近90天日均消耗
     consumption_start = now - timedelta(days=90)
     movements = db.query(SparePartMovement).filter(
         SparePartMovement.movement_type == "out",
         SparePartMovement.created_at >= consumption_start
     ).limit(5000).all()
 
-    # 按备件型号分组计算日均消耗
     part_consumption = Counter()
     for m in movements:
         part_consumption[m.part_id] += m.quantity
 
     daily_consumption = {pid: qty / 90 for pid, qty in part_consumption.items()}
 
-    # 计算每个备件的保障天数
     days_cover_values = []
     for sp in spare_parts:
         if sp.quantity_in_stock > 0:
@@ -630,10 +705,13 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                 days_cover = sp.quantity_in_stock / daily
                 days_cover_values.append(days_cover)
 
-    # 取最小保障天数（最紧缺的）
     spare_days_cover = min(days_cover_values) if days_cover_values else 999
-    spare_days_cover_estimated = len(days_cover_values) == 0  # 无消耗数据时标记为估算
+    spare_days_cover_estimated = len(days_cover_values) == 0
     days_cover_status = _get_status(spare_days_cover, 30, 14, higher_is_good=True)
+
+    # 保障天数趋势：与上月对比
+    # 注：消耗数据计算周期长，趋势变化缓慢，暂设 trend=0
+    days_cover_trend = 0
 
     # ===== 11. 根因分布 =====
     fault_types = Counter(f.fault_type or "other" for f in all_faults_30d)
@@ -644,7 +722,6 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     for key, count in device_type_counter.most_common(5):
         if count >= 2:
             device_id, fault_type = key
-            # 找到设备名
             device = db.query(Device).filter(Device.id == device_id).first()
             device_name = device.name if device else f"Device {device_id}"
             recurring_devices.append({
@@ -686,16 +763,20 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         "generated_at": now.isoformat(),
         "range": time_range,
         "kpis": {
-            "availability": _make_kpi(availability_value, "%", 99.5, 98, 0, availability_status),
+            "availability": _make_kpi(availability_value, "%", 99.5, 98, availability_trend, availability_status),
             "active_faults": _make_kpi(active_faults, "", None, None, active_faults_trend, active_faults_status),
-            "sla_rate": _make_kpi(sla_rate_value, "%", 95, 90, 0, sla_rate_status),
-            "mttr_hours": _make_kpi(mttr_hours, "h", 4, 8, 0, mttr_status),
-            "mtbf_days": _make_kpi(mtbf_days, "d", None, None, 0, mtbf_status),
-            "recurring_rate": _make_kpi(recurring_rate, "%", 15, 25, 0, recurring_status),
-            "month_cost": _make_kpi(month_total_cost, "¥", budget_value, None, 0, month_cost_status, is_estimated=False),
-            "budget_variance": _make_kpi(budget_variance if budget_variance else 0, "%", 5, 10, 0, budget_status, is_estimated=budget_value is None),
-            "spare_low_stock": _make_kpi(low_stock_count, "", 0, 3, 0, low_stock_status),
-            "spare_days_cover": _make_kpi(spare_days_cover, "d", 30, 14, 0, days_cover_status, is_estimated=spare_days_cover_estimated),
+            "sla_rate": _make_kpi(sla_rate_value, "%", 95, 90, sla_rate_trend, sla_rate_status),
+            "mttr_hours": _make_kpi(mttr_hours, "h", 4, 8, mttr_trend, mttr_status),
+            "mtbf_days": _make_kpi(mtbf_days, "d", None, None, mtbf_trend, mtbf_status),
+            "recurring_rate": _make_kpi(recurring_rate, "%", 15, 25, recurring_trend, recurring_status),
+            "month_cost": _make_kpi(month_total_cost, "¥", budget_value, None, month_cost_trend, month_cost_status, is_estimated=False),
+            "budget_variance": _make_kpi(
+                budget_variance if budget_variance is not None else 0,
+                "%", 5, 10, budget_variance_trend, budget_status,
+                is_estimated=budget_value is None
+            ),
+            "spare_low_stock": _make_kpi(low_stock_count, "", 0, 3, low_stock_trend, low_stock_status),
+            "spare_days_cover": _make_kpi(spare_days_cover, "d", 30, 14, days_cover_trend, days_cover_status, is_estimated=spare_days_cover_estimated),
         },
         "summary_text": summary_text,
         "root_cause_distribution": root_cause_distribution,
