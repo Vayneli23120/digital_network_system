@@ -479,7 +479,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     Returns:
         包含所有管理层 KPI 的字典，每个 KPI 带 value/unit/target/threshold/trend/status
     """
-    from app.shared.models import SystemConfig, SparePartMovement, ServiceSlo
+    from app.shared.models import SystemConfig, SparePartMovement, ServiceSlo, BackupRecord
     from collections import Counter
 
     # 计算时间范围
@@ -857,7 +857,91 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             "alert": False
         })
 
-    # ===== 16. 自动生成摘要文本 =====
+    # ===== 16. 变更-故障关联分析 =====
+    # 查询配置变更记录（has_change = True 表示有变更）
+    config_changes = db.query(BackupRecord).filter(
+        BackupRecord.has_change == True,
+        BackupRecord.backup_time >= range_start
+    ).all()
+
+    total_changes = len(config_changes)
+    change_fault_correlation = []
+
+    # 定义故障关联时间窗口（72小时内）
+    correlation_window_hours = 72
+    correlation_window = timedelta(hours=correlation_window_hours)
+
+    # 统计变更后发生故障的次数
+    changes_with_faults = 0
+    device_change_fault_map = defaultdict(lambda: {"changes": 0, "faults_after_change": 0})
+
+    for change in config_changes:
+        # 查找变更后时间窗口内该设备的故障
+        window_end = change.backup_time + correlation_window
+        faults_after_change = db.query(FaultRecord).filter(
+            FaultRecord.device_id == change.device_id,
+            FaultRecord.created_at >= change.backup_time,
+            FaultRecord.created_at <= window_end
+        ).count()
+
+        if faults_after_change > 0:
+            changes_with_faults += 1
+            device_change_fault_map[change.device_name]["changes"] += 1
+            device_change_fault_map[change.device_name]["faults_after_change"] += faults_after_change
+
+    # 变更成功率 = (1 - 变更引发故障比例) * 100
+    change_success_rate = (1 - changes_with_faults / total_changes) * 100 if total_changes > 0 else 100
+
+    # 变更风险状态判定
+    if change_success_rate >= 95:
+        change_status = "green"
+    elif change_success_rate >= 85:
+        change_status = "yellow"
+    else:
+        change_status = "red"
+
+    # 找出变更后故障最多的设备（Top 5）
+    device_correlation_list = []
+    for device_name, stats in device_change_fault_map.items():
+        if stats["changes"] > 0:
+            fault_rate = stats["faults_after_change"] / stats["changes"]
+            device_correlation_list.append({
+                "device": device_name,
+                "changes": stats["changes"],
+                "faults_after": stats["faults_after_change"],
+                "fault_rate": round(fault_rate, 2)
+            })
+
+    # 按故障率排序
+    device_correlation_list.sort(key=lambda x: x["fault_rate"], reverse=True)
+    risky_devices = device_correlation_list[:5]
+
+    # 上周期对比（趋势）
+    prev_changes = db.query(BackupRecord).filter(
+        BackupRecord.has_change == True,
+        BackupRecord.backup_time >= prev_range_start,
+        BackupRecord.backup_time < range_start
+    ).count()
+
+    prev_changes_with_faults = 0
+    for change in db.query(BackupRecord).filter(
+        BackupRecord.has_change == True,
+        BackupRecord.backup_time >= prev_range_start,
+        BackupRecord.backup_time < range_start
+    ).all():
+        window_end = change.backup_time + correlation_window
+        faults = db.query(FaultRecord).filter(
+            FaultRecord.device_id == change.device_id,
+            FaultRecord.created_at >= change.backup_time,
+            FaultRecord.created_at <= window_end
+        ).count()
+        if faults > 0:
+            prev_changes_with_faults += 1
+
+    prev_change_success_rate = (1 - prev_changes_with_faults / prev_changes) * 100 if prev_changes > 0 else 100
+    change_trend = change_success_rate - prev_change_success_rate
+
+    # ===== 17. 自动生成摘要文本 =====
     summary_parts = []
     if offlineDeviceCount := (total_deployed - reachable_devices):
         summary_parts.append(f"离线设备 {offlineDeviceCount} 台")
@@ -867,6 +951,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         summary_parts.append(f"低库存 {low_stock_count} 项")
     if recurring_rate > 15:
         summary_parts.append(f"复发故障率 {recurring_rate:.0f}%")
+    if change_success_rate < 90 and changes_with_faults > 0:
+        summary_parts.append(f"变更引发故障 {changes_with_faults} 次")
 
     if summary_parts:
         summary_text = "风险提示：" + "、".join(summary_parts)
@@ -903,6 +989,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             ),
             "spare_low_stock": _make_kpi(low_stock_count, "", 0, 3, low_stock_trend, low_stock_status),
             "spare_days_cover": _make_kpi(spare_days_cover, "d", 30, 14, days_cover_trend, days_cover_status, is_estimated=spare_days_cover_estimated),
+            "change_success_rate": _make_kpi(change_success_rate, "%", 95, 85, change_trend, change_status),
         },
         "summary_text": summary_text,
         "root_cause_distribution": root_cause_distribution,
@@ -910,6 +997,13 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         "mttr_breakdown": mttr_breakdown,
         "recurring_devices": recurring_devices,
         "slo": slo_results,
+        "change_fault_correlation": {
+            "total_changes": total_changes,
+            "changes_with_faults": changes_with_faults,
+            "success_rate": round(change_success_rate, 1),
+            "correlation_window_hours": correlation_window_hours,
+            "risky_devices": risky_devices,
+        },
     }
 
 

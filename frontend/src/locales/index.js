@@ -256,6 +256,18 @@ export const languages = {
     sloBurnRateWarning: '消耗过快',
     sloNoConfig: '未配置 SLO 目标',
 
+    // 变更-故障关联分析
+    changeCorrelationTitle: '变更-故障关联',
+    changeTotalChanges: '总变更数',
+    changeFaultCorrelation: '引发故障',
+    changeSuccessRate: '变更成功率',
+    changeCorrelationWindow: '关联窗口',
+    changeSuccessRateDesc: '变更后72小时内未引发故障的比例',
+    changeRiskyDevices: '高风险设备',
+    changeDeviceStats: '{changes}次变更 / {faults}次故障',
+    changeNoRiskDetected: '本周期未发现变更引发故障',
+    kpiChangeSuccessRate: '变更成功率',
+
     // 状态
     statusLive: '实时',
     statusOnline: '在线',
@@ -3177,6 +3189,18 @@ export const languages = {
     sloBurnRateNormal: 'Normal burn',
     sloBurnRateWarning: 'Burn rate too fast',
     sloNoConfig: 'No SLO configured',
+
+    // Change-Fault Correlation
+    changeCorrelationTitle: 'Change-Fault Correlation',
+    changeTotalChanges: 'Total Changes',
+    changeFaultCorrelation: 'Faults Caused',
+    changeSuccessRate: 'Change Success',
+    changeCorrelationWindow: 'Window',
+    changeSuccessRateDesc: 'No faults within 72h after change',
+    changeRiskyDevices: 'Risky Devices',
+    changeDeviceStats: '{changes} changes / {faults} faults',
+    changeNoRiskDetected: 'No change-induced faults this period',
+    kpiChangeSuccessRate: 'Change Success Rate',
 
     // 状态
     statusLive: 'LIVE',

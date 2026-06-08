@@ -94,6 +94,14 @@
             :title="t('sloErrorBudgetTitle')"
           />
         </div>
+
+        <!-- V2 P1: 变更-故障关联分析 -->
+        <div class="v2-change-row" v-if="executiveSummary?.change_fault_correlation">
+          <ChangeCorrelation
+            :data="executiveSummary.change_fault_correlation"
+            :title="t('changeCorrelationTitle')"
+          />
+        </div>
       </section>
 
       <!-- KPI Cards: 每个模块只出现一次 -->
@@ -541,6 +549,7 @@ import KpiStat from '@/components/ui/KpiStat.vue'
 import MttrFunnel from '@/components/ui/MttrFunnel.vue'
 import ParetoChart from '@/components/ui/ParetoChart.vue'
 import ErrorBudget from '@/components/ui/ErrorBudget.vue'
+import ChangeCorrelation from '@/components/ui/ChangeCorrelation.vue'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
@@ -2114,6 +2123,11 @@ onUnmounted(() => {
 
 /* ===== V2 SLO Row ===== */
 .v2-slo-row {
+  margin-top: 16px;
+}
+
+/* ===== V2 Change Row ===== */
+.v2-change-row {
   margin-top: 16px;
 }
 </style>
