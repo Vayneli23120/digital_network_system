@@ -743,7 +743,7 @@ const initFaultLineChart = () => {
       bottom: 0, itemWidth: 10, itemHeight: 10,
       textStyle: { color: axisColor, fontFamily: 'Geist', fontSize: 11 }
     },
-    grid: { left: '3%', right: '4%', bottom: '18%', top: '5%', containLabel: true },
+    grid: { left: '3%', right: '4%', bottom: '14%', top: '5%', containLabel: true },
     xAxis: {
       type: 'category', boundaryGap: false, data: [],
       axisLine: { lineStyle: { color: gridColor } }, axisTick: { show: false },
@@ -1604,7 +1604,7 @@ onUnmounted(() => {
 
 .date-separator { color: #64748b; font-size: 11px; }
 
-.line-chart-container { height: 220px; }
+.line-chart-container { height: 300px; }
 
 /* ===== Charts Split: 2/3 + 1/3 ===== */
 .charts-split {
