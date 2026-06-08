@@ -2,16 +2,26 @@
   <div class="mttr-funnel">
     <div class="funnel-header">
       <span class="funnel-title">{{ title }}</span>
-      <span class="funnel-total">总计 {{ breakdown.total_h }}h</span>
+      <span class="funnel-total">端到端 {{ breakdown.total_h }}h</span>
     </div>
     <div class="funnel-body">
       <div class="funnel-stage" v-for="(stage, idx) in stages" :key="stage.key">
         <div class="stage-bar" :style="getStageStyle(stage, idx)">
           <span class="stage-value">{{ formatValue(stage) }}</span>
           <span class="stage-unit">{{ stage.unit }}</span>
+          <!-- 验证段异常角标 -->
+          <span v-if="stage.key === 'verify' && breakdown.verify_anomalies > 0" class="stage-anomaly">
+            {{ breakdown.verify_anomalies }}
+          </span>
         </div>
         <div class="stage-info">
-          <span class="stage-name">{{ stage.name }}</span>
+          <span class="stage-name">
+            {{ stage.name }}
+            <!-- 验证段显示异常说明 -->
+            <span v-if="stage.key === 'verify' && breakdown.verify_anomalies > 0" class="anomaly-text">
+              ({{ breakdown.verify_anomalies }} {{ t('mttrUnclosedTimely') }})
+            </span>
+          </span>
           <span class="stage-target" :class="getStageStatus(stage)">
             目标 ≤{{ stage.target }}{{ stage.unit }}
           </span>
@@ -22,6 +32,11 @@
           </svg>
         </div>
       </div>
+    </div>
+    <!-- 口径说明 -->
+    <div class="funnel-note" v-if="breakdown.note">
+      <span class="note-icon">ℹ️</span>
+      <span class="note-text">{{ breakdown.note }}</span>
     </div>
   </div>
 </template>
@@ -187,5 +202,49 @@ const formatValue = (stage) => {
 /* Dark mode */
 .dark .mttr-funnel {
   background: var(--bg-tertiary);
+}
+
+/* 验证段异常角标 */
+.stage-anomaly {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(239, 68, 68, 0.9);
+  border-radius: 8px;
+  margin-left: 6px;
+}
+
+.anomaly-text {
+  font-size: 11px;
+  color: #ef4444;
+  font-weight: 500;
+  margin-left: 4px;
+}
+
+/* 口径说明 */
+.funnel-note {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  margin-top: 4px;
+}
+
+.note-icon {
+  font-size: 12px;
+}
+
+.note-text {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.4;
 }
 </style>

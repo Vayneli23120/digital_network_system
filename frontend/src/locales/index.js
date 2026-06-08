@@ -232,6 +232,8 @@ export const languages = {
     mttrStageDiagnose: '诊断',
     mttrStageRepair: '修复',
     mttrStageVerify: '验证',
+    mttrUnclosedTimely: '条未及时关单',
+    mttrFunnelNote: '验证段为解决→正式关闭时间，不计入端到端MTTR',
     mttrBreakdownTitle: '修复链路分析',
 
     // 根因类型
@@ -3166,6 +3168,8 @@ export const languages = {
     mttrStageDiagnose: 'Diagnose',
     mttrStageRepair: 'Repair',
     mttrStageVerify: 'Verify',
+    mttrUnclosedTimely: 'unclosed timely',
+    mttrFunnelNote: 'Verify = resolved→closed, not part of end-to-end MTTR',
     mttrBreakdownTitle: 'Repair Pipeline',
 
     // Root cause types
