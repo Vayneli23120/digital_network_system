@@ -112,6 +112,20 @@ async def get_executive_summary(
     return result
 
 
+@router.get("/alerts")
+async def get_alerts(db: Session = Depends(get_db)):
+    """获取实时告警列表（高危故障 + 备份超期 + 系统健康）"""
+    key = _cache_key("dashboard:alerts")
+    result = cache.get(key)
+    if result is not None:
+        return result
+
+    from .dashboard_service import get_alerts as svc_get_alerts
+    result = svc_get_alerts(db)
+    cache.set(key, result, ttl=30)  # 30秒缓存
+    return result
+
+
 @router.post("/cache/clear")
 async def clear_dashboard_cache():
     """清除 Dashboard 缓存（在数据变更后调用）"""

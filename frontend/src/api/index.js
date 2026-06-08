@@ -10,6 +10,11 @@ export function getExecutiveSummary(timeRange = '30d') {
   return api.get('/dashboard/executive-summary', { params: { time_range: timeRange } })
 }
 
+// 获取实时告警
+export function getAlerts() {
+  return api.get('/dashboard/alerts')
+}
+
 // 设备相关
 export function getDevices(params) {
   return api.get('/devices', { params })

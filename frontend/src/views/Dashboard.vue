@@ -480,7 +480,8 @@
               <span v-if="alertCount" class="alert-badge">{{ alertCount }}</span>
             </div>
             <div class="panel-body event-stream">
-              <div class="event-item" v-for="(alert, i) in alerts" :key="i">
+              <div class="event-item" v-for="(alert, i) in alerts" :key="i"
+                   @click="alert.link && router.push(alert.link)" :style="{ cursor: alert.link ? 'pointer' : 'default' }">
                 <div class="event-timeline-marker">
                   <span :class="['event-dot', alert.severity]"></span>
                   <span class="event-line"></span>
@@ -501,7 +502,8 @@
               <h3 class="panel-title">{{ t('dashRecentActivity') }}</h3>
             </div>
             <div class="panel-body activity-feed">
-              <div class="activity-item" v-for="(item, i) in activityFeed" :key="i">
+              <div class="activity-item" v-for="(item, i) in activityFeed" :key="i"
+                   @click="item.link && router.push(item.link)" :style="{ cursor: item.link ? 'pointer' : 'default' }">
                 <div :class="['activity-icon', item.type]">
                   <svg v-if="item.type === 'backup'" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M12 3v12M12 15l4-4M12 15l-4-4"/>
@@ -541,7 +543,7 @@ import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
 import { DataBoard } from '@element-plus/icons-vue'
-import { getDashboardSummary, getExecutiveSummary } from '@/api'
+import { getDashboardSummary, getExecutiveSummary, getAlerts } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -654,10 +656,8 @@ const healthScoreClass = computed(() => {
 // Config Compliance metrics
 const backupCoverage = computed(() => {
   const total = stats.value.devices?.total || 0
-  if (total === 0) return 0
-  // Approximate: assume recent backups cover devices with backup records
-  const backedUp = recentBackups.value.length > 0 ? Math.min(recentBackups.value.length * 2, total) : Math.round(total * 0.85)
-  return Math.round((backedUp / total) * 100)
+  const backedUp = stats.value.backups?.backed_up_devices || 0
+  return total > 0 ? Math.round((backedUp / total) * 100) : 0
 })
 
 const recentConfigChanges = computed(() => {
@@ -703,14 +703,23 @@ const typeStatus = (dtype) => {
   return 'ok'
 }
 
-const alerts = computed(() => [
-  { severity: 'warn', title: t('dashAlertBackupTitle'), summary: t('dashAlertBackupSummary'), time: '10m' },
-  { severity: 'info', title: t('dashAlertMaintenanceTitle'), summary: t('dashAlertMaintenanceSummary'), time: '2h' },
-  { severity: 'success', title: t('dashAlertHealthyTitle'), summary: t('dashAlertHealthySummary'), time: '1d' }
-])
+// 真实告警数据
+const realAlerts = ref([])
+
+const loadAlerts = async () => {
+  try {
+    const res = await getAlerts()
+    realAlerts.value = res.data || []
+  } catch (e) {
+    console.error('Failed to load alerts:', e)
+    realAlerts.value = []
+  }
+}
+
+const alerts = computed(() => realAlerts.value)
 
 const alertCount = computed(() => alerts.value.filter(a => a.severity === 'warn' || a.severity === 'danger').length)
-const monthlyLaborCost = computed(() => Math.max((stats.value.costs?.month_total || 0) - (stats.value.costs?.month_maintenance || 0), 0))
+const monthlyLaborCost = computed(() => stats.value.costs?.month_labor || 0)
 const backupChangedCount = computed(() => recentBackups.value.filter(item => item.has_change).length)
 
 // Executive summary bar class based on status
@@ -733,21 +742,24 @@ const activityFeed = computed(() => {
     items.push({
       type: 'backup',
       text: `${t('dashConfigBackups')}: ${b.device_name} — ${b.has_change ? t('dashModified') : t('dashClean')}`,
-      time: formatDate(b.backup_time)
+      time: formatDate(b.backup_time),
+      link: '/backups'
     })
   })
   if (stats.value.faults?.count_30days > 0) {
     items.push({
       type: 'fault',
       text: `${stats.value.faults.count_30days} ${t('dashFaultEvents')} (${t('dashDays30')})`,
-      time: dayjs().format('MM-DD HH:mm')
+      time: dayjs().format('MM-DD HH:mm'),
+      link: '/faults'
     })
   }
   if (stats.value.maintenance?.completed > 0) {
     items.push({
       type: 'maintenance',
       text: `${stats.value.maintenance.completed} ${t('dashMaintenanceCompleted')}`,
-      time: dayjs().format('MM-DD HH:mm')
+      time: dayjs().format('MM-DD HH:mm'),
+      link: '/maintenance'
     })
   }
   return items.slice(0, 8)
@@ -831,6 +843,8 @@ const loadDashboardData = async (force = false) => {
     } catch (err) {
       console.error('Failed to load executive summary:', err)
     }
+    // Load alerts
+    loadAlerts()
   } catch (error) {
     ElMessage.error(t('dashLoadFailed'))
   }

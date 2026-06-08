@@ -1092,7 +1092,8 @@ class ServiceSlo(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     service_name = Column(String(100), nullable=False, unique=True, index=True)  # 服务/设备组名
-    slo_target = Column(DECIMAL(5, 4), nullable=False)  # 目标可用率，如 99.9 (百分比)
+    slo_target = Column(DECIMAL(7, 4), nullable=False)  # 目标可用率，如 99.9000（百分比，最大支持 999.9999）
+    device_types = Column(String(200))  # 该服务包含的设备类型，逗号分隔，如 "core_switch,router"；为空表示全局
     window_days = Column(Integer, default=30)  # 统计窗口天数
     description = Column(String(200))
     is_active = Column(Boolean, default=True, index=True)

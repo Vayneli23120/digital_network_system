@@ -81,6 +81,9 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     # 备份统计（最近 10 条）
     recent_backups = db.query(BackupRecord).order_by(BackupRecord.backup_time.desc()).limit(10).all()
 
+    # 真实备份覆盖率：有备份记录的设备数 / 在网设备数
+    backed_up_devices = db.query(func.count(func.distinct(BackupRecord.device_id))).scalar() or 0
+
     # 故障统计（近 30 天，按状态分组）
     thirty_days_ago = datetime.utcnow() - timedelta(days=30)
     recent_faults = db.query(FaultRecord).filter(
@@ -140,6 +143,7 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
             "by_type": devices_by_type,
         },
         "backups": {
+            "backed_up_devices": backed_up_devices,
             "recent": [
                 {
                     "device_name": b.device_name,
@@ -469,6 +473,74 @@ def get_fault_trend(
     }
 
 
+def get_alerts(db: Session) -> List[Dict[str, Any]]:
+    """获取实时告警列表
+
+    Returns:
+        告警列表，每条包含 severity, title, summary, time, link
+    """
+    from datetime import datetime, timedelta
+    from app.shared.models import FaultRecord, Device
+    from sqlalchemy import func
+
+    alerts = []
+    now = datetime.utcnow()
+
+    # 1. 高危故障：severity in (critical, major) 且 status 属未关闭
+    critical_faults = db.query(FaultRecord).filter(
+        FaultRecord.severity.in_(['critical', 'major']),
+        FaultRecord.status.in_(['open', 'assigned', 'accepted', 'diagnosing', 'resolving'])
+    ).order_by(FaultRecord.created_at.desc()).limit(3).all()
+
+    for fault in critical_faults:
+        time_diff = now - fault.created_at
+        if time_diff.days > 0:
+            time_str = f"{time_diff.days}d"
+        elif time_diff.seconds >= 3600:
+            time_str = f"{int(time_diff.seconds / 3600)}h"
+        else:
+            time_str = f"{int(time_diff.seconds / 60)}m"
+
+        severity_map = {'critical': 'danger', 'major': 'warn'}
+        alerts.append({
+            "severity": severity_map.get(fault.severity, 'warn'),
+            "title": f"故障: {fault.device_name or '未知设备'}",
+            "summary": fault.description[:50] if fault.description else "无描述",
+            "time": time_str,
+            "link": "/faults?status=open"
+        })
+
+    # 2. 备份超期：设备 last_backup_time 超过 30 天
+    thirty_days_ago = now - timedelta(days=30)
+    devices_with_old_backup = db.query(Device).filter(
+        Device.deployment_status == 'in-use',
+        Device.last_backup_time < thirty_days_ago
+    ).limit(3).all()
+
+    for device in devices_with_old_backup:
+        if device.last_backup_time:
+            days_overdue = (now - device.last_backup_time).days
+            alerts.append({
+                "severity": "warn",
+                "title": "备份超期",
+                "summary": f"{device.name} 已 {days_overdue} 天未备份",
+                "time": f"{days_overdue}d",
+                "link": "/backups"
+            })
+
+    # 3. 如果没有任何告警，显示系统健康状态
+    if not alerts:
+        alerts.append({
+            "severity": "success",
+            "title": "系统健康",
+            "summary": "所有设备运行正常，无高危故障或备份超期",
+            "time": "now",
+            "link": None
+        })
+
+    return alerts
+
+
 def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any]:
     """管理层聚合接口 - 返回所有核心 KPI
 
@@ -734,7 +806,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     # ===== 14. MTTR 四段拆解 =====
     # MTTA (平均响应时间): accepted_at - created_at
     # 诊断时间: diagnosing_at - accepted_at
-    # 修复时间: resolved_at - accepted_at (已受理的修复)
+    # 修复时间: resolved_at - diagnosing_at（修复段不含诊断）
     # 验证时间: closed_at - resolved_at
     mtta_minutes = 0
     diagnose_minutes = 0
@@ -746,9 +818,14 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         if f.created_at and f.accepted_at:
             mtta_minutes += (f.accepted_at - f.created_at).total_seconds() / 60
             mttr_breakdown_count += 1
+            # 诊断段：受理 → 开始诊断
             if f.diagnosing_at and f.accepted_at:
                 diagnose_minutes += (f.diagnosing_at - f.accepted_at).total_seconds() / 60
-            if f.resolved_at and f.accepted_at:
+            # 修复段：开始诊断 → 解决（改前是 resolved - accepted，会包含诊断段）
+            if f.resolved_at and f.diagnosing_at:
+                repair_hours += (f.resolved_at - f.diagnosing_at).total_seconds() / 3600
+            elif f.resolved_at and f.accepted_at:
+                # 无诊断时间戳时回退（避免丢数据）
                 repair_hours += (f.resolved_at - f.accepted_at).total_seconds() / 3600
         if f.closed_at and f.resolved_at:
             verify_hours += (f.closed_at - f.resolved_at).total_seconds() / 3600
@@ -801,23 +878,38 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         # 错误预算 = 窗口分钟数 * (1 - SLO目标)
         error_budget_minutes = window_minutes * (1 - slo_target_pct / 100)
 
-        # 已消耗：窗口内的停机分钟数
+        # 解析该 SLO 绑定的设备类型范围
+        type_list = [t.strip() for t in (slo.device_types or "").split(",") if t.strip()]
+
+        # 该服务范围内的设备 id
+        scope_device_ids = []
+        if type_list:
+            scope_devices = db.query(Device.id).filter(Device.device_type.in_(type_list)).all()
+            scope_device_ids = [d.id for d in scope_devices]
+
+        # 已消耗：窗口内的停机分钟数（按设备范围过滤）
         window_start = now - timedelta(days=window_days)
-        consumed_minutes = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
+        consumed_q = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
             FaultRecord.created_at >= window_start,
             FaultRecord.status.in_(('resolved', 'closed'))
-        ).scalar() or 0
+        )
+        if type_list and scope_device_ids:
+            consumed_q = consumed_q.filter(FaultRecord.device_id.in_(scope_device_ids))
+        consumed_minutes = consumed_q.scalar() or 0
 
         # 剩余预算百分比
         remaining_minutes = error_budget_minutes - float(consumed_minutes)
         remaining_pct = (remaining_minutes / error_budget_minutes * 100) if error_budget_minutes > 0 else 100
 
-        # 燃尽率 burn_rate = 近24h消耗速率 / 允许平均速率
+        # 燃尽率 burn_rate = 近24h消耗速率 / 允许平均速率（同样按范围过滤）
         last_24h_start = now - timedelta(hours=24)
-        last_24h_consumed = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
+        burn_q = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
             FaultRecord.created_at >= last_24h_start,
             FaultRecord.status.in_(('resolved', 'closed'))
-        ).scalar() or 0
+        )
+        if type_list and scope_device_ids:
+            burn_q = burn_q.filter(FaultRecord.device_id.in_(scope_device_ids))
+        last_24h_consumed = burn_q.scalar() or 0
 
         allowed_avg_rate = error_budget_minutes / window_days  # 每天允许消耗
         actual_24h_rate = float(last_24h_consumed)  # 24小时实际消耗
@@ -835,7 +927,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             "service": slo.service_name,
             "target": slo_target_pct,
             "window_days": window_days,
-            "error_budget_min": round(error_budget_minutes, 0),
+            "device_types": type_list,
+            "error_budget_min": round(error_budget_minutes, 1),
             "consumed_min": float(consumed_minutes),
             "remaining_pct": round(remaining_pct, 1),
             "burn_rate": round(burn_rate, 2),
@@ -845,11 +938,15 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
 
     # 默认 SLO（如未配置）
     if not slo_results:
+        default_window = 30
+        default_target = 99.9
+        default_budget = default_window * 24 * 60 * (1 - default_target / 100)  # = 43.2
         slo_results.append({
             "service": "default",
-            "target": 99.9,
-            "window_days": 30,
-            "error_budget_min": 4320,  # 30天 * (1-99.9%) * 24*60
+            "target": default_target,
+            "window_days": default_window,
+            "device_types": [],
+            "error_budget_min": round(default_budget, 1),  # 43.2
             "consumed_min": 0,
             "remaining_pct": 100,
             "burn_rate": 0,
