@@ -13,7 +13,7 @@
             v-for="item in group.items"
             :key="item.path"
             :to="item.path"
-            :class="['si', { active: currentPath === item.path }]"
+            :class="['si', { active: isActive(item.path) }]"
           >
             <el-icon><component :is="item.icon" /></el-icon>
             <span class="si-text" v-show="!collapsed">{{ item.text }}</span>
@@ -50,6 +50,17 @@ const emit = defineEmits(['toggleCollapse'])
 const route = useRoute()
 
 const currentPath = computed(() => route.path)
+
+// 前缀匹配激活状态：详情页时父菜单保持高亮
+const isActive = (itemPath) => {
+  const current = currentPath.value
+  // 根路径精确匹配
+  if (itemPath === '/') {
+    return current === '/'
+  }
+  // 其他路径前缀匹配
+  return current === itemPath || current.startsWith(itemPath + '/')
+}
 
 const toggleCollapse = () => {
   emit('toggleCollapse')
