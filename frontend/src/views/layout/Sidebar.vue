@@ -9,7 +9,6 @@
       <!-- Sidebar Groups -->
       <div class="sidebar-groups">
         <div v-for="group in sidebarGroups" :key="group.label" class="sg">
-          <div class="sg-label" v-show="!collapsed">{{ group.label }}</div>
           <router-link
             v-for="item in group.items"
             :key="item.path"
@@ -118,28 +117,17 @@ const toggleCollapse = () => {
   gap: var(--gap-xs);
 }
 
-.sg-label {
-  padding: 8px 12px;
-  font-family: var(--font-display);
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: var(--gap-xs);
-}
-
 /* Sidebar Item */
 .si {
   display: flex;
   align-items: center;
   gap: var(--gap-sm);
-  padding: 10px 12px;
+  padding: 10px 12px 10px 9px;
+  border-left: 3px solid transparent;
   border-radius: var(--radius-md);
   color: var(--text-secondary);
   text-decoration: none;
-  transition: all 0.2s;
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease;
   position: relative;
 }
 
@@ -150,8 +138,7 @@ const toggleCollapse = () => {
 
 .si.active {
   background: var(--sidebar-active-bg);
-  border-left: 3px solid var(--sidebar-active-border);
-  padding-left: 9px;
+  border-left-color: var(--sidebar-active-border);
   color: var(--sidebar-active-border);
 }
 
@@ -199,10 +186,6 @@ const toggleCollapse = () => {
 .sidebar.collapsed .collapse-toggle {
   width: 48px;
   margin: 0 auto var(--gap-md);
-}
-
-.sidebar.collapsed .sg-label {
-  display: none;
 }
 
 .sidebar.collapsed .si {
