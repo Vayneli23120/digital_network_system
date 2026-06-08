@@ -416,6 +416,7 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
             "snmp_available": true
         }
     """
+    import asyncio
     from .snmp_service import get_snmp_service
 
     device = db.query(Device).filter(Device.id == device_id).first()
@@ -425,9 +426,7 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
     if not device.ip:
         raise HTTPException(status_code=400, detail="设备未配置 IP 地址")
 
-    # 获取 SNMP community（从设备配置或默认值）
-    # 可以扩展为从 CredentialGroup 或设备配置中获取
-    community = "public"  # 默认值
+    community = "public"
     vendor = device.vendor or "cisco"
 
     service = get_snmp_service()
@@ -437,22 +436,47 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
             "cpu": {"value": None, "status": "unknown", "message": "SNMP 服务未安装"},
             "memory": {"value": None, "status": "unknown"},
             "temperature": {"value": None, "status": "unknown"},
+            "interfaces": {"up": None, "down": None, "total": None},
+            "errors": {"total_errors": None, "has_errors": False},
             "uplinks": [],
+            "uptime": {"uptime_days": None, "human": None},
             "snmp_available": False,
             "device_ip": device.ip
         }
 
     try:
-        metrics = service.get_device_metrics(device.ip, community, vendor)
+        # 直接调用异步方法
+        metrics = await asyncio.wait_for(
+            service.get_device_metrics_async(device.ip, community, vendor),
+            timeout=15.0
+        )
         metrics["snmp_available"] = True
         metrics["device_ip"] = device.ip
         return metrics
+    except asyncio.TimeoutError:
+        logger.warning(f"SNMP query timeout for device {device.ip}")
+        return {
+            "cpu": {"value": None, "status": "unknown", "message": "查询超时"},
+            "memory": {"value": None, "status": "unknown"},
+            "temperature": {"value": None, "status": "unknown"},
+            "interfaces": {"up": None, "down": None, "total": None},
+            "errors": {"total_errors": None, "has_errors": False},
+            "uplinks": [],
+            "uptime": {"uptime_days": None, "human": None},
+            "snmp_available": True,
+            "device_ip": device.ip,
+            "error": "SNMP 查询超时，设备可能未配置 SNMP 或网络不可达"
+        }
     except Exception as e:
+        logger.error(f"SNMP query failed for device {device.ip}: {e}")
         return {
             "cpu": {"value": None, "status": "unknown", "message": str(e)},
             "memory": {"value": None, "status": "unknown"},
             "temperature": {"value": None, "status": "unknown"},
+            "interfaces": {"up": None, "down": None, "total": None},
+            "errors": {"total_errors": None, "has_errors": False},
             "uplinks": [],
+            "uptime": {"uptime_days": None, "human": None},
             "snmp_available": True,
             "device_ip": device.ip,
             "error": str(e)

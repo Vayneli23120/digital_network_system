@@ -303,6 +303,7 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
+        "last_backup_time": device.last_backup_time.isoformat() if device.last_backup_time else None,
         "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
         "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
         "modules": device.get_modules_list(),

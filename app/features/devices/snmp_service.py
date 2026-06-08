@@ -83,14 +83,15 @@ class SNMPService:
         client = Client(ip, V2C(community))
         return PyWrapper(client)
 
-    async def snmp_get_async(self, ip: str, community: str, oid: str, timeout: int = 5) -> Optional[Any]:
+    async def snmp_get_async(self, ip: str, community: str, oid: str, timeout: int = 2) -> Optional[Any]:
         """异步 SNMP GET"""
         if not SNMP_AVAILABLE:
             return None
 
         try:
             wrapper = await self._create_wrapper(ip, community)
-            result = await wrapper.get(oid)
+            # 使用 asyncio.wait_for 添加超时控制
+            result = await asyncio.wait_for(wrapper.get(oid), timeout=timeout)
 
             if result is None:
                 return None
@@ -108,7 +109,7 @@ class SNMPService:
             logger.debug(f"SNMP get failed {ip}/{oid}: {e}")
             return None
 
-    async def snmp_walk_async(self, ip: str, community: str, oid: str, timeout: int = 5) -> Dict[str, Any]:
+    async def snmp_walk_async(self, ip: str, community: str, oid: str, timeout: int = 3) -> Dict[str, Any]:
         """异步 SNMP WALK"""
         if not SNMP_AVAILABLE:
             return {}
@@ -117,24 +118,35 @@ class SNMPService:
 
         try:
             wrapper = await self._create_wrapper(ip, community)
-            # walk() 返回 async generator，需要用 async for 迭代
-            async for item in wrapper.walk(oid):
-                # item 是 PyVarBind 对象，有 oid 和 value 属性
-                if hasattr(item, 'oid') and hasattr(item, 'value'):
-                    full_oid = str(item.oid)
-                    suffix = full_oid.replace(oid, "").lstrip(".")
-                    value = item.value
 
-                    if value is not None:
-                        if isinstance(value, bytes):
+            # 收集 walk 结果，限制最多收集 100 个结果避免无限循环
+            count = 0
+            max_items = 100
+
+            try:
+                async for item in wrapper.walk(oid):
+                    if count >= max_items:
+                        break
+                    if hasattr(item, 'oid') and hasattr(item, 'value'):
+                        full_oid = str(item.oid)
+                        suffix = full_oid.replace(oid, "").lstrip(".")
+                        value = item.value
+
+                        if value is not None:
+                            if isinstance(value, bytes):
+                                try:
+                                    value = value.decode('utf-8', errors='ignore')
+                                except:
+                                    value = str(value)
                             try:
-                                value = value.decode('utf-8', errors='ignore')
-                            except:
-                                value = str(value)
-                        try:
-                            result[suffix] = int(value)
-                        except (TypeError, ValueError):
-                            result[suffix] = str(value)
+                                result[suffix] = int(value)
+                            except (TypeError, ValueError):
+                                result[suffix] = str(value)
+                        count += 1
+            except asyncio.TimeoutError:
+                logger.debug(f"SNMP walk timeout {ip}/{oid} after {timeout}s")
+                # 返回已收集的部分结果
+                return result
 
             return result
 
@@ -142,7 +154,7 @@ class SNMPService:
             logger.debug(f"SNMP walk failed {ip}/{oid}: {e}")
             return {}
 
-    def snmp_get(self, ip: str, community: str, oid: str, timeout: int = 5) -> Optional[Any]:
+    def snmp_get(self, ip: str, community: str, oid: str, timeout: int = 2) -> Optional[Any]:
         """同步 SNMP GET"""
         try:
             loop = asyncio.get_event_loop()
@@ -152,16 +164,16 @@ class SNMPService:
                         asyncio.run,
                         self.snmp_get_async(ip, community, oid, timeout)
                     )
-                    return future.result(timeout=timeout + 2)
+                    return future.result(timeout=timeout + 1)
             else:
                 return loop.run_until_complete(
                     self.snmp_get_async(ip, community, oid, timeout)
                 )
         except Exception as e:
-            logger.error(f"SNMP get wrapper failed: {e}")
+            logger.debug(f"SNMP get wrapper failed: {e}")
             return None
 
-    def snmp_walk(self, ip: str, community: str, oid: str, timeout: int = 5) -> Dict[str, Any]:
+    def snmp_walk(self, ip: str, community: str, oid: str, timeout: int = 3) -> Dict[str, Any]:
         """同步 SNMP WALK"""
         try:
             loop = asyncio.get_event_loop()
@@ -171,13 +183,13 @@ class SNMPService:
                         asyncio.run,
                         self.snmp_walk_async(ip, community, oid, timeout)
                     )
-                    return future.result(timeout=timeout + 5)
+                    return future.result(timeout=timeout + 2)
             else:
                 return loop.run_until_complete(
                     self.snmp_walk_async(ip, community, oid, timeout)
                 )
         except Exception as e:
-            logger.error(f"SNMP walk wrapper failed: {e}")
+            logger.debug(f"SNMP walk wrapper failed: {e}")
             return {}
 
     def _get_status(self, value: float, thresholds: List[int] = [50, 75, 90]) -> str:
@@ -393,6 +405,112 @@ class SNMPService:
                 })
 
         return uplinks[:10]
+
+    async def get_device_metrics_async(self, ip: str, community: str = "public", vendor: str = "cisco") -> Dict[str, Any]:
+        """获取设备完整性能指标（异步版本）"""
+        logger.info(f"开始获取设备 {ip} 的性能指标...")
+
+        oids = self.get_oid_set(vendor)
+
+        # 并行执行多个 SNMP 查询
+        try:
+            # 获取 CPU
+            cpu_values = await self.snmp_walk_async(ip, community, oids.get("cpu_5min", ""), timeout=3)
+            cpu = {"value": None, "status": "unknown"}
+            if cpu_values:
+                values = [v for v in cpu_values.values() if isinstance(v, (int, float)) and v >= 0]
+                if values:
+                    cpu_val = float(values[0])
+                    if cpu_val > 100:
+                        cpu_val = cpu_val / 100
+                    cpu = {"value": round(cpu_val, 1), "status": self._get_status(cpu_val, [50, 75, 90])}
+
+            # 获取 uptime
+            uptime_result = await self.snmp_get_async(ip, community, oids.get("sys_uptime", ""), timeout=2)
+            uptime = {"uptime_days": None, "human": None}
+            if uptime_result is not None:
+                from datetime import timedelta
+                if isinstance(uptime_result, timedelta):
+                    total_seconds = int(uptime_result.total_seconds())
+                    days = total_seconds // 86400
+                    hours = (total_seconds % 86400) // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    uptime = {
+                        "uptime_days": days,
+                        "uptime_hours": hours,
+                        "uptime_minutes": minutes,
+                        "human": f"{days}天 {hours}时 {minutes}分"
+                    }
+
+            # 获取接口状态
+            oper_status = await self.snmp_walk_async(ip, community, oids.get("if_oper_status", ""), timeout=3)
+            interfaces = {"up": None, "down": None, "total": None}
+            if oper_status:
+                up_count = sum(1 for v in oper_status.values() if v == 1)
+                down_count = sum(1 for v in oper_status.values() if v == 2)
+                interfaces = {"up": up_count, "down": down_count, "total": len(oper_status)}
+
+            # 获取错误包
+            in_errors = await self.snmp_walk_async(ip, community, oids.get("if_in_errors", ""), timeout=2)
+            out_errors = await self.snmp_walk_async(ip, community, oids.get("if_out_errors", ""), timeout=2)
+            errors = {"total_errors": 0, "in_errors": 0, "out_errors": 0, "has_errors": False}
+            try:
+                total_in = sum(v for v in in_errors.values() if isinstance(v, int))
+                total_out = sum(v for v in out_errors.values() if isinstance(v, int))
+                total = total_in + total_out
+                errors = {"total_errors": total, "in_errors": total_in, "out_errors": total_out, "has_errors": total > 0}
+            except:
+                pass
+
+            # 获取上行链路
+            if_desc = await self.snmp_walk_async(ip, community, oids.get("if_desc", ""), timeout=3)
+            if_alias = await self.snmp_walk_async(ip, community, oids.get("if_alias", ""), timeout=2)
+            if_speed = await self.snmp_walk_async(ip, community, oids.get("if_speed", ""), timeout=2)
+
+            uplinks = []
+            for idx, desc in if_desc.items():
+                desc_str = str(desc) if desc else ""
+                is_uplink = any(kw in desc_str.lower() for kw in ['gi', 'fa', 'xe', 'eth', 'ten'])
+                if is_uplink and idx in oper_status and oper_status.get(idx) == 1:
+                    speed = if_speed.get(idx, 0) or 0
+                    speed_mbps = int(speed / 1000000) if speed > 0 else 0
+                    alias = if_alias.get(idx, desc_str)
+                    uplinks.append({
+                        "index": idx,
+                        "interface": desc_str,
+                        "alias": alias,
+                        "speed_mbps": speed_mbps,
+                        "status": "up",
+                        "utilization": None
+                    })
+
+            result = {
+                "cpu": cpu,
+                "memory": {"used_percent": None, "status": "unknown"},
+                "temperature": {"value": None, "status": "unknown"},
+                "uptime": uptime,
+                "interfaces": interfaces,
+                "errors": errors,
+                "uplinks": uplinks[:10],
+                "timestamp": datetime.now().isoformat()
+            }
+
+            logger.info(f"设备 {ip} 性能指标获取完成: CPU={cpu.get('value')}")
+            return result
+
+        except Exception as e:
+            logger.error(f"SNMP query failed for {ip}: {e}")
+            return {
+                "cpu": {"value": None, "status": "unknown"},
+                "memory": {"used_percent": None, "status": "unknown"},
+                "temperature": {"value": None, "status": "unknown"},
+                "uptime": {"uptime_days": None, "human": None},
+                "interfaces": {"up": None, "down": None, "total": None},
+                "errors": {"total_errors": 0, "has_errors": False},
+                "uplinks": [],
+                "timestamp": datetime.now().isoformat(),
+                "error": str(e)
+            }
 
     def get_device_metrics(self, ip: str, community: str = "public", vendor: str = "cisco") -> Dict[str, Any]:
         """获取设备完整性能指标"""
