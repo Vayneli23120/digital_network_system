@@ -1,6 +1,79 @@
 <template>
   <div class="dashboard">
     <div class="dashboard-shell">
+      <!-- Executive Summary Section (管理层视角) -->
+      <section class="executive-section" v-if="executiveSummary">
+        <!-- Summary Bar -->
+        <div class="summary-bar" :class="summaryBarClass">
+          <div class="summary-icon">
+            <el-icon><DataBoard /></el-icon>
+          </div>
+          <span class="summary-text">{{ executiveSummary.summary_text }}</span>
+          <span class="summary-range">{{ executiveSummary.range }}</span>
+        </div>
+
+        <!-- KPI Grid -->
+        <div class="executive-kpi-grid">
+          <KpiStat
+            v-if="executiveSummary.kpis?.availability"
+            :kpi="executiveSummary.kpis.availability"
+            :title="t('kpiAvailability')"
+            link="/devices"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.active_faults"
+            :kpi="executiveSummary.kpis.active_faults"
+            :title="t('kpiActiveFaults')"
+            link="/faults?status=open"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.sla_rate"
+            :kpi="executiveSummary.kpis.sla_rate"
+            :title="t('kpiSlaRate')"
+            link="/maintenance"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.mttr_hours"
+            :kpi="executiveSummary.kpis.mttr_hours"
+            :title="t('kpiMttr')"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.month_cost"
+            :kpi="executiveSummary.kpis.month_cost"
+            :title="t('kpiMonthCost')"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.budget_variance"
+            :kpi="executiveSummary.kpis.budget_variance"
+            :title="t('kpiBudgetVariance')"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.recurring_rate"
+            :kpi="executiveSummary.kpis.recurring_rate"
+            :title="t('kpiRecurringRate')"
+            link="/faults"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.spare_low_stock"
+            :kpi="executiveSummary.kpis.spare_low_stock"
+            :title="t('kpiSpareLowStock')"
+            link="/spare-parts?low_stock=true"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.spare_days_cover"
+            :kpi="executiveSummary.kpis.spare_days_cover"
+            :title="t('kpiDaysCover')"
+            link="/spare-parts"
+            :show-trend-value="true"
+          />
+          <KpiStat
+            v-if="executiveSummary.kpis?.mtbf_days"
+            :kpi="executiveSummary.kpis.mtbf_days"
+            :title="t('kpiMtbf')"
+          />
+        </div>
+      </section>
+
       <!-- KPI Cards: 每个模块只出现一次 -->
       <section class="kpi-section">
         <div class="section-heading">
@@ -437,15 +510,18 @@ import { ref, onMounted, nextTick, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardSummary } from '@/api'
+import { DataBoard } from '@element-plus/icons-vue'
+import { getDashboardSummary, getExecutiveSummary } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
+import KpiStat from '@/components/ui/KpiStat.vue'
 
 const router = useRouter()
 const { t, currentLang } = useI18n()
 const loading = ref(false)
 const stats = ref({})
+const executiveSummary = ref(null)
 const recentBackups = ref([])
 const faultLineChart = ref(null)
 const faultTimeRange = ref('30d')
@@ -603,6 +679,15 @@ const alertCount = computed(() => alerts.value.filter(a => a.severity === 'warn'
 const monthlyLaborCost = computed(() => Math.max((stats.value.costs?.month_total || 0) - (stats.value.costs?.month_maintenance || 0), 0))
 const backupChangedCount = computed(() => recentBackups.value.filter(item => item.has_change).length)
 
+// Executive summary bar class based on status
+const summaryBarClass = computed(() => {
+  const summary = executiveSummary.value?.summary_text
+  if (!summary) return 'stable'
+  if (summary.includes('风险') || summary.includes('Risk')) return 'risk'
+  if (summary.includes('平稳') || summary.includes('Stable')) return 'stable'
+  return 'warning'
+})
+
 const lastBackupTime = computed(() => {
   if (recentBackups.value.length > 0) return formatDate(recentBackups.value[0].backup_time)
   return 'N/A'
@@ -700,6 +785,18 @@ const loadDashboardData = async (force = false) => {
     }
     // Load top fault devices
     await loadFaultDeviceList(force)
+    // Load executive summary
+    try {
+      const execData = await cachedRequest(
+        () => getExecutiveSummary('30d'),
+        'executiveSummary',
+        {},
+        { forceRefresh: force }
+      )
+      executiveSummary.value = execData
+    } catch (err) {
+      console.error('Failed to load executive summary:', err)
+    }
   } catch (error) {
     ElMessage.error(t('dashLoadFailed'))
   }
@@ -1882,4 +1979,98 @@ onUnmounted(() => {
   border-color: rgba(71, 85, 105, 0.28);
 }
 .dark .risk-panel.single-panel { min-height: 220px; }
+
+/* ===== Executive Summary Section ===== */
+.executive-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.summary-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 24px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+}
+
+.summary-bar.stable {
+  background: linear-gradient(135deg, rgba(0, 184, 148, 0.08), var(--bg-secondary));
+  border-color: rgba(0, 184, 148, 0.2);
+}
+
+.summary-bar.warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.08), var(--bg-secondary));
+  border-color: rgba(245, 158, 11, 0.2);
+}
+
+.summary-bar.risk {
+  background: linear-gradient(135deg, rgba(239, 83, 80, 0.08), var(--bg-secondary));
+  border-color: rgba(239, 83, 80, 0.2);
+}
+
+.summary-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+}
+
+.summary-bar.stable .summary-icon { background: rgba(0, 184, 148, 0.1); color: #00b894; }
+.summary-bar.warning .summary-icon { background: rgba(245, 158, 11, 0.1); color: #f59e0b; }
+.summary-bar.risk .summary-icon { background: rgba(239, 83, 80, 0.1); color: #ef5350; }
+
+.summary-text {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.summary-range {
+  padding: 4px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-sm);
+}
+
+.executive-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1400px) {
+  .executive-kpi-grid { grid-template-columns: repeat(4, 1fr); }
+}
+
+@media (max-width: 1100px) {
+  .executive-kpi-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 768px) {
+  .executive-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .summary-bar { padding: 12px 16px; }
+}
+
+/* Dark mode executive section */
+.dark .summary-bar.stable {
+  background: linear-gradient(135deg, rgba(0, 184, 148, 0.15), rgba(15, 23, 42, 0.72));
+}
+
+.dark .summary-bar.warning {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(15, 23, 42, 0.72));
+}
+
+.dark .summary-bar.risk {
+  background: linear-gradient(135deg, rgba(239, 83, 80, 0.15), rgba(15, 23, 42, 0.72));
+}
 </style>

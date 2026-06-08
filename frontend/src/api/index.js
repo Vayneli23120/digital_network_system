@@ -5,6 +5,11 @@ export function getDashboardSummary() {
   return api.get('/dashboard/summary')
 }
 
+// 获取管理层聚合 KPI
+export function getExecutiveSummary(timeRange = '30d') {
+  return api.get('/dashboard/executive-summary', { params: { time_range: timeRange } })
+}
+
 // 设备相关
 export function getDevices(params) {
   return api.get('/devices', { params })

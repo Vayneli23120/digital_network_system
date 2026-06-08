@@ -199,6 +199,34 @@ export const languages = {
     dashLastBackup: '最近备份',
     dashRiskCount: '风险数',
 
+    // 管理层 KPI
+    kpiAvailability: '系统可用率',
+    kpiSlaRate: 'SLA 达标率',
+    kpiMttr: '平均修复时长',
+    kpiMtbf: '平均无故障间隔',
+    kpiRecurringRate: '复发故障占比',
+    kpiBudgetVariance: '预算偏差率',
+    kpiDaysCover: '备件保障天数',
+    kpiMonthCost: '本月运维成本',
+    kpiActiveFaults: '活跃故障数',
+    kpiSpareLowStock: '低库存备件',
+    kpiTarget: '目标',
+    kpiEstimated: '估算',
+    kpiThreshold: '红线',
+
+    // 状态标签
+    statusGood: '正常',
+    statusWarn: '预警',
+    statusCritical: '风险',
+    statusNoData: '无数据',
+
+    // 管理层摘要
+    executiveRiskUp: '风险上升',
+    executiveRiskDown: '风险下降',
+    executiveStable: '运行平稳',
+    executiveSummaryPrefix: '风险提示',
+    executiveSummaryStable: '系统运行平稳，各项指标正常',
+
     // 状态
     statusLive: '实时',
     statusOnline: '在线',
@@ -3063,6 +3091,34 @@ export const languages = {
     dashChanged: 'Changed',
     dashLastBackup: 'Last Backup',
     dashRiskCount: 'Risk Count',
+
+    // Executive KPIs
+    kpiAvailability: 'System Availability',
+    kpiSlaRate: 'SLA Compliance',
+    kpiMttr: 'Avg Repair Time',
+    kpiMtbf: 'Avg Fault Interval',
+    kpiRecurringRate: 'Recurring Fault Rate',
+    kpiBudgetVariance: 'Budget Variance',
+    kpiDaysCover: 'Days of Cover',
+    kpiMonthCost: 'Monthly OpEx',
+    kpiActiveFaults: 'Active Faults',
+    kpiSpareLowStock: 'Low Stock Items',
+    kpiTarget: 'Target',
+    kpiEstimated: 'Est.',
+    kpiThreshold: 'Threshold',
+
+    // Status labels
+    statusGood: 'Good',
+    statusWarn: 'Warning',
+    statusCritical: 'Critical',
+    statusNoData: 'No Data',
+
+    // Executive summary
+    executiveRiskUp: 'Risk Elevated',
+    executiveRiskDown: 'Risk Reduced',
+    executiveStable: 'Stable',
+    executiveSummaryPrefix: 'Risk Alert',
+    executiveSummaryStable: 'System stable, all metrics within targets',
 
     // 状态
     statusLive: 'LIVE',

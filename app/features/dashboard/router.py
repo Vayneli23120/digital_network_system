@@ -9,6 +9,7 @@ from .dashboard_service import get_dashboard_summary as svc_get_dashboard_summar
 from .dashboard_service import get_fault_trend as svc_get_fault_trend
 from .dashboard_service import get_cost_trend as svc_get_cost_trend
 from .dashboard_service import get_top_fault_devices as svc_get_top_fault_devices
+from .dashboard_service import get_executive_summary as svc_get_executive_summary
 from app.shared.cache import cache, _DASHBOARD_TTL, _TREND_TTL, _cache_key
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -74,6 +75,40 @@ async def get_fault_trend(
 
     result = svc_get_fault_trend(db, time_range=time_range, start_date=start_date, end_date=end_date)
     cache.set(key, result, ttl=_TREND_TTL)
+    return result
+
+
+@router.get("/executive-summary")
+async def get_executive_summary(
+    db: Session = Depends(get_db),
+    time_range: str = "30d"
+):
+    """管理层聚合接口 - 返回所有核心 KPI（30s 缓存）
+
+    Args:
+        time_range: 时间范围 - 7d, 30d, 90d, 12m
+
+    Returns:
+        {
+            "kpis": {
+                "availability": {value, unit, target, threshold, trend, status},
+                "active_faults": {...},
+                "sla_rate": {...},
+                "mttr_hours": {...},
+                ...
+            },
+            "summary_text": "风险提示：...",
+            "root_cause_distribution": {...},
+            "recurring_devices": [...]
+        }
+    """
+    key = _cache_key("dashboard:executive-summary", time_range=time_range)
+    result = cache.get(key)
+    if result is not None:
+        return result
+
+    result = svc_get_executive_summary(db, time_range=time_range)
+    cache.set(key, result, ttl=_DASHBOARD_TTL)
     return result
 
 

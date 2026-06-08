@@ -1070,3 +1070,17 @@ class AIAnalysisRecord(Base):
                 return {}
         return {}
         return f"<AIAnalysisRecord(id={self.id}, type={self.analysis_type}, success={self.success})>"
+
+
+class SystemConfig(Base):
+    """系统配置表 - 存储全局配置项如预算等"""
+    __tablename__ = "system_config"
+
+    key = Column(String(100), primary_key=True)
+    value = Column(String(500), nullable=False)
+    description = Column(String(200))
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(String(100))
+
+    def __repr__(self):
+        return f"<SystemConfig(key='{self.key}', value='{self.value}')>"

@@ -11,7 +11,7 @@ from collections import defaultdict
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
-from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, SparePart
+from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, SparePart, SparePartMovement, SystemConfig
 from app.shared.cache import cache
 
 
@@ -467,3 +467,268 @@ def get_fault_trend(
         "total": total_faults,
         "by_severity": severity_timeline,
     }
+
+
+def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any]:
+    """管理层聚合接口 - 返回所有核心 KPI
+
+    Args:
+        db: 数据库会话
+        time_range: 时间范围 - 7d, 30d, 90d, 12m
+
+    Returns:
+        包含所有管理层 KPI 的字典，每个 KPI 带 value/unit/target/threshold/trend/status
+    """
+    from app.shared.models import SystemConfig, SparePartMovement
+    from collections import Counter
+
+    # 计算时间范围
+    now = datetime.utcnow()
+    days_map = {"7d": 7, "30d": 30, "90d": 90, "12m": 365}
+    days = days_map.get(time_range, 30)
+    range_start = now - timedelta(days=days)
+    current_month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # ===== 1. 系统可用率 =====
+    total_deployed = db.query(Device).filter(Device.deployment_status == "in-use").count()
+    reachable_devices = db.query(Device).filter(
+        Device.deployment_status == "in-use",
+        Device.reachability == "reachable"
+    ).count()
+
+    availability_value = (reachable_devices / total_deployed * 100) if total_deployed > 0 else 0
+    availability_status = _get_status(availability_value, 99.5, 98, higher_is_good=True)
+
+    # ===== 2. 活跃故障数 =====
+    ACTIVE_STATUS = ('open', 'assigned', 'accepted', 'diagnosing', 'resolving', 'transferred')
+    active_faults = db.query(FaultRecord).filter(
+        FaultRecord.status.in_(ACTIVE_STATUS)
+    ).count()
+
+    # 计算趋势（与上一周期对比）
+    prev_range_start = range_start - timedelta(days=days)
+    prev_active_faults = db.query(FaultRecord).filter(
+        FaultRecord.created_at >= prev_range_start,
+        FaultRecord.created_at < range_start,
+        FaultRecord.status.in_(ACTIVE_STATUS)
+    ).count()
+    active_faults_trend = active_faults - prev_active_faults
+    active_faults_status = "green" if active_faults == 0 else ("yellow" if active_faults <= 5 else "red")
+
+    # ===== 3. SLA 达标率 =====
+    # 基于 MaintenanceRecord 的 sla_deadline
+    completed_maints = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.status == "completed",
+        MaintenanceRecord.completed_at >= range_start
+    ).limit(1000).all()
+
+    sla_compliant = 0
+    sla_total = 0
+    for m in completed_maints:
+        if m.sla_deadline and m.completed_at:
+            sla_total += 1
+            if m.completed_at <= m.sla_deadline:
+                sla_compliant += 1
+
+    sla_rate_value = (sla_compliant / sla_total * 100) if sla_total > 0 else 100  # 无数据时默认达标
+    sla_rate_status = _get_status(sla_rate_value, 95, 90, higher_is_good=True) if sla_total > 0 else "gray"
+
+    # ===== 4. MTTR（平均修复时长） =====
+    resolved_faults = db.query(FaultRecord).filter(
+        FaultRecord.status.in_(('resolved', 'closed')),
+        FaultRecord.resolved_at.isnot(None),
+        FaultRecord.created_at >= range_start
+    ).limit(1000).all()
+
+    mttr_hours = 0
+    if resolved_faults:
+        total_resolve_hours = sum(
+            (f.resolved_at - f.created_at).total_seconds() / 3600
+            for f in resolved_faults
+        )
+        mttr_hours = total_resolve_hours / len(resolved_faults)
+
+    mttr_status = _get_status(mttr_hours, 4, 8, higher_is_good=False) if resolved_faults else "gray"
+
+    # ===== 5. MTBF（平均无故障间隔） =====
+    total_faults_in_range = db.query(FaultRecord).filter(
+        FaultRecord.created_at >= range_start
+    ).count()
+
+    # MTBF = 范围天数 * 设备数 / 故障数
+    mtbf_days = (days * total_deployed / total_faults_in_range) if total_faults_in_range > 0 else 999
+    mtbf_status = "green" if mtbf_days >= 30 else ("yellow" if mtbf_days >= 14 else "red")
+
+    # ===== 6. 复发故障占比 =====
+    # 30天内同设备同类型出现 ≥2 次的故障
+    all_faults_30d = db.query(FaultRecord).filter(
+        FaultRecord.created_at >= now - timedelta(days=30)
+    ).limit(2000).all()
+
+    recurring_count = 0
+    device_type_counter = Counter()
+    for f in all_faults_30d:
+        key = (f.device_id, f.fault_type)
+        device_type_counter[key] += 1
+
+    for key, count in device_type_counter.items():
+        if count >= 2:
+            recurring_count += count
+
+    recurring_rate = (recurring_count / len(all_faults_30d) * 100) if all_faults_30d else 0
+    recurring_status = _get_status(recurring_rate, 15, 25, higher_is_good=False)
+
+    # ===== 7. 本月运维成本 =====
+    month_maints = db.query(MaintenanceRecord).filter(
+        MaintenanceRecord.created_at >= current_month_start
+    ).limit(1000).all()
+
+    month_parts_cost = sum(m.parts_cost or 0 for m in month_maints)
+    month_labor_cost = sum(m.labor_cost or 0 for m in month_maints)
+    month_total_cost = month_parts_cost + month_labor_cost
+
+    # ===== 8. 预算偏差率 =====
+    budget_config = db.query(SystemConfig).filter(SystemConfig.key == "monthly_it_budget").first()
+    budget_value = float(budget_config.value) if budget_config and budget_config.value else None
+
+    if budget_value and budget_value > 0:
+        budget_variance = (month_total_cost - budget_value) / budget_value * 100
+        budget_status = _get_status(abs(budget_variance), 5, 10, higher_is_good=False)
+    else:
+        budget_variance = None
+        budget_status = "gray"
+
+    month_cost_status = "green" if budget_value and month_total_cost <= budget_value else "yellow"
+
+    # ===== 9. 低库存备件数 =====
+    spare_parts = db.query(SparePart).filter(SparePart.status == "active").all()
+    low_stock_count = len([sp for sp in spare_parts
+                           if sp.quantity_in_stock <= (sp.min_quantity or 0) and (sp.min_quantity or 0) > 0])
+    low_stock_status = "green" if low_stock_count == 0 else ("yellow" if low_stock_count < 3 else "red")
+
+    # ===== 10. 备件保障天数 =====
+    # 计算近90天日均消耗
+    consumption_start = now - timedelta(days=90)
+    movements = db.query(SparePartMovement).filter(
+        SparePartMovement.movement_type == "out",
+        SparePartMovement.created_at >= consumption_start
+    ).limit(5000).all()
+
+    # 按备件型号分组计算日均消耗
+    part_consumption = Counter()
+    for m in movements:
+        part_consumption[m.part_id] += m.quantity
+
+    daily_consumption = {pid: qty / 90 for pid, qty in part_consumption.items()}
+
+    # 计算每个备件的保障天数
+    days_cover_values = []
+    for sp in spare_parts:
+        if sp.quantity_in_stock > 0:
+            daily = daily_consumption.get(sp.id, 0)
+            if daily > 0:
+                days_cover = sp.quantity_in_stock / daily
+                days_cover_values.append(days_cover)
+
+    # 取最小保障天数（最紧缺的）
+    spare_days_cover = min(days_cover_values) if days_cover_values else 999
+    spare_days_cover_estimated = len(days_cover_values) == 0  # 无消耗数据时标记为估算
+    days_cover_status = _get_status(spare_days_cover, 30, 14, higher_is_good=True)
+
+    # ===== 11. 根因分布 =====
+    fault_types = Counter(f.fault_type or "other" for f in all_faults_30d)
+    root_cause_distribution = dict(fault_types)
+
+    # ===== 12. 复发设备 Top 5 =====
+    recurring_devices = []
+    for key, count in device_type_counter.most_common(5):
+        if count >= 2:
+            device_id, fault_type = key
+            # 找到设备名
+            device = db.query(Device).filter(Device.id == device_id).first()
+            device_name = device.name if device else f"Device {device_id}"
+            recurring_devices.append({
+                "device_name": device_name,
+                "device_id": device_id,
+                "count": count,
+                "fault_type": fault_type or "other"
+            })
+
+    # ===== 13. 自动生成摘要文本 =====
+    summary_parts = []
+    if offlineDeviceCount := (total_deployed - reachable_devices):
+        summary_parts.append(f"离线设备 {offlineDeviceCount} 台")
+    if sla_overdue := (sla_total - sla_compliant):
+        summary_parts.append(f"SLA 超期 {sla_overdue} 单")
+    if low_stock_count > 0:
+        summary_parts.append(f"低库存 {low_stock_count} 项")
+    if recurring_rate > 15:
+        summary_parts.append(f"复发故障率 {recurring_rate:.0f}%")
+
+    if summary_parts:
+        summary_text = "风险提示：" + "、".join(summary_parts)
+    else:
+        summary_text = "系统运行平稳，各项指标正常"
+
+    # ===== 组装返回结果 =====
+    def _make_kpi(value, unit, target, threshold, trend, status, is_estimated=False):
+        return {
+            "value": round(value, 2) if isinstance(value, float) else value,
+            "unit": unit,
+            "target": target,
+            "threshold": threshold,
+            "trend": round(trend, 2) if isinstance(trend, float) else trend,
+            "status": status,
+            "is_estimated": is_estimated
+        }
+
+    return {
+        "generated_at": now.isoformat(),
+        "range": time_range,
+        "kpis": {
+            "availability": _make_kpi(availability_value, "%", 99.5, 98, 0, availability_status),
+            "active_faults": _make_kpi(active_faults, "", None, None, active_faults_trend, active_faults_status),
+            "sla_rate": _make_kpi(sla_rate_value, "%", 95, 90, 0, sla_rate_status),
+            "mttr_hours": _make_kpi(mttr_hours, "h", 4, 8, 0, mttr_status),
+            "mtbf_days": _make_kpi(mtbf_days, "d", None, None, 0, mtbf_status),
+            "recurring_rate": _make_kpi(recurring_rate, "%", 15, 25, 0, recurring_status),
+            "month_cost": _make_kpi(month_total_cost, "¥", budget_value, None, 0, month_cost_status, is_estimated=False),
+            "budget_variance": _make_kpi(budget_variance if budget_variance else 0, "%", 5, 10, 0, budget_status, is_estimated=budget_value is None),
+            "spare_low_stock": _make_kpi(low_stock_count, "", 0, 3, 0, low_stock_status),
+            "spare_days_cover": _make_kpi(spare_days_cover, "d", 30, 14, 0, days_cover_status, is_estimated=spare_days_cover_estimated),
+        },
+        "summary_text": summary_text,
+        "root_cause_distribution": root_cause_distribution,
+        "recurring_devices": recurring_devices,
+    }
+
+
+def _get_status(value: float, target: float, threshold: float, higher_is_good: bool = True) -> str:
+    """根据目标值和红线判断状态
+
+    Args:
+        value: 当前值
+        target: 目标值（达标线）
+        threshold: 红线（危险线）
+        higher_is_good: True 表示数值越高越好（如可用率），False 表示越低越好（如 MTTR）
+
+    Returns:
+        green/yellow/red/gray
+    """
+    if value is None:
+        return "gray"
+
+    if higher_is_good:
+        if value >= target:
+            return "green"
+        elif value >= threshold:
+            return "yellow"
+        else:
+            return "red"
+    else:
+        if value <= target:
+            return "green"
+        elif value <= threshold:
+            return "yellow"
+        else:
+            return "red"
