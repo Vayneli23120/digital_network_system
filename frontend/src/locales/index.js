@@ -3296,6 +3296,8 @@ export const languages = {
     statusInStock: 'In Stock',
     statusOut: 'Out',
     statusScrapped: 'Scrapped',
+    statusReachable: 'Reachable',
+    statusUnreachable: 'Unreachable',
 
     // 搜索
     searchPlaceholder: 'Search devices, configs...',
@@ -4178,6 +4180,7 @@ export const languages = {
     // Device List Stats and Filter
     deviceStatsTitle: 'Device Statistics',
     deviceStatsTotal: 'Total Devices',
+    deviceStatsDeployed: 'Deployed Devices',
     deviceStatsOnline: 'Online',
     deviceStatsOffline: 'Offline',
     deviceStatsMaintenance: 'In Maintenance',
