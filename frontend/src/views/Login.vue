@@ -99,10 +99,15 @@ const loginRules = {
 /**
  * 验证 JWT Token 格式
  * 确保 token 是有效的 JWT 结构（三段 base64url）
+ * 注意：认证关闭模式下的 placeholder token 跳过验证
  */
 const validateTokenFormat = (token) => {
   if (!token || typeof token !== 'string') {
     throw new Error('Invalid token format')
+  }
+  // 认证关闭模式下的 placeholder token，跳过验证
+  if (token === 'placeholder_token_auth_disabled') {
+    return true
   }
   const parts = token.split('.')
   if (parts.length !== 3) {
