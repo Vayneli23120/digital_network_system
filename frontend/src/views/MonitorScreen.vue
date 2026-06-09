@@ -160,6 +160,7 @@
                   :class="['topo-link', link.link_role, linkStatusClass(link), { selected: selectedLinkId === link.id }]"
                   fill="none"
                   @click.stop="onLinkClick(link)"
+                  @dblclick.stop="onLinkPathClick(link, $event)"
                 />
                 <!-- 拐点手柄（编辑模式 + 有拐点的链路） -->
                 <g v-if="isEditMode">
@@ -1306,12 +1307,12 @@ const onWaypointDrag = (event) => {
   const xPercent = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100))
   const yPercent = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100))
 
-  // 更新临时拐点位置
-  const wp = tempWaypoints.value[waypointDragState.value.waypointIndex]
-  if (wp) {
-    wp.x = xPercent
-    wp.y = yPercent
-  }
+  // 替换整个数组确保 Vue 触发重渲染（而非直接修改 wp.x/wp.y）
+  const idx = waypointDragState.value.waypointIndex
+  const newWaypoints = tempWaypoints.value.map((wp, i) =>
+    i === idx ? { x: xPercent, y: yPercent } : { ...wp }
+  )
+  tempWaypoints.value = newWaypoints
 }
 
 // 拐点拖拽结束
@@ -1328,6 +1329,81 @@ const onWaypointDragEnd = async () => {
   // 重置状态
   waypointDragState.value = null
   tempWaypoints.value = null
+}
+
+// 点击链路中段插入新拐点
+const onLinkPathClick = (link, event) => {
+  if (!isEditMode.value) return
+
+  // 获取 SVG 坐标
+  const svg = event.target.closest('svg')
+  const rect = svg.getBoundingClientRect()
+  const xPercent = (event.clientX - rect.left) / rect.width * 100
+  const yPercent = (event.clientY - rect.top) / rect.height * 100
+
+  // 计算插入位置（在哪个拐点之间）
+  const existingWaypoints = link.waypoints || []
+  const fromNode = nodes.value.find(n => n.device_id === link.from)
+  const toNode = nodes.value.find(n => n.device_id === link.to)
+
+  if (!fromNode || !toNode) return
+
+  // 构建完整路径点列表（起点 → 拐点 → 终点）
+  const allPoints = [
+    { x: fromNode.x_percent, y: fromNode.y_percent },
+    ...existingWaypoints,
+    { x: toNode.x_percent, y: toNode.y_percent },
+  ]
+
+  // 找到最近的两点之间插入
+  let insertIndex = existingWaypoints.length // 默认插在最后一个拐点后
+  let minDist = Infinity
+
+  for (let i = 0; i < allPoints.length - 1; i++) {
+    const p1 = allPoints[i]
+    const p2 = allPoints[i + 1]
+    // 计算点到线段的距离
+    const dist = pointToSegmentDistance(xPercent, yPercent, p1.x, p1.y, p2.x, p2.y)
+    if (dist < minDist) {
+      minDist = dist
+      insertIndex = i // 插在 p1 后（即 existingWaypoints 的 i-1 后）
+    }
+  }
+
+  // 调整插入索引（考虑起点不算拐点）
+  const waypointInsertIndex = Math.max(0, Math.min(existingWaypoints.length, insertIndex))
+
+  // 创建新拐点数组
+  const newWaypoints = [
+    ...existingWaypoints.slice(0, waypointInsertIndex),
+    { x: xPercent, y: yPercent },
+    ...existingWaypoints.slice(waypointInsertIndex),
+  ]
+
+  // 保存
+  saveWaypoints(link.id, newWaypoints)
+}
+
+// 计算点到线段距离
+const pointToSegmentDistance = (px, py, x1, y1, x2, y2) => {
+  const dx = x2 - x1
+  const dy = y2 - y1
+  const lenSq = dx * dx + dy * dy
+
+  if (lenSq === 0) {
+    // 线段是点
+    return Math.sqrt((px - x1) ** 2 + (py - y1) ** 2)
+  }
+
+  // 计算投影参数 t
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq
+  t = Math.max(0, Math.min(1, t))
+
+  // 投影点坐标
+  const projX = x1 + t * dx
+  const projY = y1 + t * dy
+
+  return Math.sqrt((px - projX) ** 2 + (py - projY) ** 2)
 }
 
 // 保存拐点到后端
