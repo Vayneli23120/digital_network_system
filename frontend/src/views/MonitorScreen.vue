@@ -1662,7 +1662,11 @@ const onDragEnd = async (e) => {
   dragState.value = null
 
   if (!state.moved) {
-    // Short press without movement → open detail dialog
+    // 连线绘制模式下，短按不弹详情，交给 onNodeClick 处理连线
+    if (linkDrawState.value?.active) {
+      return
+    }
+    // 普通短按 → 弹设备详情
     const node = nodes.value.find(n => n.id === state.nodeId)
     if (node) showNodeDetail(node)
     return
