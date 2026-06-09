@@ -867,13 +867,14 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         impacted_devices += len(topology.get("impacted_node_ids", []))
 
     # 活跃告警数（未关闭的告警）
-    from app.shared.models import AlertRecord
+    # 注意：项目使用 FaultRecord 存储故障，AlertRecord 不存在
     try:
-        active_alerts = db.query(AlertRecord).filter(
-            AlertRecord.status.in_(['open', 'in_progress'])
+        from app.shared.models import FaultRecord
+        active_alerts = db.query(FaultRecord).filter(
+            FaultRecord.status.in_(['open', 'in_progress'])
         ).count()
     except Exception:
-        # AlertRecord 表可能不存在
+        # FaultRecord 表可能不存在或查询失败
         active_alerts = 0
 
     return {
