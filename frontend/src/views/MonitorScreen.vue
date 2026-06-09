@@ -152,6 +152,7 @@
             <div class="nodes-overlay" v-if="imageLoaded">
               <!-- SVG Topology Links Layer -->
               <svg class="topo-layer" viewBox="0 0 100 100" preserveAspectRatio="none" v-if="links.length > 0">
+                <!-- 链路路径 -->
                 <path
                   v-for="link in logicalLinks"
                   :key="link.id"
@@ -160,6 +161,21 @@
                   fill="none"
                   @click.stop="onLinkClick(link)"
                 />
+                <!-- 拐点手柄（编辑模式 + 有拐点的链路） -->
+                <g v-if="isEditMode">
+                  <template v-for="link in logicalLinks" :key="'wp-' + link.id">
+                    <circle
+                      v-for="(wp, idx) in getLinkWaypoints(link)"
+                      :key="`${link.id}-${idx}`"
+                      :cx="wp.x"
+                      :cy="wp.y"
+                      r="1.5"
+                      class="waypoint-handle"
+                      :class="{ dragging: waypointDragState?.linkId === link.id && waypointDragState?.waypointIndex === idx }"
+                      @mousedown.stop="onWaypointMouseDown(link, idx, $event)"
+                    />
+                  </template>
+                </g>
               </svg>
               <!-- Device Nodes -->
               <div
@@ -541,6 +557,10 @@ const pendingLinkTarget = ref(null)  // 待确认的目标节点 { nodeId, devic
 const showLinkEditDialog = ref(false)  // 链路编辑/删除弹窗
 const showLinkGroupDialog = ref(false)  // PortChannel group 输入弹窗
 const pendingLinkGroup = ref('')  // 待确认的 link_group
+
+// Waypoint Drag State (Edit Mode)
+const waypointDragState = ref(null)  // { linkId, waypointIndex, startX, startY }
+const tempWaypoints = ref(null)  // 拖拽中的临时拐点位置
 
 // Drag state (drag-to-reposition existing nodes)
 const dragState = ref(null)
@@ -1230,6 +1250,106 @@ const createLink = async (linkRole, linkGroup) => {
 const confirmPortchannelLink = () => {
   const group = pendingLinkGroup.value.trim() || null
   createLink('portchannel-member', group)
+}
+
+// ===== Waypoint Drag Functions =====
+
+// 获取链路的拐点数组
+const getLinkWaypoints = (link) => {
+  // 使用临时拐点（拖拽中）或原始拐点
+  if (waypointDragState.value?.linkId === link.id && tempWaypoints.value) {
+    return tempWaypoints.value
+  }
+  return link.waypoints || []
+}
+
+// 拐点拖拽开始
+const onWaypointMouseDown = (link, idx, event) => {
+  if (!isEditMode.value) return
+
+  const svg = event.target.closest('svg')
+  const rect = svg.getBoundingClientRect()
+
+  // 计算鼠标位置对应的百分比坐标
+  const xPercent = (event.clientX - rect.left) / rect.width * 100
+  const yPercent = (event.clientY - rect.top) / rect.height * 100
+
+  waypointDragState.value = {
+    linkId: link.id,
+    waypointIndex: idx,
+    startX: xPercent,
+    startY: yPercent,
+  }
+
+  // 复制当前拐点数组作为临时状态
+  tempWaypoints.value = [...(link.waypoints || [])]
+
+  // 添加全局拖拽监听
+  window.addEventListener('mousemove', onWaypointDrag)
+  window.addEventListener('mouseup', onWaypointDragEnd)
+}
+
+// 拐点拖拽中
+const onWaypointDrag = (event) => {
+  if (!waypointDragState.value) return
+
+  // 找到 SVG 容器
+  const planWrapper = document.querySelector('.plan-wrapper')
+  if (!planWrapper) return
+
+  const svg = planWrapper.querySelector('.topo-layer')
+  if (!svg) return
+
+  const rect = svg.getBoundingClientRect()
+
+  // 计算新位置（百分比）
+  const xPercent = Math.max(0, Math.min(100, (event.clientX - rect.left) / rect.width * 100))
+  const yPercent = Math.max(0, Math.min(100, (event.clientY - rect.top) / rect.height * 100))
+
+  // 更新临时拐点位置
+  const wp = tempWaypoints.value[waypointDragState.value.waypointIndex]
+  if (wp) {
+    wp.x = xPercent
+    wp.y = yPercent
+  }
+}
+
+// 拐点拖拽结束
+const onWaypointDragEnd = async () => {
+  if (!waypointDragState.value) return
+
+  // 移除全局监听
+  window.removeEventListener('mousemove', onWaypointDrag)
+  window.removeEventListener('mouseup', onWaypointDragEnd)
+
+  // 保存拐点
+  await saveWaypoints(waypointDragState.value.linkId, tempWaypoints.value)
+
+  // 重置状态
+  waypointDragState.value = null
+  tempWaypoints.value = null
+}
+
+// 保存拐点到后端
+const saveWaypoints = async (linkId, waypoints) => {
+  try {
+    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${linkId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        waypoints: waypoints.length > 0 ? JSON.stringify(waypoints) : null,
+      })
+    })
+
+    if (res.ok) {
+      // 刷新拓扑数据
+      await _loadPlanTopology(selectedPlanId.value, true)
+    } else {
+      ElMessage.error(t('msgOpFailed'))
+    }
+  } catch (err) {
+    ElMessage.error(t('msgOpFailed'))
+  }
 }
 
 // 删除选中链路
@@ -2768,5 +2888,25 @@ onUnmounted(() => {
 .group-hint {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+/* Waypoint Handle */
+.waypoint-handle {
+  fill: #6366f1;
+  stroke: #fff;
+  stroke-width: 0.3;
+  cursor: grab;
+  transition: r 0.2s;
+}
+
+.waypoint-handle:hover {
+  r: 2;
+  fill: #8b5cf6;
+}
+
+.waypoint-handle.dragging {
+  r: 2.5;
+  fill: #4f46e5;
+  cursor: grabbing;
 }
 </style>

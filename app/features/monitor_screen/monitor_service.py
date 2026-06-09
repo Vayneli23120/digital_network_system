@@ -247,7 +247,7 @@ def list_device_links(db: Session, plan_id: int) -> List[Dict[str, Any]]:
             "link_role": l.link_role,
             "link_group": l.link_group,
             "link_type": l.link_type,
-            "waypoints": l.waypoints,
+            "waypoints": json.loads(l.waypoints) if l.waypoints else None,
             "created_at": l.created_at.isoformat() if l.created_at else None,
         }
         for l in links
