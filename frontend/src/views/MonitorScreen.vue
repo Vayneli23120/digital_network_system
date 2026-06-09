@@ -1563,34 +1563,6 @@ const saveWaypoints = async (linkId, waypoints) => {
   }
 }
 
-// 删除选中链路
-const deleteSelectedLink = async () => {
-  if (!selectedLinkId.value) return
-
-  try {
-    await ElMessageBox.confirm(t('monitorDeleteLinkConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
-
-    // 如果是逻辑链路 ID（以 'logical-' 开头），需要删除所有成员
-    const isLogical = selectedLinkId.value.toString().startsWith('logical-')
-    if (isLogical) {
-      const linkGroupId = selectedLinkId.value.toString().replace('logical-', '')
-      // 删除所有该组的成员链路
-      const groupLinks = links.value.filter(l => l.link_group === linkGroupId)
-      for (const l of groupLinks) {
-        await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${l.id}`, { method: 'DELETE' })
-      }
-    } else {
-      await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${selectedLinkId.value}`, { method: 'DELETE' })
-    }
-
-    ElMessage.success(t('monitorLinkDeleted'))
-    selectedLinkId.value = null
-    await _loadPlanTopology(selectedPlanId.value, true)
-  } catch {
-    // 用户取消
-  }
-}
-
 const goToDevice = (deviceId) => {
   showDetailDialog.value = false
   router.push(`/devices/${deviceId}`)
