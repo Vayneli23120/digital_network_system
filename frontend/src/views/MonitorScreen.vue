@@ -1336,11 +1336,19 @@ const onWaypointDragEnd = async () => {
 const onLinkPathClick = (link, event) => {
   if (!isEditMode.value) return
 
+  // 逻辑链路不允许加拐点（聚合代表，拐点应加在具体成员上）
+  if (link.isLogical) {
+    ElMessage.warning(t('monitorLogicalLinkNoWaypoint'))
+    return
+  }
+
   // 获取 SVG 坐标
   const svg = event.target.closest('svg')
   const rect = svg.getBoundingClientRect()
   const xPercent = (event.clientX - rect.left) / rect.width * 100
   const yPercent = (event.clientY - rect.top) / rect.height * 100
+
+  ElMessage.success(t('monitorWaypointAdded'))
 
   // 计算插入位置（在哪个拐点之间）
   const existingWaypoints = link.waypoints || []
