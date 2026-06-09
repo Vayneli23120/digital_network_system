@@ -891,10 +891,11 @@ const orthPath = (link) => {
   const x2 = toNode.x_percent
   const y2 = toNode.y_percent
 
-  // 如果有人工拐点，使用拐点
-  if (link.waypoints && link.waypoints.length > 0) {
+  // 使用 getLinkWaypoints 获取拐点（拖拽时返回 tempWaypoints）
+  const waypoints = getLinkWaypoints(link)
+  if (waypoints && waypoints.length > 0) {
     let path = `M ${x1},${y1}`
-    for (const wp of link.waypoints) {
+    for (const wp of waypoints) {
       path += ` L ${wp.x},${wp.y}`
     }
     path += ` L ${x2},${y2}`
