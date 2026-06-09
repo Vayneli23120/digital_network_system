@@ -1,5 +1,5 @@
 <template>
-  <div class="monitor-screen" data-screen-theme="dark">
+  <div class="monitor-screen" :class="{ 'edit-mode': isEditMode }" data-screen-theme="dark">
     <!-- Header -->
     <header class="screen-header">
       <div class="header-left">
@@ -8,9 +8,18 @@
           <span class="pulse"></span>
           {{ t('statusLive') }}
         </span>
+        <!-- 紧凑平面图选择器（view/edit 都可用） -->
+        <el-select v-model="selectedPlanId" :placeholder="t('monitorScreenSelectPlan')" @change="loadPlanNodes" size="small" style="width: 160px;">
+          <el-option v-for="plan in floorPlans" :key="plan.id" :label="plan.name" :value="plan.id" />
+        </el-select>
       </div>
       <div class="header-right">
         <span class="current-time">{{ currentTime }}</span>
+        <!-- 编辑模式开关 -->
+        <button class="btn-mode-switch" @click="isEditMode = !isEditMode" :class="{ active: isEditMode }">
+          <el-icon><Edit /></el-icon>
+          {{ isEditMode ? t('monitorModeEdit') : t('monitorModeView') }}
+        </button>
         <button class="btn-refresh" @click="refreshData" :disabled="loading">
           <el-icon><Refresh /></el-icon>
         </button>
@@ -37,6 +46,14 @@
           <span class="stat-icon offline"></span>
           {{ t('statusUnreachable') }} {{ globalSummary.unreachable }}
         </span>
+        <span class="health-stat-item switch">
+          <span class="stat-icon switch"></span>
+          {{ t('monitorScreenSwitches') }} {{ stats.switch_count }}
+        </span>
+        <span class="health-stat-item ap">
+          <span class="stat-icon ap"></span>
+          {{ t('monitorScreenAPs') }} {{ stats.ap_count }}
+        </span>
         <!-- degraded_links 暂时恒为0，待 P2-3 接口级采集后启用 -->
         <span class="health-stat-item impacted" v-if="globalSummary.impacted_devices > 0">
           <span class="stat-icon impacted"></span>
@@ -51,24 +68,18 @@
 
     <!-- Main Content -->
     <div class="screen-body">
-      <!-- Left: Floor Plan Area -->
+      <!-- Floor Plan Area -->
       <div class="floor-plan-area">
-        <!-- Floor Plan Selector -->
-        <div class="plan-selector">
-          <el-select v-model="selectedPlanId" :placeholder="t('monitorScreenSelectPlan')" @change="loadPlanNodes" style="width: 200px;">
-            <el-option v-for="plan in floorPlans" :key="plan.id" :label="plan.name" :value="plan.id">
-              <span>{{ plan.name }}</span>
-              <span class="node-count">{{ t('monitorScreenNodeCount', { count: plan.node_count }) }}</span>
-            </el-option>
-          </el-select>
+        <!-- Edit Toolbar (仅编辑模式可见) -->
+        <div class="edit-toolbar" v-if="isEditMode">
+          <button class="btn-add-plan" @click="showUploadDialog = true">
+            <el-icon><Upload /></el-icon>
+            {{ t('monitorScreenUploadPlan') }}
+          </button>
           <el-button type="danger" size="small" @click="deletePlan" v-if="selectedPlanId" :disabled="floorPlans.length <= 1">
             <el-icon><Delete /></el-icon>
             {{ t('actionDelete') }}
           </el-button>
-          <button class="btn-add-plan" @click="showUploadDialog = true">
-            <el-icon><Plus /></el-icon>
-            {{ t('monitorScreenUploadPlan') }}
-          </button>
           <button class="btn-add-node" @click="startCreateNode" v-if="selectedPlanId && !isCreatingNode">
             <el-icon><Plus /></el-icon>
             {{ t('monitorScreenCreateNode') }}
@@ -77,28 +88,43 @@
             <el-icon><Close /></el-icon>
             {{ t('actionCancel') }}
           </button>
-        </div>
-
-        <!-- Filter Toolbar -->
-        <div class="filter-toolbar">
-          <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 140px;">
-            <el-option :label="t('monitorFilterAllAreas')" value="" />
-            <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
-          </el-select>
-          <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 120px;">
-            <el-option :label="t('monitorFilterAllTypes')" value="" />
-            <el-option :label="t('deviceTypeUce')" value="uce" />
-            <el-option :label="t('deviceTypeAp')" value="ap" />
-            <el-option :label="t('deviceTypeSwitch')" value="switch" />
-            <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
-            <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
-          </el-select>
+          <button class="btn-draw-link" @click="startDrawLink" v-if="selectedPlanId && !linkDrawState?.active" :class="{ active: linkDrawState?.active }">
+            <el-icon><Connection /></el-icon>
+            {{ t('monitorDrawLink') }}
+          </button>
+          <button class="btn-cancel-link" @click="cancelDrawLink" v-if="linkDrawState?.active">
+            <el-icon><Close /></el-icon>
+            {{ t('actionCancel') }}
+          </button>
+          <!-- 筛选 popover -->
+          <el-popover placement="bottom" trigger="click" width="280">
+            <template #reference>
+              <button class="btn-filter">
+                <el-icon><View /></el-icon>
+                {{ t('monitorFilter') }}
+              </button>
+            </template>
+            <div class="filter-popover-content">
+              <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 100%;">
+                <el-option :label="t('monitorFilterAllAreas')" value="" />
+                <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
+              </el-select>
+              <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 100%; margin-top: 8px;">
+                <el-option :label="t('monitorFilterAllTypes')" value="" />
+                <el-option :label="t('deviceTypeUce')" value="uce" />
+                <el-option :label="t('deviceTypeAp')" value="ap" />
+                <el-option :label="t('deviceTypeSwitch')" value="switch" />
+                <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
+                <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
+              </el-select>
+            </div>
+          </el-popover>
         </div>
 
         <!-- Floor Plan Display -->
         <div class="plan-container" ref="planContainer">
-          <!-- 缩放控制栏 -->
-          <div class="zoom-controls">
+          <!-- 缩放控制浮层（右下角半透明） -->
+          <div class="zoom-float">
             <button class="zoom-btn" @click="zoomIn" title="放大">
               <el-icon><Plus /></el-icon>
             </button>
@@ -130,18 +156,28 @@
                   v-for="link in logicalLinks"
                   :key="link.id"
                   :d="orthPath(link)"
-                  :class="['topo-link', link.link_role, linkStatusClass(link)]"
+                  :class="['topo-link', link.link_role, linkStatusClass(link), { selected: selectedLinkId === link.id }]"
                   fill="none"
+                  @click.stop="onLinkClick(link)"
                 />
               </svg>
               <!-- Device Nodes -->
               <div
                 v-for="node in filteredNodes"
                 :key="node.id"
-                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, impacted: impactedNodeIds.includes(node.device_id), dragging: dragState && dragState.nodeId === node.id, resizing: resizeState && resizeState.nodeId === node.id }]"
+                :class="['device-node', node.status, node.device_type, {
+                  flashing: node.status === 'offline',
+                  highlighted: highlightedNodeId === node.id,
+                  impacted: impactedNodeIds.includes(node.device_id),
+                  dragging: dragState && dragState.nodeId === node.id,
+                  resizing: resizeState && resizeState.nodeId === node.id,
+                  'link-source': linkDrawState?.fromNodeId === node.id,
+                  'link-target': linkDrawState?.active && linkDrawState?.fromNodeId !== node.id,
+                }]"
                 :style="{ left: node.x_percent + '%', top: node.y_percent + '%', transform: `translate(-50%, -50%) scale(${node.scale || 1})` }"
                 @mousedown.stop="onNodeMouseDown($event, node)"
                 @wheel.stop="onNodeWheel($event, node)"
+                @click.stop="onNodeClick(node)"
               >
               <!-- Switch Icon -->
               <div class="node-icon switch-icon" v-if="node.device_type === 'switch'">
@@ -192,63 +228,48 @@
             <span>{{ t('monitorScreenNoPlan') }}</span>
           </div>
         </div>
-
-        <!-- Stats Panel -->
-        <div class="stats-panel">
-          <div class="stat-item">
-            <span class="stat-value">{{ stats.total }}</span>
-            <span class="stat-label">{{ t('monitorScreenTotalDevices') }}</span>
-          </div>
-          <div class="stat-item online">
-            <span class="stat-value">{{ stats.online }}</span>
-            <span class="stat-label">{{ t('dashOnline') }}</span>
-          </div>
-          <div class="stat-item offline">
-            <span class="stat-value">{{ stats.offline }}</span>
-            <span class="stat-label">{{ t('dashOffline') }}</span>
-          </div>
-          <div class="stat-item switch">
-            <span class="stat-value">{{ stats.switch_count }}</span>
-            <span class="stat-label">{{ t('monitorScreenSwitches') }}</span>
-          </div>
-          <div class="stat-item ap">
-            <span class="stat-value">{{ stats.ap_count }}</span>
-            <span class="stat-label">{{ t('monitorScreenAPs') }}</span>
-          </div>
-        </div>
       </div>
 
-      <!-- Right: Alert Panel -->
-      <div class="alert-panel">
-        <div class="alert-header">
-          <el-icon><Warning /></el-icon>
-          <span>{{ t('monitorScreenOfflineAlerts') }}</span>
-          <span class="alert-count" v-if="offlineAlerts.length">{{ offlineAlerts.length }}</span>
-        </div>
-        <div class="alert-list">
-          <div
-            v-for="alert in offlineAlerts"
-            :key="alert.device_id"
-            :class="['alert-item', { highlighted: highlightedNodeId && nodes.find(n => n.device_id === alert.device_id)?.id === highlightedNodeId }]"
-            @click="highlightNode(alert.device_id)"
-          >
-            <div class="alert-icon">
-              <svg viewBox="0 0 24 24" width="16" height="16">
-                <rect x="2" y="6" width="20" height="12" rx="2" fill="#ff4757"/>
-              </svg>
-            </div>
-            <div class="alert-content">
-              <span class="alert-name">{{ alert.device_name }}</span>
-              <span class="alert-meta">{{ alert.ip }} · {{ alert.location }}</span>
-            </div>
-            <div class="alert-duration">
-              <span class="duration-value">{{ alert.offline_str }}</span>
-              <span class="duration-label">{{ t('monitorScreenOfflineTime') }}</span>
-            </div>
+      <!-- Alert Drawer (右侧可折叠) -->
+      <div class="alert-drawer" :class="{ collapsed: !isAlertDrawerOpen }">
+        <!-- 收起把手 -->
+        <button class="drawer-toggle" @click="isAlertDrawerOpen = !isAlertDrawerOpen">
+          <el-icon v-if="isAlertDrawerOpen"><Fold /></el-icon>
+          <el-icon v-else><Expand /></el-icon>
+          <span class="drawer-badge" v-if="offlineAlerts.length > 0 && !isAlertDrawerOpen">{{ offlineAlerts.length }}</span>
+        </button>
+        <!-- 展开内容 -->
+        <div class="drawer-content" v-if="isAlertDrawerOpen">
+          <div class="alert-header">
+            <el-icon><Warning /></el-icon>
+            <span>{{ t('monitorScreenOfflineAlerts') }}</span>
+            <span class="alert-count" v-if="offlineAlerts.length">{{ offlineAlerts.length }}</span>
           </div>
-          <div class="no-alerts" v-if="offlineAlerts.length === 0">
-            <el-icon><SuccessFilled /></el-icon>
-            <span>{{ t('monitorScreenAllOnline') }}</span>
+          <div class="alert-list">
+            <div
+              v-for="alert in offlineAlerts"
+              :key="alert.device_id"
+              :class="['alert-item', { highlighted: highlightedNodeId && nodes.find(n => n.device_id === alert.device_id)?.id === highlightedNodeId }]"
+              @click="highlightNode(alert.device_id)"
+            >
+              <div class="alert-icon">
+                <svg viewBox="0 0 24 24" width="16" height="16">
+                  <rect x="2" y="6" width="20" height="12" rx="2" fill="#ff4757"/>
+                </svg>
+              </div>
+              <div class="alert-content">
+                <span class="alert-name">{{ alert.device_name }}</span>
+                <span class="alert-meta">{{ alert.ip }} · {{ alert.location }}</span>
+              </div>
+              <div class="alert-duration">
+                <span class="duration-value">{{ alert.offline_str }}</span>
+                <span class="duration-label">{{ t('monitorScreenOfflineTime') }}</span>
+              </div>
+            </div>
+            <div class="no-alerts" v-if="offlineAlerts.length === 0">
+              <el-icon><SuccessFilled /></el-icon>
+              <span>{{ t('monitorScreenAllOnline') }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -421,6 +442,50 @@
         </button>
       </template>
     </el-dialog>
+
+    <!-- Link Role Select Dialog -->
+    <el-dialog v-model="showLinkRoleDialog" :title="t('monitorSelectLinkRole')" width="350px">
+      <div class="link-role-options">
+        <div class="role-option" @click="createLink('uplink')">
+          <div class="role-icon uplink"></div>
+          <div class="role-info">
+            <span class="role-name">{{ t('linkRoleUplink') }}</span>
+            <span class="role-desc">{{ t('linkRoleUplinkDesc') }}</span>
+          </div>
+        </div>
+        <div class="role-option" @click="createLink('svl')">
+          <div class="role-icon svl"></div>
+          <div class="role-info">
+            <span class="role-name">{{ t('linkRoleSvl') }}</span>
+            <span class="role-desc">{{ t('linkRoleSvlDesc') }}</span>
+          </div>
+        </div>
+        <div class="role-option" @click="createLink('portchannel-member')">
+          <div class="role-icon portchannel"></div>
+          <div class="role-info">
+            <span class="role-name">{{ t('linkRolePortchannel') }}</span>
+            <span class="role-desc">{{ t('linkRolePortchannelDesc') }}</span>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showLinkRoleDialog = false; cancelDrawLink()">{{ t('actionCancel') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- Link Edit/Delete Dialog (Edit Mode) -->
+    <el-dialog v-model="showLinkEditDialog" :title="t('monitorEditLink')" width="300px" v-if="selectedLinkId && isEditMode">
+      <div class="link-edit-content">
+        <p>{{ t('monitorSelectedLink') }}: {{ selectedLinkId }}</p>
+      </div>
+      <template #footer>
+        <el-button @click="showLinkEditDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="danger" @click="deleteSelectedLink(); showLinkEditDialog = false">
+          <el-icon><Delete /></el-icon>
+          {{ t('actionDelete') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -428,7 +493,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight } from '@element-plus/icons-vue'
+import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight, Edit, Connection, Fold, Expand } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -451,6 +516,17 @@ const globalSummary = ref(null)  // 全厂健康度汇总
 const stats = ref({ total: 0, online: 0, offline: 0, switch_count: 0, ap_count: 0 })
 const offlineAlerts = ref([])
 const highlightedNodeId = ref(null)
+
+// Edit Mode State
+const isEditMode = ref(false)  // 编辑/监控模式切换
+const isAlertDrawerOpen = ref(true)  // 告警抽屉展开状态
+
+// Link Drawing State (Edit Mode)
+const linkDrawState = ref(null)  // { active: boolean, fromNodeId: number, fromDeviceId: number }
+const selectedLinkId = ref(null)  // 编辑模式下选中的链路 ID
+const showLinkRoleDialog = ref(false)  // 链路角色选择弹窗
+const pendingLinkTarget = ref(null)  // 待确认的目标节点 { nodeId, deviceId }
+const showLinkEditDialog = ref(false)  // 链路编辑/删除弹窗
 
 // Drag state (drag-to-reposition existing nodes)
 const dragState = ref(null)
@@ -1038,6 +1114,116 @@ const highlightNode = (deviceId) => {
   const node = nodes.value.find(n => n.device_id === deviceId)
   if (node) {
     highlightedNodeId.value = node.id
+  }
+}
+
+// ===== Link Drawing Functions (Edit Mode) =====
+
+const startDrawLink = () => {
+  if (!isEditMode.value) return
+  linkDrawState.value = { active: true, fromNodeId: null, fromDeviceId: null }
+  ElMessage.info(t('monitorDrawLinkTip'))
+}
+
+const cancelDrawLink = () => {
+  linkDrawState.value = null
+  selectedLinkId.value = null
+}
+
+const onNodeClick = (node) => {
+  if (!isEditMode.value) return
+
+  // 连线绘制模式
+  if (linkDrawState.value?.active) {
+    if (!linkDrawState.value.fromNodeId) {
+      // 选择源节点
+      linkDrawState.value.fromNodeId = node.id
+      linkDrawState.value.fromDeviceId = node.device_id
+      ElMessage.info(t('monitorDrawLinkTarget'))
+    } else if (linkDrawState.value.fromNodeId !== node.id) {
+      // 选择目标节点，弹窗选择角色
+      pendingLinkTarget.value = { nodeId: node.id, deviceId: node.device_id }
+      showLinkRoleDialog.value = true
+    }
+    return
+  }
+
+  // 非连线模式：显示详情弹窗
+  showNodeDetail(node)
+}
+
+const onLinkClick = (link) => {
+  if (!isEditMode.value) return
+
+  // 选中链路用于编辑/删除
+  selectedLinkId.value = link.id
+
+  // 如果是逻辑链路（PortChannel 聚合），提示选择具体成员
+  if (link.isLogical) {
+    // TODO: 弹窗显示成员列表选择
+    ElMessage.info(t('monitorLinkGroupSelect'))
+  }
+}
+
+// 创建链路（弹窗确认角色后）
+const createLink = async (linkRole, linkGroup) => {
+  if (!linkDrawState.value || !pendingLinkTarget.value) return
+
+  try {
+    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/links`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from_node_id: linkDrawState.value.fromNodeId,
+        to_node_id: pendingLinkTarget.value.nodeId,
+        link_role: linkRole,
+        link_group: linkGroup || null,
+        link_type: 'fiber',
+      })
+    })
+
+    if (res.ok) {
+      ElMessage.success(t('monitorLinkCreated'))
+      await _loadPlanTopology(selectedPlanId.value, true)
+    } else {
+      const data = await res.json()
+      ElMessage.error(data.detail || t('msgOpFailed'))
+    }
+  } catch (err) {
+    ElMessage.error(t('msgOpFailed'))
+  }
+
+  // 重置状态
+  showLinkRoleDialog.value = false
+  linkDrawState.value = null
+  pendingLinkTarget.value = null
+}
+
+// 删除选中链路
+const deleteSelectedLink = async () => {
+  if (!selectedLinkId.value) return
+
+  try {
+    await ElMessageBox.confirm(t('monitorDeleteLinkConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
+
+    // 如果是逻辑链路 ID（以 'logical-' 开头），需要删除所有成员
+    const isLogical = selectedLinkId.value.toString().startsWith('logical-')
+    if (isLogical) {
+      const linkGroupId = selectedLinkId.value.toString().replace('logical-', '')
+      // 删除所有该组的成员链路
+      const groupLinks = links.value.filter(l => l.link_group === linkGroupId)
+      for (const l of groupLinks) {
+        await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${l.id}`, { method: 'DELETE' })
+      }
+    } else {
+      await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${selectedLinkId.value}`, { method: 'DELETE' })
+    }
+
+    ElMessage.success(t('monitorLinkDeleted'))
+    selectedLinkId.value = null
+    await _loadPlanTopology(selectedPlanId.value, true)
+  } catch {
+    // 用户取消
   }
 }
 
@@ -2271,4 +2457,247 @@ onUnmounted(() => {
 .dark .plan-selector :deep(.el-button--danger) {
   background: linear-gradient(135deg, rgba(248, 81, 73, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
 }
+
+/* ===== Edit Mode ===== */
+.btn-mode-switch {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-mode-switch:hover {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
+.btn-mode-switch.active {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
+}
+
+.monitor-screen.edit-mode {
+  --accent-primary: #6366f1;
+}
+
+/* ===== Edit Toolbar ===== */
+.edit-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.btn-draw-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
+  border: none;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-draw-link:hover, .btn-draw-link.active {
+  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  transform: translateY(-1px);
+}
+
+.btn-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.btn-filter:hover {
+  background: var(--bg-tertiary);
+}
+
+.filter-popover-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ===== Zoom Float ===== */
+.zoom-float {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: rgba(26, 33, 50, 0.6);
+  border-radius: 8px;
+  z-index: 50;
+  opacity: 0.5;
+  transition: opacity 0.3s;
+}
+
+.zoom-float:hover {
+  opacity: 1;
+}
+
+/* ===== Alert Drawer ===== */
+.alert-drawer {
+  position: relative;
+  min-width: 280px;
+  max-width: 320px;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-default);
+  transition: all 0.3s;
+}
+
+.alert-drawer.collapsed {
+  min-width: 48px;
+  max-width: 48px;
+}
+
+.drawer-toggle {
+  position: absolute;
+  left: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-tertiary);
+  border: none;
+  border-right: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.drawer-toggle:hover {
+  color: var(--accent-primary);
+}
+
+.drawer-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  background: #ff3b5b;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.drawer-content {
+  padding: 16px;
+  margin-left: 48px;
+}
+
+.alert-drawer.collapsed .drawer-content {
+  display: none;
+}
+
+/* ===== Link Drawing States ===== */
+.device-node.link-source {
+  box-shadow: 0 0 0 3px #6366f1, 0 0 12px rgba(99, 102, 241, 0.4);
+}
+
+.device-node.link-target {
+  cursor: crosshair;
+}
+
+.device-node.link-target:hover {
+  box-shadow: 0 0 0 2px #10d98a;
+}
+
+/* ===== Link Selection ===== */
+.topo-link.selected {
+  stroke-width: 5;
+  filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.6));
+}
+
+/* ===== Link Role Dialog ===== */
+.link-role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-tertiary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.role-option:hover {
+  background: var(--bg-secondary);
+  transform: translateX(4px);
+}
+
+.role-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.role-icon.uplink { background: #10d98a; }
+.role-icon.svl { background: #6366f1; }
+.role-icon.portchannel { background: #ffa116; }
+
+.role-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.role-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.role-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+/* ===== Switch/AP Stat Icons ===== */
+.stat-icon.switch { background: #6366f1; }
+.stat-icon.ap { background: #ffa116; }
+
+.health-stat-item.switch { color: #6366f1; }
+.health-stat-item.ap { color: #ffa116; }
 </style>

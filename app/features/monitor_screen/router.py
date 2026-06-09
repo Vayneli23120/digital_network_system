@@ -18,6 +18,7 @@ from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
     get_device_detail, get_offline_alerts, get_available_devices, get_plan_snapshot, get_plan_topology, get_global_summary,
+    list_device_links, create_device_link, update_device_link, delete_device_link,
 )
 
 config = get_config()
@@ -44,6 +45,20 @@ class DeviceNodeUpdate(BaseModel):
     x_percent: Optional[float] = None
     y_percent: Optional[float] = None
     scale: Optional[float] = None  # 缩放比例 (0.5-3.0)
+
+
+class DeviceLinkCreate(BaseModel):
+    from_node_id: int
+    to_node_id: int
+    link_role: str = "uplink"  # uplink / svl / portchannel-member
+    link_group: Optional[str] = None
+    link_type: str = "fiber"
+
+
+class DeviceLinkUpdate(BaseModel):
+    link_role: Optional[str] = None
+    link_group: Optional[str] = None
+    waypoints: Optional[str] = None  # JSON string
 
 
 # ============ 平面图管理 API ============
@@ -194,6 +209,43 @@ async def delete_node(plan_id: int, node_id: int, db: Session = Depends(get_db))
     if not success:
         raise HTTPException(status_code=404, detail="节点不存在")
     return {"message": "节点删除成功"}
+
+
+# ============ 设备链路管理 API ============
+
+@router.get("/floor-plans/{plan_id}/links")
+async def list_links(plan_id: int, db: Session = Depends(get_db)):
+    """获取平面图上的设备链路列表"""
+    links = list_device_links(db, plan_id)
+    return {"items": links}
+
+
+@router.post("/floor-plans/{plan_id}/links")
+async def create_link(plan_id: int, link_data: DeviceLinkCreate, db: Session = Depends(get_db)):
+    """创建设备链路"""
+    result = create_device_link(db, plan_id, link_data.from_node_id, link_data.to_node_id,
+                                link_data.link_role, link_data.link_group, link_data.link_type)
+    if not result:
+        raise HTTPException(status_code=400, detail="链路创建失败：节点不存在或不属于该平面图")
+    return result
+
+
+@router.put("/floor-plans/{plan_id}/links/{link_id}")
+async def update_link(plan_id: int, link_id: int, link_data: DeviceLinkUpdate, db: Session = Depends(get_db)):
+    """更新设备链路"""
+    result = update_device_link(db, plan_id, link_id, link_data.link_role, link_data.link_group, link_data.waypoints)
+    if not result:
+        raise HTTPException(status_code=404, detail="链路不存在")
+    return result
+
+
+@router.delete("/floor-plans/{plan_id}/links/{link_id}")
+async def delete_link(plan_id: int, link_id: int, db: Session = Depends(get_db)):
+    """删除设备链路"""
+    success = delete_device_link(db, plan_id, link_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="链路不存在")
+    return {"message": "链路删除成功"}
 
 
 # ============ 设备详情 & 告警 API ============

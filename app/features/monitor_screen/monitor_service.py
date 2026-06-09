@@ -235,6 +235,163 @@ def delete_device_node(db: Session, plan_id: int, node_id: int) -> bool:
     return True
 
 
+def list_device_links(db: Session, plan_id: int) -> List[Dict[str, Any]]:
+    """获取平面图上的所有设备链路"""
+    links = db.query(DeviceLink).filter(DeviceLink.floor_plan_id == plan_id).all()
+    return [
+        {
+            "id": l.id,
+            "floor_plan_id": l.floor_plan_id,
+            "from_node_id": l.from_node_id,
+            "to_node_id": l.to_node_id,
+            "link_role": l.link_role,
+            "link_group": l.link_group,
+            "link_type": l.link_type,
+            "waypoints": l.waypoints,
+            "created_at": l.created_at.isoformat() if l.created_at else None,
+        }
+        for l in links
+    ]
+
+
+def create_device_link(
+    db: Session,
+    plan_id: int,
+    from_node_id: int,
+    to_node_id: int,
+    link_role: str = "uplink",
+    link_group: Optional[str] = None,
+    link_type: str = "fiber"
+) -> Optional[Dict[str, Any]]:
+    """创建设备链路
+
+    校验规则：
+    - 两端节点必须属于该平面图
+    - 禁止自环（from_node_id != to_node_id）
+    - link_role 必须在白名单内（uplink/svl/portchannel-member）
+    - 防止重复链路（同方向同两端）
+    """
+    # 校验 link_role 白名单
+    valid_roles = ["uplink", "svl", "portchannel-member"]
+    if link_role not in valid_roles:
+        return None
+
+    # 校验自环
+    if from_node_id == to_node_id:
+        return None
+
+    # 校验两端节点属于该平面图
+    from_node = db.query(DeviceNode).filter(
+        DeviceNode.id == from_node_id,
+        DeviceNode.floor_plan_id == plan_id
+    ).first()
+    to_node = db.query(DeviceNode).filter(
+        DeviceNode.id == to_node_id,
+        DeviceNode.floor_plan_id == plan_id
+    ).first()
+
+    if not from_node or not to_node:
+        return None
+
+    # 校验重复链路（同方向）
+    existing = db.query(DeviceLink).filter(
+        DeviceLink.floor_plan_id == plan_id,
+        DeviceLink.from_node_id == from_node_id,
+        DeviceLink.to_node_id == to_node_id,
+    ).first()
+    if existing:
+        # 更新已有链路而非重复创建
+        existing.link_role = link_role
+        existing.link_group = link_group
+        existing.link_type = link_type
+        db.commit()
+        db.refresh(existing)
+        return {
+            "id": existing.id,
+            "from_node_id": from_node_id,
+            "to_node_id": to_node_id,
+            "link_role": link_role,
+            "message": "链路已更新",
+        }
+
+    # 创建新链路
+    link = DeviceLink(
+        floor_plan_id=plan_id,
+        from_node_id=from_node_id,
+        to_node_id=to_node_id,
+        link_role=link_role,
+        link_group=link_group,
+        link_type=link_type,
+    )
+    db.add(link)
+    db.commit()
+    db.refresh(link)
+
+    return {
+        "id": link.id,
+        "from_node_id": from_node_id,
+        "to_node_id": to_node_id,
+        "link_role": link_role,
+        "link_group": link_group,
+        "message": "链路创建成功",
+    }
+
+
+def update_device_link(
+    db: Session,
+    plan_id: int,
+    link_id: int,
+    link_role: Optional[str] = None,
+    link_group: Optional[str] = None,
+    waypoints: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
+    """更新设备链路"""
+    link = db.query(DeviceLink).filter(
+        DeviceLink.floor_plan_id == plan_id,
+        DeviceLink.id == link_id
+    ).first()
+    if not link:
+        return None
+
+    # 校验 link_role 白名单
+    if link_role:
+        valid_roles = ["uplink", "svl", "portchannel-member"]
+        if link_role not in valid_roles:
+            return None
+        link.link_role = link_role
+
+    if link_group:
+        link.link_group = link_group
+
+    if waypoints:
+        link.waypoints = waypoints
+
+    link.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(link)
+
+    return {
+        "id": link.id,
+        "link_role": link.link_role,
+        "link_group": link.link_group,
+        "waypoints": link.waypoints,
+        "message": "链路更新成功",
+    }
+
+
+def delete_device_link(db: Session, plan_id: int, link_id: int) -> bool:
+    """删除设备链路"""
+    link = db.query(DeviceLink).filter(
+        DeviceLink.floor_plan_id == plan_id,
+        DeviceLink.id == link_id
+    ).first()
+    if not link:
+        return False
+    db.delete(link)
+    db.commit()
+    return True
+
+
 def get_device_detail(db: Session, device_id: int) -> Optional[Dict[str, Any]]:
     """获取设备详情（用于弹窗显示）"""
     device = db.query(Device).filter(Device.id == device_id).first()
