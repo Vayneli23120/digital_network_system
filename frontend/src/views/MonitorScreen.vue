@@ -1469,6 +1469,8 @@ onUnmounted(() => {
 .monitor-screen {
   display: flex;
   flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   background: var(--bg-primary);
   color: var(--text-primary);
 }
@@ -1658,6 +1660,8 @@ onUnmounted(() => {
   flex: 1;
   padding: 16px;
   gap: 16px;
+  overflow: hidden;
+  min-height: 0;
 }
 
 /* Floor Plan Area */
@@ -1666,6 +1670,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .plan-selector {
@@ -1721,7 +1727,7 @@ onUnmounted(() => {
 .plan-container {
   position: relative;
   flex: 1;
-  min-height: 500px;
+  min-height: 0;
   background: var(--bg-secondary);
   border: 1px solid var(--border-default);
   border-radius: 8px;
