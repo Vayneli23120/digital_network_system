@@ -196,7 +196,7 @@
                 @wheel.stop="onNodeWheel($event, node)"
               >
               <!-- Switch Icon -->
-              <div class="node-icon switch-icon" v-if="node.device_type === 'switch'">
+              <div class="node-icon switch-icon" v-if="['office_switch', 'core_switch', 'server_switch', 'uce'].includes(node.device_type)">
                 <svg viewBox="0 0 24 24" width="20" height="20">
                   <rect x="2" y="6" width="20" height="12" rx="2" fill="currentColor"/>
                   <circle cx="6" cy="12" r="1.5" fill="#fff"/>
@@ -213,7 +213,7 @@
                 </svg>
               </div>
               <!-- Default Icon -->
-              <div class="node-icon default-icon" v-if="node.device_type !== 'switch' && node.device_type !== 'ap'">
+              <div class="node-icon default-icon" v-if="!['office_switch', 'core_switch', 'server_switch', 'uce', 'ap'].includes(node.device_type)">
                 <svg viewBox="0 0 24 24" width="16" height="16">
                   <circle cx="12" cy="12" r="8" fill="currentColor"/>
                 </svg>
@@ -432,7 +432,7 @@
           @click="selectedDeviceId = device.id"
         >
           <div class="device-icon">
-            <svg viewBox="0 0 24 24" width="20" height="20" v-if="device.device_type === 'switch'">
+            <svg viewBox="0 0 24 24" width="20" height="20" v-if="['office_switch', 'core_switch', 'server_switch', 'uce'].includes(device.device_type)">
               <rect x="2" y="6" width="20" height="12" rx="2" fill="currentColor"/>
             </svg>
             <svg viewBox="0 0 24 24" width="20" height="20" v-else-if="device.device_type === 'ap'">
