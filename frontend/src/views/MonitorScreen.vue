@@ -194,7 +194,6 @@
                 :style="{ left: node.x_percent + '%', top: node.y_percent + '%', transform: `translate(-50%, -50%) scale(${node.scale || 1})` }"
                 @mousedown.stop="onNodeMouseDown($event, node)"
                 @wheel.stop="onNodeWheel($event, node)"
-                @click.stop="onNodeClick(node)"
               >
               <!-- Switch Icon -->
               <div class="node-icon switch-icon" v-if="node.device_type === 'switch'">
@@ -1662,13 +1661,17 @@ const onDragEnd = async (e) => {
   dragState.value = null
 
   if (!state.moved) {
-    // 连线绘制模式下，短按不弹详情，交给 onNodeClick 处理连线
+    const node = nodes.value.find(n => n.id === state.nodeId)
+    if (!node) return
+
+    // 连线模式：短按 = 选源/选目标节点
     if (linkDrawState.value?.active) {
+      onNodeClick(node)
       return
     }
-    // 普通短按 → 弹设备详情
-    const node = nodes.value.find(n => n.id === state.nodeId)
-    if (node) showNodeDetail(node)
+
+    // 普通模式：短按 = 弹设备详情
+    showNodeDetail(node)
     return
   }
 
