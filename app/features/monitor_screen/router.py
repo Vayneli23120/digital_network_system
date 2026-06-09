@@ -17,7 +17,7 @@ from app.shared.config import get_config
 from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
-    get_device_detail, get_offline_alerts, get_available_devices,
+    get_device_detail, get_offline_alerts, get_available_devices, get_plan_snapshot, get_plan_topology, get_global_summary,
 )
 
 config = get_config()
@@ -137,6 +137,31 @@ async def list_nodes(plan_id: int, db: Session = Depends(get_db)):
     return {"items": nodes}
 
 
+@router.get("/floor-plans/{plan_id}/snapshot")
+async def get_snapshot(plan_id: int, db: Session = Depends(get_db)):
+    """获取平面图全量快照 - 用于 WebSocket 重连对账
+
+    返回所有节点完整状态 + 统计数据，前端重连时直接覆盖本地状态，
+    防止乐观增减导致的计数漂移。
+    """
+    result = get_plan_snapshot(db, plan_id)
+    return result
+
+
+@router.get("/floor-plans/{plan_id}/topology")
+async def get_topology(plan_id: int, db: Session = Depends(get_db)):
+    """获取平面图拓扑数据 - 用于数字孪生渲染
+
+    返回：
+    - nodes: 节点列表（包含位置、状态）
+    - links: 链路列表（包含角色、分组）
+    - groups: PortChannel/SVL 聚合组（逻辑链路）
+    - impacted_node_ids: 受影响节点 IDs（冗余感知）
+    """
+    result = get_plan_topology(db, plan_id)
+    return result
+
+
 @router.get("/floor-plans/{plan_id}/available-devices")
 async def list_available_devices(plan_id: int, db: Session = Depends(get_db)):
     """获取可添加到平面图的设备列表"""
@@ -210,3 +235,12 @@ async def get_stats(db: Session = Depends(get_db)):
         "switch_count": switch_count,
         "ap_count": ap_count,
     }
+
+
+@router.get("/monitor-screen/global-summary")
+async def get_global_summary_endpoint(db: Session = Depends(get_db)):
+    """获取全厂健康度汇总 - 用于大屏顶部健康条
+
+    聚合所有平面图数据，返回全厂整体健康状态。
+    """
+    return get_global_summary(db)

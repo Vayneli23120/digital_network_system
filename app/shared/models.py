@@ -58,6 +58,8 @@ class Device(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # ===== 企业级智能运维扩展字段 =====
+    # 监控分级（决定探测周期和告警阈值）
+    monitor_tier = Column(String(20), default="normal", index=True)  # critical(15s)/normal(60s)/low(300s)
     # 模块序列号（JSON格式存储多个模块）
     modules = Column(Text)  # JSON: [{"type": "main", "serial_number": "SN001"}, {"type": "power", "serial_number": "SN002"}]
     # 健康评分
@@ -655,6 +657,7 @@ class FloorPlan(Base):
 
     # 关系
     nodes = relationship("DeviceNode", back_populates="floor_plan", cascade="all, delete-orphan")
+    links = relationship("DeviceLink", back_populates="floor_plan", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<FloorPlan(name='{self.name}', id={self.id})>"
@@ -676,9 +679,41 @@ class DeviceNode(Base):
     # 关系
     device = relationship("Device", back_populates="nodes")
     floor_plan = relationship("FloorPlan", back_populates="nodes")
+    outgoing_links = relationship("DeviceLink", foreign_keys="[DeviceLink.from_node_id]", back_populates="from_node", cascade="all, delete-orphan")
+    incoming_links = relationship("DeviceLink", foreign_keys="[DeviceLink.to_node_id]", back_populates="to_node", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent}, scale={self.scale})>"
+
+
+class DeviceLink(Base):
+    """设备链路(边)表 - 支持双上联、PortChannel、SVL 堆叠连线
+
+    架构背景:
+    - SVL 核心: 2× Cisco C9410 堆叠，link_role='svl' 连接两台核心
+    - 接入双上联: 每台接入交换机 2 条 PortChannel 成员链路，
+      link_role='portchannel-member', link_group='po-<接入设备id>'
+    """
+    __tablename__ = "device_links"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    from_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=False, index=True)  # 下游(接入)
+    to_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=False, index=True)    # 上游(核心)
+    link_role = Column(String(20), default="uplink", nullable=False)   # uplink / svl / portchannel-member
+    link_group = Column(String(40), nullable=True, index=True)         # PortChannel 成员共享 group id
+    link_type = Column(String(20), default="fiber", nullable=False)    # fiber / ethernet / wireless
+    waypoints = Column(Text, nullable=True)                            # 正交折线人工拐点 JSON '[{"x":30,"y":40},...]'
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    floor_plan = relationship("FloorPlan", back_populates="links")
+    from_node = relationship("DeviceNode", foreign_keys=[from_node_id], back_populates="outgoing_links")
+    to_node = relationship("DeviceNode", foreign_keys=[to_node_id], back_populates="incoming_links")
+
+    def __repr__(self):
+        return f"<DeviceLink(id={self.id}, role={self.link_role}, group={self.link_group})>"
 
 
 # =============================================================================

@@ -1,5 +1,5 @@
 <template>
-  <div class="monitor-screen">
+  <div class="monitor-screen" data-screen-theme="dark">
     <!-- Header -->
     <header class="screen-header">
       <div class="header-left">
@@ -16,6 +16,41 @@
         </button>
       </div>
     </header>
+
+    <!-- Global Health Bar -->
+    <div class="health-bar" v-if="globalSummary">
+      <div class="health-score">
+        <span class="health-label">{{ t('monitorHealthScore') }}</span>
+        <span class="health-value">{{ globalSummary.health_score }}%</span>
+      </div>
+      <div class="health-divider"></div>
+      <div class="health-stats">
+        <span class="health-stat-item">
+          <span class="stat-icon devices"></span>
+          {{ t('monitorDevices') }} {{ globalSummary.total_devices }}
+        </span>
+        <span class="health-stat-item online">
+          <span class="stat-icon online"></span>
+          {{ t('statusReachable') }} {{ globalSummary.reachable }}
+        </span>
+        <span class="health-stat-item offline">
+          <span class="stat-icon offline"></span>
+          {{ t('statusUnreachable') }} {{ globalSummary.unreachable }}
+        </span>
+        <span class="health-stat-item degraded" v-if="globalSummary.degraded_links > 0">
+          <span class="stat-icon degraded"></span>
+          {{ t('monitorDegraded') }} {{ globalSummary.degraded_links }}
+        </span>
+        <span class="health-stat-item impacted" v-if="globalSummary.impacted_devices > 0">
+          <span class="stat-icon impacted"></span>
+          {{ t('monitorImpacted') }} {{ globalSummary.impacted_devices }}
+        </span>
+        <span class="health-stat-item alerts" v-if="globalSummary.active_alerts > 0">
+          <span class="stat-icon alerts"></span>
+          {{ t('dashAlerts') }} {{ globalSummary.active_alerts }}
+        </span>
+      </div>
+    </div>
 
     <!-- Main Content -->
     <div class="screen-body">
@@ -50,16 +85,16 @@
         <!-- Filter Toolbar -->
         <div class="filter-toolbar">
           <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 140px;">
-            <el-option label="全部车间" value="" />
+            <el-option :label="t('monitorFilterAllAreas')" value="" />
             <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
           </el-select>
           <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 120px;">
-            <el-option label="全部类型" value="" />
-            <el-option label="UCE" value="uce" />
-            <el-option label="AP" value="ap" />
-            <el-option label="交换机" value="switch" />
-            <el-option label="办公交换机" value="office_switch" />
-            <el-option label="核心交换机" value="core_switch" />
+            <el-option :label="t('monitorFilterAllTypes')" value="" />
+            <el-option :label="t('deviceTypeUce')" value="uce" />
+            <el-option :label="t('deviceTypeAp')" value="ap" />
+            <el-option :label="t('deviceTypeSwitch')" value="switch" />
+            <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
+            <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
           </el-select>
         </div>
 
@@ -92,10 +127,21 @@
           >
             <!-- Device Nodes Overlay -->
             <div class="nodes-overlay" v-if="imageLoaded">
+              <!-- SVG Topology Links Layer -->
+              <svg class="topo-layer" v-if="links.length > 0">
+                <path
+                  v-for="link in logicalLinks"
+                  :key="link.id"
+                  :d="orthPath(link)"
+                  :class="['topo-link', link.link_role, linkStatusClass(link)]"
+                  fill="none"
+                />
+              </svg>
+              <!-- Device Nodes -->
               <div
                 v-for="node in filteredNodes"
                 :key="node.id"
-                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, dragging: dragState && dragState.nodeId === node.id, resizing: resizeState && resizeState.nodeId === node.id }]"
+                :class="['device-node', node.status, node.device_type, { flashing: node.status === 'offline', highlighted: highlightedNodeId === node.id, impacted: impactedNodeIds.includes(node.device_id), dragging: dragState && dragState.nodeId === node.id, resizing: resizeState && resizeState.nodeId === node.id }]"
                 :style="{ left: node.x_percent + '%', top: node.y_percent + '%', transform: `translate(-50%, -50%) scale(${node.scale || 1})` }"
                 @mousedown.stop="onNodeMouseDown($event, node)"
                 @wheel.stop="onNodeWheel($event, node)"
@@ -401,6 +447,10 @@ const currentTime = ref(dayjs().format('HH:mm:ss'))
 const selectedPlanId = ref(null)
 const floorPlans = ref([])
 const nodes = ref([])
+const links = ref([])  // 拓扑链路列表
+const linkGroups = ref([])  // 聚合组列表
+const impactedNodeIds = ref([])  // 受影响节点 IDs
+const globalSummary = ref(null)  // 全厂健康度汇总
 const stats = ref({ total: 0, online: 0, offline: 0, switch_count: 0, ap_count: 0 })
 const offlineAlerts = ref([])
 const highlightedNodeId = ref(null)
@@ -688,6 +738,8 @@ const _loadPlanNodes = async (planId, force = false) => {
       { forceRefresh: force, ttl: 60 }
     )
     nodes.value = data.items || []
+    // 加载拓扑链路
+    await _loadPlanTopology(planId, force)
     // 不要重置 imageLoaded，保持图片加载状态
   } catch (err) {
     if (err.name !== 'CanceledError') {
@@ -696,12 +748,118 @@ const _loadPlanNodes = async (planId, force = false) => {
   }
 }
 
+// 加载拓扑链路
+const _loadPlanTopology = async (planId, force = false) => {
+  try {
+    const data = await cachedRequest(
+      () => fetch(`/api/floor-plans/${planId}/topology`).then(r => r.json()),
+      `monitor_topology_${planId}`,
+      { planId },
+      { forceRefresh: force, ttl: 60 }
+    )
+    links.value = data.links || []
+    linkGroups.value = data.groups || []
+    impactedNodeIds.value = data.impacted_node_ids || []
+  } catch (err) {
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load topology:', err)
+    }
+    links.value = []
+    linkGroups.value = []
+    impactedNodeIds.value = []
+  }
+}
+
+// 计算正交折线路径（Manhattan routing）
+const orthPath = (link) => {
+  const fromNode = nodes.value.find(n => n.device_id === link.from)
+  const toNode = nodes.value.find(n => n.device_id === link.to)
+  if (!fromNode || !toNode) return ''
+
+  // 转换百分比坐标到像素（相对于容器尺寸）
+  // 由于容器尺寸动态，使用百分比直接计算
+  const x1 = fromNode.x_percent
+  const y1 = fromNode.y_percent
+  const x2 = toNode.x_percent
+  const y2 = toNode.y_percent
+
+  // 如果有人工拐点，使用拐点
+  if (link.waypoints && link.waypoints.length > 0) {
+    let path = `M ${x1},${y1}`
+    for (const wp of link.waypoints) {
+      path += ` L ${wp.x},${wp.y}`
+    }
+    path += ` L ${x2},${y2}`
+    return path
+  }
+
+  // 默认：先横后竖（中点拐弯）
+  const midX = (x1 + x2) / 2
+  const midY = (y1 + y2) / 2
+
+  // 选择拐弯方向：水平距离大 → 先横后竖；垂直距离大 → 先竖后横
+  const dx = Math.abs(x2 - x1)
+  const dy = Math.abs(y2 - y1)
+
+  if (dx >= dy) {
+    // 先横后竖
+    return `M ${x1},${y1} L ${midX},${y1} L ${midX},${y2} L ${x2},${y2}`
+  } else {
+    // 先竖后横
+    return `M ${x1},${y1} L ${x1},${midY} L ${x2},${midY} L ${x2},${y2}`
+  }
+}
+
+// 计算链路状态样式类
+const linkStatusClass = (link) => {
+  // 对于 PortChannel 成员，使用组逻辑状态
+  if (link.link_role === 'portchannel-member' && link.link_group) {
+    const group = linkGroups.value.find(g => g.link_group === link.link_group)
+    if (group) {
+      return `link-${group.logical_status}`
+    }
+  }
+  return `link-${link.status}`
+}
+
+// 计算逻辑链路列表（聚合显示）
+const logicalLinks = computed(() => {
+  // 对 PortChannel 成员按组聚合，只显示逻辑链路
+  const result = []
+  const processedGroups = new Set()
+
+  for (const link of links.value) {
+    if (link.link_role === 'portchannel-member' && link.link_group) {
+      // 已处理的组跳过
+      if (processedGroups.has(link.link_group)) continue
+      processedGroups.add(link.link_group)
+
+      // 使用第一个成员作为代表
+      const group = linkGroups.value.find(g => g.link_group === link.link_group)
+      if (group) {
+        result.push({
+          ...link,
+          id: `logical-${link.link_group}`,
+          status: group.logical_status,
+          isLogical: true,
+          memberCount: group.member_links.length,
+        })
+      }
+    } else {
+      // 非聚合链路直接添加
+      result.push(link)
+    }
+  }
+
+  return result
+})
+
 const refreshData = async () => {
   loading.value = true
   // 先加载平面图列表，确保 selectedPlanId 有值
   await _loadFloorPlans(true)
   // 再并行加载其他数据
-  await Promise.all([loadStats(true), loadOfflineAlerts(true)])
+  await Promise.all([loadStats(true), loadOfflineAlerts(true), loadGlobalSummary(true)])
   // 最后加载节点（依赖 selectedPlanId）
   if (selectedPlanId.value) {
     await _loadPlanNodes(selectedPlanId.value, true)
@@ -770,6 +928,22 @@ const loadOfflineAlerts = debounce(async (force = false) => {
   } catch (err) {
     if (err.name !== 'CanceledError') {
       console.error('Failed to load offline alerts:', err)
+    }
+  }
+}, 300)
+
+const loadGlobalSummary = debounce(async (force = false) => {
+  try {
+    const data = await cachedRequest(
+      () => fetch('/api/monitor-screen/global-summary').then(r => r.json()),
+      'monitor_global_summary',
+      {},
+      { forceRefresh: force, ttl: 30 }
+    )
+    globalSummary.value = data
+  } catch (err) {
+    if (err.name !== 'CanceledError') {
+      console.error('Failed to load global summary:', err)
     }
   }
 }, 300)
@@ -1081,6 +1255,7 @@ onMounted(() => {
   refreshInterval = setInterval(() => {
     loadStats()
     loadOfflineAlerts()
+    loadGlobalSummary()
     if (selectedPlanId.value) {
       _loadPlanNodes(selectedPlanId.value)
     }
@@ -1115,6 +1290,26 @@ onUnmounted(() => {
   color: var(--text-primary);
 }
 
+/* 深色 NOC 主题覆盖 */
+.monitor-screen[data-screen-theme="dark"] {
+  --bg-primary: #0a0e17;
+  --bg-secondary: #121826;
+  --bg-tertiary: #1a2132;
+  --text-primary: #e4e7eb;
+  --text-secondary: #8b95a5;
+  --text-tertiary: #6b7280;
+  --border-default: #2a3441;
+
+  /* 状态色高对比度 */
+  --status-online: #10d98a;
+  --status-offline: #ff3b5b;
+  --status-impacted: #ffa116;
+  --status-degraded: #ffd60a;
+  --accent-primary: #10d98a;
+  --accent-danger: #ff3b5b;
+  --accent-warning: #ffa116;
+}
+
 /* Header */
 .screen-header {
   display: flex;
@@ -1124,6 +1319,82 @@ onUnmounted(() => {
   background: var(--bg-secondary);
   border-bottom: 1px solid var(--border-default);
 }
+
+/* Global Health Bar */
+.health-bar {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 12px 24px;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-default);
+}
+
+.monitor-screen[data-screen-theme="dark"] .health-bar {
+  background: linear-gradient(90deg, #121826 0%, #1a2132 100%);
+}
+
+.health-score {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.health-label {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.health-value {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--accent-primary);
+}
+
+.monitor-screen[data-screen-theme="dark"] .health-value {
+  color: #10d98a;
+  text-shadow: 0 0 12px rgba(16, 217, 138, 0.4);
+}
+
+.health-divider {
+  width: 1px;
+  height: 32px;
+  background: var(--border-default);
+}
+
+.health-stats {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.health-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.stat-icon {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.stat-icon.devices { background: var(--text-tertiary); }
+.stat-icon.online { background: #10d98a; }
+.stat-icon.offline { background: #ff3b5b; }
+.stat-icon.degraded { background: #ffd60a; }
+.stat-icon.impacted { background: #ffa116; }
+.stat-icon.alerts { background: #ff3b5b; }
+
+.health-stat-item.online { color: #10d98a; }
+.health-stat-item.offline { color: #ff3b5b; }
+.health-stat-item.degraded { color: #ffd60a; }
+.health-stat-item.impacted { color: #ffa116; }
 
 .header-left {
   display: flex;
@@ -1338,6 +1609,62 @@ onUnmounted(() => {
   bottom: 0;
 }
 
+/* Topology Links Layer - SVG */
+.topo-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;  /* 低于节点层 */
+  pointer-events: none;  /* 不阻碍节点交互 */
+}
+
+.topo-link {
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  transition: stroke 0.3s, stroke-width 0.3s, opacity 0.3s;
+}
+
+/* 正常链路 - 近乎隐形 */
+.topo-link.link-normal {
+  stroke: var(--accent-primary);
+  opacity: 0.15;
+}
+
+/* SVL 链路 - 核心堆叠 */
+.topo-link.svl {
+  stroke: #6366f1;  /* 靛蓝色 */
+  stroke-width: 3;
+  opacity: 0.3;
+}
+
+/* 降级链路 - 黄色警告 */
+.topo-link.link-degraded {
+  stroke: #ffa116;
+  stroke-width: 3;
+  opacity: 0.8;
+}
+
+/* 断开链路 - 红色高亮 */
+.topo-link.link-broken {
+  stroke: #ff3b5b;
+  stroke-width: 4;
+  opacity: 1;
+  animation: link-pulse 1.5s infinite;
+}
+
+@keyframes link-pulse {
+  0%, 100% { opacity: 1; stroke-width: 4; }
+  50% { opacity: 0.6; stroke-width: 3; }
+}
+
+/* PortChannel 逻辑链路 - 加粗 */
+.topo-link.portchannel-member {
+  stroke-width: 4;
+}
+
 .no-plan {
   position: absolute;
   top: 50%;
@@ -1401,6 +1728,17 @@ onUnmounted(() => {
 
 .device-node.maintenance .node-icon {
   color: var(--accent-warning);
+}
+
+/* 受影响节点 - 橙色脉冲（区别于自身 offline 的红色）*/
+.device-node.impacted .node-icon {
+  color: #ffa116;
+  animation: impacted-pulse 2s infinite;
+}
+
+@keyframes impacted-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(0.9); }
 }
 
 @keyframes flash {
@@ -1487,8 +1825,24 @@ onUnmounted(() => {
 
 .stat-value {
   font-family: var(--font-display);
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 36px;
+  font-weight: 700;
+}
+
+/* 深色主题增强 */
+.monitor-screen[data-screen-theme="dark"] .stat-value {
+  font-size: 42px;
+  letter-spacing: -1px;
+}
+
+.monitor-screen[data-screen-theme="dark"] .stat-item.online .stat-value {
+  color: #10d98a;
+  text-shadow: 0 0 10px rgba(16, 217, 138, 0.3);
+}
+
+.monitor-screen[data-screen-theme="dark"] .stat-item.offline .stat-value {
+  color: #ff3b5b;
+  text-shadow: 0 0 10px rgba(255, 59, 91, 0.3);
 }
 
 .stat-item.online .stat-value { color: var(--accent-primary); }

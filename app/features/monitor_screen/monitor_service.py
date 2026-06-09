@@ -8,8 +8,9 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case
+import json
 
-from app.shared.models import Device, FloorPlan, DeviceNode, BackupRecord, FaultRecord
+from app.shared.models import Device, FloorPlan, DeviceNode, DeviceLink, BackupRecord, FaultRecord
 
 
 def get_floor_plans(db: Session) -> List[Dict[str, Any]]:
@@ -364,3 +365,358 @@ def get_available_devices(db: Session, plan_id: int) -> List[Dict[str, Any]]:
         }
         for d in devices
     ]
+
+
+def get_plan_snapshot(db: Session, plan_id: int) -> Dict[str, Any]:
+    """获取平面图全量快照 - 用于 WebSocket 重连对账
+
+    返回所有节点完整状态 + 统计数据，前端重连时直接覆盖本地状态，
+    防止乐观增减导致的计数漂移。
+
+    Args:
+        db: 数据库会话
+        plan_id: 平面图ID
+
+    Returns:
+        {
+            "nodes": [{...}],  # 全量节点状态
+            "stats": {         # 统计数据（以 reachability 为准）
+                "total": N,
+                "reachable": N,
+                "unreachable": N,
+                "unknown": N
+            },
+            "timestamp": "ISO时间"
+        }
+    """
+    # 获取所有节点
+    nodes = get_floor_plan_nodes(db, plan_id)
+
+    # 按 reachability 统计（这是可达性监控的真实状态）
+    stats = {
+        "total": len(nodes),
+        "reachable": 0,
+        "unreachable": 0,
+        "unknown": 0,
+    }
+
+    for node in nodes:
+        reachability = node.get("reachability", "unknown")
+        if reachability == "reachable":
+            stats["reachable"] += 1
+        elif reachability == "unreachable":
+            stats["unreachable"] += 1
+        else:
+            stats["unknown"] += 1
+
+    return {
+        "nodes": nodes,
+        "stats": stats,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
+    """获取平面图拓扑数据 - 包含节点、链路、聚合组、影响传播
+
+    返回用于前端渲染拓扑图的所有数据：
+    - nodes: 节点列表（包含位置、状态）
+    - links: 链路列表（包含角色、分组）
+    - groups: PortChannel/SVL 聚合组（逻辑链路）
+    - impacted_node_ids: 受影响节点 IDs（冗余感知）
+
+    Args:
+        db: 数据库会话
+        plan_id: 平面图ID
+
+    Returns:
+        拓扑数据字典
+    """
+    # 获取所有节点
+    nodes = get_floor_plan_nodes(db, plan_id)
+    node_map = {n["device_id"]: n for n in nodes}
+
+    # 获取所有链路
+    links = db.query(DeviceLink).filter(DeviceLink.floor_plan_id == plan_id).all()
+
+    # 构建链路列表
+    link_list = []
+    for link in links:
+        # 获取节点信息
+        from_node = db.query(DeviceNode).filter(DeviceNode.id == link.from_node_id).first()
+        to_node = db.query(DeviceNode).filter(DeviceNode.id == link.to_node_id).first()
+
+        if not from_node or not to_node:
+            continue
+
+        # 获取设备状态
+        from_device = node_map.get(from_node.device_id)
+        to_device = node_map.get(to_node.device_id)
+
+        link_list.append({
+            "id": link.id,
+            "from": from_node.device_id,
+            "to": to_node.device_id,
+            "from_node_id": from_node.id,
+            "to_node_id": to_node.id,
+            "link_role": link.link_role,
+            "link_group": link.link_group,
+            "link_type": link.link_type,
+            "waypoints": json.loads(link.waypoints) if link.waypoints else None,
+            "status": _calculate_link_status(from_device, to_device, link.link_role, link.link_group),
+        })
+
+    # 构建聚合组（PortChannel/SVL）
+    groups = _build_link_groups(link_list)
+
+    # 计算受影响节点（冗余感知）
+    impacted_node_ids = _propagate_impact(nodes, link_list, groups)
+
+    return {
+        "nodes": nodes,
+        "links": link_list,
+        "groups": groups,
+        "impacted_node_ids": impacted_node_ids,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
+
+
+def _calculate_link_status(
+    from_device: Optional[Dict],
+    to_device: Optional[Dict],
+    link_role: str,
+    link_group: Optional[str]
+) -> str:
+    """计算单条链路状态
+
+    状态判定规则：
+    - 正常: 两端设备都 reachable
+    - 断开: 任一端 unreachable
+    - 降级: PortChannel 组成员部分失效（在 _build_link_groups 中聚合判定）
+
+    Args:
+        from_device: 下游设备信息
+        to_device: 上游设备信息
+        link_role: 链路角色
+        link_group: 链路分组
+
+    Returns:
+        状态: normal / degraded / broken
+    """
+    if not from_device or not to_device:
+        return "broken"
+
+    from_status = from_device.get("reachability", "unknown")
+    to_status = to_device.get("reachability", "unknown")
+
+    # 任一端 unreachable 则链路断开
+    if from_status == "unreachable" or to_status == "unreachable":
+        return "broken"
+
+    # 两端都 reachable 则正常
+    if from_status == "reachable" and to_status == "reachable":
+        return "normal"
+
+    # 其他情况（unknown）视为降级
+    return "degraded"
+
+
+def _build_link_groups(links: List[Dict]) -> List[Dict]:
+    """构建链路聚合组
+
+    将同一 link_group 的多条成员链路聚合为逻辑链路：
+    - PortChannel: link_role='portchannel-member' 的链路按 link_group 聚合
+    - SVL: link_role='svl' 视为特殊组
+
+    Args:
+        links: 链路列表
+
+    Returns:
+        聚合组列表
+    """
+    groups = {}
+
+    for link in links:
+        group_id = link.get("link_group")
+        if not group_id:
+            continue
+
+        if group_id not in groups:
+            groups[group_id] = {
+                "link_group": group_id,
+                "member_link_ids": [],
+                "member_links": [],
+                "link_role": link["link_role"],
+            }
+
+        groups[group_id]["member_link_ids"].append(link["id"])
+        groups[group_id]["member_links"].append(link)
+
+    # 计算每组逻辑状态（冗余感知）
+    result = []
+    for group_id, group in groups.items():
+        # 统计成员状态
+        broken_count = sum(1 for l in group["member_links"] if l["status"] == "broken")
+        normal_count = sum(1 for l in group["member_links"] if l["status"] == "normal")
+        total_count = len(group["member_links"])
+
+        # 冗余判定：部分失效 = 降级，全部失效 = 断开
+        if broken_count == total_count:
+            group["logical_status"] = "broken"
+        elif broken_count > 0:
+            group["logical_status"] = "degraded"
+        else:
+            group["logical_status"] = "normal"
+
+        result.append(group)
+
+    return result
+
+
+def _propagate_impact(
+    nodes: List[Dict],
+    links: List[Dict],
+    groups: List[Dict]
+) -> List[int]:
+    """冗余感知的影响传播计算
+
+    核心业务逻辑：
+    - 接入单上联断: 链路降级(黄)，设备不报离线
+    - 接入双上联全断: 接入失联(红)
+    - SVL 单核心宕: 核心红，下游不连带
+    - SVL 双核心全宕: 全厂中断(橙)
+
+    Args:
+        nodes: 节点列表
+        links: 链路列表
+        groups: 聚合组列表
+
+    Returns:
+        受影响节点 device_id 列表（橙色脉冲，区别于自身 unreachable）
+    """
+    # 构建上游依赖图
+    # downstream_to_upstreams: {下游device_id: [上游device_id列表]}
+    downstream_to_upstreams = {}
+
+    # PortChannel 组状态映射
+    group_status = {g["link_group"]: g["logical_status"] for g in groups}
+
+    for link in links:
+        if link["link_role"] == "svl":
+            # SVL 链路特殊处理，不计入下游依赖
+            continue
+
+        from_id = link["from"]
+        to_id = link["to"]
+
+        if from_id not in downstream_to_upstreams:
+            downstream_to_upstreams[from_id] = []
+
+        # PortChannel 成员按组状态判定
+        if link["link_role"] == "portchannel-member" and link["link_group"]:
+            # 使用组逻辑状态而非单链路状态
+            group_id = link["link_group"]
+            effective_status = group_status.get(group_id, "normal")
+
+            if effective_status == "broken":
+                # 组完全断开，计入失效上游
+                downstream_to_upstreams[from_id].append((to_id, "broken"))
+            elif effective_status == "degraded":
+                # 组降级，标记但不计入失效
+                downstream_to_upstreams[from_id].append((to_id, "degraded"))
+            else:
+                downstream_to_upstreams[from_id].append((to_id, "normal"))
+        else:
+            # 普通 uplink
+            downstream_to_upstreams[from_id].append((to_id, link["status"]))
+
+    # 计算受影响节点
+    impacted = set()
+    node_status = {n["device_id"]: n.get("reachability", "unknown") for n in nodes}
+
+    for downstream_id, upstreams in downstream_to_upstreams.items():
+        # 自身 unreachable 的节点不算"受影响"，直接离线
+        if node_status.get(downstream_id) == "unreachable":
+            continue
+
+        # 统计上游状态
+        broken_upstreams = [u for u, s in upstreams if s == "broken"]
+
+        if len(broken_upstreams) == len(upstreams) and len(upstreams) > 0:
+            # 所有上游都失效 → 下游受影响（橙色）
+            impacted.add(downstream_id)
+        elif len(broken_upstreams) > 0:
+            # 部分上游失效 → 链路降级，设备不受影响
+            pass
+
+    return list(impacted)
+
+
+def get_global_summary(db: Session) -> Dict[str, Any]:
+    """获取全厂健康度汇总 - 用于大屏顶部健康条
+
+    聚合所有平面图数据，返回全厂整体健康状态。
+
+    Args:
+        db: 数据库会话
+
+    Returns:
+        {
+            "health_score": 98.2,  # 健康度百分比
+            "total_devices": 1240,
+            "reachable": 1218,
+            "unreachable": 22,
+            "unknown": 0,
+            "degraded_links": 8,   # 降级链路数
+            "impacted_devices": 35, # 受影响设备数
+            "active_alerts": 14,   # 活跃告警数
+        }
+    """
+    # 统计所有在管设备（deployment_status='in-use'）
+    from sqlalchemy import func
+
+    devices = db.query(Device).filter(Device.deployment_status == 'in-use').all()
+
+    total = len(devices)
+    reachable = sum(1 for d in devices if d.reachability == 'reachable')
+    unreachable = sum(1 for d in devices if d.reachability == 'unreachable')
+    unknown = total - reachable - unreachable
+
+    # 计算健康度（reachable / total）
+    health_score = round((reachable / total * 100) if total > 0 else 100, 1)
+
+    # 统计降级链路和受影响设备（聚合所有平面图）
+    degraded_links = 0
+    impacted_devices = 0
+
+    plans = db.query(FloorPlan).all()
+    for plan in plans:
+        topology = get_plan_topology(db, plan.id)
+        # 统计降级链路
+        for group in topology.get("groups", []):
+            if group.get("logical_status") == "degraded":
+                degraded_links += 1
+        # 统计受影响设备
+        impacted_devices += len(topology.get("impacted_node_ids", []))
+
+    # 活跃告警数（未关闭的告警）
+    from app.shared.models import AlertRecord
+    try:
+        active_alerts = db.query(AlertRecord).filter(
+            AlertRecord.status.in_(['open', 'in_progress'])
+        ).count()
+    except Exception:
+        # AlertRecord 表可能不存在
+        active_alerts = 0
+
+    return {
+        "health_score": health_score,
+        "total_devices": total,
+        "reachable": reachable,
+        "unreachable": unreachable,
+        "unknown": unknown,
+        "degraded_links": degraded_links,
+        "impacted_devices": impacted_devices,
+        "active_alerts": active_alerts,
+        "timestamp": datetime.utcnow().isoformat(),
+    }
