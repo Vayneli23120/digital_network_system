@@ -515,6 +515,28 @@
         </el-button>
       </template>
     </el-dialog>
+
+    <!-- PortChannel Member Manage Dialog -->
+    <el-dialog v-model="showLinkGroupManageDialog" :title="t('monitorManageLinkGroup')" width="400px">
+      <div class="link-group-members" v-if="selectedLinkGroup">
+        <p class="group-info">{{ t('monitorLinkGroupInfo', { group: selectedLinkGroup.link_group, count: selectedLinkGroup.memberCount }) }}</p>
+        <div class="member-list">
+          <div v-for="member in getLinkGroupMembers(selectedLinkGroup.link_group)" :key="member.id" class="member-item">
+            <span class="member-name">{{ getMemberLabel(member) }}</span>
+            <el-button size="small" type="danger" @click="deleteLinkMember(member.id)">
+              <el-icon><Delete /></el-icon>
+            </el-button>
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="showLinkGroupManageDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="danger" @click="deleteLinkGroupAll()">
+          <el-icon><Delete /></el-icon>
+          {{ t('monitorDeleteGroupAll') }}
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -558,6 +580,8 @@ const pendingLinkTarget = ref(null)  // 待确认的目标节点 { nodeId, devic
 const showLinkEditDialog = ref(false)  // 链路编辑/删除弹窗
 const showLinkGroupDialog = ref(false)  // PortChannel group 输入弹窗
 const pendingLinkGroup = ref('')  // 待确认的 link_group
+const showLinkGroupManageDialog = ref(false)  // PortChannel 成员管理弹窗
+const selectedLinkGroup = ref(null)  // 选中的逻辑链路组信息
 
 // Waypoint Drag State (Edit Mode)
 const waypointDragState = ref(null)  // { linkId, waypointIndex, startX, startY }
@@ -1194,10 +1218,16 @@ const onLinkClick = (link) => {
   // 选中链路用于编辑/删除
   selectedLinkId.value = link.id
 
-  // 如果是逻辑链路（PortChannel 聚合），提示选择具体成员
+  // 如果是逻辑链路（PortChannel 聚合），打开成员管理弹窗
   if (link.isLogical) {
-    // TODO: 弹窗显示成员列表选择
-    ElMessage.info(t('monitorLinkGroupSelect'))
+    // 从 id 中剥离 logical- 前缀获取 link_group
+    const linkGroupId = link.id.toString().replace('logical-', '')
+    selectedLinkGroup.value = {
+      id: link.id,
+      link_group: linkGroupId,
+      memberCount: link.memberCount || 0,
+    }
+    showLinkGroupManageDialog.value = true
     return
   }
 
@@ -1252,6 +1282,68 @@ const createLink = async (linkRole, linkGroup) => {
 const confirmPortchannelLink = () => {
   const group = pendingLinkGroup.value.trim() || null
   createLink('portchannel-member', group)
+}
+
+// ===== Link Group Member Management =====
+
+// 获取逻辑链路组的成员列表
+const getLinkGroupMembers = (linkGroupId) => {
+  return links.value.filter(l => l.link_group === linkGroupId)
+}
+
+// 获取成员链路的显示标签
+const getMemberLabel = (member) => {
+  const fromNode = nodes.value.find(n => n.device_id === member.from)
+  const toNode = nodes.value.find(n => n.device_id === member.to)
+  const fromName = fromNode?.device_name || '未知'
+  const toName = toNode?.device_name || '未知'
+  return `${fromName} → ${toName}`
+}
+
+// 删除单个成员链路
+const deleteLinkMember = async (memberId) => {
+  try {
+    await ElMessageBox.confirm(t('monitorDeleteLinkConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
+
+    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${memberId}`, { method: 'DELETE' })
+    if (res.ok) {
+      ElMessage.success(t('monitorLinkDeleted'))
+      // 刷新拓扑
+      await _loadPlanTopology(selectedPlanId.value, true)
+      // 更新弹窗中的成员列表
+      if (selectedLinkGroup.value) {
+        const members = getLinkGroupMembers(selectedLinkGroup.value.link_group)
+        if (members.length === 0) {
+          // 无成员时关闭弹窗
+          showLinkGroupManageDialog.value = false
+        }
+      }
+    } else {
+      ElMessage.error(t('msgOpFailed'))
+    }
+  } catch {
+    // 用户取消
+  }
+}
+
+// 删除整组
+const deleteLinkGroupAll = async () => {
+  if (!selectedLinkGroup.value) return
+
+  try {
+    await ElMessageBox.confirm(t('monitorDeleteGroupConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
+
+    const members = getLinkGroupMembers(selectedLinkGroup.value.link_group)
+    for (const member of members) {
+      await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${member.id}`, { method: 'DELETE' })
+    }
+
+    ElMessage.success(t('monitorGroupDeleted'))
+    showLinkGroupManageDialog.value = false
+    await _loadPlanTopology(selectedPlanId.value, true)
+  } catch {
+    // 用户取消
+  }
 }
 
 // ===== Waypoint Drag Functions =====
@@ -2993,5 +3085,37 @@ onUnmounted(() => {
   r: 2.5;
   fill: #4f46e5;
   cursor: grabbing;
+}
+
+/* Link Group Member Management */
+.link-group-members {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-info {
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.member-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+}
+
+.member-name {
+  font-size: 13px;
+  color: var(--text-primary);
 }
 </style>
