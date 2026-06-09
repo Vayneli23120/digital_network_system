@@ -14,6 +14,29 @@
         </el-select>
       </div>
       <div class="header-right">
+        <!-- 筛选 popover（两态都可见） -->
+        <el-popover placement="bottom" trigger="click" width="280">
+          <template #reference>
+            <button class="btn-filter-header">
+              <el-icon><View /></el-icon>
+              {{ t('monitorFilter') }}
+            </button>
+          </template>
+          <div class="filter-popover-content">
+            <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 100%;">
+              <el-option :label="t('monitorFilterAllAreas')" value="" />
+              <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
+            </el-select>
+            <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 100%; margin-top: 8px;">
+              <el-option :label="t('monitorFilterAllTypes')" value="" />
+              <el-option :label="t('deviceTypeUce')" value="uce" />
+              <el-option :label="t('deviceTypeAp')" value="ap" />
+              <el-option :label="t('deviceTypeSwitch')" value="switch" />
+              <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
+              <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
+            </el-select>
+          </div>
+        </el-popover>
         <span class="current-time">{{ currentTime }}</span>
         <!-- 编辑模式开关 -->
         <button class="btn-mode-switch" @click="isEditMode = !isEditMode" :class="{ active: isEditMode }">
@@ -96,29 +119,6 @@
             <el-icon><Close /></el-icon>
             {{ t('actionCancel') }}
           </button>
-          <!-- 筛选 popover -->
-          <el-popover placement="bottom" trigger="click" width="280">
-            <template #reference>
-              <button class="btn-filter">
-                <el-icon><View /></el-icon>
-                {{ t('monitorFilter') }}
-              </button>
-            </template>
-            <div class="filter-popover-content">
-              <el-select v-model="filterArea" :placeholder="t('monitorScreenFilterArea')" clearable size="small" style="width: 100%;">
-                <el-option :label="t('monitorFilterAllAreas')" value="" />
-                <el-option v-for="area in areaList" :key="area" :label="area" :value="area" />
-              </el-select>
-              <el-select v-model="filterDeviceType" :placeholder="t('monitorScreenFilterType')" clearable size="small" style="width: 100%; margin-top: 8px;">
-                <el-option :label="t('monitorFilterAllTypes')" value="" />
-                <el-option :label="t('deviceTypeUce')" value="uce" />
-                <el-option :label="t('deviceTypeAp')" value="ap" />
-                <el-option :label="t('deviceTypeSwitch')" value="switch" />
-                <el-option :label="t('deviceTypeOfficeSwitch')" value="office_switch" />
-                <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
-              </el-select>
-            </div>
-          </el-popover>
         </div>
 
         <!-- Floor Plan Display -->
@@ -460,7 +460,7 @@
             <span class="role-desc">{{ t('linkRoleSvlDesc') }}</span>
           </div>
         </div>
-        <div class="role-option" @click="createLink('portchannel-member')">
+        <div class="role-option" @click="createLink('portchannel-member', null)">
           <div class="role-icon portchannel"></div>
           <div class="role-info">
             <span class="role-name">{{ t('linkRolePortchannel') }}</span>
@@ -470,6 +470,18 @@
       </div>
       <template #footer>
         <el-button @click="showLinkRoleDialog = false; cancelDrawLink()">{{ t('actionCancel') }}</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- PortChannel Group Input Dialog -->
+    <el-dialog v-model="showLinkGroupDialog" :title="t('monitorInputLinkGroup')" width="300px">
+      <div class="link-group-input">
+        <el-input v-model="pendingLinkGroup" :placeholder="t('monitorLinkGroupPlaceholder')" />
+        <p class="group-hint">{{ t('monitorLinkGroupHint') }}</p>
+      </div>
+      <template #footer>
+        <el-button @click="showLinkGroupDialog = false; cancelDrawLink()">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="confirmPortchannelLink">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -527,6 +539,8 @@ const selectedLinkId = ref(null)  // 编辑模式下选中的链路 ID
 const showLinkRoleDialog = ref(false)  // 链路角色选择弹窗
 const pendingLinkTarget = ref(null)  // 待确认的目标节点 { nodeId, deviceId }
 const showLinkEditDialog = ref(false)  // 链路编辑/删除弹窗
+const showLinkGroupDialog = ref(false)  // PortChannel group 输入弹窗
+const pendingLinkGroup = ref('')  // 待确认的 link_group
 
 // Drag state (drag-to-reposition existing nodes)
 const dragState = ref(null)
@@ -1162,12 +1176,24 @@ const onLinkClick = (link) => {
   if (link.isLogical) {
     // TODO: 弹窗显示成员列表选择
     ElMessage.info(t('monitorLinkGroupSelect'))
+    return
   }
+
+  // 显示编辑/删除弹窗
+  showLinkEditDialog.value = true
 }
 
 // 创建链路（弹窗确认角色后）
 const createLink = async (linkRole, linkGroup) => {
   if (!linkDrawState.value || !pendingLinkTarget.value) return
+
+  // PortChannel 需要先输入 group id
+  if (linkRole === 'portchannel-member' && linkGroup === null) {
+    showLinkRoleDialog.value = false
+    pendingLinkGroup.value = ''  // 清空上次输入
+    showLinkGroupDialog.value = true
+    return
+  }
 
   try {
     const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/links`, {
@@ -1195,8 +1221,15 @@ const createLink = async (linkRole, linkGroup) => {
 
   // 重置状态
   showLinkRoleDialog.value = false
+  showLinkGroupDialog.value = false
   linkDrawState.value = null
   pendingLinkTarget.value = null
+}
+
+// 确认 PortChannel 链路（带 group）
+const confirmPortchannelLink = () => {
+  const group = pendingLinkGroup.value.trim() || null
+  createLink('portchannel-member', group)
 }
 
 // 删除选中链路
@@ -2490,6 +2523,24 @@ onUnmounted(() => {
   border-color: #6366f1;
 }
 
+.btn-filter-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-default);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-filter-header:hover {
+  background: var(--bg-secondary);
+  color: var(--accent-primary);
+}
+
 .monitor-screen.edit-mode {
   --accent-primary: #6366f1;
 }
@@ -2706,4 +2757,16 @@ onUnmounted(() => {
 
 .health-stat-item.switch { color: #6366f1; }
 .health-stat-item.ap { color: #ffa116; }
+
+/* Link Group Input Dialog */
+.link-group-input {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.group-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
 </style>
