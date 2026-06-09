@@ -175,11 +175,12 @@
                   @click.stop="onLinkClick(link)"
                   @dblclick.stop="onLinkPathClick(link, $event)"
                 />
-                <!-- 拐点手柄（编辑模式 + 有拐点的链路） -->
+                <!-- 拐点手柄（编辑模式 + 选中链路 + 有拐点的链路） -->
                 <g v-if="isEditMode">
                   <template v-for="link in logicalLinks" :key="'wp-' + link.id">
                     <circle
                       v-for="(wp, idx) in getLinkWaypoints(link)"
+                      v-show="selectedLinkId === link.id"
                       :key="`${link.id}-${idx}`"
                       :cx="wp.x"
                       :cy="wp.y"
@@ -1462,6 +1463,12 @@ const onWaypointDragEnd = async () => {
 // 点击链路中段插入新拐点
 const onLinkPathClick = (link, event) => {
   if (!isEditMode.value) return
+
+  // 必须先选中该链路才能插入拐点
+  if (selectedLinkId.value !== link.id) {
+    ElMessage.warning(t('monitorSelectLinkFirst'))
+    return
+  }
 
   // 逻辑链路不允许加拐点（聚合代表，拐点应加在具体成员上）
   if (link.isLogical) {
