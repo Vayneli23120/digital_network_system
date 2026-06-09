@@ -2147,49 +2147,53 @@ onUnmounted(() => {
 }
 
 .topo-link {
-  stroke-width: 2;
+  stroke-width: 1;  /* 最细，hover 时变粗 */
   stroke-linecap: round;
   stroke-linejoin: round;
-  transition: stroke 0.3s, stroke-width 0.3s, opacity 0.3s;
+  pointer-events: stroke;  /* 只有连线本身可交互，不阻碍节点 */
+  transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+  cursor: pointer;
+}
+
+/* Hover 高亮效果 */
+.topo-link:hover {
+  stroke-width: 3;
+  opacity: 0.9;
 }
 
 /* 正常链路 - 近乎隐形 */
 .topo-link.link-normal {
   stroke: var(--accent-primary);
-  opacity: 0.15;
+  opacity: 0.2;
 }
 
 /* SVL 链路 - 核心堆叠 */
 .topo-link.svl {
   stroke: #6366f1;  /* 靛蓝色 */
-  stroke-width: 3;
-  opacity: 0.3;
+  opacity: 0.4;
 }
 
-/* 降级链路 - 黄色警告（P2-3 预留：接口级采集后启用）
- * 当前 ICMP 无法检测 PortChannel 单成员物理断开，暂不触发此状态 */
+/* 降级链路 - 黄色警告 */
 .topo-link.link-degraded {
   stroke: #ffa116;
-  stroke-width: 3;
   opacity: 0.8;
 }
 
 /* 断开链路 - 红色高亮 */
 .topo-link.link-broken {
   stroke: #ff3b5b;
-  stroke-width: 4;
   opacity: 1;
   animation: link-pulse 1.5s infinite;
 }
 
 @keyframes link-pulse {
-  0%, 100% { opacity: 1; stroke-width: 4; }
-  50% { opacity: 0.6; stroke-width: 3; }
+  0%, 100% { opacity: 1; stroke-width: 2; }
+  50% { opacity: 0.6; stroke-width: 1.5; }
 }
 
-/* PortChannel 逻辑链路 - 加粗 */
+/* PortChannel 逻辑链路 */
 .topo-link.portchannel-member {
-  stroke-width: 4;
+  /* 使用默认宽度，hover 时变粗 */
 }
 
 .no-plan {
@@ -2998,7 +3002,7 @@ onUnmounted(() => {
 
 /* ===== Link Selection ===== */
 .topo-link.selected {
-  stroke-width: 5;
+  stroke-width: 3;
   filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.6));
 }
 
@@ -3079,6 +3083,7 @@ onUnmounted(() => {
   fill: #6366f1;
   stroke: #fff;
   stroke-width: 0.3;
+  pointer-events: all;  /* 确保在 SVG 层禁用交互时仍可拖拽 */
   cursor: grab;
   transition: r 0.2s;
 }
