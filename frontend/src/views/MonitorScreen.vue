@@ -183,10 +183,11 @@
                       :key="`${link.id}-${idx}`"
                       :cx="wp.x"
                       :cy="wp.y"
-                      r="1.5"
+                      r="2"
                       class="waypoint-handle"
                       :class="{ dragging: waypointDragState?.linkId === link.id && waypointDragState?.waypointIndex === idx }"
                       @mousedown.stop="onWaypointMouseDown(link, idx, $event)"
+                      @contextmenu.prevent.stop="deleteWaypoint(link, idx)"
                     />
                   </template>
                 </g>
@@ -1568,6 +1569,26 @@ const goToDevice = (deviceId) => {
   router.push(`/devices/${deviceId}`)
 }
 
+// 右键删除拐点（带确认）
+const deleteWaypoint = async (link, idx) => {
+  if (!isEditMode.value) return
+
+  try {
+    await ElMessageBox.confirm(t('monitorWaypointDeleteConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
+
+    // 复制并删除指定拐点
+    const existingWaypoints = link.waypoints || []
+    const newWaypoints = [...existingWaypoints]
+    newWaypoints.splice(idx, 1)
+
+    // 保存到后端
+    await saveWaypoints(link.id, newWaypoints)
+    ElMessage.success(t('monitorWaypointDeleted'))
+  } catch {
+    // 用户取消，静默忽略
+  }
+}
+
 const deleteNodeFromPlan = async () => {
   if (!nodeDetail.value || !selectedPlanId.value) return
 
@@ -2207,6 +2228,7 @@ onUnmounted(() => {
 
 .topo-link {
   stroke-width: 1;  /* 最细，hover 时变粗 */
+  vector-effect: non-scaling-stroke;  /* 保持 1px 不随 viewBox 缩放 */
   stroke-linecap: round;
   stroke-linejoin: round;
   pointer-events: stroke;  /* 只有连线本身可交互，不阻碍节点 */
@@ -2216,7 +2238,7 @@ onUnmounted(() => {
 
 /* Hover 高亮效果 */
 .topo-link:hover {
-  stroke-width: 3;
+  stroke-width: 2.5;
   opacity: 0.9;
 }
 
@@ -3141,19 +3163,19 @@ onUnmounted(() => {
 .waypoint-handle {
   fill: #6366f1;
   stroke: #fff;
-  stroke-width: 0.3;
+  stroke-width: 0.5;  /* 描边加粗 */
   pointer-events: all;  /* 确保在 SVG 层禁用交互时仍可拖拽 */
   cursor: grab;
   transition: r 0.2s;
 }
 
 .waypoint-handle:hover {
-  r: 2;
+  r: 2.5;
   fill: #8b5cf6;
 }
 
 .waypoint-handle.dragging {
-  r: 2.5;
+  r: 3;
   fill: #4f46e5;
   cursor: grabbing;
 }
