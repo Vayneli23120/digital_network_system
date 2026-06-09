@@ -128,7 +128,7 @@
             <!-- Device Nodes Overlay -->
             <div class="nodes-overlay" v-if="imageLoaded">
               <!-- SVG Topology Links Layer -->
-              <svg class="topo-layer" v-if="links.length > 0">
+              <svg class="topo-layer" viewBox="0 0 100 100" preserveAspectRatio="none" v-if="links.length > 0">
                 <path
                   v-for="link in logicalLinks"
                   :key="link.id"
@@ -1640,7 +1640,8 @@ onUnmounted(() => {
   opacity: 0.3;
 }
 
-/* 降级链路 - 黄色警告 */
+/* 降级链路 - 黄色警告（P2-3 预留：接口级采集后启用）
+ * 当前 ICMP 无法检测 PortChannel 单成员物理断开，暂不触发此状态 */
 .topo-link.link-degraded {
   stroke: #ffa116;
   stroke-width: 3;

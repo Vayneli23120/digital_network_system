@@ -439,12 +439,16 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
     # 获取所有链路
     links = db.query(DeviceLink).filter(DeviceLink.floor_plan_id == plan_id).all()
 
+    # 获取该平面图的所有 DeviceNode，避免 N+1 查询
+    device_nodes = db.query(DeviceNode).filter(DeviceNode.floor_plan_id == plan_id).all()
+    device_node_map = {dn.id: dn for dn in device_nodes}
+
     # 构建链路列表
     link_list = []
     for link in links:
-        # 获取节点信息
-        from_node = db.query(DeviceNode).filter(DeviceNode.id == link.from_node_id).first()
-        to_node = db.query(DeviceNode).filter(DeviceNode.id == link.to_node_id).first()
+        # 从内存字典获取节点信息（避免 N+1）
+        from_node = device_node_map.get(link.from_node_id)
+        to_node = device_node_map.get(link.to_node_id)
 
         if not from_node or not to_node:
             continue
@@ -489,10 +493,17 @@ def _calculate_link_status(
 ) -> str:
     """计算单条链路状态
 
-    状态判定规则：
-    - 正常: 两端设备都 reachable
-    - 断开: 任一端 unreachable
-    - 降级: PortChannel 组成员部分失效（在 _build_link_groups 中聚合判定）
+    ⚠️ 设计限制说明（诚实兜底）：
+    当前使用"两端设备 ICMP 可达性"推导链路状态，这在双上联冗余场景有盲区：
+    - PortChannel 单条成员物理断开时，两端设备仍 reachable（设备活着，只是某条链路 down）
+    - 因此"链路降级(degraded)"状态目前无法真实检测
+
+    真正的 PortChannel 成员状态需要接口级采集（SNMP/CLI show etherchannel summary），
+    这属于 P2-3"实时指标叠加"的工作，届时会新增 DeviceLink.member_status 字段。
+
+    当前策略：诚实兜底，只返回 normal/broken，不假装能检测 degraded。
+    - normal: 两端设备都 reachable（设备级在线）
+    - broken: 任一端 unreachable（设备级离线）
 
     Args:
         from_device: 下游设备信息
@@ -501,7 +512,7 @@ def _calculate_link_status(
         link_group: 链路分组
 
     Returns:
-        状态: normal / degraded / broken
+        状态: normal / broken（诚实兜底，暂无 degraded）
     """
     if not from_device or not to_device:
         return "broken"
@@ -509,24 +520,30 @@ def _calculate_link_status(
     from_status = from_device.get("reachability", "unknown")
     to_status = to_device.get("reachability", "unknown")
 
-    # 任一端 unreachable 则链路断开
+    # 任一端 unreachable 则链路断开（设备级离线）
     if from_status == "unreachable" or to_status == "unreachable":
         return "broken"
 
-    # 两端都 reachable 则正常
+    # 两端都 reachable 则正常（设备级在线）
+    # 注意：这里不检测 degraded，因为 ICMP 无法感知单链路物理断开
     if from_status == "reachable" and to_status == "reachable":
         return "normal"
 
-    # 其他情况（unknown）视为降级
-    return "degraded"
+    # unknown 状态暂时也返回 normal（保守策略，避免误报断链）
+    return "normal"
 
 
 def _build_link_groups(links: List[Dict]) -> List[Dict]:
     """构建链路聚合组
 
-    将同一 link_group 的多条成员链路聚合为逻辑链路：
-    - PortChannel: link_role='portchannel-member' 的链路按 link_group 聚合
-    - SVL: link_role='svl' 视为特殊组
+    ⚠️ 设计限制说明（诚实兜底）：
+    真正的 PortChannel 成员状态（接口 up/down）需要 SNMP/CLI 采集（P2-3）。
+    当前基于设备 ICMP 可达性推导，无法检测"单成员物理断开"的降级场景。
+    因此聚合组只判定：
+    - broken: 所有成员的端设备都 unreachable（设备级离线）
+    - normal: 至少有一个成员两端设备都 reachable（设备级在线）
+
+    将接口级采集列入 P2-3，届时可真正检测部分成员失效的 degraded 状态。
 
     Args:
         links: 链路列表
@@ -552,19 +569,17 @@ def _build_link_groups(links: List[Dict]) -> List[Dict]:
         groups[group_id]["member_link_ids"].append(link["id"])
         groups[group_id]["member_links"].append(link)
 
-    # 计算每组逻辑状态（冗余感知）
+    # 计算每组逻辑状态（诚实兜底：暂无 degraded）
     result = []
     for group_id, group in groups.items():
         # 统计成员状态
         broken_count = sum(1 for l in group["member_links"] if l["status"] == "broken")
-        normal_count = sum(1 for l in group["member_links"] if l["status"] == "normal")
         total_count = len(group["member_links"])
 
-        # 冗余判定：部分失效 = 降级，全部失效 = 断开
-        if broken_count == total_count:
+        # 诚实判定：只有全部设备级离线才判 broken
+        # 单成员物理断开（设备仍活着）目前无法检测，暂不判 degraded
+        if broken_count == total_count and total_count > 0:
             group["logical_status"] = "broken"
-        elif broken_count > 0:
-            group["logical_status"] = "degraded"
         else:
             group["logical_status"] = "normal"
 
