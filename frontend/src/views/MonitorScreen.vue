@@ -119,6 +119,19 @@
             <el-icon><Close /></el-icon>
             {{ t('actionCancel') }}
           </button>
+          <!-- 选中链路操作 -->
+          <button class="btn-edit-link" @click="showLinkEditDialog = true" v-if="selectedLinkId && !selectedLinkGroup">
+            <el-icon><Edit /></el-icon>
+            {{ t('actionEdit') }}
+          </button>
+          <button class="btn-delete-link" @click="deleteSelectedLink" v-if="selectedLinkId">
+            <el-icon><Delete /></el-icon>
+            {{ t('actionDelete') }}
+          </button>
+          <button class="btn-manage-group" @click="showLinkGroupManageDialog = true" v-if="selectedLinkGroup">
+            <el-icon><Setting /></el-icon>
+            {{ t('monitorManageGroup') }}
+          </button>
         </div>
 
         <!-- Floor Plan Display -->
@@ -543,7 +556,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight, Edit, Connection, Fold, Expand } from '@element-plus/icons-vue'
+import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight, Edit, Connection, Fold, Expand, Setting } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -1214,24 +1227,20 @@ const onNodeClick = (node) => {
 const onLinkClick = (link) => {
   if (!isEditMode.value) return
 
-  // 选中链路用于编辑/删除
+  // 单击只选中链路，不弹窗（双击才插入拐点）
   selectedLinkId.value = link.id
 
-  // 如果是逻辑链路（PortChannel 聚合），打开成员管理弹窗
+  // 逻辑链路选中时记录 group 信息
   if (link.isLogical) {
-    // 从 id 中剥离 logical- 前缀获取 link_group
     const linkGroupId = link.id.toString().replace('logical-', '')
     selectedLinkGroup.value = {
       id: link.id,
       link_group: linkGroupId,
       memberCount: link.memberCount || 0,
     }
-    showLinkGroupManageDialog.value = true
-    return
+  } else {
+    selectedLinkGroup.value = null
   }
-
-  // 显示编辑/删除弹窗
-  showLinkEditDialog.value = true
 }
 
 // 创建链路（弹窗确认角色后）
@@ -1340,6 +1349,32 @@ const deleteLinkGroupAll = async () => {
     ElMessage.success(t('monitorGroupDeleted'))
     showLinkGroupManageDialog.value = false
     await _loadPlanTopology(selectedPlanId.value, true)
+  } catch {
+    // 用户取消
+  }
+}
+
+// 删除选中的链路（工具栏按钮触发）
+const deleteSelectedLink = async () => {
+  if (!selectedLinkId.value) return
+
+  // 如果是逻辑链路，删除整组
+  if (selectedLinkGroup.value) {
+    await deleteLinkGroupAll()
+    selectedLinkId.value = null
+    selectedLinkGroup.value = null
+    return
+  }
+
+  try {
+    await ElMessageBox.confirm(t('monitorDeleteLinkConfirm'), t('monitorDeleteConfirmTitle'), { type: 'warning' })
+
+    const res = await fetch(`/api/floor-plans/${selectedPlanId.value}/links/${selectedLinkId.value}`, { method: 'DELETE' })
+    if (res.ok) {
+      ElMessage.success(t('monitorLinkDeleted'))
+      selectedLinkId.value = null
+      await _loadPlanTopology(selectedPlanId.value, true)
+    }
   } catch {
     // 用户取消
   }
@@ -2059,6 +2094,58 @@ onUnmounted(() => {
   color: #fff;
   border: none;
   box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.btn-cancel-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.btn-edit-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.9) 0%, rgba(139, 92, 246, 0.9) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(99, 102, 241, 0.2);
+}
+
+.btn-delete-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.9) 0%, rgba(255, 71, 87, 0.9) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(239, 68, 68, 0.2);
+}
+
+.btn-manage-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(52, 211, 153, 0.9) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(16, 185, 129, 0.2);
 }
 
 .plan-container {
