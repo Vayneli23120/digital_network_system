@@ -636,10 +636,8 @@ def _propagate_impact(
             if effective_status == "broken":
                 # 组完全断开，计入失效上游
                 downstream_to_upstreams[from_id].append((to_id, "broken"))
-            elif effective_status == "degraded":
-                # 组降级，标记但不计入失效
-                downstream_to_upstreams[from_id].append((to_id, "degraded"))
             else:
+                # 组正常（当前无 degraded，诚实兜底）
                 downstream_to_upstreams[from_id].append((to_id, "normal"))
         else:
             # 普通 uplink
@@ -700,17 +698,14 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
     # 计算健康度（reachable / total）
     health_score = round((reachable / total * 100) if total > 0 else 100, 1)
 
-    # 统计降级链路和受影响设备（聚合所有平面图）
-    degraded_links = 0
+    # 统计受影响设备（聚合所有平面图）
+    # 注意：degraded_links 暂时恒为0，因为 ICMP 无法检测 PortChannel 单成员断开
+    # 待 P2-3 接口级采集后再启用
     impacted_devices = 0
 
     plans = db.query(FloorPlan).all()
     for plan in plans:
         topology = get_plan_topology(db, plan.id)
-        # 统计降级链路
-        for group in topology.get("groups", []):
-            if group.get("logical_status") == "degraded":
-                degraded_links += 1
         # 统计受影响设备
         impacted_devices += len(topology.get("impacted_node_ids", []))
 
@@ -730,7 +725,7 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         "reachable": reachable,
         "unreachable": unreachable,
         "unknown": unknown,
-        "degraded_links": degraded_links,
+        "degraded_links": 0,  # 暂时恒0，待 P2-3 接口级采集后启用
         "impacted_devices": impacted_devices,
         "active_alerts": active_alerts,
         "timestamp": datetime.utcnow().isoformat(),

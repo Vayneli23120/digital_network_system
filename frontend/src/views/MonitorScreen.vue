@@ -37,10 +37,7 @@
           <span class="stat-icon offline"></span>
           {{ t('statusUnreachable') }} {{ globalSummary.unreachable }}
         </span>
-        <span class="health-stat-item degraded" v-if="globalSummary.degraded_links > 0">
-          <span class="stat-icon degraded"></span>
-          {{ t('monitorDegraded') }} {{ globalSummary.degraded_links }}
-        </span>
+        <!-- degraded_links 暂时恒为0，待 P2-3 接口级采集后启用 -->
         <span class="health-stat-item impacted" v-if="globalSummary.impacted_devices > 0">
           <span class="stat-icon impacted"></span>
           {{ t('monitorImpacted') }} {{ globalSummary.impacted_devices }}
