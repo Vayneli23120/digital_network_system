@@ -270,13 +270,17 @@ async def get_alerts(db: Session = Depends(get_db)):
 async def get_stats(db: Session = Depends(get_db)):
     """获取大屏统计数据"""
     from app.shared.models import Device
+    from sqlalchemy import or_
 
     total_devices = db.query(Device).count()
     online_devices = db.query(Device).filter(Device.status == "online").count()
     offline_devices = db.query(Device).filter(Device.status == "offline").count()
     maintenance_devices = db.query(Device).filter(Device.status == "maintenance").count()
 
-    switch_count = db.query(Device).filter(Device.device_type == "switch").count()
+    # 交换机：包括 office_switch、core_switch、server_switch（项目实际枚举值）
+    switch_count = db.query(Device).filter(
+        Device.device_type.in_(["office_switch", "core_switch", "server_switch"])
+    ).count()
     ap_count = db.query(Device).filter(Device.device_type == "ap").count()
 
     return {
