@@ -183,7 +183,7 @@
                       :key="`${link.id}-${idx}`"
                       :cx="wp.x"
                       :cy="wp.y"
-                      r="1.2"
+                      r="1"
                       class="waypoint-handle"
                       :class="{ dragging: waypointDragState?.linkId === link.id && waypointDragState?.waypointIndex === idx }"
                       @mousedown.stop="onWaypointMouseDown(link, idx, $event)"
@@ -3170,12 +3170,12 @@ onUnmounted(() => {
 }
 
 .waypoint-handle:hover {
-  r: 1.8;
+  r: 1.5;
   fill: #8b5cf6;
 }
 
 .waypoint-handle.dragging {
-  r: 2;
+  r: 1.8;
   fill: #4f46e5;
   cursor: grabbing;
 }
