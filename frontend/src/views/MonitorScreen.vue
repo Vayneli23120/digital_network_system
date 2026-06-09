@@ -183,7 +183,7 @@
                       :key="`${link.id}-${idx}`"
                       :cx="wp.x"
                       :cy="wp.y"
-                      r="2"
+                      r="1.2"
                       class="waypoint-handle"
                       :class="{ dragging: waypointDragState?.linkId === link.id && waypointDragState?.waypointIndex === idx }"
                       @mousedown.stop="onWaypointMouseDown(link, idx, $event)"
@@ -2245,7 +2245,7 @@ onUnmounted(() => {
 /* 正常链路 - 近乎隐形 */
 .topo-link.link-normal {
   stroke: var(--accent-primary);
-  opacity: 0.2;
+  opacity: 0.5;  /* 提亮，清晰可见 */
 }
 
 /* SVL 链路 - 核心堆叠 */
@@ -3170,12 +3170,12 @@ onUnmounted(() => {
 }
 
 .waypoint-handle:hover {
-  r: 2.5;
+  r: 1.8;
   fill: #8b5cf6;
 }
 
 .waypoint-handle.dragging {
-  r: 3;
+  r: 2;
   fill: #4f46e5;
   cursor: grabbing;
 }
