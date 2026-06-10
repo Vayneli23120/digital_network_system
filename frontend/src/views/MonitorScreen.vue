@@ -156,8 +156,17 @@
               :step="0.01"
               style="width: 80px"
               size="small"
+              :disabled="!planFilterEnabled"
               title="底图明暗"
             />
+            <button
+              class="zoom-btn"
+              @click="planFilterEnabled = !planFilterEnabled"
+              :class="{ active: planFilterEnabled }"
+              :title="planFilterEnabled ? '关闭滤镜（显示原图）' : '开启滤镜（压制底图）'"
+            >
+              <el-icon><Moon v-if="planFilterEnabled" /><Sunny v-else /></el-icon>
+            </button>
           </div>
           <div
             class="plan-wrapper"
@@ -568,7 +577,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight, Edit, Connection, Fold, Expand, Setting } from '@element-plus/icons-vue'
+import { Refresh, Plus, Minus, Close, Picture, Warning, SuccessFilled, View, Delete, Upload, RefreshRight, Edit, Connection, Fold, Expand, Setting, Sunny, Moon } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -705,11 +714,15 @@ const panStart = ref({ x: 0, y: 0 })
 // 计算平面图样式
 // 底图明暗控制（0.2~1，默认压暗）
 const planBrightness = ref(0.42)
+// 滤镜开关（关闭时显示原图）
+const planFilterEnabled = ref(true)
 
 const planWrapperStyle = computed(() => {
   return {
     '--plan-bg': `url(${planImageUrl.value})`,
-    '--plan-brightness': planBrightness.value,
+    '--plan-brightness': planFilterEnabled.value ? planBrightness.value : 1,
+    '--plan-filter': planFilterEnabled.value ? 'grayscale(0.95) brightness(var(--plan-brightness)) contrast(1.05)' : 'none',
+    '--plan-mask-opacity': planFilterEnabled.value ? 0.35 : 0,
     transform: `scale(${zoomScale.value}) translate(${panOffset.value.x}px, ${panOffset.value.y}px)`,
     transformOrigin: 'center center',
     cursor: isPanning.value ? 'grabbing' : 'grab'
@@ -2211,6 +2224,12 @@ onUnmounted(() => {
   border-color: var(--accent-primary);
 }
 
+.zoom-btn.active {
+  background: var(--accent-primary);
+  color: #fff;
+  border-color: var(--accent-primary);
+}
+
 .zoom-value {
   font-family: 'JetBrains Mono', monospace;
   font-size: 12px;
@@ -2239,8 +2258,8 @@ onUnmounted(() => {
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
-  /* 关键：去饱和 + 压暗，brightness 由变量控制（图纸无关，深底浅底都能压） */
-  filter: grayscale(0.95) brightness(var(--plan-brightness, 0.42)) contrast(1.05);
+  /* 滤镜：由变量控制，关闭时为 none */
+  filter: var(--plan-filter, grayscale(0.95) brightness(0.42) contrast(1.05));
   z-index: 0;
 }
 
@@ -2249,7 +2268,7 @@ onUnmounted(() => {
   content: '';
   position: absolute;
   inset: 0;
-  background: rgba(8, 12, 20, 0.35);
+  background: rgba(8, 12, 20, var(--plan-mask-opacity, 0.35));
   z-index: 0;
   pointer-events: none;
 }
