@@ -3,8 +3,8 @@
 
 企业级设备可达性监控，参考 Cisco DNA Center 设计：
 - 分级探测：critical(15s) / normal(60s) / low(300s)
-- 异步并发：asyncio + Semaphore 控制并发量
-- 独立 Session：避免并发写冲突
+- 异步并发网络检测（ICMP/SSH）
+- 串行化数据库写入（SQLite 兼容）
 - 状态判定逻辑（避免瞬时故障误判）
 - 状态变化触发告警
 
@@ -49,8 +49,11 @@ class ReachabilityMonitor:
             "low": 3,         # 低优先级 3 次
         }
 
-        # 并发控制
+        # 并发控制（网络检测）
         self.max_concurrency = 50
+
+        # 数据库写入锁（SQLite 串行化）
+        self._db_lock = asyncio.Lock()
 
         # 检测历史缓存（Redis 内存缓存）
         self._history_cache_prefix = "reachability_history:"
@@ -105,29 +108,124 @@ class ReachabilityMonitor:
 
         logger.debug(f"Checking {len(devices)} devices in tier {tier}")
 
-        # 并发探测
+        # 并发网络检测
         sem = asyncio.Semaphore(self.max_concurrency)
 
-        async def _check_one(device_dict):
+        async def _detect_one(device_dict):
             async with sem:
-                # 每探测独立 Session，避免并发写冲突
-                db = next(get_db())
-                try:
-                    # 重新查询设备对象（确保 Session 内有效）
-                    device = db.query(Device).filter(Device.id == device_dict['id']).first()
-                    if device:
-                        await asyncio.to_thread(self.check_device_reachability, db, device, tier)
-                except Exception as e:
-                    logger.error(f"Check failed for {device_dict['name']}: {e}")
-                finally:
-                    db.close()
+                # 网络检测（并发）
+                result = await asyncio.to_thread(self._detect_reachability, device_dict['ip'])
+                return {
+                    'id': device_dict['id'],
+                    'name': device_dict['name'],
+                    'tier': tier,
+                    'result': result
+                }
 
-        # 并发执行
-        await asyncio.gather(*[_check_one(d) for d in devices], return_exceptions=True)
+        # 并发执行网络检测
+        detect_results = await asyncio.gather(*[_detect_one(d) for d in devices], return_exceptions=True)
+
+        # 串行化数据库写入（SQLite 兼容）
+        for detect_result in detect_results:
+            if isinstance(detect_result, Exception):
+                logger.error(f"Detection failed: {detect_result}")
+                continue
+
+            # 使用锁确保串行写入
+            async with self._db_lock:
+                await asyncio.to_thread(self._update_device_status, detect_result)
 
         # 清除 Dashboard 缓存
         cache.invalidate_prefix("dashboard:")
         logger.info(f"Completed tier {tier} check for {len(devices)} devices")
+
+    def _detect_reachability(self, ip: str) -> Dict[str, any]:
+        """网络检测（ICMP + SSH），不涉及数据库
+
+        Args:
+            ip: 设备 IP
+
+        Returns:
+            检测结果字典
+        """
+        results = []
+
+        # Layer 1: ICMP Ping
+        ping_result = self._icmp_check(ip)
+        results.append(('icmp', ping_result['reachable'], ping_result['latency_ms']))
+
+        # Layer 2: SSH Port Check (如果 ICMP 失败)
+        if not ping_result['reachable']:
+            ssh_result = self._ssh_port_check(ip)
+            results.append(('ssh', ssh_result['reachable'], ssh_result['latency_ms']))
+
+        # 综合判定
+        is_reachable = any(r[1] for r in results)
+        best_latency = min(
+            (r[2] for r in results if r[1] and r[2] is not None),
+            default=None
+        )
+        best_method = next(
+            (r[0] for r in results if r[1]),
+            None
+        )
+
+        return {
+            'reachable': is_reachable,
+            'latency_ms': best_latency,
+            'method': best_method
+        }
+
+    def _update_device_status(self, detect_result: Dict):
+        """更新设备状态（串行化，SQLite 兼容）
+
+        Args:
+            detect_result: 检测结果 {id, name, tier, result}
+        """
+        db = next(get_db())
+        try:
+            device = db.query(Device).filter(Device.id == detect_result['id']).first()
+            if not device:
+                logger.warning(f"Device {detect_result['id']} not found")
+                return
+
+            result = detect_result['result']
+            tier = detect_result['tier']
+
+            # 获取历史记录
+            history = self._get_check_history(device.id)
+            history.append(result['reachable'])
+
+            # 保留最近10次记录
+            if len(history) > 10:
+                history = history[-10:]
+
+            # 更新历史缓存
+            self._update_check_history(device.id, history)
+
+            # 使用分级阈值判定状态
+            old_reachability = device.reachability
+            new_reachability = self._determine_state(history, old_reachability, tier)
+
+            # 更新设备状态
+            device.reachability = new_reachability
+            device.last_reachability_check = datetime.utcnow()
+            device.reachability_latency_ms = result['latency_ms']
+            device.reachability_method = result['method']
+
+            db.commit()
+
+            # 状态变化触发告警
+            if old_reachability != new_reachability:
+                self._trigger_state_change_alert(device, old_reachability, new_reachability)
+                logger.info(
+                    f"Device {device.name} reachability changed: {old_reachability} -> {new_reachability}"
+                )
+        except Exception as e:
+            logger.error(f"Failed to update device {detect_result['name']}: {e}")
+            db.rollback()
+        finally:
+            db.close()
 
     def _load_devices_by_tier(self, tier: str) -> List[Dict]:
         """加载指定分级的设备列表
@@ -157,87 +255,6 @@ class ReachabilityMonitor:
             ]
         finally:
             db.close()
-
-    def check_device_reachability(self, db, device: Device, tier: str = "normal") -> Dict[str, any]:
-        """检查单个设备可达性
-
-        Args:
-            db: 数据库会话
-            device: 设备对象
-            tier: 监控分级
-
-        Returns:
-            检测结果字典
-        """
-        if not device.ip:
-            logger.warning(f"Device {device.name} has no IP address")
-            return {"reachable": False, "reason": "no_ip"}
-
-        # 多层次检测
-        results = []
-
-        # Layer 1: ICMP Ping
-        ping_result = self._icmp_check(device.ip)
-        results.append(('icmp', ping_result['reachable'], ping_result['latency_ms']))
-
-        # Layer 2: SSH Port Check (如果 ICMP 失败)
-        if not ping_result['reachable']:
-            ssh_result = self._ssh_port_check(device.ip)
-            results.append(('ssh', ssh_result['reachable'], ssh_result['latency_ms']))
-
-        # 综合判定
-        is_reachable = any(r[1] for r in results)
-        best_latency = min(
-            (r[2] for r in results if r[1] and r[2] is not None),
-            default=None
-        )
-        best_method = next(
-            (r[0] for r in results if r[1]),
-            None
-        )
-
-        # 获取历史记录
-        history = self._get_check_history(device.id)
-
-        # 添加当前结果到历史
-        history.append(is_reachable)
-
-        # 保留最近10次记录
-        if len(history) > 10:
-            history = history[-10:]
-
-        # 更新历史缓存
-        self._update_check_history(device.id, history)
-
-        # 使用分级阈值判定状态
-        old_reachability = device.reachability
-        new_reachability = self._determine_state(history, old_reachability, tier)
-
-        # 更新设备状态
-        device.reachability = new_reachability
-        device.last_reachability_check = datetime.utcnow()
-        device.reachability_latency_ms = best_latency
-        device.reachability_method = best_method
-
-        db.commit()
-
-        # 状态变化触发告警
-        if old_reachability != new_reachability:
-            self._trigger_state_change_alert(device, old_reachability, new_reachability)
-            logger.info(
-                f"Device {device.name} reachability changed: {old_reachability} -> {new_reachability}"
-            )
-
-        return {
-            "device_id": device.id,
-            "device_name": device.name,
-            "ip": device.ip,
-            "reachable": is_reachable,
-            "reachability": new_reachability,
-            "latency_ms": best_latency,
-            "method": best_method,
-            "history_length": len(history)
-        }
 
     def _icmp_check(self, ip: str, timeout: int = 2) -> Dict[str, any]:
         """ICMP Ping 检测"""
