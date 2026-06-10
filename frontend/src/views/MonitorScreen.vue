@@ -148,6 +148,16 @@
             <button class="zoom-btn" @click="resetZoom" title="重置">
               <el-icon><RefreshRight /></el-icon>
             </button>
+            <el-divider direction="vertical" />
+            <el-slider
+              v-model="planBrightness"
+              :min="0.15"
+              :max="1"
+              :step="0.01"
+              style="width: 80px"
+              size="small"
+              title="底图明暗"
+            />
           </div>
           <div
             class="plan-wrapper"
@@ -693,9 +703,13 @@ const isPanning = ref(false)
 const panStart = ref({ x: 0, y: 0 })
 
 // 计算平面图样式
+// 底图明暗控制（0.2~1，默认压暗）
+const planBrightness = ref(0.42)
+
 const planWrapperStyle = computed(() => {
   return {
-    backgroundImage: `url(${planImageUrl.value})`,
+    '--plan-bg': `url(${planImageUrl.value})`,
+    '--plan-brightness': planBrightness.value,
     transform: `scale(${zoomScale.value}) translate(${panOffset.value.x}px, ${panOffset.value.y}px)`,
     transformOrigin: 'center center',
     cursor: isPanning.value ? 'grabbing' : 'grab'
@@ -2211,12 +2225,33 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
   background-color: var(--bg-tertiary);
   transition: transform 0.1s ease-out;
   will-change: transform;
+}
+
+/* 底图层：去色 + 压暗，沉为背景。滤镜只作用于伪元素，不影响节点 */
+.plan-wrapper::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: var(--plan-bg);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  /* 关键：去饱和 + 压暗，brightness 由变量控制（图纸无关，深底浅底都能压） */
+  filter: grayscale(0.95) brightness(var(--plan-brightness, 0.42)) contrast(1.05);
+  z-index: 0;
+}
+
+/* 暗色蒙版，进一步压住背景噪点，让设备/链路浮出来 */
+.plan-wrapper::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(8, 12, 20, 0.35);
+  z-index: 0;
+  pointer-events: none;
 }
 
 .nodes-overlay {
@@ -2341,22 +2376,29 @@ onUnmounted(() => {
   justify-content: center;
 }
 
+/* 在线：青色光晕 */
 .device-node.online .node-icon {
   color: var(--accent-primary);
+  filter: drop-shadow(0 0 5px var(--accent-primary));
 }
 
+/* 离线：红色强光晕 + flash（全屏唯一高饱和焦点）*/
 .device-node.offline .node-icon {
   color: var(--accent-danger);
+  filter: drop-shadow(0 0 7px var(--accent-danger));
   animation: flash 1s infinite;
 }
 
+/* 维护：橙色光晕 */
 .device-node.maintenance .node-icon {
   color: var(--accent-warning);
+  filter: drop-shadow(0 0 5px var(--accent-warning));
 }
 
 /* 受影响节点 - 橙色脉冲（区别于自身 offline 的红色）*/
 .device-node.impacted .node-icon {
   color: #ffa116;
+  filter: drop-shadow(0 0 5px #ffa116);
   animation: impacted-pulse 2s infinite;
 }
 
