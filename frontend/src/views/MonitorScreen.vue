@@ -1563,11 +1563,14 @@ const saveWaypoints = async (linkId, waypoints) => {
     if (res.ok) {
       // 刷新拓扑数据
       await _loadPlanTopology(selectedPlanId.value, true)
+      return true
     } else {
       ElMessage.error(t('msgOpFailed'))
+      return false
     }
   } catch (err) {
     ElMessage.error(t('msgOpFailed'))
+    return false
   }
 }
 
@@ -1588,9 +1591,11 @@ const deleteWaypoint = async (link, idx) => {
     const newWaypoints = [...existingWaypoints]
     newWaypoints.splice(idx, 1)
 
-    // 保存到后端
-    await saveWaypoints(link.id, newWaypoints)
-    ElMessage.success(t('monitorWaypointDeleted'))
+    // 保存到后端，根据返回值决定是否提示成功
+    const success = await saveWaypoints(link.id, newWaypoints)
+    if (success) {
+      ElMessage.success(t('monitorWaypointDeleted'))
+    }
   } catch {
     // 用户取消，静默忽略
   }
