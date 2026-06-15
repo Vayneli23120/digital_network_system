@@ -2294,8 +2294,6 @@ onUnmounted(() => {
   bottom: 0;
   z-index: 2;  /* 在蒙版（z-index:1）之上 */
 }
-  z-index: 2;  /* 浮在蒙版(::after z-index:0)和链路层(::before z-index:0)之上 */
-}
 
 /* Topology Links Layer - SVG */
 .topo-layer {
