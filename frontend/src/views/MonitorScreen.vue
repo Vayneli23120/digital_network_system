@@ -747,9 +747,17 @@ const resetZoom = () => {
   panOffset.value = { x: 0, y: 0 }
 }
 
-// 鼠标滚轮缩放
+// 鼠标滚轮缩放（节流优化）
+let wheelThrottleTimer = null
 const handleWheel = (e) => {
   e.preventDefault()
+
+  // 节流：最多每 50ms 处理一次
+  if (wheelThrottleTimer) return
+  wheelThrottleTimer = setTimeout(() => {
+    wheelThrottleTimer = null
+  }, 50)
+
   const delta = e.deltaY > 0 ? -0.1 : 0.1
   const newScale = Math.max(0.25, Math.min(5, zoomScale.value + delta))
   zoomScale.value = newScale
@@ -2245,7 +2253,7 @@ onUnmounted(() => {
   right: 0;
   bottom: 0;
   background-color: var(--bg-tertiary);
-  transition: transform 0.1s ease-out;
+  /* 移除 transition，滚轮缩放更流畅 */
   will-change: transform;
 }
 

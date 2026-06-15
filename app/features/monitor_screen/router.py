@@ -89,18 +89,45 @@ async def create_plan(
     upload_dir = Path(config.storage.photo_dir) / "floor_plans"
     upload_dir.mkdir(parents=True, exist_ok=True)
 
-    # 生成安全的文件名（处理中文和特殊字符）
-    import re
+    # 生成安全的文件名
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-    # 获取原始扩展名
     original_ext = Path(image.filename).suffix if image.filename else ".jpg"
-    # 使用时间戳作为文件名，避免中文/空格问题
     filename = f"{timestamp}{original_ext}"
     file_path = upload_dir / filename
 
-    # 保存文件
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(image.file, buffer)
+    # 读取图片数据
+    image_data = await image.read()
+
+    # 压缩图片（保持合理分辨率，避免失真和过大文件）
+    try:
+        from PIL import Image
+        import io
+
+        img = Image.open(io.BytesIO(image_data))
+
+        # 限制最大分辨率（保持比例）
+        max_dimension = 4000  # 最大边长
+        if max(img.width, img.height) > max_dimension:
+            ratio = max_dimension / max(img.width, img.height)
+            new_size = (int(img.width * ratio), int(img.height * ratio))
+            img = img.resize(new_size, Image.LANCZOS)  # 高质量缩放
+
+        # 保存压缩后的图片（质量 85，平衡大小和清晰度）
+        if original_ext.lower() in ['.jpg', '.jpeg']:
+            img.save(file_path, 'JPEG', quality=85, optimize=True)
+        elif original_ext.lower() == '.png':
+            img.save(file_path, 'PNG', optimize=True)
+        else:
+            img.save(file_path, quality=85)
+
+    except ImportError:
+        # Pillow 未安装，直接保存原图
+        with open(file_path, "wb") as buffer:
+            buffer.write(image_data)
+    except Exception as e:
+        # 压缩失败，保存原图
+        with open(file_path, "wb") as buffer:
+            buffer.write(image_data)
 
     # 创建数据库记录
     result = create_floor_plan(db, name, str(file_path))
@@ -120,12 +147,33 @@ async def update_plan(
         upload_dir = Path(config.storage.photo_dir) / "floor_plans"
         upload_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
-        # 获取原始扩展名，使用时间戳作为文件名
         original_ext = Path(image.filename).suffix if image.filename else ".jpg"
         filename = f"{timestamp}{original_ext}"
         file_path = upload_dir / filename
-        with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(image.file, buffer)
+
+        # 读取并压缩图片
+        image_data = await image.read()
+        try:
+            from PIL import Image
+            import io
+
+            img = Image.open(io.BytesIO(image_data))
+            max_dimension = 4000
+            if max(img.width, img.height) > max_dimension:
+                ratio = max_dimension / max(img.width, img.height)
+                new_size = (int(img.width * ratio), int(img.height * ratio))
+                img = img.resize(new_size, Image.LANCZOS)
+
+            if original_ext.lower() in ['.jpg', '.jpeg']:
+                img.save(file_path, 'JPEG', quality=85, optimize=True)
+            elif original_ext.lower() == '.png':
+                img.save(file_path, 'PNG', optimize=True)
+            else:
+                img.save(file_path, quality=85)
+        except Exception:
+            with open(file_path, "wb") as buffer:
+                buffer.write(image_data)
+
         image_path = str(file_path)
 
     result = update_floor_plan(db, plan_id, name=name, image_path=image_path)
