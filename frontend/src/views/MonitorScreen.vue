@@ -180,6 +180,17 @@
             @mouseleave="endPan"
             :style="planWrapperStyle"
           >
+            <!-- 底图用 img 标签渲染（比 CSS background 更清晰） -->
+            <img
+              v-if="planImageUrl"
+              :src="planImageUrl"
+              class="plan-image"
+              :style="{ filter: planFilterEnabled ? 'grayscale(0.95) brightness(' + planBrightness + ') contrast(1.05)' : 'none' }"
+              @load="imageLoaded = true"
+              draggable="false"
+            />
+            <!-- 暗色蒙版 -->
+            <div class="plan-overlay" v-if="planFilterEnabled"></div>
             <!-- Device Nodes Overlay -->
             <div class="nodes-overlay" v-if="imageLoaded">
               <!-- SVG Topology Links Layer -->
@@ -719,10 +730,6 @@ const planFilterEnabled = ref(true)
 
 const planWrapperStyle = computed(() => {
   return {
-    '--plan-bg': `url(${planImageUrl.value})`,
-    '--plan-brightness': planFilterEnabled.value ? planBrightness.value : 1,
-    '--plan-filter': planFilterEnabled.value ? 'grayscale(0.95) brightness(var(--plan-brightness)) contrast(1.05)' : 'none',
-    '--plan-mask-opacity': planFilterEnabled.value ? 0.35 : 0,
     transform: `scale(${zoomScale.value}) translate(${panOffset.value.x}px, ${panOffset.value.y}px)`,
     transformOrigin: 'center center',
     cursor: isPanning.value ? 'grabbing' : 'grab'
@@ -2253,31 +2260,29 @@ onUnmounted(() => {
   right: 0;
   bottom: 0;
   background-color: var(--bg-tertiary);
-  /* 移除 transition，滚轮缩放更流畅 */
   will-change: transform;
+  overflow: hidden;
 }
 
-/* 底图层：去色 + 压暗，沉为背景。滤镜只作用于伪元素，不影响节点 */
-.plan-wrapper::before {
-  content: '';
+/* 底图 img 标签渲染（比 CSS background 更清晰） */
+.plan-image {
   position: absolute;
-  inset: 0;
-  background-image: var(--plan-bg);
-  background-size: contain;  /* 改为 contain，显示完整图片（可能有空白边） */
-  background-position: center;
-  background-repeat: no-repeat;
-  /* 滤镜：由变量控制，关闭时为 none */
-  filter: var(--plan-filter, grayscale(0.95) brightness(0.42) contrast(1.05));
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
   z-index: 0;
+  user-select: none;
+  pointer-events: none;
 }
 
-/* 暗色蒙版，进一步压住背景噪点，让设备/链路浮出来 */
-.plan-wrapper::after {
-  content: '';
+/* 暗色蒙版 */
+.plan-overlay {
   position: absolute;
   inset: 0;
-  background: rgba(8, 12, 20, var(--plan-mask-opacity, 0.35));
-  z-index: 0;
+  background: rgba(8, 12, 20, 0.35);
+  z-index: 1;
   pointer-events: none;
 }
 
@@ -2287,6 +2292,8 @@ onUnmounted(() => {
   left: 0;
   right: 0;
   bottom: 0;
+  z-index: 2;  /* 在蒙版（z-index:1）之上 */
+}
   z-index: 2;  /* 浮在蒙版(::after z-index:0)和链路层(::before z-index:0)之上 */
 }
 
