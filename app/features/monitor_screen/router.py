@@ -85,9 +85,6 @@ async def create_plan(
     db: Session = Depends(get_db),
 ):
     """上传平面图"""
-    from PIL import Image
-    import io
-
     # 确保上传目录存在
     upload_dir = Path(config.storage.photo_dir) / "floor_plans"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -107,39 +104,53 @@ async def create_plan(
         with open(file_path, "wb") as buffer:
             buffer.write(image_data)
     else:
-        # 位图处理：生成预览版本 + 保存原图
-        img = Image.open(io.BytesIO(image_data))
-        original_width, original_height = img.size
+        # 尝试使用 Pillow 处理
+        try:
+            from PIL import Image
+            import io
 
-        # 保存原图（用于超高清需求）
-        original_filename = f"{timestamp}_original{original_ext}"
-        original_path = upload_dir / original_filename
+            img = Image.open(io.BytesIO(image_data))
+            original_width, original_height = img.size
 
-        # 生成预览版本：控制在 4096px（性能与清晰度平衡）
-        preview_max = 4096
-        if max(original_width, original_height) > preview_max:
-            ratio = preview_max / max(original_width, original_height)
-            preview_size = (int(original_width * ratio), int(original_height * ratio))
-            preview_img = img.resize(preview_size, Image.LANCZOS)
-        else:
-            preview_img = img
+            # 保存原图（用于超高清需求）
+            original_path = upload_dir / f"{timestamp}_original{original_ext}"
 
-        # 保存预览版本（用于日常显示）
-        preview_filename = f"{timestamp}{original_ext}"
-        preview_path = upload_dir / preview_filename
+            # 生成预览版本：控制在 4096px
+            preview_max = 4096
+            if max(original_width, original_height) > preview_max:
+                ratio = preview_max / max(original_width, original_height)
+                preview_size = (int(original_width * ratio), int(original_height * ratio))
+                preview_img = img.resize(preview_size, Image.LANCZOS)
+            else:
+                preview_img = img
 
-        if original_ext.lower() in ['.jpg', '.jpeg']:
-            preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
-            img.save(original_path, 'JPEG', quality=95)
-        elif original_ext.lower() == '.png':
-            preview_img.save(preview_path, 'PNG', optimize=True)
-            img.save(original_path, 'PNG', optimize=True)
-        else:
-            preview_img.save(preview_path, quality=95)
-            img.save(original_path, quality=95)
+            # 保存预览版本
+            preview_path = upload_dir / f"{timestamp}{original_ext}"
 
-        # 使用预览版本路径（后续可切换到原图）
-        file_path = preview_path
+            if original_ext.lower() in ['.jpg', '.jpeg']:
+                preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
+                img.save(original_path, 'JPEG', quality=95)
+            elif original_ext.lower() == '.png':
+                preview_img.save(preview_path, 'PNG', optimize=True)
+                img.save(original_path, 'PNG', optimize=True)
+            else:
+                preview_img.save(preview_path, quality=95)
+                img.save(original_path, quality=95)
+
+            file_path = preview_path
+
+        except ImportError:
+            # Pillow 未安装，直接保存原图
+            filename = f"{timestamp}{original_ext}"
+            file_path = upload_dir / filename
+            with open(file_path, "wb") as buffer:
+                buffer.write(image_data)
+        except Exception as e:
+            # 处理失败，保存原图
+            filename = f"{timestamp}{original_ext}"
+            file_path = upload_dir / filename
+            with open(file_path, "wb") as buffer:
+                buffer.write(image_data)
 
     # 创建数据库记录
     result = create_floor_plan(db, name, str(file_path))
@@ -154,9 +165,6 @@ async def update_plan(
     db: Session = Depends(get_db),
 ):
     """更新平面图（可更换图片）"""
-    from PIL import Image
-    import io
-
     image_path = None
     if image:
         upload_dir = Path(config.storage.photo_dir) / "floor_plans"
@@ -172,34 +180,46 @@ async def update_plan(
             with open(file_path, "wb") as buffer:
                 buffer.write(image_data)
         else:
-            img = Image.open(io.BytesIO(image_data))
-            original_width, original_height = img.size
+            try:
+                from PIL import Image
+                import io
 
-            # 保存原图
-            original_path = upload_dir / f"{timestamp}_original{original_ext}"
+                img = Image.open(io.BytesIO(image_data))
+                original_width, original_height = img.size
 
-            # 生成预览版本（4096px）
-            preview_max = 4096
-            if max(original_width, original_height) > preview_max:
-                ratio = preview_max / max(original_width, original_height)
-                preview_size = (int(original_width * ratio), int(original_height * ratio))
-                preview_img = img.resize(preview_size, Image.LANCZOS)
-            else:
-                preview_img = img
+                original_path = upload_dir / f"{timestamp}_original{original_ext}"
 
-            preview_path = upload_dir / f"{timestamp}{original_ext}"
+                preview_max = 4096
+                if max(original_width, original_height) > preview_max:
+                    ratio = preview_max / max(original_width, original_height)
+                    preview_size = (int(original_width * ratio), int(original_height * ratio))
+                    preview_img = img.resize(preview_size, Image.LANCZOS)
+                else:
+                    preview_img = img
 
-            if original_ext.lower() in ['.jpg', '.jpeg']:
-                preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
-                img.save(original_path, 'JPEG', quality=95)
-            elif original_ext.lower() == '.png':
-                preview_img.save(preview_path, 'PNG', optimize=True)
-                img.save(original_path, 'PNG', optimize=True)
-            else:
-                preview_img.save(preview_path, quality=95)
-                img.save(original_path, quality=95)
+                preview_path = upload_dir / f"{timestamp}{original_ext}"
 
-            file_path = preview_path
+                if original_ext.lower() in ['.jpg', '.jpeg']:
+                    preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
+                    img.save(original_path, 'JPEG', quality=95)
+                elif original_ext.lower() == '.png':
+                    preview_img.save(preview_path, 'PNG', optimize=True)
+                    img.save(original_path, 'PNG', optimize=True)
+                else:
+                    preview_img.save(preview_path, quality=95)
+                    img.save(original_path, quality=95)
+
+                file_path = preview_path
+            except ImportError:
+                filename = f"{timestamp}{original_ext}"
+                file_path = upload_dir / filename
+                with open(file_path, "wb") as buffer:
+                    buffer.write(image_data)
+            except Exception:
+                filename = f"{timestamp}{original_ext}"
+                file_path = upload_dir / filename
+                with open(file_path, "wb") as buffer:
+                    buffer.write(image_data)
 
         image_path = str(file_path)
 
