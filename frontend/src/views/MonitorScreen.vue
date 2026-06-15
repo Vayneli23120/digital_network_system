@@ -2255,7 +2255,7 @@ onUnmounted(() => {
   position: absolute;
   inset: 0;
   background-image: var(--plan-bg);
-  background-size: cover;
+  background-size: contain;  /* 改为 contain，显示完整图片（可能有空白边） */
   background-position: center;
   background-repeat: no-repeat;
   /* 滤镜：由变量控制，关闭时为 none */
