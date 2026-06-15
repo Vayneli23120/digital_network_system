@@ -2275,6 +2275,11 @@ onUnmounted(() => {
   z-index: 0;
   user-select: none;
   pointer-events: none;
+  /* 强制高清渲染，禁用浏览器降采样优化 */
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  image-rendering: pixelated;
+  -ms-interpolation-mode: nearest-neighbor;
 }
 
 /* 暗色蒙版 */
