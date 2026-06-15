@@ -98,36 +98,35 @@ async def create_plan(
     # 读取图片数据
     image_data = await image.read()
 
-    # 压缩图片（保持合理分辨率，避免失真和过大文件）
-    try:
-        from PIL import Image
-        import io
-
-        img = Image.open(io.BytesIO(image_data))
-
-        # 限制最大分辨率（保持比例）
-        max_dimension = 4000  # 最大边长
-        if max(img.width, img.height) > max_dimension:
-            ratio = max_dimension / max(img.width, img.height)
-            new_size = (int(img.width * ratio), int(img.height * ratio))
-            img = img.resize(new_size, Image.LANCZOS)  # 高质量缩放
-
-        # 保存压缩后的图片（质量 85，平衡大小和清晰度）
-        if original_ext.lower() in ['.jpg', '.jpeg']:
-            img.save(file_path, 'JPEG', quality=85, optimize=True)
-        elif original_ext.lower() == '.png':
-            img.save(file_path, 'PNG', optimize=True)
-        else:
-            img.save(file_path, quality=85)
-
-    except ImportError:
-        # Pillow 未安装，直接保存原图
+    # 矢量图（SVG）直接保存原图，不压缩
+    if original_ext.lower() == '.svg':
         with open(file_path, "wb") as buffer:
             buffer.write(image_data)
-    except Exception as e:
-        # 压缩失败，保存原图
-        with open(file_path, "wb") as buffer:
-            buffer.write(image_data)
+    else:
+        # 位图压缩处理
+        try:
+            from PIL import Image
+            import io
+
+            img = Image.open(io.BytesIO(image_data))
+
+            # 保持原始分辨率，只做质量压缩（不缩放）
+            # 矢量图转位图时已经保留了足够分辨率
+
+            # 保存压缩后的图片（质量 90，保持清晰）
+            if original_ext.lower() in ['.jpg', '.jpeg']:
+                img.save(file_path, 'JPEG', quality=90, optimize=True)
+            elif original_ext.lower() == '.png':
+                img.save(file_path, 'PNG', optimize=True)
+            else:
+                img.save(file_path, quality=90)
+
+        except ImportError:
+            with open(file_path, "wb") as buffer:
+                buffer.write(image_data)
+        except Exception:
+            with open(file_path, "wb") as buffer:
+                buffer.write(image_data)
 
     # 创建数据库记录
     result = create_floor_plan(db, name, str(file_path))
@@ -151,28 +150,28 @@ async def update_plan(
         filename = f"{timestamp}{original_ext}"
         file_path = upload_dir / filename
 
-        # 读取并压缩图片
+        # 读取图片数据
         image_data = await image.read()
-        try:
-            from PIL import Image
-            import io
 
-            img = Image.open(io.BytesIO(image_data))
-            max_dimension = 4000
-            if max(img.width, img.height) > max_dimension:
-                ratio = max_dimension / max(img.width, img.height)
-                new_size = (int(img.width * ratio), int(img.height * ratio))
-                img = img.resize(new_size, Image.LANCZOS)
-
-            if original_ext.lower() in ['.jpg', '.jpeg']:
-                img.save(file_path, 'JPEG', quality=85, optimize=True)
-            elif original_ext.lower() == '.png':
-                img.save(file_path, 'PNG', optimize=True)
-            else:
-                img.save(file_path, quality=85)
-        except Exception:
+        # 矢量图（SVG）直接保存原图
+        if original_ext.lower() == '.svg':
             with open(file_path, "wb") as buffer:
                 buffer.write(image_data)
+        else:
+            # 位图保持原始分辨率，只做质量压缩
+            try:
+                from PIL import Image
+                import io
+                img = Image.open(io.BytesIO(image_data))
+                if original_ext.lower() in ['.jpg', '.jpeg']:
+                    img.save(file_path, 'JPEG', quality=90, optimize=True)
+                elif original_ext.lower() == '.png':
+                    img.save(file_path, 'PNG', optimize=True)
+                else:
+                    img.save(file_path, quality=90)
+            except Exception:
+                with open(file_path, "wb") as buffer:
+                    buffer.write(image_data)
 
         image_path = str(file_path)
 
