@@ -85,6 +85,9 @@ async def create_plan(
     db: Session = Depends(get_db),
 ):
     """上传平面图"""
+    from PIL import Image
+    import io
+
     # 确保上传目录存在
     upload_dir = Path(config.storage.photo_dir) / "floor_plans"
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -92,41 +95,51 @@ async def create_plan(
     # 生成安全的文件名
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     original_ext = Path(image.filename).suffix if image.filename else ".jpg"
-    filename = f"{timestamp}{original_ext}"
-    file_path = upload_dir / filename
 
     # 读取图片数据
     image_data = await image.read()
 
-    # 矢量图（SVG）直接保存原图，不压缩
+    # 处理图片
     if original_ext.lower() == '.svg':
+        # SVG 矢量图直接保存
+        filename = f"{timestamp}.svg"
+        file_path = upload_dir / filename
         with open(file_path, "wb") as buffer:
             buffer.write(image_data)
     else:
-        # 位图压缩处理
-        try:
-            from PIL import Image
-            import io
+        # 位图处理：生成预览版本 + 保存原图
+        img = Image.open(io.BytesIO(image_data))
+        original_width, original_height = img.size
 
-            img = Image.open(io.BytesIO(image_data))
+        # 保存原图（用于超高清需求）
+        original_filename = f"{timestamp}_original{original_ext}"
+        original_path = upload_dir / original_filename
 
-            # 保持原始分辨率，只做质量压缩（不缩放）
-            # 矢量图转位图时已经保留了足够分辨率
+        # 生成预览版本：控制在 4096px（性能与清晰度平衡）
+        preview_max = 4096
+        if max(original_width, original_height) > preview_max:
+            ratio = preview_max / max(original_width, original_height)
+            preview_size = (int(original_width * ratio), int(original_height * ratio))
+            preview_img = img.resize(preview_size, Image.LANCZOS)
+        else:
+            preview_img = img
 
-            # 保存压缩后的图片（质量 90，保持清晰）
-            if original_ext.lower() in ['.jpg', '.jpeg']:
-                img.save(file_path, 'JPEG', quality=90, optimize=True)
-            elif original_ext.lower() == '.png':
-                img.save(file_path, 'PNG', optimize=True)
-            else:
-                img.save(file_path, quality=90)
+        # 保存预览版本（用于日常显示）
+        preview_filename = f"{timestamp}{original_ext}"
+        preview_path = upload_dir / preview_filename
 
-        except ImportError:
-            with open(file_path, "wb") as buffer:
-                buffer.write(image_data)
-        except Exception:
-            with open(file_path, "wb") as buffer:
-                buffer.write(image_data)
+        if original_ext.lower() in ['.jpg', '.jpeg']:
+            preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
+            img.save(original_path, 'JPEG', quality=95)
+        elif original_ext.lower() == '.png':
+            preview_img.save(preview_path, 'PNG', optimize=True)
+            img.save(original_path, 'PNG', optimize=True)
+        else:
+            preview_img.save(preview_path, quality=95)
+            img.save(original_path, quality=95)
+
+        # 使用预览版本路径（后续可切换到原图）
+        file_path = preview_path
 
     # 创建数据库记录
     result = create_floor_plan(db, name, str(file_path))
@@ -141,37 +154,52 @@ async def update_plan(
     db: Session = Depends(get_db),
 ):
     """更新平面图（可更换图片）"""
+    from PIL import Image
+    import io
+
     image_path = None
     if image:
         upload_dir = Path(config.storage.photo_dir) / "floor_plans"
         upload_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
         original_ext = Path(image.filename).suffix if image.filename else ".jpg"
-        filename = f"{timestamp}{original_ext}"
-        file_path = upload_dir / filename
 
-        # 读取图片数据
         image_data = await image.read()
 
-        # 矢量图（SVG）直接保存原图
         if original_ext.lower() == '.svg':
+            filename = f"{timestamp}.svg"
+            file_path = upload_dir / filename
             with open(file_path, "wb") as buffer:
                 buffer.write(image_data)
         else:
-            # 位图保持原始分辨率，只做质量压缩
-            try:
-                from PIL import Image
-                import io
-                img = Image.open(io.BytesIO(image_data))
-                if original_ext.lower() in ['.jpg', '.jpeg']:
-                    img.save(file_path, 'JPEG', quality=90, optimize=True)
-                elif original_ext.lower() == '.png':
-                    img.save(file_path, 'PNG', optimize=True)
-                else:
-                    img.save(file_path, quality=90)
-            except Exception:
-                with open(file_path, "wb") as buffer:
-                    buffer.write(image_data)
+            img = Image.open(io.BytesIO(image_data))
+            original_width, original_height = img.size
+
+            # 保存原图
+            original_path = upload_dir / f"{timestamp}_original{original_ext}"
+
+            # 生成预览版本（4096px）
+            preview_max = 4096
+            if max(original_width, original_height) > preview_max:
+                ratio = preview_max / max(original_width, original_height)
+                preview_size = (int(original_width * ratio), int(original_height * ratio))
+                preview_img = img.resize(preview_size, Image.LANCZOS)
+            else:
+                preview_img = img
+
+            preview_path = upload_dir / f"{timestamp}{original_ext}"
+
+            if original_ext.lower() in ['.jpg', '.jpeg']:
+                preview_img.save(preview_path, 'JPEG', quality=95, optimize=True)
+                img.save(original_path, 'JPEG', quality=95)
+            elif original_ext.lower() == '.png':
+                preview_img.save(preview_path, 'PNG', optimize=True)
+                img.save(original_path, 'PNG', optimize=True)
+            else:
+                preview_img.save(preview_path, quality=95)
+                img.save(original_path, quality=95)
+
+            file_path = preview_path
 
         image_path = str(file_path)
 
