@@ -310,6 +310,20 @@ const routes = [
       }
     ]
   },
+  // 3D 数字孪生监控大屏
+  {
+    path: '/monitor-3d',
+    name: 'Monitor3DLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'Monitor3D',
+        component: () => import('@/views/Monitor3D.vue'),
+        meta: { title: '3D 数字孪生' }
+      }
+    ]
+  },
   // v1.5 AI增强运维 - 设备健康评分
   {
     path: '/device-health',
