@@ -1345,11 +1345,15 @@ let selectedModel = null
 const dragState = ref(null)
 let isDragging = false
 
-// 编辑模式鼠标按下 - 拖动起点
+// 拐点拖动状态
+let waypointDragState = null
+let selectedWaypointSphere = null
+
+// 编辑模式鼠标按下 - 拖动起点（支持拐点和设备拖动）
 function onCanvasMouseDown(e) {
   if (!isEditMode.value) return
 
-  const { camera, renderer, deviceGroup, controls } = ctx.value
+  const { camera, renderer, deviceGroup, linkLines, controls } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -1357,6 +1361,36 @@ function onCanvasMouseDown(e) {
 
   raycaster.setFromCamera(pointer, camera)
 
+  // 先检查是否点击了拐点球
+  if (linkLines) {
+    const waypointSpheres = linkLines.children.filter(c => c.userData.waypoint)
+    const waypointHits = raycaster.intersectObjects(waypointSpheres, false)
+
+    if (waypointHits.length > 0) {
+      const sphere = waypointHits[0].object
+      const wp = sphere.userData.waypoint
+
+      waypointDragState = {
+        linkId: wp.linkId,
+        index: wp.index,
+        startX: wp.x,
+        startY: wp.y,
+      }
+      selectedWaypointSphere = sphere
+
+      // 高亮拐点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onWaypointDragMove)
+      renderer.domElement.addEventListener('mouseup', onWaypointDragEnd)
+      return
+    }
+  }
+
+  // 检查设备点击
   const hits = raycaster.intersectObjects(deviceGroup?.children || [], true)
 
   if (hits.length > 0) {
@@ -1399,6 +1433,86 @@ function onCanvasMouseDown(e) {
       renderer.domElement.addEventListener('mouseup', onDragEnd)
     }
   }
+}
+
+// 拐点拖动处理
+function onWaypointDragMove(e) {
+  if (!waypointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  waypointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  waypointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新拐点球位置
+  if (selectedWaypointSphere) {
+    const linkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002 + 2
+    const w = percentToWorld(waypointDragState._lastX, waypointDragState._lastY, linkHeight)
+    selectedWaypointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+// 拐点拖动结束
+async function onWaypointDragEnd(e) {
+  if (!waypointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onWaypointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onWaypointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { linkId, index, _lastX, _lastY } = waypointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      // 更新拐点数据
+      const link = links.value.find(l => l.id === linkId)
+      if (link) {
+        let waypoints = []
+        try {
+          waypoints = link.waypoints ? JSON.parse(link.waypoints) : []
+        } catch (e) {}
+
+        // 更新指定索引的拐点
+        if (index < waypoints.length) {
+          waypoints[index] = { x: Number(_lastX.toFixed(2)), y: Number(_lastY.toFixed(2)) }
+        }
+
+        const waypointsJson = JSON.stringify(waypoints)
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/links/${linkId}`, {
+          waypoints: waypointsJson
+        })
+
+        // 更新本地数据
+        link.waypoints = waypointsJson
+
+        // 更新 userData
+        if (selectedWaypointSphere) {
+          selectedWaypointSphere.userData.waypoint.x = _lastX
+          selectedWaypointSphere.userData.waypoint.y = _lastY
+        }
+
+        // 重建链路
+        disposeGroup('links')
+        buildLinks()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新拐点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复拐点球颜色
+  if (selectedWaypointSphere) {
+    selectedWaypointSphere.material.color.set(0xffa116)
+  }
+
+  waypointDragState = null
+  selectedWaypointSphere = null
+  isDragging = false
 }
 
 // 查看模式点击选中
