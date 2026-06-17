@@ -182,15 +182,17 @@
 
         <!-- 链路标签页 -->
         <el-tab-pane :label="t('deviceLinks')" name="links">
-          <el-button type="primary" size="small" @click="showAddLinkDialog = true" style="margin-bottom: 8px;">
-            {{ t('actionAddLink') }}
-          </el-button>
+          <button class="panel-action-btn" @click="showAddLinkDialog = true">
+            <el-icon><Plus /></el-icon>
+            <span>{{ t('actionAddLink') }}</span>
+          </button>
           <div class="link-list">
             <div v-for="link in links" :key="link.id" class="link-item">
               <span class="link-info">{{ getLinkLabel(link) }}</span>
-              <el-button type="danger" size="small" text @click="deleteLink(link.id)">
-                {{ t('actionDelete') }}
-              </el-button>
+              <span class="link-role-badge" :data-role="link.link_role">{{ link.link_role }}</span>
+              <button class="icon-btn danger" :title="t('actionDelete')" @click="deleteLink(link.id)">
+                <el-icon><Delete /></el-icon>
+              </button>
             </div>
             <div v-if="links.length === 0" class="no-data">
               {{ t('noData') }}
@@ -200,15 +202,22 @@
 
         <!-- 底图标签页 -->
         <el-tab-pane :label="t('floorPlans')" name="plans">
-          <el-button type="primary" size="small" @click="showUploadDialog = true" style="margin-bottom: 8px;">
-            {{ t('uploadFloorPlan') }}
-          </el-button>
+          <button class="panel-action-btn" @click="showUploadDialog = true">
+            <el-icon><Upload /></el-icon>
+            <span>{{ t('uploadFloorPlan') }}</span>
+          </button>
           <div class="plan-list">
             <div v-for="plan in floorPlans" :key="plan.id" class="plan-item" :class="{ active: plan.id === currentPlanId }">
+              <el-icon class="plan-icon"><Picture /></el-icon>
               <span class="plan-name">{{ plan.name }}</span>
+              <span v-if="plan.id === currentPlanId" class="plan-badge">{{ t('statusLive') }}</span>
               <div class="plan-actions">
-                <el-button size="small" text @click="switchPlan(plan.id)">{{ t('actionSwitchPlan') }}</el-button>
-                <el-button type="danger" size="small" text @click="deletePlan(plan.id)">{{ t('actionDeletePlan') }}</el-button>
+                <button v-if="plan.id !== currentPlanId" class="icon-btn" :title="t('actionSwitchPlan')" @click="switchPlan(plan.id)">
+                  <el-icon><Switch /></el-icon>
+                </button>
+                <button class="icon-btn danger" :title="t('actionDeletePlan')" @click="deletePlan(plan.id)">
+                  <el-icon><Delete /></el-icon>
+                </button>
               </div>
             </div>
             <div v-if="floorPlans.length === 0" class="no-data">
@@ -228,7 +237,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Plus, Delete, Switch, Picture } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { t } from '@/locales'
 
@@ -1934,5 +1943,145 @@ onBeforeUnmount(() => {
   font-size: 12px;
   text-align: center;
   padding: 12px;
+}
+
+/* 功能按钮 */
+.panel-action-btn {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.18), rgba(34, 211, 238, 0.08));
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  border-radius: 6px;
+  color: #22d3ee;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.panel-action-btn:hover {
+  background: linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(34, 211, 238, 0.15));
+  border-color: rgba(34, 211, 238, 0.5);
+  transform: translateY(-1px);
+}
+
+.panel-action-btn .el-icon {
+  font-size: 14px;
+}
+
+/* 图标按钮 */
+.icon-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(26, 34, 48, 0.6);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 4px;
+  color: #22d3ee;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  padding: 0;
+}
+
+.icon-btn:hover {
+  background: rgba(34, 211, 238, 0.2);
+  border-color: rgba(34, 211, 238, 0.4);
+  transform: scale(1.05);
+}
+
+.icon-btn.danger {
+  color: #ff4d4f;
+  border-color: rgba(255, 77, 79, 0.3);
+}
+
+.icon-btn.danger:hover {
+  background: rgba(255, 77, 79, 0.15);
+  border-color: rgba(255, 77, 79, 0.5);
+}
+
+.icon-btn .el-icon {
+  font-size: 12px;
+}
+
+/* 链路角色标签 */
+.link-role-badge {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: rgba(26, 34, 48, 0.6);
+  border-radius: 3px;
+  color: #6b7280;
+}
+
+.link-role-badge[data-role="uplink"] {
+  background: rgba(34, 211, 238, 0.15);
+  color: #22d3ee;
+}
+
+.link-role-badge[data-role="svl"] {
+  background: rgba(168, 85, 247, 0.15);
+  color: #a855f7;
+}
+
+.link-role-badge[data-role="portchannel-member"] {
+  background: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+/* 增强底图列表项 */
+.plan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: rgba(26, 34, 48, 0.5);
+  border-radius: 4px;
+  margin-bottom: 6px;
+  transition: all 0.2s ease;
+}
+
+.plan-item:hover {
+  background: rgba(36, 48, 64, 0.6);
+}
+
+.plan-item.active {
+  background: rgba(34, 211, 238, 0.15);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+}
+
+.plan-icon {
+  color: #6b7280;
+  font-size: 14px;
+}
+
+.plan-item.active .plan-icon {
+  color: #22d3ee;
+}
+
+.plan-name {
+  flex: 1;
+  color: #e5e7eb;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.plan-badge {
+  padding: 2px 6px;
+  font-size: 10px;
+  background: rgba(34, 211, 238, 0.2);
+  border-radius: 3px;
+  color: #22d3ee;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 4px;
 }
 </style>
