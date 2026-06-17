@@ -875,6 +875,9 @@ function getDeviceBaseSize(deviceType) {
 // 状态颜色映射
 const STATUS_COLOR = { online: 0x22d3ee, offline: 0xff4d4f, maintenance: 0xffa116 }
 
+// 设备发光颜色（让设备在暗背景下更醒目）
+const STATUS_EMISSIVE = { online: 0x0a4a5e, offline: 0x5a1a1a, maintenance: 0x5a3a0a }
+
 // 复用的 emissive 颜色常量（避免每次 new THREE.Color）
 const EMISSIVE_ON = new THREE.Color(0x333333)
 const EMISSIVE_OFF = new THREE.Color(0x000000)
@@ -884,7 +887,8 @@ function createDeviceModel(deviceType, status = 'online') {
   const group = new THREE.Group()
   const base = getDeviceBaseSize(deviceType)
   const color = STATUS_COLOR[status] || STATUS_COLOR.online
-  const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.5 })
+  const emissive = STATUS_EMISSIVE[status] || STATUS_EMISSIVE.online
+  const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.5, emissive, emissiveIntensity: 0.3 })
   const accentMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, metalness: 0.6, roughness: 0.4 })
 
   switch (deviceType) {
@@ -1466,9 +1470,9 @@ function buildLinks() {
 
     const geo = new THREE.BufferGeometry().setFromPoints(points)
     const mat = new THREE.LineBasicMaterial({
-      color: link.status === 'broken' ? 0xff4d4f : 0x22d3ee,
+      color: link.status === 'broken' ? 0xff4d4f : 0x00d4ff,  // 更亮的青色
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.85,  // 提高可见度
       linewidth: 2
     })
 
@@ -1486,8 +1490,10 @@ function buildLinks() {
         if (Array.isArray(waypoints)) {
           waypoints.forEach((wp, idx) => {
             const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + 2)
-            const sphereGeo = new THREE.SphereGeometry(3, 16, 16)
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffa116, transparent: true, opacity: 0.8 })
+            // 拐点球半径：底图短边的 0.3%，确保可见
+            const wpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
+            const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 1.0 })  // 更亮的黄色
             const sphere = new THREE.Mesh(sphereGeo, sphereMat)
             sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
             sphere.userData.waypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
@@ -1534,9 +1540,9 @@ function buildFiberTrunks() {
 
     const geo = new THREE.BufferGeometry().setFromPoints(points)
     const mat = new THREE.LineBasicMaterial({
-      color: 0x6366f1,  // 深紫/蓝色
+      color: 0x8b5cf6,  // 更亮的紫色
       transparent: true,
-      opacity: 0.8,
+      opacity: 1.0,  // 完全可见
       linewidth: 4
     })
 
@@ -1583,9 +1589,9 @@ function buildBranchPoints() {
 
     const sphereGeo = new THREE.SphereGeometry(bpRadius, 16, 16)
     const sphereMat = new THREE.MeshBasicMaterial({
-      color: 0xf59e0b,  // 橙色
+      color: 0xfbbf24,  // 更亮的黄色
       transparent: true,
-      opacity: 0.9
+      opacity: 1.0  // 完全可见
     })
     const sphere = new THREE.Mesh(sphereGeo, sphereMat)
     sphere.position.set(bpWorld.x, bpWorld.y, bpWorld.z)
@@ -1640,9 +1646,9 @@ function buildBranchLinks() {
 
     const geo = new THREE.BufferGeometry().setFromPoints(points)
     const mat = new THREE.LineBasicMaterial({
-      color: 0x22d3ee,  // 青色
+      color: 0x06b6d4,  // 更亮的青色
       transparent: true,
-      opacity: 0.6,
+      opacity: 0.9,
       linewidth: 1
     })
 
