@@ -158,7 +158,7 @@
               <span>{{ t('deviceScale') }}:</span>
               <el-slider
                 v-model="deviceScale"
-                :min="0.5"
+                :min="0.2"
                 :max="3"
                 :step="0.1"
                 :show-tooltip="true"
@@ -529,16 +529,16 @@ const COLORS = {
   maintenance: new THREE.Color(0xffa116), // 橙色
 }
 
-// 设备尺寸比例系数 - 基于底图短边的百分比
+// 设备尺寸比例系数 - 基于底图短边的百分比（调小以适应放大底图）
 const DEVICE_SIZE_RATIO = {
-  switch: 0.015,       // 交换机占底图短边 1.5%
-  core_switch: 0.020,  // 核心交换机稍大 2%
-  ap: 0.010,           // AP 小一点 1%
-  server_switch: 0.015,
-  uce: 0.015,
-  router: 0.014,
-  firewall: 0.016,
-  wlc: 0.018,
+  switch: 0.008,       // 交换机占底图短边 0.8%
+  core_switch: 0.010,  // 核心交换机 1%
+  ap: 0.005,           // AP 0.5%
+  server_switch: 0.008,
+  uce: 0.008,
+  router: 0.007,
+  firewall: 0.008,
+  wlc: 0.010,
 }
 
 // 计算设备基准尺寸（基于底图尺寸）
