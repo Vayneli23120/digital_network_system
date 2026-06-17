@@ -169,6 +169,38 @@
             </el-select>
           </div>
 
+          <!-- 光纤主干操作（编辑模式下显示） -->
+          <div class="fiber-section" v-if="isEditMode">
+            <div class="section-header">{{ t('fiberTrunk') }}</div>
+            <el-button class="panel-action-btn" size="small" @click="startAddTrunk">
+              <el-icon><Plus /></el-icon>
+              {{ t('addFiberTrunk') }}
+            </el-button>
+
+            <!-- 主干列表 -->
+            <div class="trunk-list" v-if="fiberTrunks.length > 0">
+              <div v-for="trunk in fiberTrunks" :key="trunk.id" class="trunk-item">
+                <span class="trunk-name">{{ trunk.name || `${t('fiberTrunk')} ${trunk.id}` }}</span>
+                <div class="trunk-actions">
+                  <el-button size="small" @click="editTrunk(trunk)">{{ t('actionEdit') }}</el-button>
+                  <el-button size="small" type="danger" @click="deleteTrunk(trunk.id)">{{ t('actionDelete') }}</el-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 分支点列表 -->
+            <div class="section-header" v-if="fiberBranchPoints.length > 0">{{ t('fiberBranchPoint') }}</div>
+            <div class="branch-point-list" v-if="fiberBranchPoints.length > 0">
+              <div v-for="bp in fiberBranchPoints" :key="bp.id" class="branch-point-item">
+                <span class="bp-name">{{ bp.name || `${t('fiberBranchPoint')} ${bp.id}` }}</span>
+                <div class="bp-actions">
+                  <el-button size="small" @click="startConnectFromBranch(bp)">{{ t('connectDevice') }}</el-button>
+                  <el-button size="small" type="danger" @click="deleteBranchPoint(bp.id)">{{ t('actionDelete') }}</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <!-- 选中设备详情 -->
           <div class="selected-box" v-if="selectedDevice">
             <h4>{{ selectedDevice.name }}</h4>
@@ -438,6 +470,13 @@ const sidebarTab = ref('topology')
 const isEditMode = ref(false)
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
+// 光纤主干交互状态
+const trunkCreateMode = ref(false)  // 正在创建主干
+const trunkStartPoint = ref(null)   // 主干起点
+const trunkEndPoint = ref(null)     // 主干终点
+const connectFromBranchMode = ref(false)  // 从分支点连接设备模式
+const selectedBranchPoint = ref(null)     // 选中的分支点
+
 // 监听全局主题变化
 window.addEventListener('theme-change', (e) => {
   isDark.value = e.detail.dark
@@ -469,7 +508,177 @@ function toggleEditMode() {
     ElMessage.info(t('monitorEditMode') + ' - ' + t('clickDeviceHint'))
   } else {
     ElMessage.info(t('monitorViewMode'))
+    // 退出编辑模式时清除交互状态
+    trunkCreateMode.value = false
+    trunkStartPoint.value = null
+    connectFromBranchMode.value = false
+    selectedBranchPoint.value = null
   }
+}
+
+// ============ 光纤主干交互函数 ============
+
+// 开始添加主干
+function startAddTrunk() {
+  trunkCreateMode.value = true
+  trunkStartPoint.value = null
+  trunkEndPoint.value = null
+  ElMessage.info(t('clickTrunkStart'))
+}
+
+// 开始从分支点连接设备
+function startConnectFromBranch(bp) {
+  connectFromBranchMode.value = true
+  selectedBranchPoint.value = bp
+  ElMessage.info(t('clickDeviceToConnect'))
+}
+
+// 创建主干光缆
+async function createFiberTrunk() {
+  if (!trunkStartPoint.value || !trunkEndPoint.value) return
+
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-trunks`, {
+      name: `${t('fiberTrunk')} ${fiberTrunks.value.length + 1}`,
+      start_x_percent: trunkStartPoint.value.x,
+      start_y_percent: trunkStartPoint.value.y,
+      end_x_percent: trunkEndPoint.value.x,
+      end_y_percent: trunkEndPoint.value.y,
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 重新加载数据
+    await loadFiberData()
+
+    // 重置状态
+    trunkCreateMode.value = false
+    trunkStartPoint.value = null
+    trunkEndPoint.value = null
+  } catch (e) {
+    console.error('创建主干失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 加载光纤数据
+async function loadFiberData() {
+  try {
+    const topoRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topology`)
+    if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
+    if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
+    if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
+
+    // 重建光纤渲染
+    disposeGroup('fiber-trunks')
+    disposeGroup('branch-points')
+    disposeGroup('branch-links')
+    buildFiberTrunks()
+    buildBranchPoints()
+    buildBranchLinks()
+  } catch (e) {
+    console.error('加载光纤数据失败:', e)
+  }
+}
+
+// 删除主干光缆
+async function deleteTrunk(trunkId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${trunkId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除主干失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除分支点
+async function deleteBranchPoint(bpId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points/${bpId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除分支点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 从分支点连接设备
+async function connectDeviceFromBranch(deviceId) {
+  if (!selectedBranchPoint.value) return
+
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-branch-links`, {
+      branch_point_id: selectedBranchPoint.value.id,
+      to_device_id: deviceId,
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+
+    // 重置状态
+    connectFromBranchMode.value = false
+    selectedBranchPoint.value = null
+  } catch (e) {
+    console.error('连接设备失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 在主干上添加分支点（点击主干时）
+async function addBranchPointOnTrunk(trunk, clickPos) {
+  // 计算点击位置在主干上的百分比
+  const positionPercent = calculatePositionPercentOnTrunk(trunk, clickPos)
+
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points`, {
+      trunk_link_id: trunk.id,
+      position_percent: positionPercent,
+      name: `${t('fiberBranchPoint')} ${fiberBranchPoints.value.length + 1}`,
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('添加分支点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 计算点击位置在主干上的百分比
+function calculatePositionPercentOnTrunk(trunk, clickPos) {
+  const points = [{ x: trunk.start_x_percent, y: trunk.start_y_percent }]
+  if (trunk.waypoints) points.push(...trunk.waypoints)
+  points.push({ x: trunk.end_x_percent, y: trunk.end_y_percent })
+
+  let totalLength = 0
+  const segmentLengths = []
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i-1].x
+    const dy = points[i].y - points[i-1].y
+    const len = Math.sqrt(dx*dx + dy*dy)
+    segmentLengths.push(len)
+    totalLength += len
+  }
+
+  // 找到距离点击位置最近的点，返回其百分比
+  let minDist = Infinity
+  let bestPercent = 0
+  let accumulated = 0
+
+  for (let i = 0; i < segmentLengths.length; i++) {
+    for (let t = 0; t <= 1; t += 0.01) {
+      const x = points[i].x + t * (points[i+1].x - points[i].x)
+      const y = points[i].y + t * (points[i+1].y - points[i].y)
+      const dist = Math.sqrt((x - clickPos.x)**2 + (y - clickPos.y)**2)
+      if (dist < minDist) {
+        minDist = dist
+        bestPercent = (accumulated + t * segmentLengths[i]) / totalLength * 100
+      }
+    }
+    accumulated += segmentLengths[i]
+  }
+
+  return bestPercent
 }
 
 // 获取节点名称
@@ -1599,13 +1808,62 @@ let selectedWaypointSphere = null
 function onCanvasMouseDown(e) {
   if (!isEditMode.value) return
 
-  const { camera, renderer, deviceGroup, linkLines, controls } = ctx.value
+  const { camera, renderer, deviceGroup, linkLines, controls, fiberTrunkGroup, branchPointGroup } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
   pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
   raycaster.setFromCamera(pointer, camera)
+
+  // ========== 光纤主干交互 ==========
+
+  // 处理主干创建模式的点击
+  if (trunkCreateMode.value) {
+    const pos = screenToPercent(e)
+    if (!pos) return
+
+    if (!trunkStartPoint.value) {
+      trunkStartPoint.value = { x: pos.x_percent, y: pos.y_percent }
+      ElMessage.info(t('clickTrunkEnd'))
+    } else {
+      trunkEndPoint.value = { x: pos.x_percent, y: pos.y_percent }
+      createFiberTrunk()
+    }
+    return
+  }
+
+  // 处理从分支点连接设备模式
+  if (connectFromBranchMode.value) {
+    const hits = raycaster.intersectObjects(deviceGroup?.children || [], true)
+    if (hits.length > 0) {
+      let model = hits[0].object
+      while (model && !model.userData.device) {
+        model = model.parent
+      }
+      if (model && model.userData.device) {
+        connectDeviceFromBranch(model.userData.device.id)
+      }
+    }
+    return
+  }
+
+  // 检查是否点击了主干光缆（添加分支点）
+  if (fiberTrunkGroup) {
+    const trunkHits = raycaster.intersectObjects(fiberTrunkGroup.children, false)
+    if (trunkHits.length > 0) {
+      const line = trunkHits[0].object
+      if (line.userData.trunk) {
+        const pos = screenToPercent(e)
+        if (pos) {
+          addBranchPointOnTrunk(line.userData.trunk, { x: pos.x_percent, y: pos.y_percent })
+        }
+      }
+      return
+    }
+  }
+
+  // ========== 原有编辑交互 ==========
 
   // 先检查是否点击了拐点球
   if (linkLines) {
@@ -2496,6 +2754,43 @@ onBeforeUnmount(() => {
 
 .filter-section .el-select {
   flex: 1;  /* 等宽 */
+}
+
+/* 光纤主干区域 */
+.fiber-section {
+  margin-top: 10px;
+}
+
+.section-header {
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 6px;
+  margin-top: 10px;
+}
+
+.trunk-list, .branch-point-list {
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.trunk-item, .branch-point-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 6px;
+  background: rgba(26, 34, 48, 0.5);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.trunk-name, .bp-name {
+  font-size: 11px;
+  color: #e5e7eb;
+}
+
+.trunk-actions, .bp-actions {
+  display: flex;
+  gap: 4px;
 }
 
 .selected-box {
