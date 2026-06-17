@@ -1,10 +1,14 @@
 <template>
-  <div class="monitor3d" :class="{ 'fullscreen-mode': isFullscreen, 'panel-hidden': hidePanel }">
+  <div class="monitor3d" :class="{ 'fullscreen-mode': isFullscreen, 'panel-hidden': hidePanel, 'edit-mode': isEditMode }">
     <!-- 左：3D 画布 -->
     <div ref="canvasHost" class="canvas-host"></div>
 
     <!-- 画布右下角操作按钮 -->
     <div class="canvas-tools">
+      <!-- 编辑/查看模式切换 -->
+      <el-button size="small" :type="isEditMode ? 'warning' : 'default'" @click="toggleEditMode">
+        {{ isEditMode ? t('monitorEditMode') : t('monitorViewMode') }}
+      </el-button>
       <el-button size="small" @click="resetView">{{ t('viewReset') }}</el-button>
       <el-button size="small" @click="topView">{{ t('viewTop') }}</el-button>
       <el-button size="small" type="primary" @click="showUploadDialog = true">
@@ -17,8 +21,42 @@
 
     <!-- 右侧面板展开/收起按钮 -->
     <div class="panel-toggle" @click="hidePanel = !hidePanel">
-      <el-icon><ArrowLeft v-if="!hidePanel" /><ArrowRight v-else /></el-icon>
+      <el-icon><ArrowRight v-if="!hidePanel" /><ArrowLeft v-else /></el-icon>
     </div>
+
+    <!-- 新增链路对话框 -->
+    <el-dialog v-model="showAddLinkDialog" :title="t('actionAddLink')" width="400px">
+      <el-form>
+        <el-form-item :label="t('linkSource')">
+          <el-select v-model="newLinkSource" :placeholder="t('actionSelect')" size="small">
+            <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('linkTarget')">
+          <el-select v-model="newLinkTarget" :placeholder="t('actionSelect')" size="small">
+            <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('linkRole')">
+          <el-select v-model="newLinkRole" size="small">
+            <el-option :label="t('linkRoleUplink')" value="uplink" />
+            <el-option :label="t('linkRoleSvl')" value="svl" />
+            <el-option :label="t('linkRolePortchannel')" value="portchannel-member" />
+          </el-select>
+        </el-form-item>
+        <el-form-item :label="t('linkType')">
+          <el-select v-model="newLinkType" size="small">
+            <el-option :label="t('linkTypeFiber')" value="fiber" />
+            <el-option :label="t('linkTypeEthernet')" value="ethernet" />
+            <el-option :label="t('linkTypeWireless')" value="wireless" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddLinkDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="addLink">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
 
     <!-- 上传底图对话框 -->
     <el-dialog v-model="showUploadDialog" :title="t('uploadFloorPlan')" width="400px">
@@ -67,96 +105,114 @@
           <b>{{ stats.total }}</b>
         </div>
       </div>
-      <el-divider />
 
-      <!-- 平面图切换 -->
-      <div class="plan-switch" v-if="floorPlans.length > 0">
-        <el-select v-model="currentPlanId" :placeholder="t('monitorScreenSelectPlan')" size="small" @change="switchPlan">
-          <el-option
-            v-for="plan in floorPlans"
-            :key="plan.id"
-            :label="plan.name"
-            :value="plan.id"
-          />
-        </el-select>
-      </div>
-      <div v-else class="no-plan-hint">
-        <el-button type="primary" size="small" @click="showUploadDialog = true">
-          {{ t('uploadFloorPlan') }}
-        </el-button>
-      </div>
-
-      <el-divider />
-
-      <!-- 设备筛选 -->
-      <div class="filter-section">
-        <el-select v-model="filterType" :placeholder="t('filterDeviceType')" size="small" clearable>
-          <el-option :label="t('monitorFilterAllTypes')" value="" />
-          <el-option :label="t('deviceTypeSwitch')" value="switch" />
-          <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
-          <el-option :label="t('deviceTypeAP')" value="ap" />
-        </el-select>
-        <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable>
-          <el-option :label="t('filterAllStatus')" value="" />
-          <el-option :label="t('statusOnline')" value="online" />
-          <el-option :label="t('statusOffline')" value="offline" />
-        </el-select>
-      </div>
-
-      <el-divider />
-
-      <!-- 选中设备详情 -->
-      <div class="selected-box" v-if="selectedDevice">
-        <h4>{{ selectedDevice.name }}</h4>
-        <p><strong>IP:</strong> {{ selectedDevice.ip }}</p>
-        <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabel(selectedDevice.device_type) }}</p>
-        <p><strong>{{ t('deviceStatus') }}:</strong>
-          <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
-            {{ getStatusLabel(selectedDevice.status) }}
-          </el-tag>
-        </p>
-        <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
-          {{ t('viewDetail') }}
-        </el-button>
-      </div>
-      <div v-else class="hint">
-        <el-icon><Pointer /></el-icon>
-        <span>{{ t('clickDeviceHint') }}</span>
-      </div>
-
-      <el-divider />
-
-      <!-- 图层控制 -->
-      <div class="layer-control">
-        <h4>{{ t('layerControl') }}</h4>
-        <el-checkbox v-model="showLabels">{{ t('showLabels') }}</el-checkbox>
-        <el-checkbox v-model="showLinks">{{ t('showLinks') }}</el-checkbox>
-        <div class="tilt-control">
-          <span>{{ t('floorPlanTilt') }}:</span>
-          <el-slider v-model="floorTiltAngle" :min="0" :max="90" :step="5" :show-tooltip="true" size="small" />
-          <span class="tilt-value">{{ floorTiltAngle }}°</span>
-        </div>
-      </div>
-
-      <!-- 告警列表 -->
-      <el-divider />
-      <div class="alert-section">
-        <h4>{{ t('alertList') }}</h4>
-        <div class="alert-list">
-          <div
-            v-for="alert in offlineDevices"
-            :key="alert.id"
-            class="alert-item"
-            @click="focusDevice(alert)"
-          >
-            <el-icon class="alert-icon"><Warning /></el-icon>
-            <span class="alert-name">{{ alert.name }}</span>
+      <!-- 标签页：拓扑/链路/底图 -->
+      <el-tabs v-model="sidebarTab" type="border-card" size="small">
+        <!-- 拓扑标签页 -->
+        <el-tab-pane :label="t('monitorTopology')" name="topology">
+          <!-- 设备筛选 -->
+          <div class="filter-section">
+            <el-select v-model="filterType" :placeholder="t('filterDeviceType')" size="small" clearable>
+              <el-option :label="t('monitorFilterAllTypes')" value="" />
+              <el-option :label="t('deviceTypeSwitch')" value="switch" />
+              <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
+              <el-option :label="t('deviceTypeAP')" value="ap" />
+            </el-select>
+            <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable>
+              <el-option :label="t('filterAllStatus')" value="" />
+              <el-option :label="t('statusOnline')" value="online" />
+              <el-option :label="t('statusOffline')" value="offline" />
+            </el-select>
           </div>
-          <div v-if="offlineDevices.length === 0" class="no-alert">
-            {{ t('noOfflineDevices') }}
+
+          <!-- 选中设备详情 -->
+          <div class="selected-box" v-if="selectedDevice">
+            <h4>{{ selectedDevice.name }}</h4>
+            <p><strong>IP:</strong> {{ selectedDevice.ip }}</p>
+            <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabel(selectedDevice.device_type) }}</p>
+            <p><strong>{{ t('deviceStatus') }}:</strong>
+              <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
+                {{ getStatusLabel(selectedDevice.status) }}
+              </el-tag>
+            </p>
+            <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
+              {{ t('viewDetail') }}
+            </el-button>
           </div>
-        </div>
-      </div>
+          <div v-else class="hint">
+            <el-icon><Pointer /></el-icon>
+            <span>{{ t('clickDeviceHint') }}</span>
+          </div>
+
+          <!-- 图层控制 -->
+          <div class="layer-control">
+            <h4>{{ t('layerControl') }}</h4>
+            <el-checkbox v-model="showLabels">{{ t('showLabels') }}</el-checkbox>
+            <el-checkbox v-model="showLinks">{{ t('showLinks') }}</el-checkbox>
+            <div class="tilt-control">
+              <span>{{ t('floorPlanTilt') }}:</span>
+              <el-slider v-model="floorTiltAngle" :min="0" :max="90" :step="5" :show-tooltip="true" size="small" />
+              <span class="tilt-value">{{ floorTiltAngle }}°</span>
+            </div>
+          </div>
+
+          <!-- 告警列表 -->
+          <div class="alert-section">
+            <h4>{{ t('alertList') }}</h4>
+            <div class="alert-list">
+              <div
+                v-for="alert in offlineDevices"
+                :key="alert.id"
+                class="alert-item"
+                @click="focusDevice(alert)"
+              >
+                <el-icon class="alert-icon"><Warning /></el-icon>
+                <span class="alert-name">{{ alert.name }}</span>
+              </div>
+              <div v-if="offlineDevices.length === 0" class="no-alert">
+                {{ t('noOfflineDevices') }}
+              </div>
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <!-- 链路标签页 -->
+        <el-tab-pane :label="t('deviceLinks')" name="links">
+          <el-button type="primary" size="small" @click="showAddLinkDialog = true" style="margin-bottom: 8px;">
+            {{ t('actionAddLink') }}
+          </el-button>
+          <div class="link-list">
+            <div v-for="link in links" :key="link.id" class="link-item">
+              <span class="link-info">{{ getLinkLabel(link) }}</span>
+              <el-button type="danger" size="small" text @click="deleteLink(link.id)">
+                {{ t('actionDelete') }}
+              </el-button>
+            </div>
+            <div v-if="links.length === 0" class="no-data">
+              {{ t('noData') }}
+            </div>
+          </div>
+        </el-tab-pane>
+
+        <!-- 底图标签页 -->
+        <el-tab-pane :label="t('floorPlans')" name="plans">
+          <el-button type="primary" size="small" @click="showUploadDialog = true" style="margin-bottom: 8px;">
+            {{ t('uploadFloorPlan') }}
+          </el-button>
+          <div class="plan-list">
+            <div v-for="plan in floorPlans" :key="plan.id" class="plan-item" :class="{ active: plan.id === currentPlanId }">
+              <span class="plan-name">{{ plan.name }}</span>
+              <div class="plan-actions">
+                <el-button size="small" text @click="switchPlan(plan.id)">{{ t('actionSwitchPlan') }}</el-button>
+                <el-button type="danger" size="small" text @click="deletePlan(plan.id)">{{ t('actionDeletePlan') }}</el-button>
+              </div>
+            </div>
+            <div v-if="floorPlans.length === 0" class="no-data">
+              {{ t('noData') }}
+            </div>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
     </aside>
   </div>
 </template>
@@ -256,6 +312,110 @@ function getStatusLabel(status) {
   return statusMap[status] || status
 }
 
+// 标签页和编辑模式
+const sidebarTab = ref('topology')
+const isEditMode = ref(false)
+
+// 新增链路对话框
+const showAddLinkDialog = ref(false)
+const newLinkSource = ref(null)
+const newLinkTarget = ref(null)
+const newLinkRole = ref('uplink')
+const newLinkType = ref('fiber')
+
+// 编辑模式切换
+function toggleEditMode() {
+  isEditMode.value = !isEditMode.value
+  if (isEditMode.value) {
+    ElMessage.info(t('monitorEditMode') + ': ' + t('clickDeviceHint'))
+  }
+}
+
+// 获取节点名称
+function getNodeName(node) {
+  const device = devices.value.find(d => d.id === node.device_id)
+  return device ? device.name : `Node ${node.id}`
+}
+
+// 获取链路标签
+function getLinkLabel(link) {
+  const fromNode = nodes.value.find(n => n.id === link.from_node_id)
+  const toNode = nodes.value.find(n => n.id === link.to_node_id)
+  const fromName = fromNode ? getNodeName(fromNode) : '?'
+  const toName = toNode ? getNodeName(toNode) : '?'
+  return `${fromName} → ${toName}`
+}
+
+// 新增链路
+async function addLink() {
+  if (!newLinkSource.value || !newLinkTarget.value) {
+    ElMessage.warning(t('pleaseFillAllFields'))
+    return
+  }
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/links`, {
+      from_node_id: newLinkSource.value,
+      to_node_id: newLinkTarget.value,
+      link_role: newLinkRole.value,
+      link_type: newLinkType.value,
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    showAddLinkDialog.value = false
+    newLinkSource.value = null
+    newLinkTarget.value = null
+    // 重新加载链路
+    const linksRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/links`)
+    links.value = linksRes.data.items || []
+    // 重建链路
+    if (ctx.value.linkLines) {
+      ctx.value.scene.remove(ctx.value.linkLines)
+      ctx.value.linkLines = null
+    }
+    buildLinks()
+  } catch (e) {
+    console.error('新增链路失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除链路
+async function deleteLink(linkId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/links/${linkId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    links.value = links.value.filter(l => l.id !== linkId)
+    // 重建链路
+    if (ctx.value.linkLines) {
+      ctx.value.scene.remove(ctx.value.linkLines)
+      ctx.value.linkLines = null
+    }
+    buildLinks()
+  } catch (e) {
+    console.error('删除链路失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除底图
+async function deletePlan(planId) {
+  try {
+    await axios.delete(`/api/floor-plans/${planId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    floorPlans.value = floorPlans.value.filter(p => p.id !== planId)
+    if (currentPlanId.value === planId) {
+      if (floorPlans.value.length > 0) {
+        switchPlan(floorPlans.value[0].id)
+      } else {
+        currentPlanId.value = null
+        currentPlan.value = null
+      }
+    }
+  } catch (e) {
+    console.error('删除底图失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
 // 用 shallowRef 持有 three 对象，避免 Vue 深度响应式代理
 const ctx = shallowRef({
   scene: null,
@@ -291,6 +451,49 @@ function percentToWorld(xPercent, yPercent, elevation = 0) {
   const x = (Number(xPercent) / 100) * plan.real_width_m
   const z = (Number(yPercent) / 100) * plan.real_depth_m
   return { x, y: elevation, z }
+}
+
+// 自定义滚轮缩放处理函数（需要保存引用以便清理）
+function handleWheel(e) {
+  e.preventDefault()
+
+  const { camera, controls } = ctx.value
+
+  // 计算鼠标在场景中的位置
+  const rect = ctx.value.renderer.domElement.getBoundingClientRect()
+  const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+  // 射线投射到地面（y=0）
+  const raycasterLocal = new THREE.Raycaster()
+  raycasterLocal.setFromCamera({ x: mouseX, y: mouseY }, camera)
+
+  // 创建一个水平面用于计算交点
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  const intersectPoint = new THREE.Vector3()
+  raycasterLocal.ray.intersectPlane(groundPlane, intersectPoint)
+
+  if (intersectPoint) {
+    // 缩放因子
+    const delta = e.deltaY > 0 ? 0.9 : 1.1
+    const minDist = 30
+    const maxDist = 3000
+
+    // 当前相机到target的距离
+    const currentDist = camera.position.distanceTo(controls.target)
+    const newDist = Math.max(minDist, Math.min(maxDist, currentDist * (1 / delta)))
+
+    // 以鼠标位置为中心缩放
+    const direction = camera.position.clone().sub(controls.target).normalize()
+    const offset = intersectPoint.clone().sub(controls.target)
+
+    // 新的target位置（向鼠标位置移动）
+    const factor = (newDist - currentDist) / currentDist
+    controls.target.add(offset.multiplyScalar(factor * 0.5))
+
+    // 新的相机位置
+    camera.position.copy(controls.target).add(direction.multiplyScalar(newDist))
+  }
 }
 
 // 初始化场景
@@ -352,48 +555,8 @@ function initScene() {
   // 保存上下文
   Object.assign(ctx.value, { scene, camera, renderer, labelRenderer, controls, host })
 
-  // 自定义滚轮缩放：以鼠标位置为中心
-  renderer.domElement.addEventListener('wheel', (e) => {
-    e.preventDefault()
-
-    const { camera, controls } = ctx.value
-
-    // 计算鼠标在场景中的位置
-    const rect = renderer.domElement.getBoundingClientRect()
-    const mouseX = ((e.clientX - rect.left) / rect.width) * 2 - 1
-    const mouseY = -((e.clientY - rect.top) / rect.height) * 2 + 1
-
-    // 射线投射到地面（y=0）
-    const raycasterLocal = new THREE.Raycaster()
-    raycasterLocal.setFromCamera({ x: mouseX, y: mouseY }, camera)
-
-    // 创建一个水平面用于计算交点
-    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-    const intersectPoint = new THREE.Vector3()
-    raycasterLocal.ray.intersectPlane(groundPlane, intersectPoint)
-
-    if (intersectPoint) {
-      // 缩放因子
-      const delta = e.deltaY > 0 ? 0.9 : 1.1
-      const minDist = 30
-      const maxDist = 3000
-
-      // 当前相机到target的距离
-      const currentDist = camera.position.distanceTo(controls.target)
-      const newDist = Math.max(minDist, Math.min(maxDist, currentDist * (1 / delta)))
-
-      // 以鼠标位置为中心缩放
-      const direction = camera.position.clone().sub(controls.target).normalize()
-      const offset = intersectPoint.clone().sub(controls.target)
-
-      // 新的target位置（向鼠标位置移动）
-      const factor = (newDist - currentDist) / currentDist
-      controls.target.add(offset.multiplyScalar(factor * 0.5))
-
-      // 新的相机位置
-      camera.position.copy(controls.target).add(direction.multiplyScalar(newDist))
-    }
-  }, { passive: false })
+  // 注册滚轮事件（使用提取的函数以便清理）
+  renderer.domElement.addEventListener('wheel', handleWheel, { passive: false })
 
   // 动画循环
   const animate = () => {
@@ -487,10 +650,16 @@ function onFullscreenChange() {
   isFullscreen.value = document.fullscreenElement !== null
 }
 
+// 底图加载并发控制
+let floorPlanLoadId = 0
+
 // 加载底图纹理
 async function loadFloorPlanTexture() {
   const { scene, renderer } = ctx.value
   if (!currentPlan.value) return
+
+  // 生成新的加载ID，用于并发控制
+  const currentLoadId = ++floorPlanLoadId
 
   // 清除旧底图
   const oldGround = scene?.getObjectByName('ground')
@@ -509,6 +678,13 @@ async function loadFloorPlanTexture() {
 
   try {
     const tex = await loader.loadAsync(imageUrl)
+
+    // 并发检查：如果这不是最新的加载请求，则放弃
+    if (currentLoadId !== floorPlanLoadId) {
+      tex.dispose()
+      return
+    }
+
     tex.colorSpace = THREE.SRGBColorSpace
     tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
 
@@ -555,17 +731,17 @@ function buildDeviceInstances() {
   const meshes = {}
   const dummy = new THREE.Object3D()
 
-  // 交换机 - 放大到可见尺寸
+  // 交换机 - 放大到更可见尺寸（场景1000m量级）
   if (switches.length > 0) {
-    const geo = new THREE.BoxGeometry(15, 10, 10)  // 15m x 10m x 10m
-    const mat = new THREE.MeshStandardMaterial({ metalness: 0.3, roughness: 0.6 })
+    const geo = new THREE.BoxGeometry(25, 15, 15)  // 25m x 15m x 15m
+    const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
     const mesh = new THREE.InstancedMesh(geo, mat, switches.length)
 
     switches.forEach((d, i) => {
       const node = nodes.value.find(n => n.device_id === d.id)
       if (!node) return
 
-      const w = percentToWorld(node.x_percent, node.y_percent, 5)  // 离地5m
+      const w = percentToWorld(node.x_percent, node.y_percent, 8)  // 离地8m
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -582,17 +758,17 @@ function buildDeviceInstances() {
     meshes.switch = mesh
   }
 
-  // AP - 放大到可见尺寸
+  // AP - 放大到更可见尺寸
   if (aps.length > 0) {
-    const geo = new THREE.BoxGeometry(10, 6, 6)  // 10m x 6m x 6m
-    const mat = new THREE.MeshStandardMaterial({ metalness: 0.3, roughness: 0.6 })
+    const geo = new THREE.BoxGeometry(18, 10, 10)  // 18m x 10m x 10m
+    const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
     const mesh = new THREE.InstancedMesh(geo, mat, aps.length)
 
     aps.forEach((d, i) => {
       const node = nodes.value.find(n => n.device_id === d.id)
       if (!node) return
 
-      const w = percentToWorld(node.x_percent, node.y_percent, 3)  // 离地3m
+      const w = percentToWorld(node.x_percent, node.y_percent, 5)  // 离地5m
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -680,22 +856,32 @@ function buildLabels() {
   ctx.value.labels = labelGroup
 }
 
-// 离线设备呼吸动画
+// 离线设备呼吸动画（优化：复用Color避免GC）
 let pulseTime = 0
+const reusedColor = new THREE.Color()  // 复用的临时Color对象
+let lastPulseUpdate = 0
+const PULSE_UPDATE_INTERVAL = 50  // 50ms节流，减少更新频率
+
 function pulseOfflineDevices() {
   if (!ctx.value.deviceMeshes) return
 
-  pulseTime += 0.05
+  const now = performance.now()
+  if (now - lastPulseUpdate < PULSE_UPDATE_INTERVAL) return  // 节流
+  lastPulseUpdate = now
+
+  pulseTime += 0.1
   const pulse = Math.sin(pulseTime) * 0.3 + 0.7
+
+  // 计算脉冲颜色一次，复用
+  reusedColor.set(0xff4d4f)
+  reusedColor.multiplyScalar(pulse)
 
   Object.values(ctx.value.deviceMeshes).forEach(mesh => {
     if (!mesh.userData.devices) return
 
     mesh.userData.devices.forEach((d, i) => {
       if (d.status === 'offline') {
-        const c = new THREE.Color(0xff4d4f)
-        c.multiplyScalar(pulse)
-        mesh.setColorAt(i, c)
+        mesh.setColorAt(i, reusedColor)
       }
     })
 
@@ -735,8 +921,12 @@ function updateLabelVisibility() {
 let selectedInstanceId = null
 let selectedMesh = null
 
+// 拖动状态
+const dragState = ref(null)
+let isDragging = false
+
 function onCanvasClick(e) {
-  const { camera, renderer, deviceMeshes, scene } = ctx.value
+  const { camera, renderer, deviceMeshes, scene, controls } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -772,13 +962,33 @@ function onCanvasClick(e) {
       mesh.setColorAt(hit.instanceId, highlightColor)
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
 
-      ElMessage.success(`${t('selected')}: ${device.name}`)
-
-      // 相机聚焦到设备
-      const node = nodes.value.find(n => n.device_id === device.id)
-      if (node) {
-        const w = percentToWorld(node.x_percent, node.y_percent, 0)
-        ctx.value.controls.target.set(w.x, 30, w.z)
+      // 编辑模式下准备拖动
+      if (isEditMode.value) {
+        const node = nodes.value.find(n => n.device_id === device.id)
+        if (node) {
+          dragState.value = {
+            nodeId: node.id,
+            deviceId: device.id,
+            startX_percent: parseFloat(node.x_percent),
+            startY_percent: parseFloat(node.y_percent),
+            startClientX: e.clientX,
+            startClientY: e.clientY,
+          }
+          // 暂停轨道控制
+          controls.enabled = false
+          isDragging = false
+          // 开始监听拖动
+          renderer.domElement.addEventListener('mousemove', onDragMove)
+          renderer.domElement.addEventListener('mouseup', onDragEnd)
+        }
+      } else {
+        ElMessage.success(`${t('selected')}: ${device.name}`)
+        // 相机聚焦到设备
+        const node = nodes.value.find(n => n.device_id === device.id)
+        if (node) {
+          const w = percentToWorld(node.x_percent, node.y_percent, 0)
+          ctx.value.controls.target.set(w.x, 30, w.z)
+        }
       }
     }
   } else {
@@ -786,6 +996,94 @@ function onCanvasClick(e) {
     selectedInstanceId = null
     selectedMesh = null
   }
+}
+
+// 拖动处理
+function onDragMove(e) {
+  if (!dragState.value) return
+  isDragging = true
+
+  const rect = ctx.value.renderer.domElement.getBoundingClientRect()
+  const deltaX = ((e.clientX - dragState.value.startClientX) / rect.width) * 100
+  const deltaY = ((e.clientY - dragState.value.startClientY) / rect.height) * 100
+
+  const newX = Math.max(0, Math.min(100, dragState.value.startX_percent + deltaX))
+  const newY = Math.max(0, Math.min(100, dragState.value.startY_percent + deltaY))
+
+  dragState.value._lastX = newX
+  dragState.value._lastY = newY
+
+  // 实时更新标签位置
+  const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
+  if (label) {
+    const w = percentToWorld(newX, newY, 5)
+    label.position.set(w.x, w.y, w.z)
+  }
+}
+
+async function onDragEnd(e) {
+  if (!dragState.value) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { nodeId, _lastX, _lastY } = dragState.value
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      await axios.patch(`/api/floor-plans/${currentPlanId.value}/nodes/${nodeId}`, {
+        x_percent: parseFloat(_lastX.toFixed(2)),
+        y_percent: parseFloat(_lastY.toFixed(2)),
+      })
+      ElMessage.success(t('msgSaveSuccess'))
+      // 更新本地nodes数据
+      const node = nodes.value.find(n => n.id === nodeId)
+      if (node) {
+        node.x_percent = _lastX.toFixed(2)
+        node.y_percent = _lastY.toFixed(2)
+      }
+      // 重建设备位置
+      rebuildDevicePositions()
+    } catch (err) {
+      console.error('更新节点位置失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  dragState.value = null
+  isDragging = false
+}
+
+// 重建设备位置（拖动后）
+function rebuildDevicePositions() {
+  const { deviceMeshes } = ctx.value
+  if (!deviceMeshes) return
+
+  const dummy = new THREE.Object3D()
+
+  Object.values(deviceMeshes).forEach(mesh => {
+    if (!mesh.userData.devices) return
+
+    mesh.userData.devices.forEach((d, i) => {
+      const node = nodes.value.find(n => n.device_id === d.id)
+      if (!node) return
+
+      const w = percentToWorld(node.x_percent, node.y_percent, 8)
+      dummy.position.set(w.x, w.y, w.z)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(i, dummy.matrix)
+    })
+
+    mesh.instanceMatrix.needsUpdate = true
+  })
+
+  // 重建链路
+  if (ctx.value.linkLines) {
+    ctx.value.scene.remove(ctx.value.linkLines)
+    ctx.value.linkLines = null
+  }
+  buildLinks()
 }
       
 // 聚焦到设备（带平滑动画）
@@ -1040,8 +1338,14 @@ watch([filterType, filterStatus], () => {
       ctx.value.scene.remove(ctx.value.labels)
       ctx.value.labels = null
     }
+    // 清除旧链路
+    if (ctx.value.linkLines) {
+      ctx.value.scene.remove(ctx.value.linkLines)
+      ctx.value.linkLines = null
+    }
     // 重建
     buildDeviceInstances()
+    buildLinks()
     buildLabels()
   }
 })
@@ -1099,6 +1403,11 @@ onBeforeUnmount(() => {
   // 移除全屏事件监听
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+
+  // 移除滚轮事件监听
+  if (ctx.value.renderer?.domElement) {
+    ctx.value.renderer.domElement.removeEventListener('wheel', handleWheel)
+  }
 
   const { renderer, controls, host, labelRenderer, scene } = ctx.value
 
@@ -1163,6 +1472,10 @@ onBeforeUnmount(() => {
 }
 
 .monitor3d.fullscreen-mode .side-panel {
+  display: none;
+}
+
+.monitor3d.fullscreen-mode .panel-toggle {
   display: none;
 }
 
@@ -1394,5 +1707,86 @@ onBeforeUnmount(() => {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.6; }
+}
+
+/* 编辑模式样式 */
+.monitor3d.edit-mode .canvas-host {
+  cursor: grab;
+}
+
+.monitor3d.edit-mode .canvas-host:active {
+  cursor: grabbing;
+}
+
+/* 标签页样式 */
+:deep(.el-tabs) {
+  margin-top: 8px;
+}
+
+:deep(.el-tabs__content) {
+  padding: 8px 0;
+}
+
+:deep(.el-tab-pane) {
+  font-size: 12px;
+}
+
+/* 链路列表 */
+.link-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.link-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(26, 34, 48, 0.5);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.link-info {
+  color: #e5e7eb;
+  font-size: 11px;
+}
+
+/* 底图列表 */
+.plan-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.plan-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 8px;
+  background: rgba(26, 34, 48, 0.5);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.plan-item.active {
+  background: rgba(34, 211, 238, 0.2);
+  border: 1px solid rgba(34, 211, 238, 0.3);
+}
+
+.plan-name {
+  color: #e5e7eb;
+  font-size: 12px;
+}
+
+.plan-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.no-data {
+  color: #6b7280;
+  font-size: 12px;
+  text-align: center;
+  padding: 12px;
 }
 </style>
