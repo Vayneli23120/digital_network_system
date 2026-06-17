@@ -1648,6 +1648,22 @@ function buildFiberTrunks() {
     line.userData.trunk = trunk
     line.name = `trunk-${trunk.id}`
     trunkGroup.add(line)
+
+    // 如果有拐点且在编辑模式，添加拐点标记球
+    if (trunk.waypoints && Array.isArray(trunk.waypoints) && trunk.waypoints.length > 0 && isEditMode.value) {
+      trunk.waypoints.forEach((wp, idx) => {
+        const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight + 2)
+        // 主干拐点球半径：底图短边的 0.4%，比普通拐点稍大
+        const wpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.004
+        const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 1.0 })  // 紫色，与主干同色
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+        sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+        sphere.userData.trunkWaypoint = { trunkId: trunk.id, index: idx, x: wp.x, y: wp.y }
+        sphere.name = `trunk-waypoint-${trunk.id}-${idx}`
+        trunkGroup.add(sphere)
+      })
+    }
   })
 
   scene.add(trunkGroup)
