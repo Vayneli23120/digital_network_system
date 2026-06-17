@@ -1502,10 +1502,13 @@ async function onWaypointDragEnd(e) {
       // 更新拐点数据
       const link = links.value.find(l => l.id === linkId)
       if (link) {
+        // waypoints 可能是字符串或已解析的数组
         let waypoints = []
-        try {
-          waypoints = link.waypoints ? JSON.parse(link.waypoints) : []
-        } catch (e) {}
+        if (typeof link.waypoints === 'string') {
+          waypoints = JSON.parse(link.waypoints) || []
+        } else if (Array.isArray(link.waypoints)) {
+          waypoints = link.waypoints
+        }
 
         // 更新指定索引的拐点
         if (index < waypoints.length) {
