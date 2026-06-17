@@ -397,6 +397,13 @@ function getStatusLabel(status) {
 const sidebarTab = ref('topology')
 const isEditMode = ref(false)
 
+// 编辑模式切换时自动禁用/启用轨道控制
+watch(isEditMode, (editMode) => {
+  if (ctx.value.controls) {
+    ctx.value.controls.enabled = !editMode
+  }
+})
+
 // 新增链路对话框
 const showAddLinkDialog = ref(false)
 const newLinkSource = ref(null)
@@ -743,6 +750,9 @@ function percentToWorld(xPercent, yPercent, elevation = 0) {
 // 自定义滚轮缩放处理函数（需要保存引用以便清理）
 function handleWheel(e) {
   e.preventDefault()
+
+  // 编辑模式下禁用滚轮缩放，防止视角乱动
+  if (isEditMode.value) return
 
   const { camera, controls } = ctx.value
 
@@ -1251,7 +1261,7 @@ function onCanvasMouseDown(e) {
         startClientY: e.clientY,
       }
 
-      // 暂停轨道控制
+      // 暂停轨道控制（编辑模式下完全禁用）
       controls.enabled = false
       isDragging = false
 
@@ -1370,22 +1380,26 @@ async function onDragEnd(e) {
 
   if (isDragging && _lastX != null && _lastY != null) {
     try {
-      // 使用 PUT 而不是 PATCH（按文档要求）
       await axios.put(`/api/floor-plans/${currentPlanId.value}/nodes/${nodeId}`, {
         x_percent: Number(_lastX.toFixed(2)),
         y_percent: Number(_lastY.toFixed(2)),
       })
       ElMessage.success(t('msgSaveSuccess'))
 
-      // 更新本地nodes数据
+      // 更新本地nodes数据（不重建场景，保持选中状态）
       const node = nodes.value.find(n => n.id === nodeId)
       if (node) {
         node.x_percent = _lastX.toFixed(2)
         node.y_percent = _lastY.toFixed(2)
+        // 同步 userData
+        if (selectedModel && selectedModel.userData.node) {
+          selectedModel.userData.node = { ...node }
+        }
       }
 
-      // 重建链路
-      rebuildScene()
+      // 只重建链路（不重建设备模型和标签）
+      disposeGroup('links')
+      buildLinks()
 
       // 清除高亮
       if (selectedModel) {
