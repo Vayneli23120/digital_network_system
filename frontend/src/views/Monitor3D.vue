@@ -96,7 +96,7 @@
           <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
           <el-option :label="t('deviceTypeAP')" value="ap" />
         </el-select>
-        <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable style="margin-left: 8px;">
+        <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable>
           <el-option :label="t('filterAllStatus')" value="" />
           <el-option :label="t('statusOnline')" value="online" />
           <el-option :label="t('statusOffline')" value="offline" />
@@ -109,9 +109,10 @@
       <div class="selected-box" v-if="selectedDevice">
         <h4>{{ selectedDevice.name }}</h4>
         <p><strong>IP:</strong> {{ selectedDevice.ip }}</p>
+        <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabel(selectedDevice.device_type) }}</p>
         <p><strong>{{ t('deviceStatus') }}:</strong>
           <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
-            {{ selectedDevice.status }}
+            {{ getStatusLabel(selectedDevice.status) }}
           </el-tag>
         </p>
         <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
@@ -217,7 +218,8 @@ const filteredDevices = computed(() => {
   let result = devices.value
   if (filterType.value) {
     if (filterType.value === 'switch') {
-      result = result.filter(d => ['office_switch', 'core_switch', 'server_switch', 'uce'].includes(d.device_type))
+      // "交换机"排除核心交换机，避免与"核心交换机"选项重叠
+      result = result.filter(d => ['office_switch', 'server_switch', 'uce'].includes(d.device_type))
     } else {
       result = result.filter(d => d.device_type === filterType.value)
     }
@@ -227,6 +229,32 @@ const filteredDevices = computed(() => {
   }
   return result
 })
+
+// 设备类型/状态中文映射
+const deviceTypeMap = {
+  'office_switch': '办公交换机',
+  'core_switch': '核心交换机',
+  'server_switch': '服务器交换机',
+  'uce': 'UCE',
+  'ap': 'AP',
+  'wlc': '无线控制器',
+  'router': '路由器',
+  'firewall': '防火墙',
+}
+
+const statusMap = {
+  'online': '在线',
+  'offline': '离线',
+  'maintenance': '维护中',
+}
+
+function getDeviceTypeLabel(type) {
+  return deviceTypeMap[type] || type
+}
+
+function getStatusLabel(status) {
+  return statusMap[status] || status
+}
 
 // 用 shallowRef 持有 three 对象，避免 Vue 深度响应式代理
 const ctx = shallowRef({
@@ -1237,12 +1265,12 @@ onBeforeUnmount(() => {
 
 .filter-section {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  flex-direction: row;  /* 横向排列 */
+  gap: 8px;
 }
 
 .filter-section .el-select {
-  width: 100%;
+  flex: 1;  /* 等宽 */
 }
 
 .selected-box {
