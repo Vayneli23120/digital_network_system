@@ -433,10 +433,15 @@ function getStatusLabel(status) {
 const sidebarTab = ref('topology')
 const isEditMode = ref(false)
 
-// 编辑模式切换时自动禁用/启用轨道控制
+// 编辑模式切换时自动禁用/启用轨道控制 + 显示/隐藏拐点
 watch(isEditMode, (editMode) => {
   if (ctx.value.controls) {
     ctx.value.controls.enabled = !editMode
+  }
+  // 重建链路以显示/隐藏拐点球
+  if (ctx.value.scene) {
+    disposeGroup('links')
+    buildLinks()
   }
 })
 
@@ -1220,8 +1225,8 @@ function buildLinks() {
     line.userData.link = link
     linkGroup.add(line)
 
-    // 如果有拐点，添加拐点标记球（编辑模式下可见）
-    if (link.waypoints) {
+    // 如果有拐点且在编辑模式，添加拐点标记球
+    if (link.waypoints && isEditMode.value) {
       try {
         const waypoints = JSON.parse(link.waypoints)
         waypoints.forEach((wp, idx) => {
