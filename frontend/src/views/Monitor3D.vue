@@ -527,8 +527,15 @@ async function deleteLink(linkId) {
 // 打开拐点编辑对话框
 function openWaypointDialog(link) {
   editingLink.value = link
+  // waypoints 可能是字符串（旧数据）或已解析的数组（新接口）
   try {
-    editingWaypoints.value = link.waypoints ? JSON.parse(link.waypoints) : []
+    if (typeof link.waypoints === 'string') {
+      editingWaypoints.value = JSON.parse(link.waypoints) || []
+    } else if (Array.isArray(link.waypoints)) {
+      editingWaypoints.value = link.waypoints
+    } else {
+      editingWaypoints.value = []
+    }
   } catch (e) {
     editingWaypoints.value = []
   }
@@ -1191,11 +1198,16 @@ function buildLinks() {
     // 如果有拐点，按拐点绘制折线
     if (link.waypoints) {
       try {
-        const waypoints = JSON.parse(link.waypoints)
-        waypoints.forEach(wp => {
-          const wpWorld = percentToWorld(wp.x, wp.y, linkHeight)
-          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
-        })
+        // waypoints 可能是字符串或已解析的数组
+        const waypoints = typeof link.waypoints === 'string'
+          ? JSON.parse(link.waypoints)
+          : link.waypoints
+        if (Array.isArray(waypoints)) {
+          waypoints.forEach(wp => {
+            const wpWorld = percentToWorld(wp.x, wp.y, linkHeight)
+            points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+          })
+        }
       } catch (e) {
         console.error('解析 waypoints 失败:', e)
       }
@@ -1232,17 +1244,22 @@ function buildLinks() {
     // 如果有拐点且在编辑模式，添加拐点标记球
     if (link.waypoints && isEditMode.value) {
       try {
-        const waypoints = JSON.parse(link.waypoints)
-        waypoints.forEach((wp, idx) => {
-          const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + 2)
-          const sphereGeo = new THREE.SphereGeometry(3, 16, 16)
-          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffa116, transparent: true, opacity: 0.8 })
-          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
-          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
-          sphere.userData.waypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
-          sphere.name = `waypoint-${link.id}-${idx}`
-          linkGroup.add(sphere)
-        })
+        // waypoints 可能是字符串或已解析的数组
+        const waypoints = typeof link.waypoints === 'string'
+          ? JSON.parse(link.waypoints)
+          : link.waypoints
+        if (Array.isArray(waypoints)) {
+          waypoints.forEach((wp, idx) => {
+            const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + 2)
+            const sphereGeo = new THREE.SphereGeometry(3, 16, 16)
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffa116, transparent: true, opacity: 0.8 })
+            const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+            sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+            sphere.userData.waypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
+            sphere.name = `waypoint-${link.id}-${idx}`
+            linkGroup.add(sphere)
+          })
+        }
       } catch (e) {}
     }
   })
