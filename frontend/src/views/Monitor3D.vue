@@ -130,6 +130,32 @@
       </template>
     </el-dialog>
 
+    <!-- 主干光缆拐点编辑对话框 -->
+    <el-dialog v-model="showTrunkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberTrunk')" width="500px">
+      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
+      <div class="waypoint-list">
+        <div v-for="(wp, idx) in editingTrunkWaypoints" :key="idx" class="waypoint-item">
+          <span class="waypoint-index">{{ idx + 1 }}</span>
+          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
+          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
+          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeTrunkWaypoint(idx)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
+        <div v-if="editingTrunkWaypoints.length === 0" class="no-data">
+          {{ t('noWaypoints') }}
+        </div>
+      </div>
+      <el-button type="primary" size="small" @click="addTrunkWaypoint">
+        <el-icon><Plus /></el-icon>
+        {{ t('addWaypoint') }}
+      </el-button>
+      <template #footer>
+        <el-button @click="showTrunkWaypointDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="saveTrunkWaypoints">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel" :class="{ dark: isDark }">
       <div class="panel-header">
@@ -182,7 +208,7 @@
               <div v-for="trunk in fiberTrunks" :key="trunk.id" class="trunk-item">
                 <span class="trunk-name">{{ trunk.name || `${t('fiberTrunk')} ${trunk.id}` }}</span>
                 <div class="trunk-actions">
-                  <el-button size="small" @click="editTrunk(trunk)">{{ t('actionEdit') }}</el-button>
+                  <el-button size="small" @click="openTrunkWaypointDialog(trunk)">{{ t('editWaypoints') }}</el-button>
                   <el-button size="small" type="danger" @click="deleteTrunk(trunk.id)">{{ t('actionDelete') }}</el-button>
                 </div>
               </div>
@@ -537,14 +563,21 @@ function startConnectFromBranch(bp) {
 async function createFiberTrunk() {
   if (!trunkStartPoint.value || !trunkEndPoint.value) return
 
+  console.log('创建主干:', {
+    planId: currentPlanId.value,
+    start: trunkStartPoint.value,
+    end: trunkEndPoint.value
+  })
+
   try {
-    await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-trunks`, {
+    const res = await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-trunks`, {
       name: `${t('fiberTrunk')} ${fiberTrunks.value.length + 1}`,
       start_x_percent: trunkStartPoint.value.x,
       start_y_percent: trunkStartPoint.value.y,
       end_x_percent: trunkEndPoint.value.x,
       end_y_percent: trunkEndPoint.value.y,
     })
+    console.log('创建成功:', res.data)
     ElMessage.success(t('msgSaveSuccess'))
 
     // 重新加载数据
@@ -796,6 +829,71 @@ async function saveWaypoints() {
     editingLink.value = null
   } catch (e) {
     console.error('保存拐点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// ============ 主干光缆拐点编辑 ============
+
+const showTrunkWaypointDialog = ref(false)
+const editingTrunk = ref(null)
+const editingTrunkWaypoints = ref([])
+
+// 打开主干拐点编辑对话框
+function openTrunkWaypointDialog(trunk) {
+  editingTrunk.value = trunk
+  try {
+    if (typeof trunk.waypoints === 'string') {
+      editingTrunkWaypoints.value = JSON.parse(trunk.waypoints) || []
+    } else if (Array.isArray(trunk.waypoints)) {
+      editingTrunkWaypoints.value = trunk.waypoints
+    } else {
+      editingTrunkWaypoints.value = []
+    }
+  } catch (e) {
+    editingTrunkWaypoints.value = []
+  }
+  showTrunkWaypointDialog.value = true
+}
+
+// 添加主干拐点
+function addTrunkWaypoint() {
+  editingTrunkWaypoints.value.push({
+    x: 50,
+    y: 50
+  })
+}
+
+// 删除主干拐点
+function removeTrunkWaypoint(idx) {
+  editingTrunkWaypoints.value.splice(idx, 1)
+}
+
+// 保存主干拐点
+async function saveTrunkWaypoints() {
+  if (!editingTrunk.value) return
+
+  try {
+    const waypointsJson = JSON.stringify(editingTrunkWaypoints.value)
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${editingTrunk.value.id}`, {
+      waypoints: waypointsJson
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 更新本地数据
+    const trunk = fiberTrunks.value.find(t => t.id === editingTrunk.value.id)
+    if (trunk) {
+      trunk.waypoints = editingTrunkWaypoints.value
+    }
+
+    // 重建主干
+    disposeGroup('fiber-trunks')
+    buildFiberTrunks()
+
+    showTrunkWaypointDialog.value = false
+    editingTrunk.value = null
+  } catch (e) {
+    console.error('保存主干拐点失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }
