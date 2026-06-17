@@ -634,11 +634,23 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
     # 计算受影响节点（冗余感知）
     impacted_node_ids = _propagate_impact(nodes, link_list, groups)
 
+    # 获取主干光缆数据
+    fiber_trunks = _get_fiber_trunks(db, plan_id)
+
+    # 获取分支点数据
+    fiber_branch_points = _get_fiber_branch_points(db, plan_id)
+
+    # 获取分支光缆数据
+    fiber_branch_links = _get_fiber_branch_links(db, plan_id, device_node_map)
+
     return {
         "nodes": nodes,
         "links": link_list,
         "groups": groups,
         "impacted_node_ids": impacted_node_ids,
+        "fiber_trunks": fiber_trunks,
+        "fiber_branch_points": fiber_branch_points,
+        "fiber_branch_links": fiber_branch_links,
         "timestamp": datetime.utcnow().isoformat(),
     }
 
@@ -889,3 +901,71 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         "active_alerts": active_alerts,
         "timestamp": datetime.utcnow().isoformat(),
     }
+
+
+# ============ 预接式光纤主干+分支辅助函数 ============
+
+def _get_fiber_trunks(db: Session, plan_id: int) -> List[Dict[str, Any]]:
+    """获取主干光缆列表"""
+    from app.shared.models import FiberTrunkLink
+    import json
+
+    trunks = db.query(FiberTrunkLink).filter(
+        FiberTrunkLink.floor_plan_id == plan_id
+    ).all()
+
+    return [
+        {
+            "id": t.id,
+            "name": t.name,
+            "start_x_percent": t.start_x_percent,
+            "start_y_percent": t.start_y_percent,
+            "start_device_id": t.start_device_id,
+            "end_x_percent": t.end_x_percent,
+            "end_y_percent": t.end_y_percent,
+            "waypoints": json.loads(t.waypoints) if t.waypoints else None,
+        }
+        for t in trunks
+    ]
+
+
+def _get_fiber_branch_points(db: Session, plan_id: int) -> List[Dict[str, Any]]:
+    """获取分支点列表"""
+    from app.shared.models import FiberBranchPoint, FiberTrunkLink
+
+    branch_points = db.query(FiberBranchPoint).join(FiberTrunkLink).filter(
+        FiberTrunkLink.floor_plan_id == plan_id
+    ).all()
+
+    return [
+        {
+            "id": bp.id,
+            "trunk_link_id": bp.trunk_link_id,
+            "name": bp.name,
+            "position_percent": bp.position_percent,
+            "x_percent": bp.x_percent,
+            "y_percent": bp.y_percent,
+        }
+        for bp in branch_points
+    ]
+
+
+def _get_fiber_branch_links(db: Session, plan_id: int, device_node_map: Dict) -> List[Dict[str, Any]]:
+    """获取分支光缆列表"""
+    branch_links = db.query(DeviceLink).filter(
+        DeviceLink.floor_plan_id == plan_id,
+        DeviceLink.link_role == "fiber_branch"
+    ).all()
+
+    result = []
+    for link in branch_links:
+        to_node = device_node_map.get(link.to_node_id)
+        result.append({
+            "id": link.id,
+            "branch_point_id": link.branch_point_id,
+            "to_device_id": to_node.device_id if to_node else None,
+            "to_node_id": link.to_node_id,
+            "logical_uplink_device_id": link.logical_uplink_device_id,
+        })
+
+    return result

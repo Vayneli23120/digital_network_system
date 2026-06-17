@@ -368,6 +368,9 @@ const deviceScale = ref(1)
 const devices = ref([])
 const nodes = ref([])
 const links = ref([])
+const fiberTrunks = ref([])  // 主干光缆
+const fiberBranchPoints = ref([])  // 分支点
+const fiberBranchLinks = ref([])  // 分支光缆
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
@@ -618,6 +621,9 @@ const ctx = shallowRef({
   deviceGroup: null,
   linkLines: null,
   labels: null,
+  fiberTrunkGroup: null,
+  branchPointGroup: null,
+  branchLinkGroup: null,
 })
 
 // 厂区真实尺寸（米）
@@ -1181,8 +1187,14 @@ function rebuildScene() {
   disposeGroup('devices')
   disposeGroup('links')
   disposeGroup('labels')
+  disposeGroup('fiber-trunks')
+  disposeGroup('branch-points')
+  disposeGroup('branch-links')
   buildDeviceModels()
   buildLinks()
+  buildFiberTrunks()
+  buildBranchPoints()
+  buildBranchLinks()
   buildLabels()
 }
 
@@ -1280,6 +1292,200 @@ function buildLinks() {
 
   scene.add(linkGroup)
   ctx.value.linkLines = linkGroup
+}
+
+// 构建主干光缆（粗紫线）
+function buildFiberTrunks() {
+  const { scene } = ctx.value
+  if (!scene || fiberTrunks.value.length === 0) return
+
+  const trunkGroup = new THREE.Group()
+  trunkGroup.name = 'fiber-trunks'
+
+  // 主干高度：贴近地面
+  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+
+  fiberTrunks.value.forEach(trunk => {
+    const startPoint = percentToWorld(trunk.start_x_percent, trunk.start_y_percent, trunkHeight)
+    const endPoint = percentToWorld(trunk.end_x_percent, trunk.end_y_percent, trunkHeight)
+
+    // 构建主干路径点
+    const points = []
+    points.push(new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z))
+
+    // 如果有拐点，按拐点绘制
+    if (trunk.waypoints && Array.isArray(trunk.waypoints)) {
+      trunk.waypoints.forEach(wp => {
+        const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight)
+        points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+      })
+    }
+
+    points.push(new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z))
+
+    const geo = new THREE.BufferGeometry().setFromPoints(points)
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x6366f1,  // 深紫/蓝色
+      transparent: true,
+      opacity: 0.8,
+      linewidth: 4
+    })
+
+    const line = new THREE.Line(geo, mat)
+    line.userData.trunk = trunk
+    line.name = `trunk-${trunk.id}`
+    trunkGroup.add(line)
+  })
+
+  scene.add(trunkGroup)
+  ctx.value.fiberTrunkGroup = trunkGroup
+}
+
+// 构建分支点（橙色圆点）
+function buildBranchPoints() {
+  const { scene } = ctx.value
+  if (!scene || fiberBranchPoints.value.length === 0) return
+
+  const bpGroup = new THREE.Group()
+  bpGroup.name = 'branch-points'
+
+  // 分支点高度：略高于主干
+  const bpHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002 + 1
+  // 分支点半径：底图短边的 0.3%
+  const bpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
+
+  fiberBranchPoints.value.forEach(bp => {
+    let x = bp.x_percent
+    let y = bp.y_percent
+
+    // 如果没有坐标，根据 position_percent 在主干上计算
+    if (x == null || y == null) {
+      const trunk = fiberTrunks.value.find(t => t.id === bp.trunk_link_id)
+      if (trunk) {
+        const pos = calculatePositionOnTrunk(trunk, bp.position_percent)
+        x = pos.x
+        y = pos.y
+      }
+    }
+
+    if (x == null || y == null) return
+
+    const bpWorld = percentToWorld(x, y, bpHeight)
+
+    const sphereGeo = new THREE.SphereGeometry(bpRadius, 16, 16)
+    const sphereMat = new THREE.MeshBasicMaterial({
+      color: 0xf59e0b,  // 橙色
+      transparent: true,
+      opacity: 0.9
+    })
+    const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+    sphere.position.set(bpWorld.x, bpWorld.y, bpWorld.z)
+    sphere.userData.branchPoint = bp
+    sphere.name = `branch-point-${bp.id}`
+    bpGroup.add(sphere)
+  })
+
+  scene.add(bpGroup)
+  ctx.value.branchPointGroup = bpGroup
+}
+
+// 构建分支光缆（细青线，从分支点到设备）
+function buildBranchLinks() {
+  const { scene } = ctx.value
+  if (!scene || fiberBranchLinks.value.length === 0) return
+
+  const branchGroup = new THREE.Group()
+  branchGroup.name = 'branch-links'
+
+  // 分支光缆高度：贴近地面
+  const branchHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+
+  fiberBranchLinks.value.forEach(link => {
+    // 找分支点坐标
+    const bp = fiberBranchPoints.value.find(bp => bp.id === link.branch_point_id)
+    if (!bp) return
+
+    let bpX = bp.x_percent
+    let bpY = bp.y_percent
+    if (bpX == null || bpY == null) {
+      const trunk = fiberTrunks.value.find(t => t.id === bp.trunk_link_id)
+      if (trunk) {
+        const pos = calculatePositionOnTrunk(trunk, bp.position_percent)
+        bpX = pos.x
+        bpY = pos.y
+      }
+    }
+
+    // 找设备节点坐标
+    const deviceNode = nodes.value.find(n => n.device_id === link.to_device_id)
+    if (!deviceNode || bpX == null || bpY == null) return
+
+    const bpWorld = percentToWorld(bpX, bpY, branchHeight)
+    const deviceWorld = percentToWorld(deviceNode.x_percent, deviceNode.y_percent, branchHeight)
+
+    const points = []
+    points.push(new THREE.Vector3(bpWorld.x, bpWorld.y, bpWorld.z))
+
+    // 简单直线连接（可根据需要添加拐点）
+    points.push(new THREE.Vector3(deviceWorld.x, deviceWorld.y, deviceWorld.z))
+
+    const geo = new THREE.BufferGeometry().setFromPoints(points)
+    const mat = new THREE.LineBasicMaterial({
+      color: 0x22d3ee,  // 青色
+      transparent: true,
+      opacity: 0.6,
+      linewidth: 1
+    })
+
+    const line = new THREE.Line(geo, mat)
+    line.userData.branchLink = link
+    line.name = `branch-link-${link.id}`
+    branchGroup.add(line)
+  })
+
+  scene.add(branchGroup)
+  ctx.value.branchLinkGroup = branchGroup
+}
+
+// 根据位置百分比计算主干上的坐标
+function calculatePositionOnTrunk(trunk, positionPercent) {
+  // 获取主干路径点
+  const points = [{ x: trunk.start_x_percent, y: trunk.start_y_percent }]
+
+  if (trunk.waypoints && Array.isArray(trunk.waypoints)) {
+    trunk.waypoints.forEach(wp => points.push({ x: wp.x, y: wp.y }))
+  }
+
+  points.push({ x: trunk.end_x_percent, y: trunk.end_y_percent })
+
+  // 计算总长度
+  let totalLength = 0
+  const segmentLengths = []
+  for (let i = 1; i < points.length; i++) {
+    const dx = points[i].x - points[i-1].x
+    const dy = points[i].y - points[i-1].y
+    const len = Math.sqrt(dx*dx + dy*dy)
+    segmentLengths.push(len)
+    totalLength += len
+  }
+
+  // 根据位置百分比找到对应点
+  const targetLength = totalLength * positionPercent / 100
+  let accumulated = 0
+
+  for (let i = 0; i < segmentLengths.length; i++) {
+    if (accumulated + segmentLengths[i] >= targetLength) {
+      const remaining = targetLength - accumulated
+      const ratio = segmentLengths[i] > 0 ? remaining / segmentLengths[i] : 0
+      const x = points[i].x + ratio * (points[i+1].x - points[i].x)
+      const y = points[i].y + ratio * (points[i+1].y - points[i].y)
+      return { x, y }
+    }
+    accumulated += segmentLengths[i]
+  }
+
+  // 超出范围返回终点
+  return { x: trunk.end_x_percent, y: trunk.end_y_percent }
 }
 
 // 构建设备标签（显示在设备上方）
@@ -1809,6 +2015,9 @@ async function switchPlan(planId) {
     const topoRes = await axios.get(`/api/floor-plans/${planId}/topology`)
     if (topoRes.data.nodes) nodes.value = topoRes.data.nodes
     if (topoRes.data.links) links.value = topoRes.data.links
+    if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
+    if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
+    if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
 
     // 重建场景
     loadFloorPlanTexture()
@@ -1913,6 +2122,9 @@ async function loadData() {
       const topoRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topology`)
       if (topoRes.data.nodes) nodes.value = topoRes.data.nodes
       if (topoRes.data.links) links.value = topoRes.data.links
+      if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
+      if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
+      if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
     }
 
   } catch (e) {

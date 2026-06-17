@@ -61,6 +61,44 @@ class DeviceLinkUpdate(BaseModel):
     waypoints: Optional[str] = None  # JSON string
 
 
+# ============ 预接式光纤主干+分支 Pydantic 模型 ============
+
+class FiberTrunkCreate(BaseModel):
+    name: Optional[str] = None
+    start_x_percent: float
+    start_y_percent: float
+    start_device_id: Optional[int] = None
+    end_x_percent: float
+    end_y_percent: float
+    waypoints: Optional[str] = None  # JSON string
+
+
+class FiberTrunkUpdate(BaseModel):
+    name: Optional[str] = None
+    waypoints: Optional[str] = None  # JSON string
+
+
+class FiberBranchPointCreate(BaseModel):
+    trunk_link_id: int
+    name: Optional[str] = None
+    position_percent: float  # 0-100
+    x_percent: Optional[float] = None  # 用户微调坐标
+    y_percent: Optional[float] = None
+
+
+class FiberBranchPointUpdate(BaseModel):
+    name: Optional[str] = None
+    position_percent: Optional[float] = None
+    x_percent: Optional[float] = None
+    y_percent: Optional[float] = None
+
+
+class FiberBranchLinkCreate(BaseModel):
+    branch_point_id: int
+    to_device_id: int
+    logical_uplink_device_id: Optional[int] = None  # 逻辑上联设备
+
+
 # ============ 平面图管理 API ============
 
 @router.get("/floor-plans")
@@ -341,6 +379,93 @@ async def delete_link(plan_id: int, link_id: int, db: Session = Depends(get_db))
     if not success:
         raise HTTPException(status_code=404, detail="链路不存在")
     return {"message": "链路删除成功"}
+
+
+# ============ 预接式光纤主干+分支 API ============
+
+from .fiber_service import (
+    list_fiber_trunks, create_fiber_trunk, update_fiber_trunk, delete_fiber_trunk,
+    list_branch_points, create_branch_point, update_branch_point, delete_branch_point,
+    create_branch_link, delete_branch_link,
+)
+
+
+@router.get("/floor-plans/{plan_id}/fiber-trunks")
+async def get_fiber_trunks(plan_id: int, db: Session = Depends(get_db)):
+    """获取主干光缆列表"""
+    return {"items": list_fiber_trunks(db, plan_id)}
+
+
+@router.post("/floor-plans/{plan_id}/fiber-trunks")
+async def add_fiber_trunk(plan_id: int, data: FiberTrunkCreate, db: Session = Depends(get_db)):
+    """创建主干光缆"""
+    result = create_fiber_trunk(db, plan_id, data)
+    return result
+
+
+@router.put("/floor-plans/{plan_id}/fiber-trunks/{trunk_id}")
+async def modify_fiber_trunk(plan_id: int, trunk_id: int, data: FiberTrunkUpdate, db: Session = Depends(get_db)):
+    """更新主干光缆"""
+    result = update_fiber_trunk(db, plan_id, trunk_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="主干光缆不存在")
+    return result
+
+
+@router.delete("/floor-plans/{plan_id}/fiber-trunks/{trunk_id}")
+async def remove_fiber_trunk(plan_id: int, trunk_id: int, db: Session = Depends(get_db)):
+    """删除主干光缆（连带删除分支点和分支光缆）"""
+    success = delete_fiber_trunk(db, plan_id, trunk_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="主干光缆不存在")
+    return {"message": "主干光缆删除成功"}
+
+
+@router.get("/floor-plans/{plan_id}/fiber-branch-points")
+async def get_branch_points(plan_id: int, db: Session = Depends(get_db)):
+    """获取分支点列表"""
+    return {"items": list_branch_points(db, plan_id)}
+
+
+@router.post("/floor-plans/{plan_id}/fiber-branch-points")
+async def add_branch_point(plan_id: int, data: FiberBranchPointCreate, db: Session = Depends(get_db)):
+    """在主干上创建分支点"""
+    result = create_branch_point(db, plan_id, data)
+    return result
+
+
+@router.put("/floor-plans/{plan_id}/fiber-branch-points/{bp_id}")
+async def modify_branch_point(plan_id: int, bp_id: int, data: FiberBranchPointUpdate, db: Session = Depends(get_db)):
+    """更新分支点"""
+    result = update_branch_point(db, plan_id, bp_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="分支点不存在")
+    return result
+
+
+@router.delete("/floor-plans/{plan_id}/fiber-branch-points/{bp_id}")
+async def remove_branch_point(plan_id: int, bp_id: int, db: Session = Depends(get_db)):
+    """删除分支点（连带删除分支光缆）"""
+    success = delete_branch_point(db, plan_id, bp_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="分支点不存在")
+    return {"message": "分支点删除成功"}
+
+
+@router.post("/floor-plans/{plan_id}/fiber-branch-links")
+async def add_branch_link(plan_id: int, data: FiberBranchLinkCreate, db: Session = Depends(get_db)):
+    """创建分支光缆（从分支点到设备）"""
+    result = create_branch_link(db, plan_id, data)
+    return result
+
+
+@router.delete("/floor-plans/{plan_id}/fiber-branch-links/{link_id}")
+async def remove_branch_link(plan_id: int, link_id: int, db: Session = Depends(get_db)):
+    """删除分支光缆"""
+    success = delete_branch_link(db, plan_id, link_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="分支光缆不存在")
+    return {"message": "分支光缆删除成功"}
 
 
 # ============ 设备详情 & 告警 API ============
