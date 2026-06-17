@@ -1,5 +1,5 @@
 <template>
-  <div class="monitor3d" :class="{ 'fullscreen-mode': isFullscreen, 'panel-hidden': hidePanel, 'edit-mode': isEditMode }">
+  <div class="monitor3d" :class="{ 'fullscreen-mode': isFullscreen, 'panel-hidden': hidePanel, 'edit-mode': isEditMode, 'dark-panel': isDark }">
     <!-- 左：3D 画布 -->
     <div ref="canvasHost" class="canvas-host"
          @dragover.prevent="onCanvasDragOver"
@@ -131,7 +131,7 @@
     </el-dialog>
 
     <!-- 右：操作面板（玻璃质感） -->
-    <aside class="side-panel">
+    <aside class="side-panel" :class="{ dark: isDark }">
       <div class="panel-header">
         <h3>{{ t('monitor3dTitle') }}</h3>
       </div>
@@ -318,7 +318,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { ElMessage } from 'element-plus'
 import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu } from '@element-plus/icons-vue'
 import axios from 'axios'
-import { t } from '@/locales'
+import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
 const canvasHost = ref(null)
@@ -329,6 +329,7 @@ const showLabels = ref(true)
 const showLinks = ref(true)
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
+const { t } = useI18n()
 const hidePanel = ref(false)  // 隐藏侧边栏
 
 // 上传底图相关
@@ -432,6 +433,12 @@ function getStatusLabel(status) {
 // 标签页和编辑模式
 const sidebarTab = ref('topology')
 const isEditMode = ref(false)
+const isDark = ref(document.documentElement.classList.contains('dark'))
+
+// 监听全局主题变化
+window.addEventListener('theme-change', (e) => {
+  isDark.value = e.detail.dark
+})
 
 // 编辑模式切换时自动禁用/启用轨道控制 + 显示/隐藏拐点
 watch(isEditMode, (editMode) => {
@@ -2040,6 +2047,55 @@ onBeforeUnmount(() => {
   z-index: 10;
 }
 
+/* 明亮模式适配 */
+.side-panel:not(.dark) {
+  background: rgba(255, 255, 255, 0.85);
+  color: #374151;
+  border-left: 1px solid rgba(0, 120, 212, 0.2);
+}
+
+.side-panel:not(.dark) .panel-header h3 {
+  color: #0078d4;
+}
+
+.side-panel:not(.dark) .kpi b.online {
+  color: #10b981;
+}
+
+.side-panel:not(.dark) .kpi b.offline {
+  color: #ef4444;
+}
+
+.side-panel:not(.dark) .link-item,
+.side-panel:not(.dark) .plan-item {
+  background: rgba(0, 0, 0, 0.05);
+  color: #374151;
+}
+
+.side-panel:not(.dark) .plan-item.active {
+  background: rgba(0, 120, 212, 0.1);
+  border-color: rgba(0, 120, 212, 0.3);
+}
+
+.side-panel:not(.dark) .link-info {
+  color: #374151;
+}
+
+.side-panel:not(.dark) .plan-name {
+  color: #374151;
+}
+
+.side-panel:not(.dark) .panel-action-btn {
+  background: linear-gradient(135deg, rgba(0, 120, 212, 0.08), rgba(0, 120, 212, 0.02));
+  border-color: rgba(0, 120, 212, 0.25);
+  color: #0078d4;
+}
+
+.side-panel:not(.dark) .panel-action-btn:hover {
+  background: linear-gradient(135deg, rgba(0, 120, 212, 0.15), rgba(0, 120, 212, 0.08));
+  border-color: rgba(0, 120, 212, 0.4);
+}
+
 .monitor3d.panel-hidden .side-panel {
   transform: translateX(100%);
 }
@@ -2076,6 +2132,13 @@ onBeforeUnmount(() => {
 
 .monitor3d.panel-hidden .panel-toggle {
   right: 0;
+}
+
+/* 明亮模式：panel-toggle 适配 */
+.monitor3d:not(.dark-panel) .panel-toggle {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 120, 212, 0.2);
+  color: #0078d4;
 }
 
 /* 画布右下角工具按钮（避开侧边栏） */
@@ -2374,6 +2437,65 @@ onBeforeUnmount(() => {
 
 :deep(.el-tabs__nav) {
   border: none;
+}
+
+/* ===== 明亮模式：el-tabs 样式覆盖 ===== */
+.side-panel:not(.dark) :deep(.el-tabs--border-card) {
+  background: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.side-panel:not(.dark) :deep(.el-tabs__header) {
+  background: rgba(0, 0, 0, 0.03);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.side-panel:not(.dark) :deep(.el-tabs__item) {
+  color: #6b7280 !important;
+}
+
+.side-panel:not(.dark) :deep(.el-tabs__item:hover) {
+  color: #0078d4 !important;
+}
+
+.side-panel:not(.dark) :deep(.el-tabs__item.is-active) {
+  color: #0078d4 !important;
+}
+
+.side-panel:not(.dark) :deep(.el-tabs__item.is-active)::after {
+  background: #0078d4;
+}
+
+/* ===== 明亮模式：el-select 样式覆盖 ===== */
+.side-panel:not(.dark) :deep(.el-select__wrapper),
+.side-panel:not(.dark) :deep(.el-input__wrapper) {
+  background: rgba(255, 255, 255, 0.8) !important;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.15) inset !important;
+}
+
+.side-panel:not(.dark) :deep(.el-select__wrapper:hover),
+.side-panel:not(.dark) :deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px rgba(0, 120, 212, 0.4) inset !important;
+}
+
+.side-panel:not(.dark) :deep(.el-select__wrapper.is-focused),
+.side-panel:not(.dark) :deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #0078d4 inset !important;
+}
+
+.side-panel:not(.dark) :deep(.el-select__placeholder),
+.side-panel:not(.dark) :deep(.el-input__inner) {
+  color: #374151 !important;
+}
+
+.side-panel:not(.dark) :deep(.el-select__placeholder.is-transparent) {
+  color: #9ca3af !important;
+}
+
+.side-panel:not(.dark) :deep(.el-select__caret),
+.side-panel:not(.dark) :deep(.el-input__icon) {
+  color: #6b7280 !important;
 }
 
 /* ===== 下拉框暗色化 ===== */
