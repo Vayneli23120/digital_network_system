@@ -5,9 +5,13 @@
 
     <!-- 画布右下角操作按钮 -->
     <div class="canvas-tools">
+      <!-- 编辑模式状态提示 -->
+      <div v-if="isEditMode" class="edit-mode-indicator">
+        <el-tag type="warning" size="small">{{ t('monitorEditMode') }}</el-tag>
+      </div>
       <!-- 编辑/查看模式切换 -->
-      <el-button size="small" :type="isEditMode ? 'warning' : 'default'" @click="toggleEditMode">
-        {{ isEditMode ? t('monitorEditMode') : t('monitorViewMode') }}
+      <el-button size="small" :type="isEditMode ? 'warning' : 'primary'" @click="toggleEditMode">
+        {{ isEditMode ? t('monitorViewMode') : t('monitorEditMode') }}
       </el-button>
       <el-button size="small" @click="resetView">{{ t('viewReset') }}</el-button>
       <el-button size="small" @click="topView">{{ t('viewTop') }}</el-button>
@@ -327,7 +331,9 @@ const newLinkType = ref('fiber')
 function toggleEditMode() {
   isEditMode.value = !isEditMode.value
   if (isEditMode.value) {
-    ElMessage.info(t('monitorEditMode') + ': ' + t('clickDeviceHint'))
+    ElMessage.info(t('monitorEditMode') + ' - ' + t('clickDeviceHint'))
+  } else {
+    ElMessage.info(t('monitorViewMode'))
   }
 }
 
@@ -574,8 +580,11 @@ function initScene() {
   }
   animate()
 
-  // 点击事件
+  // 点击事件（查看模式选中）
   renderer.domElement.addEventListener('click', onCanvasClick)
+
+  // 鼠标按下事件（编辑模式拖动起点）
+  renderer.domElement.addEventListener('mousedown', onCanvasMouseDown)
 
   // 窗口大小变化
   window.addEventListener('resize', onResize)
@@ -925,8 +934,67 @@ let selectedMesh = null
 const dragState = ref(null)
 let isDragging = false
 
+// 编辑模式鼠标按下 - 拖动起点
+function onCanvasMouseDown(e) {
+  if (!isEditMode.value) return
+
+  const { camera, renderer, deviceMeshes, controls } = ctx.value
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+  raycaster.setFromCamera(pointer, camera)
+
+  const targets = Object.values(deviceMeshes || {})
+  const hits = raycaster.intersectObjects(targets, false)
+
+  if (hits.length > 0) {
+    const hit = hits[0]
+    const mesh = hit.object
+    const device = mesh.userData.devices?.[hit.instanceId]
+
+    if (device) {
+      const node = nodes.value.find(n => n.device_id === device.id)
+      if (node) {
+        selectedDevice.value = device
+        selectedInstanceId = hit.instanceId
+        selectedMesh = mesh
+
+        // 高亮选中设备
+        const highlightColor = new THREE.Color(0xffffff)
+        mesh.setColorAt(hit.instanceId, highlightColor)
+        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+
+        // 设置拖动状态
+        dragState.value = {
+          nodeId: node.id,
+          deviceId: device.id,
+          startX_percent: parseFloat(node.x_percent),
+          startY_percent: parseFloat(node.y_percent),
+          startClientX: e.clientX,
+          startClientY: e.clientY,
+        }
+
+        // 暂停轨道控制
+        controls.enabled = false
+        isDragging = false
+
+        // 监听拖动
+        renderer.domElement.addEventListener('mousemove', onDragMove)
+        renderer.domElement.addEventListener('mouseup', onDragEnd)
+      }
+    }
+  }
+}
+
+// 查看模式点击选中
 function onCanvasClick(e) {
-  const { camera, renderer, deviceMeshes, scene, controls } = ctx.value
+  // 如果刚完成拖动，不处理点击
+  if (isDragging) return
+  if (isEditMode.value) return
+
+  const { camera, renderer, deviceMeshes } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -957,38 +1025,18 @@ function onCanvasClick(e) {
       selectedInstanceId = hit.instanceId
       selectedMesh = mesh
 
-      // 高亮选中设备（变亮）
+      // 高亮选中设备
       const highlightColor = new THREE.Color(0xffffff)
       mesh.setColorAt(hit.instanceId, highlightColor)
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
 
-      // 编辑模式下准备拖动
-      if (isEditMode.value) {
-        const node = nodes.value.find(n => n.device_id === device.id)
-        if (node) {
-          dragState.value = {
-            nodeId: node.id,
-            deviceId: device.id,
-            startX_percent: parseFloat(node.x_percent),
-            startY_percent: parseFloat(node.y_percent),
-            startClientX: e.clientX,
-            startClientY: e.clientY,
-          }
-          // 暂停轨道控制
-          controls.enabled = false
-          isDragging = false
-          // 开始监听拖动
-          renderer.domElement.addEventListener('mousemove', onDragMove)
-          renderer.domElement.addEventListener('mouseup', onDragEnd)
-        }
-      } else {
-        ElMessage.success(`${t('selected')}: ${device.name}`)
-        // 相机聚焦到设备
-        const node = nodes.value.find(n => n.device_id === device.id)
-        if (node) {
-          const w = percentToWorld(node.x_percent, node.y_percent, 0)
-          ctx.value.controls.target.set(w.x, 30, w.z)
-        }
+      ElMessage.success(`${t('selected')}: ${device.name}`)
+
+      // 相机聚焦到设备
+      const node = nodes.value.find(n => n.device_id === device.id)
+      if (node) {
+        const w = percentToWorld(node.x_percent, node.y_percent, 0)
+        ctx.value.controls.target.set(w.x, 30, w.z)
       }
     }
   } else {
@@ -998,26 +1046,52 @@ function onCanvasClick(e) {
   }
 }
 
-// 拖动处理
+// 拖动处理 - 使用Raycaster求地面交点（更精确）
 function onDragMove(e) {
   if (!dragState.value) return
   isDragging = true
 
-  const rect = ctx.value.renderer.domElement.getBoundingClientRect()
-  const deltaX = ((e.clientX - dragState.value.startClientX) / rect.width) * 100
-  const deltaY = ((e.clientY - dragState.value.startClientY) / rect.height) * 100
+  const { camera, renderer } = ctx.value
 
-  const newX = Math.max(0, Math.min(100, dragState.value.startX_percent + deltaX))
-  const newY = Math.max(0, Math.min(100, dragState.value.startY_percent + deltaY))
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
 
-  dragState.value._lastX = newX
-  dragState.value._lastY = newY
+  raycaster.setFromCamera(pointer, camera)
 
-  // 实时更新标签位置
-  const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
-  if (label) {
-    const w = percentToWorld(newX, newY, 5)
-    label.position.set(w.x, w.y, w.z)
+  // 计算鼠标在地面（y=0）上的交点
+  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  const intersectPoint = new THREE.Vector3()
+  raycaster.ray.intersectPlane(groundPlane, intersectPoint)
+
+  if (intersectPoint) {
+    // 世界坐标转百分比
+    const newX = (intersectPoint.x / plan.real_width_m) * 100
+    const newY = (intersectPoint.z / plan.real_depth_m) * 100
+
+    // 限制在0-100范围
+    const clampedX = Math.max(0, Math.min(100, newX))
+    const clampedY = Math.max(0, Math.min(100, newY))
+
+    dragState.value._lastX = clampedX
+    dragState.value._lastY = clampedY
+
+    // 实时更新标签位置
+    const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
+    if (label) {
+      const w = percentToWorld(clampedX, clampedY, 5)
+      label.position.set(w.x, w.y, w.z)
+    }
+
+    // 实时更新设备实例位置
+    if (selectedMesh && selectedInstanceId !== null) {
+      const dummy = new THREE.Object3D()
+      const w = percentToWorld(clampedX, clampedY, 8)
+      dummy.position.set(w.x, w.y, w.z)
+      dummy.updateMatrix()
+      selectedMesh.setMatrixAt(selectedInstanceId, dummy.matrix)
+      selectedMesh.instanceMatrix.needsUpdate = true
+    }
   }
 }
 
@@ -1037,14 +1111,31 @@ async function onDragEnd(e) {
         y_percent: parseFloat(_lastY.toFixed(2)),
       })
       ElMessage.success(t('msgSaveSuccess'))
+
       // 更新本地nodes数据
       const node = nodes.value.find(n => n.id === nodeId)
       if (node) {
         node.x_percent = _lastX.toFixed(2)
         node.y_percent = _lastY.toFixed(2)
       }
-      // 重建设备位置
-      rebuildDevicePositions()
+
+      // 重建链路（拖动后连线要跟随）
+      if (ctx.value.linkLines) {
+        ctx.value.scene.remove(ctx.value.linkLines)
+        ctx.value.linkLines = null
+      }
+      buildLinks()
+
+      // 恢复设备颜色
+      if (selectedMesh && selectedInstanceId !== null) {
+        const device = selectedMesh.userData.devices?.[selectedInstanceId]
+        if (device) {
+          const c = COLORS[device.status] || COLORS.online
+          selectedMesh.setColorAt(selectedInstanceId, c)
+          if (selectedMesh.instanceColor) selectedMesh.instanceColor.needsUpdate = true
+        }
+      }
+
     } catch (err) {
       console.error('更新节点位置失败:', err)
       ElMessage.error(t('msgUpdateFailed'))
@@ -1413,6 +1504,9 @@ onBeforeUnmount(() => {
 
   // 清除事件
   renderer?.domElement?.removeEventListener('click', onCanvasClick)
+  renderer?.domElement?.removeEventListener('mousedown', onCanvasMouseDown)
+  renderer?.domElement?.removeEventListener('mousemove', onDragMove)
+  renderer?.domElement?.removeEventListener('mouseup', onDragEnd)
 
   // 释放资源
   controls?.dispose()
@@ -1718,17 +1812,69 @@ onBeforeUnmount(() => {
   cursor: grabbing;
 }
 
-/* 标签页样式 */
+.edit-mode-indicator {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  background: rgba(255, 161, 22, 0.9);
+  padding: 8px 16px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 14px;
+}
+
+/* 标签页样式 - 暗色玻璃质感风格 */
 :deep(.el-tabs) {
   margin-top: 8px;
 }
 
+:deep(.el-tabs--border-card) {
+  background: transparent;
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 6px;
+}
+
+:deep(.el-tabs__header) {
+  background: rgba(26, 34, 48, 0.5);
+  border: none;
+  border-radius: 5px 5px 0 0;
+}
+
+:deep(.el-tabs__nav-wrap) {
+  background: transparent;
+}
+
+:deep(.el-tabs__item) {
+  color: #e5e7eb !important;
+  background: transparent;
+  border: none;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+
+:deep(.el-tabs__item:hover) {
+  color: #22d3ee !important;
+}
+
+:deep(.el-tabs__item.is-active) {
+  color: #22d3ee !important;
+  background: rgba(34, 211, 238, 0.2);
+}
+
 :deep(.el-tabs__content) {
-  padding: 8px 0;
+  padding: 8px;
+  background: transparent;
+  border-radius: 0 0 5px 5px;
 }
 
 :deep(.el-tab-pane) {
   font-size: 12px;
+}
+
+:deep(.el-tabs__nav) {
+  border: none;
 }
 
 /* 链路列表 */
