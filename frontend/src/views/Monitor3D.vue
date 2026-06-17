@@ -646,6 +646,10 @@ function getDeviceBaseSize(deviceType) {
 // 状态颜色映射
 const STATUS_COLOR = { online: 0x22d3ee, offline: 0xff4d4f, maintenance: 0xffa116 }
 
+// 复用的 emissive 颜色常量（避免每次 new THREE.Color）
+const EMISSIVE_ON = new THREE.Color(0x333333)
+const EMISSIVE_OFF = new THREE.Color(0x000000)
+
 // 创建立体设备模型（基于底图比例）
 function createDeviceModel(deviceType, status = 'online') {
   const group = new THREE.Group()
@@ -1416,7 +1420,7 @@ function onCanvasMouseDown(e) {
       // 高亮选中设备
       model.traverse(child => {
         if (child.material) {
-          child.material.emissive = new THREE.Color(0x333333)
+          child.material.emissive = EMISSIVE_ON
         }
       })
 
@@ -1540,7 +1544,7 @@ function onCanvasClick(e) {
   if (selectedModel) {
     selectedModel.traverse(child => {
       if (child.material) {
-        child.material.emissive = new THREE.Color(0x000000)
+        child.material.emissive = EMISSIVE_OFF
       }
     })
   }
@@ -1563,7 +1567,7 @@ function onCanvasClick(e) {
       // 高亮选中设备
       model.traverse(child => {
         if (child.material) {
-          child.material.emissive = new THREE.Color(0x333333)
+          child.material.emissive = EMISSIVE_ON
         }
       })
 
@@ -1592,27 +1596,25 @@ function onDragMove(e) {
   const pos = screenToPercent(e)
   if (!pos) return
 
-  const { clampedX, clampedY } = { clampedX: pos.x_percent, clampedY: pos.y_percent }
-  dragState.value._lastX = clampedX
-  dragState.value._lastY = clampedY
+  dragState.value._lastX = pos.x_percent
+  dragState.value._lastY = pos.y_percent
 
   // 计算基于底图尺寸的高度
   const deviceType = dragState.value.deviceType || 'switch'
   const base = getDeviceBaseSize(deviceType)
   const elevation = base * 0.5  // 设备离地高度
-  const modelHeight = base * 0.8  // 设备模型高度估算
-  const labelHeight = elevation + modelHeight + base * 0.3  // 标签在设备上方
+  const labelHeight = elevation + base * 1.1  // 标签在设备上方
 
   // 实时更新标签位置（在设备上方）
   const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
   if (label) {
-    const w = percentToWorld(clampedX, clampedY, labelHeight)
+    const w = percentToWorld(pos.x_percent, pos.y_percent, labelHeight)
     label.position.set(w.x, w.y, w.z)
   }
 
   // 实时更新设备模型位置
   if (selectedModel) {
-    const w = percentToWorld(clampedX, clampedY, elevation)
+    const w = percentToWorld(pos.x_percent, pos.y_percent, elevation)
     selectedModel.position.set(w.x, w.y, w.z)
   }
 }
@@ -1653,7 +1655,7 @@ async function onDragEnd(e) {
       if (selectedModel) {
         selectedModel.traverse(child => {
           if (child.material) {
-            child.material.emissive = new THREE.Color(0x000000)
+            child.material.emissive = EMISSIVE_OFF
           }
         })
       }
@@ -1731,7 +1733,7 @@ function focusDevice(device) {
       if (d && d.id === device.id) {
         model.traverse(child => {
           if (child.material) {
-            child.material.emissive = new THREE.Color(0x333333)
+            child.material.emissive = EMISSIVE_ON
           }
         })
       }

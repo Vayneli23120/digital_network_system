@@ -363,7 +363,8 @@ def update_device_link(
     if link_group:
         link.link_group = link_group
 
-    if waypoints:
+    # waypoints 允许为空（用户清空所有拐点）
+    if waypoints is not None:
         link.waypoints = waypoints
 
     link.updated_at = datetime.utcnow()
