@@ -461,6 +461,25 @@ const COLORS = {
   maintenance: new THREE.Color(0xffa116), // 橙色
 }
 
+// 设备尺寸比例系数 - 基于底图短边的百分比
+const DEVICE_SIZE_RATIO = {
+  switch: 0.015,       // 交换机占底图短边 1.5%
+  core_switch: 0.020,  // 核心交换机稍大 2%
+  ap: 0.010,           // AP 小一点 1%
+  server_switch: 0.015,
+  uce: 0.015,
+  router: 0.014,
+  firewall: 0.016,
+  wlc: 0.018,
+}
+
+// 计算设备基准尺寸（基于底图尺寸）
+function getDeviceBaseSize(deviceType) {
+  const ref = Math.min(plan.real_width_m, plan.real_depth_m)  // 用短边做基准
+  const ratio = DEVICE_SIZE_RATIO[deviceType] ?? 0.015
+  return ref * ratio
+}
+
 // 坐标转换：百分比 → 世界坐标（米）
 function percentToWorld(xPercent, yPercent, elevation = 0) {
   const x = (Number(xPercent) / 100) * plan.real_width_m
@@ -740,7 +759,7 @@ async function loadFloorPlanTexture() {
   }
 }
 
-// 构建设备 InstancedMesh
+// 构建设备 InstancedMesh（基于底图尺寸等比缩放）
 function buildDeviceInstances() {
   const { scene } = ctx.value
 
@@ -749,24 +768,24 @@ function buildDeviceInstances() {
     ['office_switch', 'core_switch', 'server_switch', 'uce'].includes(d.device_type)
   )
   const aps = filteredDevices.value.filter(d => d.device_type === 'ap')
-  const others = filteredDevices.value.filter(d =>
-    !['office_switch', 'core_switch', 'server_switch', 'uce', 'ap'].includes(d.device_type)
-  )
 
   const meshes = {}
   const dummy = new THREE.Object3D()
 
-  // 交换机 - 放大到更可见尺寸（场景1000m量级）
+  // 交换机 - 基于底图尺寸的等比例
   if (switches.length > 0) {
-    const geo = new THREE.BoxGeometry(25, 15, 15)  // 25m x 15m x 15m
+    const base = getDeviceBaseSize('switch')
+    const geo = new THREE.BoxGeometry(base * 1.6, base * 0.5, base * 1.1)  // 长×高×宽
     const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
     const mesh = new THREE.InstancedMesh(geo, mat, switches.length)
+
+    const elevation = base * 0.8  // 离地高度也用 base
 
     switches.forEach((d, i) => {
       const node = nodes.value.find(n => n.device_id === d.id)
       if (!node) return
 
-      const w = percentToWorld(node.x_percent, node.y_percent, 8)  // 离地8m
+      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -779,21 +798,25 @@ function buildDeviceInstances() {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     mesh.userData.devices = switches
     mesh.userData.type = 'switch'
+    mesh.userData.base = base  // 存储 base 用于后续重建
     scene.add(mesh)
     meshes.switch = mesh
   }
 
-  // AP - 放大到更可见尺寸
+  // AP - 基于底图尺寸的等比例
   if (aps.length > 0) {
-    const geo = new THREE.BoxGeometry(18, 10, 10)  // 18m x 10m x 10m
+    const base = getDeviceBaseSize('ap')
+    const geo = new THREE.BoxGeometry(base * 1.2, base * 0.4, base * 0.8)  // 长×高×宽
     const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
     const mesh = new THREE.InstancedMesh(geo, mat, aps.length)
+
+    const elevation = base * 0.5  // AP 离地稍低
 
     aps.forEach((d, i) => {
       const node = nodes.value.find(n => n.device_id === d.id)
       if (!node) return
 
-      const w = percentToWorld(node.x_percent, node.y_percent, 5)  // 离地5m
+      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -806,6 +829,7 @@ function buildDeviceInstances() {
     if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
     mesh.userData.devices = aps
     mesh.userData.type = 'ap'
+    mesh.userData.base = base
     scene.add(mesh)
     meshes.ap = mesh
   }
@@ -813,12 +837,15 @@ function buildDeviceInstances() {
   ctx.value.deviceMeshes = meshes
 }
 
-// 构建链路
+// 构建链路（贴近地面，使用基于底图尺寸的高度）
 function buildLinks() {
   const { scene } = ctx.value
 
   const linkGroup = new THREE.Group()
   linkGroup.name = 'links'
+
+  // 链路高度：贴近地面，底图短边的 0.2%
+  const linkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
 
   links.value.forEach(link => {
     const fromNode = nodes.value.find(n => n.id === link.from_node_id || n.device_id === link.from)
@@ -826,8 +853,8 @@ function buildLinks() {
 
     if (!fromNode || !toNode) return
 
-    const a = percentToWorld(fromNode.x_percent, fromNode.y_percent, 1)
-    const b = percentToWorld(toNode.x_percent, toNode.y_percent, 1)
+    const a = percentToWorld(fromNode.x_percent, fromNode.y_percent, linkHeight)
+    const b = percentToWorld(toNode.x_percent, toNode.y_percent, linkHeight)
 
     const points = [
       new THREE.Vector3(a.x, a.y, a.z),
@@ -850,19 +877,22 @@ function buildLinks() {
   ctx.value.linkLines = linkGroup
 }
 
-// 构建设备标签
+// 构建设备标签（基于底图尺寸等比缩放）
 function buildLabels() {
   const { scene } = ctx.value
 
   const labelGroup = new THREE.Group()
   labelGroup.name = 'labels'
 
+  // 标签基准高度（底图短边的 0.5%，低于设备模型）
+  const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
+
   // 显示所有筛选后的设备标签
   filteredDevices.value.forEach(d => {
     const node = nodes.value.find(n => n.device_id === d.id)
     if (!node) return
 
-    const w = percentToWorld(node.x_percent, node.y_percent, 2)
+    const w = percentToWorld(node.x_percent, node.y_percent, labelBase)
 
     const el = document.createElement('div')
     el.className = `device-label ${d.status}`
@@ -1048,11 +1078,13 @@ function onCanvasClick(e) {
 
       ElMessage.success(`${t('selected')}: ${device.name}`)
 
-      // 相机聚焦到设备
+      // 相机聚焦到设备（使用基于底图尺寸的高度）
       const node = nodes.value.find(n => n.device_id === device.id)
       if (node) {
         const w = percentToWorld(node.x_percent, node.y_percent, 0)
-        ctx.value.controls.target.set(w.x, 30, w.z)
+        const ref = Math.min(plan.real_width_m, plan.real_depth_m)
+        const lookAtHeight = ref * 0.03  // 观察点高度约底图短边的 3%
+        ctx.value.controls.target.set(w.x, lookAtHeight, w.z)
       }
     }
   } else {
@@ -1092,17 +1124,23 @@ function onDragMove(e) {
     dragState.value._lastX = clampedX
     dragState.value._lastY = clampedY
 
+    // 计算基于底图尺寸的高度
+    const meshType = selectedMesh?.userData.type || 'switch'
+    const base = selectedMesh?.userData.base || getDeviceBaseSize(meshType)
+    const elevation = meshType === 'ap' ? base * 0.5 : base * 0.8
+    const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
+
     // 实时更新标签位置
     const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
     if (label) {
-      const w = percentToWorld(clampedX, clampedY, 5)
+      const w = percentToWorld(clampedX, clampedY, labelBase)
       label.position.set(w.x, w.y, w.z)
     }
 
     // 实时更新设备实例位置
     if (selectedMesh && selectedInstanceId !== null) {
       const dummy = new THREE.Object3D()
-      const w = percentToWorld(clampedX, clampedY, 8)
+      const w = percentToWorld(clampedX, clampedY, elevation)
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       selectedMesh.setMatrixAt(selectedInstanceId, dummy.matrix)
@@ -1162,7 +1200,7 @@ async function onDragEnd(e) {
   isDragging = false
 }
 
-// 重建设备位置（拖动后）
+// 重建设备位置（拖动后）- 使用基于底图尺寸的高度
 function rebuildDevicePositions() {
   const { deviceMeshes } = ctx.value
   if (!deviceMeshes) return
@@ -1172,11 +1210,15 @@ function rebuildDevicePositions() {
   Object.values(deviceMeshes).forEach(mesh => {
     if (!mesh.userData.devices) return
 
+    // 使用 mesh 存储的 base 计算离地高度
+    const base = mesh.userData.base || getDeviceBaseSize(mesh.userData.type || 'switch')
+    const elevation = mesh.userData.type === 'ap' ? base * 0.5 : base * 0.8
+
     mesh.userData.devices.forEach((d, i) => {
       const node = nodes.value.find(n => n.device_id === d.id)
       if (!node) return
 
-      const w = percentToWorld(node.x_percent, node.y_percent, 8)
+      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
       dummy.position.set(w.x, w.y, w.z)
       dummy.updateMatrix()
       mesh.setMatrixAt(i, dummy.matrix)
@@ -1193,7 +1235,7 @@ function rebuildDevicePositions() {
   buildLinks()
 }
       
-// 聚焦到设备（带平滑动画）
+// 聚焦到设备（带平滑动画）- 使用基于底图尺寸的距离
 let focusAnimationId = null
 function focusDevice(device) {
   const { camera, controls, deviceMeshes } = ctx.value
@@ -1208,9 +1250,15 @@ function focusDevice(device) {
     cancelAnimationFrame(focusAnimationId)
   }
 
+  // 基于底图尺寸计算聚焦距离
+  const ref = Math.min(plan.real_width_m, plan.real_depth_m)
+  const focusDist = ref * 0.08  // 聚焦时相机距离设备约底图短边的 8%
+  const focusHeight = ref * 0.05  // 相机高度约 5%
+  const lookAtHeight = ref * 0.03  // 观察点高度约 3%
+
   // 目标位置
-  const targetPos = { x: w.x + 50, y: 100, z: w.z + 50 }
-  const targetLookAt = { x: w.x, y: 30, z: w.z }
+  const targetPos = { x: w.x + focusDist, y: focusHeight, z: w.z + focusDist }
+  const targetLookAt = { x: w.x, y: lookAtHeight, z: w.z }
 
   // 当前位置
   const startPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
