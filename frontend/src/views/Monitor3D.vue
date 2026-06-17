@@ -34,24 +34,24 @@
     <el-dialog v-model="showAddLinkDialog" :title="t('actionAddLink')" width="400px">
       <el-form>
         <el-form-item :label="t('linkSource')">
-          <el-select v-model="newLinkSource" :placeholder="t('actionSelect')" size="small">
+          <el-select v-model="newLinkSource" :placeholder="t('actionSelect')" size="small" popper-class="dark-select-popper">
             <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('linkTarget')">
-          <el-select v-model="newLinkTarget" :placeholder="t('actionSelect')" size="small">
+          <el-select v-model="newLinkTarget" :placeholder="t('actionSelect')" size="small" popper-class="dark-select-popper">
             <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('linkRole')">
-          <el-select v-model="newLinkRole" size="small">
+          <el-select v-model="newLinkRole" size="small" popper-class="dark-select-popper">
             <el-option :label="t('linkRoleUplink')" value="uplink" />
             <el-option :label="t('linkRoleSvl')" value="svl" />
             <el-option :label="t('linkRolePortchannel')" value="portchannel-member" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('linkType')">
-          <el-select v-model="newLinkType" size="small">
+          <el-select v-model="newLinkType" size="small" popper-class="dark-select-popper">
             <el-option :label="t('linkTypeFiber')" value="fiber" />
             <el-option :label="t('linkTypeEthernet')" value="ethernet" />
             <el-option :label="t('linkTypeWireless')" value="wireless" />
@@ -94,7 +94,7 @@
 
     <!-- 绑定设备对话框 -->
     <el-dialog v-model="showBindDialog" :title="t('bindDeviceTitle')" width="400px">
-      <el-select v-model="bindDeviceId" :placeholder="t('monitorScreenSelectDevice')" filterable style="width:100%">
+      <el-select v-model="bindDeviceId" :placeholder="t('monitorScreenSelectDevice')" filterable style="width:100%" popper-class="dark-select-popper">
         <el-option v-for="d in bindCandidates" :key="d.id"
                    :label="`${d.name} (${d.ip || ''})`" :value="d.id" />
       </el-select>
@@ -156,13 +156,13 @@
         <el-tab-pane :label="t('monitorTopology')" name="topology">
           <!-- 设备筛选 -->
           <div class="filter-section">
-            <el-select v-model="filterType" :placeholder="t('filterDeviceType')" size="small" clearable>
+            <el-select v-model="filterType" :placeholder="t('filterDeviceType')" size="small" clearable popper-class="dark-select-popper">
               <el-option :label="t('monitorFilterAllTypes')" value="" />
               <el-option :label="t('deviceTypeSwitch')" value="switch" />
               <el-option :label="t('deviceTypeCoreSwitch')" value="core_switch" />
               <el-option :label="t('deviceTypeAP')" value="ap" />
             </el-select>
-            <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable>
+            <el-select v-model="filterStatus" :placeholder="t('filterDeviceStatus')" size="small" clearable popper-class="dark-select-popper">
               <el-option :label="t('filterAllStatus')" value="" />
               <el-option :label="t('statusOnline')" value="online" />
               <el-option :label="t('statusOffline')" value="offline" />
@@ -2293,16 +2293,22 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
+/* 整个 tabs 作为一张连续卡片 */
 :deep(.el-tabs--border-card) {
-  background: transparent;
-  border: 1px solid rgba(34, 211, 238, 0.2);
-  border-radius: 6px;
+  background: rgba(17, 22, 31, 0.45);
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
 }
 
+/* 头部去掉独立底色，改为轻微区分 + 底部细分隔线 */
 :deep(.el-tabs__header) {
-  background: rgba(26, 34, 48, 0.5);
+  background: rgba(26, 34, 48, 0.35);
   border: none;
-  border-radius: 5px 5px 0 0;
+  border-bottom: 1px solid rgba(34, 211, 238, 0.12);
+  border-radius: 0;
+  margin: 0;
 }
 
 :deep(.el-tabs__nav-wrap) {
@@ -2315,21 +2321,34 @@ onBeforeUnmount(() => {
   border: none;
   padding: 8px 12px;
   font-size: 12px;
+  border-left: none !important;
+  border-right: none !important;
 }
 
 :deep(.el-tabs__item:hover) {
   color: #22d3ee !important;
 }
 
+/* 选中项改为底部高亮条，而非整块色块 */
 :deep(.el-tabs__item.is-active) {
   color: #22d3ee !important;
-  background: rgba(34, 211, 238, 0.2);
+  background: transparent;
+  position: relative;
+}
+:deep(.el-tabs__item.is-active)::after {
+  content: '';
+  position: absolute;
+  left: 12px; right: 12px; bottom: 0;
+  height: 2px;
+  background: #22d3ee;
+  border-radius: 2px;
 }
 
+/* 内容区透明、无独立圆角（圆角交给外层） */
 :deep(.el-tabs__content) {
-  padding: 8px;
+  padding: 10px;
   background: transparent;
-  border-radius: 0 0 5px 5px;
+  border-radius: 0;
 }
 
 :deep(.el-tab-pane) {
@@ -2338,6 +2357,36 @@ onBeforeUnmount(() => {
 
 :deep(.el-tabs__nav) {
   border: none;
+}
+
+/* ===== 下拉框暗色化 ===== */
+/* 覆盖 el-select 的输入框底色（暗色玻璃质感） */
+:deep(.el-select__wrapper),
+:deep(.el-input__wrapper) {
+  background: rgba(26, 34, 48, 0.6) !important;
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.25) inset !important;
+  border-radius: 6px;
+}
+:deep(.el-select__wrapper:hover),
+:deep(.el-input__wrapper:hover) {
+  box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.5) inset !important;
+}
+:deep(.el-select__wrapper.is-focused),
+:deep(.el-input__wrapper.is-focus) {
+  box-shadow: 0 0 0 1px #22d3ee inset !important;
+}
+/* 选中文字 / 占位符颜色 */
+:deep(.el-select__placeholder),
+:deep(.el-input__inner) {
+  color: #e5e7eb !important;
+}
+:deep(.el-select__placeholder.is-transparent) {
+  color: #6b7280 !important;
+}
+/* 下拉箭头 / 清除图标 */
+:deep(.el-select__caret),
+:deep(.el-input__icon) {
+  color: #9ca3af !important;
 }
 
 /* 链路列表 */

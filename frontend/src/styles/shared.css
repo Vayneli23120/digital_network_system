@@ -1,5 +1,22 @@
 /* ===== 全局共享组件样式 ===== */
 
+/* ===== Dark Select Popper ===== */
+/* el-select 下拉弹层暗色化（popper 挂在 body 下，需全局样式） */
+.dark-select-popper {
+  background: rgba(17, 22, 31, 0.95) !important;
+  border: 1px solid rgba(34, 211, 238, 0.25) !important;
+}
+.dark-select-popper .el-select-dropdown__item {
+  color: #e5e7eb !important;
+}
+.dark-select-popper .el-select-dropdown__item.is-hovering,
+.dark-select-popper .el-select-dropdown__item.hover {
+  background: rgba(34, 211, 238, 0.15) !important;
+}
+.dark-select-popper .el-select-dropdown__item.is-selected {
+  color: #22d3ee !important;
+}
+
 /* ===== Button System ===== */
 /* 覆盖 Element Plus 默认按钮颜色，与系统主题协调 */
 
