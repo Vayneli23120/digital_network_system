@@ -1,7 +1,9 @@
 <template>
   <div class="monitor3d" :class="{ 'fullscreen-mode': isFullscreen, 'panel-hidden': hidePanel, 'edit-mode': isEditMode }">
     <!-- 左：3D 画布 -->
-    <div ref="canvasHost" class="canvas-host"></div>
+    <div ref="canvasHost" class="canvas-host"
+         @dragover.prevent="onCanvasDragOver"
+         @drop.prevent="onCanvasDrop"></div>
 
     <!-- 画布右下角操作按钮 -->
     <div class="canvas-tools">
@@ -90,6 +92,18 @@
       </template>
     </el-dialog>
 
+    <!-- 绑定设备对话框 -->
+    <el-dialog v-model="showBindDialog" :title="t('bindDeviceTitle')" width="400px">
+      <el-select v-model="bindDeviceId" :placeholder="t('monitorScreenSelectDevice')" filterable style="width:100%">
+        <el-option v-for="d in bindCandidates" :key="d.id"
+                   :label="`${d.name} (${d.ip || ''})`" :value="d.id" />
+      </el-select>
+      <template #footer>
+        <el-button @click="cancelBind">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="confirmBindDevice">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel">
       <div class="panel-header">
@@ -139,9 +153,14 @@
                 {{ getStatusLabel(selectedDevice.status) }}
               </el-tag>
             </p>
-            <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
-              {{ t('viewDetail') }}
-            </el-button>
+            <div class="selected-actions">
+              <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
+                {{ t('viewDetail') }}
+              </el-button>
+              <el-button type="danger" size="small" v-if="selectedNode" @click="deleteNode(selectedNode.id)">
+                {{ t('actionDelete') }}
+              </el-button>
+            </div>
           </div>
           <div v-else class="hint">
             <el-icon><Pointer /></el-icon>
@@ -225,6 +244,21 @@
             </div>
           </div>
         </el-tab-pane>
+
+        <!-- 设备库标签页 -->
+        <el-tab-pane :label="t('deviceLibrary')" name="devices">
+          <div class="hint">
+            <span>{{ t('dragDeviceHint') }}</span>
+          </div>
+          <div class="device-palette">
+            <div class="palette-item" draggable="true"
+                 v-for="item in deviceTemplates" :key="item.type"
+                 @dragstart="onPaletteDragStart($event, item.type)">
+              <el-icon><component :is="item.icon" /></el-icon>
+              <span>{{ t(item.labelKey) }}</span>
+            </div>
+          </div>
+        </el-tab-pane>
       </el-tabs>
     </aside>
   </div>
@@ -237,7 +271,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Plus, Delete, Switch, Picture } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { t } from '@/locales'
 
@@ -258,6 +292,23 @@ const uploadPlanName = ref('')
 const uploadFile = ref(null)
 const uploadFileName = ref('')
 const uploading = ref(false)
+
+// 设备库模板
+const deviceTemplates = [
+  { type: 'switch',   icon: Box,        labelKey: 'deviceTypeSwitch' },
+  { type: 'ap',       icon: Position,   labelKey: 'deviceTypeAP' },
+  { type: 'router',   icon: Connection, labelKey: 'deviceTypeRouter' },
+  { type: 'firewall', icon: Lock,       labelKey: 'deviceTypeFirewall' },
+]
+
+// 绑定设备对话框相关
+const showBindDialog = ref(false)
+const bindCandidates = ref([])
+const bindDeviceId = ref(null)
+let pendingPlacement = null  // { deviceType, x_percent, y_percent }
+
+// 选中节点（用于删除）
+const selectedNode = ref(null)
 
 // 设备数据
 const devices = ref([])
@@ -438,7 +489,7 @@ const ctx = shallowRef({
   renderer: null,
   labelRenderer: null,
   controls: null,
-  deviceMeshes: null,
+  deviceGroup: null,
   linkLines: null,
   labels: null,
 })
@@ -478,6 +529,164 @@ function getDeviceBaseSize(deviceType) {
   const ref = Math.min(plan.real_width_m, plan.real_depth_m)  // 用短边做基准
   const ratio = DEVICE_SIZE_RATIO[deviceType] ?? 0.015
   return ref * ratio
+}
+
+// 状态颜色映射
+const STATUS_COLOR = { online: 0x22d3ee, offline: 0xff4d4f, maintenance: 0xffa116 }
+
+// 创建立体设备模型（基于底图比例）
+function createDeviceModel(deviceType, status = 'online') {
+  const group = new THREE.Group()
+  const base = getDeviceBaseSize(deviceType)
+  const color = STATUS_COLOR[status] || STATUS_COLOR.online
+  const bodyMat = new THREE.MeshStandardMaterial({ color, metalness: 0.4, roughness: 0.5 })
+  const accentMat = new THREE.MeshStandardMaterial({ color: 0x1a2230, metalness: 0.6, roughness: 0.4 })
+
+  switch (deviceType) {
+    case 'ap': {
+      const r = base * 0.6
+      const baseMesh = new THREE.Mesh(new THREE.CylinderGeometry(r, r, base * 0.25, 24), bodyMat)
+      const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(r * 0.7, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2), bodyMat)
+      dome.position.y = base * 0.15
+      group.add(baseMesh, dome)
+      break
+    }
+    case 'router': {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(base * 1.4, base * 0.4, base * 1.0), bodyMat)
+      group.add(body)
+      for (let i = -1; i <= 1; i++) {
+        const ant = new THREE.Mesh(new THREE.CylinderGeometry(base * 0.04, base * 0.04, base * 0.8), accentMat)
+        ant.position.set(i * base * 0.4, base * 0.6, -base * 0.4)
+        group.add(ant)
+      }
+      break
+    }
+    case 'firewall': {
+      const body = new THREE.Mesh(new THREE.BoxGeometry(base * 1.4, base * 0.8, base * 1.0),
+        new THREE.MeshStandardMaterial({ color: 0xff4d4f, metalness: 0.4, roughness: 0.5 }))
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(base * 1.42, base * 0.15, base * 0.03), accentMat)
+      panel.position.set(0, base * 0.1, base * 0.5)
+      group.add(body, panel)
+      break
+    }
+    default: { // switch / core_switch / server_switch / uce
+      const body = new THREE.Mesh(new THREE.BoxGeometry(base * 1.6, base * 0.5, base * 1.1), bodyMat)
+      const ports = new THREE.Mesh(new THREE.BoxGeometry(base * 1.4, base * 0.12, base * 0.03), accentMat)
+      ports.position.set(0, -base * 0.05, base * 0.56)
+      group.add(body, ports)
+    }
+  }
+
+  group.userData.deviceType = deviceType
+  return group
+}
+
+// 屏幕坐标 → 百分比坐标（射线求交）
+function screenToPercent(e) {
+  const { camera, renderer } = ctx.value
+  const rect = renderer.domElement.getBoundingClientRect()
+  const ndc = new THREE.Vector2(
+    ((e.clientX - rect.left) / rect.width) * 2 - 1,
+    -((e.clientY - rect.top) / rect.height) * 2 + 1
+  )
+  const ray = new THREE.Raycaster()
+  ray.setFromCamera(ndc, camera)
+  const ground = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
+  const hit = new THREE.Vector3()
+  if (!ray.ray.intersectPlane(ground, hit)) return null
+  return {
+    x_percent: Math.max(0, Math.min(100, (hit.x / plan.real_width_m) * 100)),
+    y_percent: Math.max(0, Math.min(100, (hit.z / plan.real_depth_m) * 100)),
+  }
+}
+
+// 设备库拖拽开始
+function onPaletteDragStart(e, type) {
+  e.dataTransfer.setData('device-type', type)
+  e.dataTransfer.effectAllowed = 'copy'
+}
+
+// 画布接收拖拽
+function onCanvasDragOver(e) {
+  e.dataTransfer.dropEffect = 'copy'
+}
+
+// 画布拖放处理
+function onCanvasDrop(e) {
+  const deviceType = e.dataTransfer.getData('device-type')
+  if (!deviceType) return
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  pendingPlacement = { deviceType, ...pos }
+  openBindDeviceDialog(deviceType)
+}
+
+// 匹配设备类型
+function matchType(devType, paletteType) {
+  if (paletteType === 'switch')
+    return ['switch', 'office_switch', 'server_switch', 'core_switch', 'uce'].includes(devType)
+  return devType === paletteType
+}
+
+// 打开绑定设备对话框
+async function openBindDeviceDialog(deviceType) {
+  try {
+    const res = await axios.get(`/api/floor-plans/${currentPlanId.value}/available-devices`)
+    const items = res.data.items || []
+    bindCandidates.value = items.filter(d => !deviceType || matchType(d.device_type, deviceType))
+    if (bindCandidates.value.length === 0) {
+      ElMessage.warning(t('noAvailableDevices'))
+      pendingPlacement = null
+      return
+    }
+    bindDeviceId.value = null
+    showBindDialog.value = true
+  } catch (e) {
+    ElMessage.error(t('loadDataFailed'))
+    pendingPlacement = null
+  }
+}
+
+// 取消绑定
+function cancelBind() {
+  showBindDialog.value = false
+  pendingPlacement = null
+}
+
+// 确认绑定设备
+async function confirmBindDevice() {
+  if (!bindDeviceId.value || !pendingPlacement) return
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/nodes`, {
+      device_id: bindDeviceId.value,
+      x_percent: Number(pendingPlacement.x_percent.toFixed(2)),
+      y_percent: Number(pendingPlacement.y_percent.toFixed(2)),
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    showBindDialog.value = false
+    pendingPlacement = null
+    await loadData()
+    rebuildScene()
+  } catch (e) {
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除节点
+async function deleteNode(nodeId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/nodes/${nodeId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    selectedDevice.value = null
+    selectedNode.value = null
+    await loadData()
+    rebuildScene()
+  } catch (e) {
+    ElMessage.error(t('msgUpdateFailed'))
+  }
 }
 
 // 坐标转换：百分比 → 世界坐标（米）
@@ -759,82 +968,55 @@ async function loadFloorPlanTexture() {
   }
 }
 
-// 构建设备 InstancedMesh（基于底图尺寸等比缩放）
-function buildDeviceInstances() {
+// 构建设备模型（独立 Group，便于单独操作）
+function buildDeviceModels() {
   const { scene } = ctx.value
 
-  // 按类型分组
-  const switches = filteredDevices.value.filter(d =>
-    ['office_switch', 'core_switch', 'server_switch', 'uce'].includes(d.device_type)
-  )
-  const aps = filteredDevices.value.filter(d => d.device_type === 'ap')
-
-  const meshes = {}
-  const dummy = new THREE.Object3D()
-
-  // 交换机 - 基于底图尺寸的等比例
-  if (switches.length > 0) {
-    const base = getDeviceBaseSize('switch')
-    const geo = new THREE.BoxGeometry(base * 1.6, base * 0.5, base * 1.1)  // 长×高×宽
-    const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
-    const mesh = new THREE.InstancedMesh(geo, mat, switches.length)
-
-    const elevation = base * 0.8  // 离地高度也用 base
-
-    switches.forEach((d, i) => {
-      const node = nodes.value.find(n => n.device_id === d.id)
-      if (!node) return
-
-      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
-      dummy.position.set(w.x, w.y, w.z)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-
-      const c = COLORS[d.status] || COLORS.online
-      mesh.setColorAt(i, c)
-    })
-
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    mesh.userData.devices = switches
-    mesh.userData.type = 'switch'
-    mesh.userData.base = base  // 存储 base 用于后续重建
-    scene.add(mesh)
-    meshes.switch = mesh
+  // 清除旧设备组
+  const oldGroup = scene?.getObjectByName('devices')
+  if (oldGroup) {
+    oldGroup.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.() })
+    scene.remove(oldGroup)
   }
 
-  // AP - 基于底图尺寸的等比例
-  if (aps.length > 0) {
-    const base = getDeviceBaseSize('ap')
-    const geo = new THREE.BoxGeometry(base * 1.2, base * 0.4, base * 0.8)  // 长×高×宽
-    const mat = new THREE.MeshStandardMaterial({ metalness: 0.5, roughness: 0.4, emissive: 0x112233, emissiveIntensity: 0.3 })
-    const mesh = new THREE.InstancedMesh(geo, mat, aps.length)
+  const group = new THREE.Group()
+  group.name = 'devices'
 
-    const elevation = base * 0.5  // AP 离地稍低
+  filteredDevices.value.forEach(d => {
+    const node = nodes.value.find(n => n.device_id === d.id)
+    if (!node) return
 
-    aps.forEach((d, i) => {
-      const node = nodes.value.find(n => n.device_id === d.id)
-      if (!node) return
+    const model = createDeviceModel(d.device_type, d.status)
+    const elevation = getDeviceBaseSize(d.device_type) * 0.5
+    const w = percentToWorld(node.x_percent, node.y_percent, elevation)
+    model.position.set(w.x, w.y, w.z)
+    const userScale = Number(node.scale) || 1
+    model.scale.setScalar(userScale)
+    model.userData = { device: d, node, base: getDeviceBaseSize(d.device_type) }
+    group.add(model)
+  })
 
-      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
-      dummy.position.set(w.x, w.y, w.z)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
+  scene.add(group)
+  ctx.value.deviceGroup = group
+}
 
-      const c = COLORS[d.status] || COLORS.online
-      mesh.setColorAt(i, c)
-    })
+// 清理组资源
+function disposeGroup(name) {
+  const { scene } = ctx.value
+  const g = scene?.getObjectByName(name)
+  if (!g) return
+  g.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.() })
+  scene.remove(g)
+}
 
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    mesh.userData.devices = aps
-    mesh.userData.type = 'ap'
-    mesh.userData.base = base
-    scene.add(mesh)
-    meshes.ap = mesh
-  }
-
-  ctx.value.deviceMeshes = meshes
+// 重建场景（底图切换或节点变化后）
+function rebuildScene() {
+  disposeGroup('devices')
+  disposeGroup('links')
+  disposeGroup('labels')
+  buildDeviceModels()
+  buildLinks()
+  buildLabels()
 }
 
 // 构建链路（贴近地面，使用基于底图尺寸的高度）
@@ -911,36 +1093,34 @@ function buildLabels() {
   ctx.value.labels = labelGroup
 }
 
-// 离线设备呼吸动画（优化：复用Color避免GC）
+// 离线设备呼吸动画（独立 Group 版本）
 let pulseTime = 0
-const reusedColor = new THREE.Color()  // 复用的临时Color对象
+const reusedColor = new THREE.Color()
 let lastPulseUpdate = 0
-const PULSE_UPDATE_INTERVAL = 50  // 50ms节流，减少更新频率
+const PULSE_UPDATE_INTERVAL = 50
 
 function pulseOfflineDevices() {
-  if (!ctx.value.deviceMeshes) return
+  const { deviceGroup } = ctx.value
+  if (!deviceGroup) return
 
   const now = performance.now()
-  if (now - lastPulseUpdate < PULSE_UPDATE_INTERVAL) return  // 节流
+  if (now - lastPulseUpdate < PULSE_UPDATE_INTERVAL) return
   lastPulseUpdate = now
 
   pulseTime += 0.1
   const pulse = Math.sin(pulseTime) * 0.3 + 0.7
 
-  // 计算脉冲颜色一次，复用
-  reusedColor.set(0xff4d4f)
-  reusedColor.multiplyScalar(pulse)
-
-  Object.values(ctx.value.deviceMeshes).forEach(mesh => {
-    if (!mesh.userData.devices) return
-
-    mesh.userData.devices.forEach((d, i) => {
-      if (d.status === 'offline') {
-        mesh.setColorAt(i, reusedColor)
-      }
-    })
-
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+  deviceGroup.children.forEach(model => {
+    const device = model.userData.device
+    if (device && device.status === 'offline') {
+      model.traverse(child => {
+        if (child.material && child.material.color) {
+          const baseColor = STATUS_COLOR.offline
+          child.material.color.set(baseColor)
+          child.material.color.multiplyScalar(pulse)
+        }
+      })
+    }
   })
 }
 
@@ -972,9 +1152,8 @@ function updateLabelVisibility() {
   })
 }
 
-// 点击拾取
-let selectedInstanceId = null
-let selectedMesh = null
+// 点击拾取（独立 Group）
+let selectedModel = null
 
 // 拖动状态
 const dragState = ref(null)
@@ -984,7 +1163,7 @@ let isDragging = false
 function onCanvasMouseDown(e) {
   if (!isEditMode.value) return
 
-  const { camera, renderer, deviceMeshes, controls } = ctx.value
+  const { camera, renderer, deviceGroup, controls } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -992,44 +1171,46 @@ function onCanvasMouseDown(e) {
 
   raycaster.setFromCamera(pointer, camera)
 
-  const targets = Object.values(deviceMeshes || {})
-  const hits = raycaster.intersectObjects(targets, false)
+  const hits = raycaster.intersectObjects(deviceGroup?.children || [], true)
 
   if (hits.length > 0) {
-    const hit = hits[0]
-    const mesh = hit.object
-    const device = mesh.userData.devices?.[hit.instanceId]
+    // 找到带 userData.device 的父级 Group
+    let model = hits[0].object
+    while (model && !model.userData.device) {
+      model = model.parent
+    }
 
-    if (device) {
-      const node = nodes.value.find(n => n.device_id === device.id)
-      if (node) {
-        selectedDevice.value = device
-        selectedInstanceId = hit.instanceId
-        selectedMesh = mesh
+    if (model && model.userData.device) {
+      const device = model.userData.device
+      const node = model.userData.node
 
-        // 高亮选中设备
-        const highlightColor = new THREE.Color(0xffffff)
-        mesh.setColorAt(hit.instanceId, highlightColor)
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      selectedDevice.value = device
+      selectedNode.value = node
+      selectedModel = model
 
-        // 设置拖动状态
-        dragState.value = {
-          nodeId: node.id,
-          deviceId: device.id,
-          startX_percent: parseFloat(node.x_percent),
-          startY_percent: parseFloat(node.y_percent),
-          startClientX: e.clientX,
-          startClientY: e.clientY,
+      // 高亮选中设备
+      model.traverse(child => {
+        if (child.material) {
+          child.material.emissive = new THREE.Color(0x333333)
         }
+      })
 
-        // 暂停轨道控制
-        controls.enabled = false
-        isDragging = false
-
-        // 监听拖动
-        renderer.domElement.addEventListener('mousemove', onDragMove)
-        renderer.domElement.addEventListener('mouseup', onDragEnd)
+      // 设置拖动状态
+      dragState.value = {
+        nodeId: node.id,
+        deviceId: device.id,
+        deviceType: device.device_type,
+        startClientX: e.clientX,
+        startClientY: e.clientY,
       }
+
+      // 暂停轨道控制
+      controls.enabled = false
+      isDragging = false
+
+      // 监听拖动
+      renderer.domElement.addEventListener('mousemove', onDragMove)
+      renderer.domElement.addEventListener('mouseup', onDragEnd)
     }
   }
 }
@@ -1040,7 +1221,7 @@ function onCanvasClick(e) {
   if (isDragging) return
   if (isEditMode.value) return
 
-  const { camera, renderer, deviceMeshes } = ctx.value
+  const { camera, renderer, deviceGroup } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -1048,104 +1229,85 @@ function onCanvasClick(e) {
 
   raycaster.setFromCamera(pointer, camera)
 
-  const targets = Object.values(deviceMeshes || {})
-  const hits = raycaster.intersectObjects(targets, false)
+  const hits = raycaster.intersectObjects(deviceGroup?.children || [], true)
 
   // 清除之前的高亮
-  if (selectedMesh && selectedInstanceId !== null) {
-    const prevDevice = selectedMesh.userData.devices?.[selectedInstanceId]
-    if (prevDevice) {
-      const c = COLORS[prevDevice.status] || COLORS.online
-      selectedMesh.setColorAt(selectedInstanceId, c)
-      if (selectedMesh.instanceColor) selectedMesh.instanceColor.needsUpdate = true
-    }
+  if (selectedModel) {
+    selectedModel.traverse(child => {
+      if (child.material) {
+        child.material.emissive = new THREE.Color(0x000000)
+      }
+    })
   }
 
   if (hits.length > 0) {
-    const hit = hits[0]
-    const mesh = hit.object
-    const device = mesh.userData.devices?.[hit.instanceId]
+    // 找到带 userData.device 的父级 Group
+    let model = hits[0].object
+    while (model && !model.userData.device) {
+      model = model.parent
+    }
 
-    if (device) {
+    if (model && model.userData.device) {
+      const device = model.userData.device
+      const node = model.userData.node
+
       selectedDevice.value = device
-      selectedInstanceId = hit.instanceId
-      selectedMesh = mesh
+      selectedNode.value = node
+      selectedModel = model
 
       // 高亮选中设备
-      const highlightColor = new THREE.Color(0xffffff)
-      mesh.setColorAt(hit.instanceId, highlightColor)
-      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
+      model.traverse(child => {
+        if (child.material) {
+          child.material.emissive = new THREE.Color(0x333333)
+        }
+      })
 
       ElMessage.success(`${t('selected')}: ${device.name}`)
 
-      // 相机聚焦到设备（使用基于底图尺寸的高度）
-      const node = nodes.value.find(n => n.device_id === device.id)
+      // 相机聚焦到设备
       if (node) {
         const w = percentToWorld(node.x_percent, node.y_percent, 0)
         const ref = Math.min(plan.real_width_m, plan.real_depth_m)
-        const lookAtHeight = ref * 0.03  // 观察点高度约底图短边的 3%
+        const lookAtHeight = ref * 0.03
         ctx.value.controls.target.set(w.x, lookAtHeight, w.z)
       }
     }
   } else {
     selectedDevice.value = null
-    selectedInstanceId = null
-    selectedMesh = null
+    selectedNode.value = null
+    selectedModel = null
   }
 }
 
-// 拖动处理 - 使用Raycaster求地面交点（更精确）
+// 拖动处理（独立 Group 版本）
 function onDragMove(e) {
   if (!dragState.value) return
   isDragging = true
 
-  const { camera, renderer } = ctx.value
+  const pos = screenToPercent(e)
+  if (!pos) return
 
-  const rect = renderer.domElement.getBoundingClientRect()
-  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
-  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+  const { clampedX, clampedY } = { clampedX: pos.x_percent, clampedY: pos.y_percent }
+  dragState.value._lastX = clampedX
+  dragState.value._lastY = clampedY
 
-  raycaster.setFromCamera(pointer, camera)
+  // 计算基于底图尺寸的高度
+  const deviceType = dragState.value.deviceType || 'switch'
+  const base = getDeviceBaseSize(deviceType)
+  const elevation = base * 0.5
+  const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
 
-  // 计算鼠标在地面（y=0）上的交点
-  const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)
-  const intersectPoint = new THREE.Vector3()
-  raycaster.ray.intersectPlane(groundPlane, intersectPoint)
+  // 实时更新标签位置
+  const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
+  if (label) {
+    const w = percentToWorld(clampedX, clampedY, labelBase)
+    label.position.set(w.x, w.y, w.z)
+  }
 
-  if (intersectPoint) {
-    // 世界坐标转百分比
-    const newX = (intersectPoint.x / plan.real_width_m) * 100
-    const newY = (intersectPoint.z / plan.real_depth_m) * 100
-
-    // 限制在0-100范围
-    const clampedX = Math.max(0, Math.min(100, newX))
-    const clampedY = Math.max(0, Math.min(100, newY))
-
-    dragState.value._lastX = clampedX
-    dragState.value._lastY = clampedY
-
-    // 计算基于底图尺寸的高度
-    const meshType = selectedMesh?.userData.type || 'switch'
-    const base = selectedMesh?.userData.base || getDeviceBaseSize(meshType)
-    const elevation = meshType === 'ap' ? base * 0.5 : base * 0.8
-    const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
-
-    // 实时更新标签位置
-    const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
-    if (label) {
-      const w = percentToWorld(clampedX, clampedY, labelBase)
-      label.position.set(w.x, w.y, w.z)
-    }
-
-    // 实时更新设备实例位置
-    if (selectedMesh && selectedInstanceId !== null) {
-      const dummy = new THREE.Object3D()
-      const w = percentToWorld(clampedX, clampedY, elevation)
-      dummy.position.set(w.x, w.y, w.z)
-      dummy.updateMatrix()
-      selectedMesh.setMatrixAt(selectedInstanceId, dummy.matrix)
-      selectedMesh.instanceMatrix.needsUpdate = true
-    }
+  // 实时更新设备模型位置
+  if (selectedModel) {
+    const w = percentToWorld(clampedX, clampedY, elevation)
+    selectedModel.position.set(w.x, w.y, w.z)
   }
 }
 
@@ -1160,9 +1322,10 @@ async function onDragEnd(e) {
 
   if (isDragging && _lastX != null && _lastY != null) {
     try {
-      await axios.patch(`/api/floor-plans/${currentPlanId.value}/nodes/${nodeId}`, {
-        x_percent: parseFloat(_lastX.toFixed(2)),
-        y_percent: parseFloat(_lastY.toFixed(2)),
+      // 使用 PUT 而不是 PATCH（按文档要求）
+      await axios.put(`/api/floor-plans/${currentPlanId.value}/nodes/${nodeId}`, {
+        x_percent: Number(_lastX.toFixed(2)),
+        y_percent: Number(_lastY.toFixed(2)),
       })
       ElMessage.success(t('msgSaveSuccess'))
 
@@ -1173,21 +1336,16 @@ async function onDragEnd(e) {
         node.y_percent = _lastY.toFixed(2)
       }
 
-      // 重建链路（拖动后连线要跟随）
-      if (ctx.value.linkLines) {
-        ctx.value.scene.remove(ctx.value.linkLines)
-        ctx.value.linkLines = null
-      }
-      buildLinks()
+      // 重建链路
+      rebuildScene()
 
-      // 恢复设备颜色
-      if (selectedMesh && selectedInstanceId !== null) {
-        const device = selectedMesh.userData.devices?.[selectedInstanceId]
-        if (device) {
-          const c = COLORS[device.status] || COLORS.online
-          selectedMesh.setColorAt(selectedInstanceId, c)
-          if (selectedMesh.instanceColor) selectedMesh.instanceColor.needsUpdate = true
-        }
+      // 清除高亮
+      if (selectedModel) {
+        selectedModel.traverse(child => {
+          if (child.material) {
+            child.material.emissive = new THREE.Color(0x000000)
+          }
+        })
       }
 
     } catch (err) {
@@ -1199,46 +1357,11 @@ async function onDragEnd(e) {
   dragState.value = null
   isDragging = false
 }
-
-// 重建设备位置（拖动后）- 使用基于底图尺寸的高度
-function rebuildDevicePositions() {
-  const { deviceMeshes } = ctx.value
-  if (!deviceMeshes) return
-
-  const dummy = new THREE.Object3D()
-
-  Object.values(deviceMeshes).forEach(mesh => {
-    if (!mesh.userData.devices) return
-
-    // 使用 mesh 存储的 base 计算离地高度
-    const base = mesh.userData.base || getDeviceBaseSize(mesh.userData.type || 'switch')
-    const elevation = mesh.userData.type === 'ap' ? base * 0.5 : base * 0.8
-
-    mesh.userData.devices.forEach((d, i) => {
-      const node = nodes.value.find(n => n.device_id === d.id)
-      if (!node) return
-
-      const w = percentToWorld(node.x_percent, node.y_percent, elevation)
-      dummy.position.set(w.x, w.y, w.z)
-      dummy.updateMatrix()
-      mesh.setMatrixAt(i, dummy.matrix)
-    })
-
-    mesh.instanceMatrix.needsUpdate = true
-  })
-
-  // 重建链路
-  if (ctx.value.linkLines) {
-    ctx.value.scene.remove(ctx.value.linkLines)
-    ctx.value.linkLines = null
-  }
-  buildLinks()
-}
       
 // 聚焦到设备（带平滑动画）- 使用基于底图尺寸的距离
 let focusAnimationId = null
 function focusDevice(device) {
-  const { camera, controls, deviceMeshes } = ctx.value
+  const { camera, controls, deviceGroup } = ctx.value
 
   const node = nodes.value.find(n => n.device_id === device.id)
   if (!node) return
@@ -1252,9 +1375,9 @@ function focusDevice(device) {
 
   // 基于底图尺寸计算聚焦距离
   const ref = Math.min(plan.real_width_m, plan.real_depth_m)
-  const focusDist = ref * 0.08  // 聚焦时相机距离设备约底图短边的 8%
-  const focusHeight = ref * 0.05  // 相机高度约 5%
-  const lookAtHeight = ref * 0.03  // 观察点高度约 3%
+  const focusDist = ref * 0.08
+  const focusHeight = ref * 0.05
+  const lookAtHeight = ref * 0.03
 
   // 目标位置
   const targetPos = { x: w.x + focusDist, y: focusHeight, z: w.z + focusDist }
@@ -1265,20 +1388,18 @@ function focusDevice(device) {
   const startLookAt = { x: controls.target.x, y: controls.target.y, z: controls.target.z }
 
   // 动画参数
-  const duration = 60 // 约 1 秒 (60 帧)
+  const duration = 60
   let frame = 0
 
   const animate = () => {
     frame++
     const progress = Math.min(frame / duration, 1)
-    const ease = 1 - Math.pow(1 - progress, 3) // ease-out cubic
+    const ease = 1 - Math.pow(1 - progress, 3)
 
-    // 插值相机位置
     camera.position.x = startPos.x + (targetPos.x - startPos.x) * ease
     camera.position.y = startPos.y + (targetPos.y - startPos.y) * ease
     camera.position.z = startPos.z + (targetPos.z - startPos.z) * ease
 
-    // 插值观察目标
     controls.target.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * ease
     controls.target.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * ease
     controls.target.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * ease
@@ -1293,18 +1414,17 @@ function focusDevice(device) {
 
   selectedDevice.value = device
 
-  // 高亮该设备
-  if (deviceMeshes) {
-    Object.values(deviceMeshes).forEach(mesh => {
-      if (!mesh.userData.devices) return
-
-      mesh.userData.devices.forEach((d, i) => {
-        if (d.id === device.id) {
-          const highlightColor = new THREE.Color(0xffffff)
-          mesh.setColorAt(i, highlightColor)
-          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-        }
-      })
+  // 高亮该设备（独立 Group）
+  if (deviceGroup) {
+    deviceGroup.children.forEach(model => {
+      const d = model.userData.device
+      if (d && d.id === device.id) {
+        model.traverse(child => {
+          if (child.material) {
+            child.material.emissive = new THREE.Color(0x333333)
+          }
+        })
+      }
     })
   }
 }
@@ -1323,31 +1443,9 @@ async function switchPlan(planId) {
 
   currentPlan.value = plan
 
-  // 清除旧场景物体
-  const { scene, deviceMeshes, linkLines, labels } = ctx.value
-
-  // 清除旧设备
-  Object.values(deviceMeshes || {}).forEach(mesh => {
-    scene.remove(mesh)
-    mesh.geometry?.dispose()
-    mesh.material?.dispose()
-  })
-  ctx.value.deviceMeshes = null
-
-  // 清除旧链路
-  if (linkLines) {
-    scene.remove(linkLines)
-    ctx.value.linkLines = null
-  }
-
-  // 清除旧标签
-  if (labels) {
-    scene.remove(labels)
-    ctx.value.labels = null
-  }
-
   // 清除旧底图
-  const oldGround = scene.getObjectByName('ground')
+  const { scene } = ctx.value
+  const oldGround = scene?.getObjectByName('ground')
   if (oldGround) {
     scene.remove(oldGround)
     oldGround.geometry?.dispose()
@@ -1368,9 +1466,7 @@ async function switchPlan(planId) {
 
     // 重建场景
     loadFloorPlanTexture()
-    buildDeviceInstances()
-    buildLinks()
-    buildLabels()
+    rebuildScene()
 
     // 重置视角
     resetView()
@@ -1482,26 +1578,7 @@ async function loadData() {
 // 监听筛选变化，重建设备和标签
 watch([filterType, filterStatus], () => {
   if (ctx.value.scene) {
-    // 清除旧设备
-    Object.values(ctx.value.deviceMeshes || {}).forEach(mesh => {
-      ctx.value.scene.remove(mesh)
-      mesh.geometry?.dispose()
-      mesh.material?.dispose()
-    })
-    // 清除旧标签
-    if (ctx.value.labels) {
-      ctx.value.scene.remove(ctx.value.labels)
-      ctx.value.labels = null
-    }
-    // 清除旧链路
-    if (ctx.value.linkLines) {
-      ctx.value.scene.remove(ctx.value.linkLines)
-      ctx.value.linkLines = null
-    }
-    // 重建
-    buildDeviceInstances()
-    buildLinks()
-    buildLabels()
+    rebuildScene()
   }
 })
 
@@ -1539,7 +1616,7 @@ onMounted(async () => {
   initScene()
   await loadData()
   loadFloorPlanTexture()
-  buildDeviceInstances()
+  buildDeviceModels()
   buildLinks()
   buildLabels()
 
@@ -2138,5 +2215,48 @@ onBeforeUnmount(() => {
 .plan-actions {
   display: flex;
   gap: 4px;
+}
+
+/* 设备库面板 */
+.device-palette {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.palette-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: rgba(26, 34, 48, 0.5);
+  border: 1px solid rgba(34, 211, 238, 0.2);
+  border-radius: 6px;
+  color: #e5e7eb;
+  font-size: 12px;
+  cursor: grab;
+  transition: all 0.2s ease;
+}
+
+.palette-item:hover {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(34, 211, 238, 0.45);
+}
+
+.palette-item:active {
+  cursor: grabbing;
+}
+
+.palette-item .el-icon {
+  color: #22d3ee;
+  font-size: 14px;
+}
+
+/* 选中设备操作按钮 */
+.selected-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
 }
 </style>
