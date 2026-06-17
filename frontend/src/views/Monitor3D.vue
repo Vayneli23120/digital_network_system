@@ -2099,6 +2099,60 @@ onBeforeUnmount(() => {
   border-color: rgba(0, 120, 212, 0.4);
 }
 
+/* 明亮模式：KPI 区域适配 */
+.side-panel:not(.dark) .kpi {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.side-panel:not(.dark) .kpi span {
+  color: #374151;
+}
+
+.side-panel:not(.dark) .kpi b {
+  color: #374151;
+}
+
+.side-panel:not(.dark) .kpi b.online {
+  color: #10b981;
+}
+
+.side-panel:not(.dark) .kpi b.offline {
+  color: #ef4444;
+}
+
+/* 明亮模式：selected-box 适配 */
+.side-panel:not(.dark) .selected-box {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+
+.side-panel:not(.dark) .selected-box h4 {
+  color: #1f2937;
+}
+
+.side-panel:not(.dark) .selected-box p {
+  color: #4b5563;
+}
+
+/* 明亮模式：no-data 适配 */
+.side-panel:not(.dark) .no-data {
+  color: #6b7280;
+}
+
+/* 明亮模式：waypoint-hint 和 waypoint-item 适配 */
+.side-panel:not(.dark) .waypoint-hint {
+  color: #6b7280;
+}
+
+.side-panel:not(.dark) .waypoint-item {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.side-panel:not(.dark) .waypoint-index {
+  background: rgba(0, 120, 212, 0.1);
+  color: #0078d4;
+}
+
 .monitor3d.panel-hidden .side-panel {
   transform: translateX(100%);
 }
