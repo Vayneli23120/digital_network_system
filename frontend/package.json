@@ -16,6 +16,7 @@
     "element-plus": "^2.5.4",
     "jsbarcode": "^3.12.3",
     "pinia": "^2.1.7",
+    "three": "^0.184.0",
     "vue": "^3.4.0",
     "vue-echarts": "^6.6.5",
     "vue-router": "^4.2.5"

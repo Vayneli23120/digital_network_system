@@ -60,7 +60,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation, Sort, Lock, Odometer } from '@element-plus/icons-vue'
+import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Monitor, Cpu, TrendCharts, Operation, Sort, Lock, Odometer, VideoPlay } from '@element-plus/icons-vue'
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -130,6 +130,7 @@ const sidebarGroups = computed(() => {
           { path: '/', text: t('menuDashboard'), icon: DataBoard },
           { path: '/operations', text: t('menuOperations'), icon: Odometer },
           { path: '/monitor-screen', text: t('menuMonitorScreen'), icon: Monitor },
+          { path: '/monitor-3d', text: t('menuMonitor3D'), icon: VideoPlay },
           { path: '/device-health', text: t('menuDeviceHealth'), icon: TrendCharts },
           { path: '/ai-analysis', text: t('menuAIAnalysis'), icon: Cpu },
           { path: '/workflows', text: t('menuWorkflows'), icon: Operation },
@@ -195,7 +196,7 @@ const sidebarGroups = computed(() => {
 // Sync top tab based on current route
 watch(route, (newRoute) => {
   const path = newRoute.path
-  if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/monitor-screen') || path.startsWith('/device-health') || path.startsWith('/ai-analysis') || path.startsWith('/workflows')) {
+  if (path === '/' || path.startsWith('/dashboard') || path.startsWith('/monitor-screen') || path.startsWith('/monitor-3d') || path.startsWith('/device-health') || path.startsWith('/ai-analysis') || path.startsWith('/workflows')) {
     activeTopTab.value = 'dashboard'
   } else if (path.startsWith('/devices') || path.startsWith('/discovery') || path.startsWith('/backups') || path.startsWith('/faults') || path.startsWith('/maintenance') || path.startsWith('/planned-maintenance')) {
     activeTopTab.value = 'devices'
