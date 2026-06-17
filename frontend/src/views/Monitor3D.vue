@@ -1162,10 +1162,17 @@ function buildDeviceModels() {
 
 // 清理组资源
 function disposeGroup(name) {
-  const { scene } = ctx.value
+  const { scene, labelRenderer } = ctx.value
   const g = scene?.getObjectByName(name)
   if (!g) return
-  g.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.() })
+  g.traverse(o => {
+    // 清理 CSS2DObject 的 DOM 元素
+    if (o.element && o.element.parentNode) {
+      o.element.parentNode.removeChild(o.element)
+    }
+    o.geometry?.dispose?.()
+    o.material?.dispose?.()
+  })
   scene.remove(g)
 }
 
