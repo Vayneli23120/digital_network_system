@@ -153,6 +153,20 @@
                 {{ getStatusLabel(selectedDevice.status) }}
               </el-tag>
             </p>
+            <!-- 设备缩放调节 -->
+            <div class="scale-control" v-if="selectedNode">
+              <span>{{ t('deviceScale') }}:</span>
+              <el-slider
+                v-model="deviceScale"
+                :min="0.5"
+                :max="3"
+                :step="0.1"
+                :show-tooltip="true"
+                size="small"
+                @change="updateDeviceScale"
+              />
+              <span class="scale-value">{{ deviceScale.toFixed(1) }}x</span>
+            </div>
             <div class="selected-actions">
               <el-button type="primary" size="small" @click="goToDeviceDetail(selectedDevice.id)">
                 {{ t('viewDetail') }}
@@ -309,6 +323,9 @@ let pendingPlacement = null  // { deviceType, x_percent, y_percent }
 
 // 选中节点（用于删除）
 const selectedNode = ref(null)
+
+// 设备缩放值（与选中节点同步）
+const deviceScale = ref(1)
 
 // 设备数据
 const devices = ref([])
@@ -682,8 +699,35 @@ async function deleteNode(nodeId) {
     ElMessage.success(t('msgSaveSuccess'))
     selectedDevice.value = null
     selectedNode.value = null
+    deviceScale.value = 1
     await loadData()
     rebuildScene()
+  } catch (e) {
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 更新设备缩放
+async function updateDeviceScale(newScale) {
+  if (!selectedNode.value) return
+
+  try {
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/nodes/${selectedNode.value.id}`, {
+      scale: Number(newScale.toFixed(2)),
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 更新本地 nodes 数据
+    const node = nodes.value.find(n => n.id === selectedNode.value.id)
+    if (node) {
+      node.scale = newScale
+      selectedNode.value = { ...node }
+    }
+
+    // 更新模型缩放
+    if (selectedModel) {
+      selectedModel.scale.setScalar(newScale)
+    }
   } catch (e) {
     ElMessage.error(t('msgUpdateFailed'))
   }
@@ -1059,33 +1103,36 @@ function buildLinks() {
   ctx.value.linkLines = linkGroup
 }
 
-// 构建设备标签（基于底图尺寸等比缩放）
+// 构建设备标签（显示在设备上方）
 function buildLabels() {
-  const { scene } = ctx.value
+  const { scene, deviceGroup } = ctx.value
 
   const labelGroup = new THREE.Group()
   labelGroup.name = 'labels'
-
-  // 标签基准高度（底图短边的 0.5%，低于设备模型）
-  const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
 
   // 显示所有筛选后的设备标签
   filteredDevices.value.forEach(d => {
     const node = nodes.value.find(n => n.device_id === d.id)
     if (!node) return
 
-    const w = percentToWorld(node.x_percent, node.y_percent, labelBase)
+    // 获取设备模型位置和高度
+    const base = getDeviceBaseSize(d.device_type)
+    const elevation = base * 0.5  // 设备离地高度
+    const modelHeight = base * 0.8  // 设备模型高度估算
+    const labelHeight = elevation + modelHeight + base * 0.3  // 标签在设备上方
+
+    const w = percentToWorld(node.x_percent, node.y_percent, labelHeight)
 
     const el = document.createElement('div')
     el.className = `device-label ${d.status}`
     el.textContent = d.name
-    el.style.opacity = '0' // 初始隐藏，由 updateLabelVisibility 控制
+    el.style.opacity = '0'
 
     const label = new CSS2DObject(el)
     label.position.set(w.x, w.y, w.z)
     label.userData.deviceId = d.id
     label.userData.deviceStatus = d.status
-    label.visible = false // 初始不可见
+    label.visible = false
     labelGroup.add(label)
   })
 
@@ -1294,13 +1341,14 @@ function onDragMove(e) {
   // 计算基于底图尺寸的高度
   const deviceType = dragState.value.deviceType || 'switch'
   const base = getDeviceBaseSize(deviceType)
-  const elevation = base * 0.5
-  const labelBase = Math.min(plan.real_width_m, plan.real_depth_m) * 0.005
+  const elevation = base * 0.5  // 设备离地高度
+  const modelHeight = base * 0.8  // 设备模型高度估算
+  const labelHeight = elevation + modelHeight + base * 0.3  // 标签在设备上方
 
-  // 实时更新标签位置
+  // 实时更新标签位置（在设备上方）
   const label = ctx.value.labels?.children.find(l => l.userData.deviceId === dragState.value.deviceId)
   if (label) {
-    const w = percentToWorld(clampedX, clampedY, labelBase)
+    const w = percentToWorld(clampedX, clampedY, labelHeight)
     label.position.set(w.x, w.y, w.z)
   }
 
@@ -1579,6 +1627,15 @@ async function loadData() {
 watch([filterType, filterStatus], () => {
   if (ctx.value.scene) {
     rebuildScene()
+  }
+})
+
+// 监听选中节点变化，同步缩放值
+watch(selectedNode, (node) => {
+  if (node) {
+    deviceScale.value = Number(node.scale) || 1
+  } else {
+    deviceScale.value = 1
   }
 })
 
@@ -1912,15 +1969,16 @@ onBeforeUnmount(() => {
   font-size: 11px;
 }
 
-/* 设备标签样式（CSS2D） */
+/* 设备标签样式（CSS2D）- 显示在设备上方 */
 :deep(.device-label) {
-  padding: 4px 8px;
-  background: rgba(26, 34, 48, 0.9);
-  border-radius: 4px;
+  padding: 2px 6px;
+  background: rgba(26, 34, 48, 0.85);
+  border-radius: 3px;
   color: #e5e7eb;
-  font-size: 12px;
+  font-size: 10px;
   white-space: nowrap;
   transition: opacity 0.3s;
+  pointer-events: none;
 }
 
 :deep(.device-label.online) {
@@ -2258,5 +2316,28 @@ onBeforeUnmount(() => {
   display: flex;
   gap: 8px;
   margin-top: 8px;
+}
+
+/* 设备缩放控制 */
+.scale-control {
+  margin-top: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.scale-control span {
+  font-size: 12px;
+  color: #6b7280;
+}
+
+.scale-control .el-slider {
+  flex: 1;
+}
+
+.scale-value {
+  color: #22d3ee;
+  font-weight: 500;
+  font-size: 11px;
 }
 </style>
