@@ -623,17 +623,24 @@ function topView() {
   controls.target.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
 }
 
-// 自动框景 - 根据底图尺寸计算合适的相机距离
+// 自动框景 - 根据底图尺寸和画布宽高比计算合适的相机距离
 function fitView() {
   const { camera, controls } = ctx.value
   if (!camera) return
 
-  const maxDim = Math.max(plan.real_width_m, plan.real_depth_m)
-  // 根据FOV计算距离，让底图填满视野
-  const fovRad = THREE.MathUtils.degToRad(camera.fov / 2)
-  const dist = (maxDim / 2) / Math.tan(fovRad) * 1.5  // 1.5倍留边距
+  const fovV = THREE.MathUtils.degToRad(camera.fov)            // 垂直 FOV
+  const aspect = camera.aspect || 1
 
-  camera.position.set(plan.real_width_m / 2, dist * 0.7, plan.real_depth_m / 2 + dist)
+  // 垂直方向需要的距离（按底图"深度"）
+  const distV = (plan.real_depth_m / 2) / Math.tan(fovV / 2)
+  // 水平方向需要的距离（按底图"宽度"，换算水平 FOV）
+  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
+  const distH = (plan.real_width_m / 2) / Math.tan(fovH / 2)
+
+  const dist = Math.max(distV, distH) * 1.05  // 取大者保证完整可见，1.05 微留边
+
+  // 略微俯视角度（0.6 越小越接近俯视）
+  camera.position.set(plan.real_width_m / 2, dist * 0.6, plan.real_depth_m / 2 + dist * 0.8)
   controls.target.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
 }
 
@@ -1488,8 +1495,8 @@ onMounted(async () => {
   buildLinks()
   buildLabels()
 
-  // 自动框景
-  fitView()
+  // 自动框景 - 延迟执行确保布局稳定
+  requestAnimationFrame(() => fitView())
 
   // 全屏事件监听
   document.addEventListener('fullscreenchange', onFullscreenChange)
