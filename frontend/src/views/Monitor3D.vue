@@ -104,6 +104,32 @@
       </template>
     </el-dialog>
 
+    <!-- 链路拐点编辑对话框 -->
+    <el-dialog v-model="showWaypointDialog" :title="t('editWaypoints')" width="500px">
+      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
+      <div class="waypoint-list">
+        <div v-for="(wp, idx) in editingWaypoints" :key="idx" class="waypoint-item">
+          <span class="waypoint-index">{{ idx + 1 }}</span>
+          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
+          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
+          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeWaypoint(idx)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
+        <div v-if="editingWaypoints.length === 0" class="no-data">
+          {{ t('noWaypoints') }}
+        </div>
+      </div>
+      <el-button type="primary" size="small" @click="addWaypoint">
+        <el-icon><Plus /></el-icon>
+        {{ t('addWaypoint') }}
+      </el-button>
+      <template #footer>
+        <el-button @click="showWaypointDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="saveWaypoints">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel">
       <div class="panel-header">
@@ -223,9 +249,14 @@
             <div v-for="link in links" :key="link.id" class="link-item">
               <span class="link-info">{{ getLinkLabel(link) }}</span>
               <span class="link-role-badge" :data-role="link.link_role">{{ link.link_role }}</span>
-              <button class="icon-btn danger" :title="t('actionDelete')" @click="deleteLink(link.id)">
-                <el-icon><Delete /></el-icon>
-              </button>
+              <div class="link-actions">
+                <button class="icon-btn" :title="t('editWaypoints')" @click="openWaypointDialog(link)">
+                  <el-icon><Connection /></el-icon>
+                </button>
+                <button class="icon-btn danger" :title="t('actionDelete')" @click="deleteLink(link.id)">
+                  <el-icon><Delete /></el-icon>
+                </button>
+              </div>
             </div>
             <div v-if="links.length === 0" class="no-data">
               {{ t('noData') }}
@@ -320,6 +351,11 @@ const showBindDialog = ref(false)
 const bindCandidates = ref([])
 const bindDeviceId = ref(null)
 let pendingPlacement = null  // { deviceType, x_percent, y_percent }
+
+// 链路拐点编辑相关
+const showWaypointDialog = ref(false)
+const editingLink = ref(null)
+const editingWaypoints = ref([])
 
 // 选中节点（用于删除）
 const selectedNode = ref(null)
@@ -475,13 +511,60 @@ async function deleteLink(linkId) {
     ElMessage.success(t('msgSaveSuccess'))
     links.value = links.value.filter(l => l.id !== linkId)
     // 重建链路
-    if (ctx.value.linkLines) {
-      ctx.value.scene.remove(ctx.value.linkLines)
-      ctx.value.linkLines = null
-    }
+    disposeGroup('links')
     buildLinks()
   } catch (e) {
     console.error('删除链路失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 打开拐点编辑对话框
+function openWaypointDialog(link) {
+  editingLink.value = link
+  try {
+    editingWaypoints.value = link.waypoints ? JSON.parse(link.waypoints) : []
+  } catch (e) {
+    editingWaypoints.value = []
+  }
+  showWaypointDialog.value = true
+}
+
+// 添加拐点
+function addWaypoint() {
+  editingWaypoints.value.push({ x: 50, y: 50 })
+}
+
+// 移除拐点
+function removeWaypoint(idx) {
+  editingWaypoints.value.splice(idx, 1)
+}
+
+// 保存拐点
+async function saveWaypoints() {
+  if (!editingLink.value) return
+
+  try {
+    const waypointsJson = JSON.stringify(editingWaypoints.value)
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/links/${editingLink.value.id}`, {
+      waypoints: waypointsJson
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 更新本地数据
+    const link = links.value.find(l => l.id === editingLink.value.id)
+    if (link) {
+      link.waypoints = waypointsJson
+    }
+
+    // 重建链路
+    disposeGroup('links')
+    buildLinks()
+
+    showWaypointDialog.value = false
+    editingLink.value = null
+  } catch (e) {
+    console.error('保存拐点失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }
@@ -1073,7 +1156,7 @@ function rebuildScene() {
   buildLabels()
 }
 
-// 构建链路（贴近地面，使用基于底图尺寸的高度）
+// 构建链路（支持 waypoints 正交折线）
 function buildLinks() {
   const { scene } = ctx.value
 
@@ -1092,21 +1175,67 @@ function buildLinks() {
     const a = percentToWorld(fromNode.x_percent, fromNode.y_percent, linkHeight)
     const b = percentToWorld(toNode.x_percent, toNode.y_percent, linkHeight)
 
-    const points = [
-      new THREE.Vector3(a.x, a.y, a.z),
-      new THREE.Vector3(b.x, b.y, b.z)
-    ]
+    // 构建折线点（支持 waypoints）
+    const points = []
+    points.push(new THREE.Vector3(a.x, a.y, a.z))
+
+    // 如果有拐点，按拐点绘制折线
+    if (link.waypoints) {
+      try {
+        const waypoints = JSON.parse(link.waypoints)
+        waypoints.forEach(wp => {
+          const wpWorld = percentToWorld(wp.x, wp.y, linkHeight)
+          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+        })
+      } catch (e) {
+        console.error('解析 waypoints 失败:', e)
+      }
+    } else if (!link.waypoints) {
+      // 无拐点时，生成默认正交折线（先横后竖）
+      const midX = (a.x + b.x) / 2
+      const midZ = (a.z + b.z) / 2
+      // 根据起点终点方向决定折线方向
+      if (Math.abs(a.x - b.x) > Math.abs(a.z - b.z)) {
+        // 横向为主：先横向到中点，再竖向
+        points.push(new THREE.Vector3(midX, a.y, a.z))
+        points.push(new THREE.Vector3(midX, a.y, b.z))
+      } else {
+        // 竖向为主：先竖向到中点，再横向
+        points.push(new THREE.Vector3(a.x, a.y, midZ))
+        points.push(new THREE.Vector3(b.x, a.y, midZ))
+      }
+    }
+
+    points.push(new THREE.Vector3(b.x, b.y, b.z))
 
     const geo = new THREE.BufferGeometry().setFromPoints(points)
     const mat = new THREE.LineBasicMaterial({
       color: link.status === 'broken' ? 0xff4d4f : 0x22d3ee,
       transparent: true,
-      opacity: 0.5
+      opacity: 0.6,
+      linewidth: 2
     })
 
     const line = new THREE.Line(geo, mat)
     line.userData.link = link
     linkGroup.add(line)
+
+    // 如果有拐点，添加拐点标记球（编辑模式下可见）
+    if (link.waypoints) {
+      try {
+        const waypoints = JSON.parse(link.waypoints)
+        waypoints.forEach((wp, idx) => {
+          const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + 2)
+          const sphereGeo = new THREE.SphereGeometry(3, 16, 16)
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffa116, transparent: true, opacity: 0.8 })
+          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+          sphere.userData.waypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
+          sphere.name = `waypoint-${link.id}-${idx}`
+          linkGroup.add(sphere)
+        })
+      } catch (e) {}
+    }
   })
 
   scene.add(linkGroup)
@@ -2353,5 +2482,44 @@ onBeforeUnmount(() => {
   color: #22d3ee;
   font-weight: 500;
   font-size: 11px;
+}
+
+/* 链路操作按钮 */
+.link-actions {
+  display: flex;
+  gap: 4px;
+}
+
+/* 拐点编辑样式 */
+.waypoint-hint {
+  font-size: 12px;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+
+.waypoint-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.waypoint-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(26, 34, 48, 0.5);
+  border-radius: 4px;
+  margin-bottom: 4px;
+}
+
+.waypoint-index {
+  color: #22d3ee;
+  font-size: 12px;
+  font-weight: 500;
+  min-width: 20px;
+}
+
+.waypoint-item .el-input-number {
+  width: 80px;
 }
 </style>
