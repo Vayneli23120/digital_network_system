@@ -966,6 +966,7 @@ def _get_fiber_branch_links(db: Session, plan_id: int, device_node_map: Dict) ->
             "to_device_id": to_node.device_id if to_node else None,
             "to_node_id": link.to_node_id,
             "logical_uplink_device_id": link.logical_uplink_device_id,
+            "waypoints": json.loads(link.waypoints) if link.waypoints else None,
         })
 
     return result

@@ -699,9 +699,9 @@ class DeviceLink(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
-    from_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=False, index=True)  # 下游(接入)
+    from_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=True, index=True)  # 下游(接入)，NULL表示从分支点连接
     to_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=False, index=True)    # 上游(核心)
-    link_role = Column(String(20), default="uplink", nullable=False)   # uplink / svl / portchannel-member
+    link_role = Column(String(20), default="uplink", nullable=False)   # uplink / svl / portchannel-member / fiber_branch
     link_group = Column(String(40), nullable=True, index=True)         # PortChannel 成员共享 group id
     link_type = Column(String(20), default="fiber", nullable=False)    # fiber / ethernet / wireless
     waypoints = Column(Text, nullable=True)                            # 正交折线人工拐点 JSON '[{"x":30,"y":40},...]'

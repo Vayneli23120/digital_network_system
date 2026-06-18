@@ -76,6 +76,11 @@ class FiberTrunkCreate(BaseModel):
 class FiberTrunkUpdate(BaseModel):
     name: Optional[str] = None
     waypoints: Optional[str] = None  # JSON string
+    start_x_percent: Optional[float] = None  # 起点X坐标百分比
+    start_y_percent: Optional[float] = None  # 起点Y坐标百分比
+    start_device_id: Optional[int] = None  # 起点关联设备ID（核心交换机）
+    end_x_percent: Optional[float] = None  # 终点X坐标百分比
+    end_y_percent: Optional[float] = None  # 终点Y坐标百分比
 
 
 class FiberBranchPointCreate(BaseModel):

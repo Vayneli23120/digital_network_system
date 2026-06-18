@@ -156,6 +156,32 @@
       </template>
     </el-dialog>
 
+    <!-- 分支光缆拐点编辑对话框 -->
+    <el-dialog v-model="showBranchLinkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberBranchLink')" width="500px">
+      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
+      <div class="waypoint-list">
+        <div v-for="(wp, idx) in editingBranchLinkWaypoints" :key="idx" class="waypoint-item">
+          <span class="waypoint-index">{{ idx + 1 }}</span>
+          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
+          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
+          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeBranchLinkWaypoint(idx)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
+        <div v-if="editingBranchLinkWaypoints.length === 0" class="no-data">
+          {{ t('noWaypoints') }}
+        </div>
+      </div>
+      <el-button type="primary" size="small" @click="addBranchLinkWaypoint">
+        <el-icon><Plus /></el-icon>
+        {{ t('addWaypoint') }}
+      </el-button>
+      <template #footer>
+        <el-button @click="showBranchLinkWaypointDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="saveBranchLinkWaypoints">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel" :class="{ dark: isDark }">
       <div class="panel-header">
@@ -202,6 +228,10 @@
               <el-icon><Plus /></el-icon>
               {{ t('addFiberTrunk') }}
             </el-button>
+            <el-button class="panel-action-btn" size="small" @click="startAddBranchPoint" v-if="fiberTrunks.length > 0 && isEditMode">
+              <el-icon><Position /></el-icon>
+              {{ t('addBranchPoint') }}
+            </el-button>
 
             <!-- 主干列表 -->
             <div class="trunk-list" v-if="fiberTrunks.length > 0">
@@ -222,6 +252,18 @@
                 <div class="bp-actions">
                   <el-button size="small" @click="startConnectFromBranch(bp)">{{ t('connectDevice') }}</el-button>
                   <el-button size="small" type="danger" @click="deleteBranchPoint(bp.id)">{{ t('actionDelete') }}</el-button>
+                </div>
+              </div>
+            </div>
+
+            <!-- 分支光缆列表 -->
+            <div class="section-header" v-if="fiberBranchLinks.length > 0">{{ t('fiberBranchLink') }}</div>
+            <div class="branch-link-list" v-if="fiberBranchLinks.length > 0">
+              <div v-for="link in fiberBranchLinks" :key="link.id" class="branch-link-item">
+                <span class="link-name">{{ getBranchLinkName(link) }}</span>
+                <div class="link-actions">
+                  <el-button size="small" @click="openBranchLinkWaypointDialog(link)">{{ t('editWaypoints') }}</el-button>
+                  <el-button size="small" type="danger" @click="deleteBranchLink(link.id)">{{ t('actionDelete') }}</el-button>
                 </div>
               </div>
             </div>
@@ -500,6 +542,7 @@ const isDark = ref(document.documentElement.classList.contains('dark'))
 const trunkCreateMode = ref(false)  // 正在创建主干
 const trunkStartPoint = ref(null)   // 主干起点
 const trunkEndPoint = ref(null)     // 主干终点
+const branchPointCreateMode = ref(false)  // 正在添加分支点
 const connectFromBranchMode = ref(false)  // 从分支点连接设备模式
 const selectedBranchPoint = ref(null)     // 选中的分支点
 
@@ -550,6 +593,12 @@ function startAddTrunk() {
   trunkStartPoint.value = null
   trunkEndPoint.value = null
   ElMessage.info(t('clickTrunkStart'))
+}
+
+// 开始添加分支点
+function startAddBranchPoint() {
+  branchPointCreateMode.value = true
+  ElMessage.info(t('clickTrunkToAddBranch'))
 }
 
 // 开始从分支点连接设备
@@ -839,6 +888,11 @@ const showTrunkWaypointDialog = ref(false)
 const editingTrunk = ref(null)
 const editingTrunkWaypoints = ref([])
 
+// 分支光缆拐点编辑
+const showBranchLinkWaypointDialog = ref(false)
+const editingBranchLink = ref(null)
+const editingBranchLinkWaypoints = ref([])
+
 // 打开主干拐点编辑对话框
 function openTrunkWaypointDialog(trunk) {
   editingTrunk.value = trunk
@@ -894,6 +948,86 @@ async function saveTrunkWaypoints() {
     editingTrunk.value = null
   } catch (e) {
     console.error('保存主干拐点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 打开分支光缆拐点编辑对话框
+function openBranchLinkWaypointDialog(link) {
+  editingBranchLink.value = link
+  try {
+    if (typeof link.waypoints === 'string') {
+      editingBranchLinkWaypoints.value = JSON.parse(link.waypoints) || []
+    } else if (Array.isArray(link.waypoints)) {
+      editingBranchLinkWaypoints.value = link.waypoints
+    } else {
+      editingBranchLinkWaypoints.value = []
+    }
+  } catch (e) {
+    editingBranchLinkWaypoints.value = []
+  }
+  showBranchLinkWaypointDialog.value = true
+}
+
+// 添加分支光缆拐点
+function addBranchLinkWaypoint() {
+  editingBranchLinkWaypoints.value.push({
+    x: 50,
+    y: 50
+  })
+}
+
+// 删除分支光缆拐点
+function removeBranchLinkWaypoint(idx) {
+  editingBranchLinkWaypoints.value.splice(idx, 1)
+}
+
+// 保存分支光缆拐点
+async function saveBranchLinkWaypoints() {
+  if (!editingBranchLink.value) return
+
+  try {
+    const waypointsJson = JSON.stringify(editingBranchLinkWaypoints.value)
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/links/${editingBranchLink.value.id}`, {
+      waypoints: waypointsJson
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 更新本地数据
+    const link = fiberBranchLinks.value.find(l => l.id === editingBranchLink.value.id)
+    if (link) {
+      link.waypoints = waypointsJson
+    }
+
+    // 重建分支光缆
+    disposeGroup('branch-links')
+    buildBranchLinks()
+
+    showBranchLinkWaypointDialog.value = false
+    editingBranchLink.value = null
+  } catch (e) {
+    console.error('保存分支光缆拐点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 获取分支光缆名称
+function getBranchLinkName(link) {
+  const bp = fiberBranchPoints.value.find(bp => bp.id === link.branch_point_id)
+  const device = devices.value.find(d => d.id === link.to_device_id)
+  const bpName = bp ? (bp.name || `分支点${bp.id}`) : `分支点${link.branch_point_id}`
+  const deviceName = device ? device.name : `设备${link.to_device_id}`
+  return `${bpName} → ${deviceName}`
+}
+
+// 删除分支光缆
+async function deleteBranchLink(linkId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-branch-links/${linkId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除分支光缆失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }
@@ -1616,7 +1750,11 @@ function buildFiberTrunks() {
   trunkGroup.name = 'fiber-trunks'
 
   // 主干高度：贴近地面
-  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+  // 主干管道半径：比链路线稍粗（底图短边的 0.0015）
+  const trunkRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0015
+  // 端点球半径
+  const endpointRadius = trunkRadius * 3
 
   fiberTrunks.value.forEach(trunk => {
     const startPoint = percentToWorld(trunk.start_x_percent, trunk.start_y_percent, trunkHeight)
@@ -1627,41 +1765,91 @@ function buildFiberTrunks() {
     points.push(new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z))
 
     // 如果有拐点，按拐点绘制
-    if (trunk.waypoints && Array.isArray(trunk.waypoints)) {
-      trunk.waypoints.forEach(wp => {
-        const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight)
-        points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+    let waypoints = trunk.waypoints
+    if (typeof waypoints === 'string') {
+      try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
+    }
+    if (Array.isArray(waypoints) && waypoints.length > 0) {
+      waypoints.forEach(wp => {
+        if (wp.x != null && wp.y != null) {
+          const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight)
+          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+        }
       })
     }
 
     points.push(new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z))
 
-    const geo = new THREE.BufferGeometry().setFromPoints(points)
-    const mat = new THREE.LineBasicMaterial({
-      color: 0x8b5cf6,  // 更亮的紫色
+    // 使用圆柱体绘制直角折线（每段一个圆柱）
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0xa855f7,  // 紫色
       transparent: true,
-      opacity: 1.0,  // 完全可见
-      linewidth: 4
+      opacity: 0.9,
     })
 
-    const line = new THREE.Line(geo, mat)
-    line.userData.trunk = trunk
-    line.name = `trunk-${trunk.id}`
-    trunkGroup.add(line)
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i]
+      const end = points[i + 1]
 
-    // 如果有拐点且在编辑模式，添加拐点标记球
-    if (trunk.waypoints && Array.isArray(trunk.waypoints) && trunk.waypoints.length > 0 && isEditMode.value) {
-      trunk.waypoints.forEach((wp, idx) => {
-        const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight + 2)
-        // 主干拐点球半径：底图短边的 0.4%，比普通拐点稍大
-        const wpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.004
-        const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
-        const sphereMat = new THREE.MeshBasicMaterial({ color: 0x8b5cf6, transparent: true, opacity: 1.0 })  // 紫色，与主干同色
-        const sphere = new THREE.Mesh(sphereGeo, sphereMat)
-        sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
-        sphere.userData.trunkWaypoint = { trunkId: trunk.id, index: idx, x: wp.x, y: wp.y }
-        sphere.name = `trunk-waypoint-${trunk.id}-${idx}`
-        trunkGroup.add(sphere)
+      // 计算圆柱体参数
+      const direction = new THREE.Vector3().subVectors(end, start)
+      const length = direction.length()
+      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+
+      // 创建圆柱体几何
+      const cylinderGeo = new THREE.CylinderGeometry(trunkRadius, trunkRadius, length, 8)
+
+      // 创建圆柱 Mesh
+      const cylinder = new THREE.Mesh(cylinderGeo, mat)
+
+      // 定位到中点
+      cylinder.position.copy(midPoint)
+
+      // 旋转圆柱使其指向终点方向
+      const axis = new THREE.Vector3(0, 1, 0)  // CylinderGeometry 默认沿 Y 轴
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
+      cylinder.quaternion.copy(quaternion)
+
+      cylinder.userData.trunk = trunk
+      cylinder.name = `trunk-${trunk.id}-seg-${i}`
+      trunkGroup.add(cylinder)
+    }
+
+    // 编辑模式下显示起点/终点拖拽球
+    if (isEditMode.value) {
+      const startSphereGeo = new THREE.SphereGeometry(endpointRadius, 16, 16)
+      const startSphereMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 1.0 })  // 绿色
+      const startSphere = new THREE.Mesh(startSphereGeo, startSphereMat)
+      startSphere.position.set(startPoint.x, startPoint.y + trunkRadius * 2, startPoint.z)
+      startSphere.userData.trunkEndpoint = { trunkId: trunk.id, type: 'start', x: trunk.start_x_percent, y: trunk.start_y_percent }
+      startSphere.name = `trunk-start-${trunk.id}`
+      trunkGroup.add(startSphere)
+
+      const endSphereGeo = new THREE.SphereGeometry(endpointRadius, 16, 16)
+      const endSphereMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 1.0 })  // 红色
+      const endSphere = new THREE.Mesh(endSphereGeo, endSphereMat)
+      endSphere.position.set(endPoint.x, endPoint.y + trunkRadius * 2, endPoint.z)
+      endSphere.userData.trunkEndpoint = { trunkId: trunk.id, type: 'end', x: trunk.end_x_percent, y: trunk.end_y_percent }
+      endSphere.name = `trunk-end-${trunk.id}`
+      trunkGroup.add(endSphere)
+    }
+
+    // 编辑模式下显示拐点球
+    if (isEditMode.value && Array.isArray(waypoints) && waypoints.length > 0) {
+      waypoints.forEach((wp, idx) => {
+        if (wp.x != null && wp.y != null) {
+          // 拐点球位置略高于管道
+          const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight + trunkRadius * 3)
+          // 拐点球半径：管道半径的 2.5 倍
+          const wpRadius = trunkRadius * 2.5
+          const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 })  // 白色
+          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+          sphere.userData.trunkWaypoint = { trunkId: trunk.id, index: idx, x: wp.x, y: wp.y }
+          sphere.name = `trunk-waypoint-${trunk.id}-${idx}`
+          trunkGroup.add(sphere)
+        }
       })
     }
   })
@@ -1728,6 +1916,8 @@ function buildBranchLinks() {
 
   // 分支光缆高度：贴近地面
   const branchHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+  // 分支光缆半径（比主干更细）
+  const branchRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
 
   fiberBranchLinks.value.forEach(link => {
     // 找分支点坐标
@@ -1752,24 +1942,70 @@ function buildBranchLinks() {
     const bpWorld = percentToWorld(bpX, bpY, branchHeight)
     const deviceWorld = percentToWorld(deviceNode.x_percent, deviceNode.y_percent, branchHeight)
 
+    // 构建路径点
     const points = []
     points.push(new THREE.Vector3(bpWorld.x, bpWorld.y, bpWorld.z))
 
-    // 简单直线连接（可根据需要添加拐点）
+    // 解析拐点
+    let waypoints = link.waypoints
+    if (typeof waypoints === 'string') {
+      try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
+    }
+    if (Array.isArray(waypoints) && waypoints.length > 0) {
+      waypoints.forEach(wp => {
+        if (wp.x != null && wp.y != null) {
+          const wpWorld = percentToWorld(wp.x, wp.y, branchHeight)
+          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
+        }
+      })
+    }
+
     points.push(new THREE.Vector3(deviceWorld.x, deviceWorld.y, deviceWorld.z))
 
-    const geo = new THREE.BufferGeometry().setFromPoints(points)
-    const mat = new THREE.LineBasicMaterial({
-      color: 0x06b6d4,  // 更亮的青色
+    // 使用圆柱体绘制直角折线
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x06b6d4,  // 青色
       transparent: true,
       opacity: 0.9,
-      linewidth: 1
     })
 
-    const line = new THREE.Line(geo, mat)
-    line.userData.branchLink = link
-    line.name = `branch-link-${link.id}`
-    branchGroup.add(line)
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i]
+      const end = points[i + 1]
+
+      const direction = new THREE.Vector3().subVectors(end, start)
+      const length = direction.length()
+      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+
+      const cylinderGeo = new THREE.CylinderGeometry(branchRadius, branchRadius, length, 8)
+      const cylinder = new THREE.Mesh(cylinderGeo, mat)
+      cylinder.position.copy(midPoint)
+
+      const axis = new THREE.Vector3(0, 1, 0)
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
+      cylinder.quaternion.copy(quaternion)
+
+      cylinder.userData.branchLink = link
+      cylinder.name = `branch-link-${link.id}-seg-${i}`
+      branchGroup.add(cylinder)
+    }
+
+    // 编辑模式下显示拐点球
+    if (isEditMode.value && Array.isArray(waypoints) && waypoints.length > 0) {
+      waypoints.forEach((wp, idx) => {
+        if (wp.x != null && wp.y != null) {
+          const wpWorld = percentToWorld(wp.x, wp.y, branchHeight + branchRadius * 3)
+          const wpRadius = branchRadius * 2.5
+          const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
+          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 })
+          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+          sphere.userData.branchLinkWaypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
+          sphere.name = `branch-link-waypoint-${link.id}-${idx}`
+          branchGroup.add(sphere)
+        }
+      })
+    }
   })
 
   scene.add(branchGroup)
@@ -1924,11 +2160,27 @@ let isDragging = false
 let waypointDragState = null
 let selectedWaypointSphere = null
 
+// 主干拐点拖动状态
+let trunkWaypointDragState = null
+let selectedTrunkWaypointSphere = null
+
+// 主干端点拖拽状态
+let trunkEndpointDragState = null
+let selectedTrunkEndpointSphere = null
+
+// 分支点拖拽状态
+let branchPointDragState = null
+let selectedBranchPointSphere = null
+
+// 分支光缆拐点拖拽状态
+let branchLinkWaypointDragState = null
+let selectedBranchLinkWaypointSphere = null
+
 // 编辑模式鼠标按下 - 拖动起点（支持拐点和设备拖动）
 function onCanvasMouseDown(e) {
   if (!isEditMode.value) return
 
-  const { camera, renderer, deviceGroup, linkLines, controls, fiberTrunkGroup, branchPointGroup } = ctx.value
+  const { camera, renderer, deviceGroup, linkLines, controls, fiberTrunkGroup, branchPointGroup, branchLinkGroup } = ctx.value
 
   const rect = renderer.domElement.getBoundingClientRect()
   pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
@@ -1968,15 +2220,131 @@ function onCanvasMouseDown(e) {
     return
   }
 
-  // 检查是否点击了主干光缆（添加分支点）
+  // 检查是否点击了主干端点球（优先于拐点球）
   if (fiberTrunkGroup) {
-    const trunkHits = raycaster.intersectObjects(fiberTrunkGroup.children, false)
+    const endpointSpheres = fiberTrunkGroup.children.filter(c => c.userData.trunkEndpoint)
+    const epHits = raycaster.intersectObjects(endpointSpheres, false)
+
+    if (epHits.length > 0) {
+      const sphere = epHits[0].object
+      const ep = sphere.userData.trunkEndpoint
+
+      trunkEndpointDragState = {
+        trunkId: ep.trunkId,
+        type: ep.type,  // 'start' or 'end'
+        startX: ep.x,
+        startY: ep.y,
+      }
+      selectedTrunkEndpointSphere = sphere
+
+      // 高亮端点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onTrunkEndpointDragMove)
+      renderer.domElement.addEventListener('mouseup', onTrunkEndpointDragEnd)
+      return
+    }
+  }
+
+  // 检查是否点击了分支点球（可拖动调整位置）
+  if (branchPointGroup) {
+    const bpHits = raycaster.intersectObjects(branchPointGroup.children, false)
+    if (bpHits.length > 0) {
+      const sphere = bpHits[0].object
+      if (sphere.userData.branchPoint) {
+        const bp = sphere.userData.branchPoint
+
+        branchPointDragState = {
+          branchPointId: bp.id,
+          startX: bp.x_percent,
+          startY: bp.y_percent,
+        }
+        selectedBranchPointSphere = sphere
+
+        // 高亮分支点球
+        sphere.material.color.set(0x22d3ee)
+
+        controls.enabled = false
+        isDragging = false
+
+        renderer.domElement.addEventListener('mousemove', onBranchPointDragMove)
+        renderer.domElement.addEventListener('mouseup', onBranchPointDragEnd)
+        return
+      }
+    }
+  }
+
+  // 检查是否点击了分支光缆拐点球
+  if (branchLinkGroup) {
+    const waypointSpheres = branchLinkGroup.children.filter(c => c.userData.branchLinkWaypoint)
+    const wpHits = raycaster.intersectObjects(waypointSpheres, false)
+
+    if (wpHits.length > 0) {
+      const sphere = wpHits[0].object
+      const wp = sphere.userData.branchLinkWaypoint
+
+      branchLinkWaypointDragState = {
+        linkId: wp.linkId,
+        index: wp.index,
+        startX: wp.x,
+        startY: wp.y,
+      }
+      selectedBranchLinkWaypointSphere = sphere
+
+      // 高亮拐点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onBranchLinkWaypointDragMove)
+      renderer.domElement.addEventListener('mouseup', onBranchLinkWaypointDragEnd)
+      return
+    }
+  }
+
+  // 检查是否点击了主干拐点球（优先于主干管体）
+  if (fiberTrunkGroup) {
+    const trunkWaypointSpheres = fiberTrunkGroup.children.filter(c => c.userData.trunkWaypoint)
+    const wpHits = raycaster.intersectObjects(trunkWaypointSpheres, false)
+
+    if (wpHits.length > 0) {
+      const sphere = wpHits[0].object
+      const wp = sphere.userData.trunkWaypoint
+
+      trunkWaypointDragState = {
+        trunkId: wp.trunkId,
+        index: wp.index,
+        startX: wp.x,
+        startY: wp.y,
+      }
+      selectedTrunkWaypointSphere = sphere
+
+      // 高亮拐点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onTrunkWaypointDragMove)
+      renderer.domElement.addEventListener('mouseup', onTrunkWaypointDragEnd)
+      return
+    }
+  }
+
+  // 检查是否点击了主干光缆管体（添加分支点）- 需要进入分支点创建模式
+  if (branchPointCreateMode.value && fiberTrunkGroup) {
+    const trunkHits = raycaster.intersectObjects(fiberTrunkGroup.children.filter(c => c.userData.trunk), false)
     if (trunkHits.length > 0) {
-      const line = trunkHits[0].object
-      if (line.userData.trunk) {
+      const tube = trunkHits[0].object
+      if (tube.userData.trunk) {
         const pos = screenToPercent(e)
         if (pos) {
-          addBranchPointOnTrunk(line.userData.trunk, { x: pos.x_percent, y: pos.y_percent })
+          addBranchPointOnTrunk(tube.userData.trunk, { x: pos.x_percent, y: pos.y_percent })
+          branchPointCreateMode.value = false  // 添加完成后退出模式
         }
       }
       return
@@ -2140,6 +2508,347 @@ async function onWaypointDragEnd(e) {
   waypointDragState = null
   selectedWaypointSphere = null
   isDragging = false
+}
+
+// 主干拐点拖动处理
+function onTrunkWaypointDragMove(e) {
+  if (!trunkWaypointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  trunkWaypointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  trunkWaypointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新主干拐点球位置
+  if (selectedTrunkWaypointSphere) {
+    const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+    const trunkRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0015
+    const w = percentToWorld(trunkWaypointDragState._lastX, trunkWaypointDragState._lastY, trunkHeight + trunkRadius * 3)
+    selectedTrunkWaypointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+// 主干拐点拖动结束
+async function onTrunkWaypointDragEnd(e) {
+  if (!trunkWaypointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onTrunkWaypointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onTrunkWaypointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { trunkId, index, _lastX, _lastY } = trunkWaypointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      // 更新主干拐点数据
+      const trunk = fiberTrunks.value.find(t => t.id === trunkId)
+      if (trunk) {
+        // waypoints 可能是字符串或已解析的数组
+        let waypoints = []
+        if (typeof trunk.waypoints === 'string') {
+          waypoints = JSON.parse(trunk.waypoints) || []
+        } else if (Array.isArray(trunk.waypoints)) {
+          waypoints = trunk.waypoints
+        }
+
+        // 更新指定索引的拐点
+        if (index < waypoints.length) {
+          waypoints[index] = { x: Number(_lastX.toFixed(2)), y: Number(_lastY.toFixed(2)) }
+        }
+
+        const waypointsJson = JSON.stringify(waypoints)
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${trunkId}`, {
+          waypoints: waypointsJson
+        })
+
+        // 更新本地数据
+        trunk.waypoints = waypointsJson
+
+        // 更新 userData
+        if (selectedTrunkWaypointSphere) {
+          selectedTrunkWaypointSphere.userData.trunkWaypoint.x = _lastX
+          selectedTrunkWaypointSphere.userData.trunkWaypoint.y = _lastY
+        }
+
+        // 重建主干
+        disposeGroup('fiber-trunks')
+        buildFiberTrunks()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新主干拐点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复拐点球颜色
+  if (selectedTrunkWaypointSphere) {
+    selectedTrunkWaypointSphere.material.color.set(0xffffff)
+  }
+
+  trunkWaypointDragState = null
+  selectedTrunkWaypointSphere = null
+  isDragging = false
+}
+
+// 主干端点拖动处理
+function onTrunkEndpointDragMove(e) {
+  if (!trunkEndpointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  trunkEndpointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  trunkEndpointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新端点球位置
+  if (selectedTrunkEndpointSphere) {
+    const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+    const trunkRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0015
+    const w = percentToWorld(trunkEndpointDragState._lastX, trunkEndpointDragState._lastY, trunkHeight + trunkRadius * 2)
+    selectedTrunkEndpointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+// 主干端点拖动结束
+async function onTrunkEndpointDragEnd(e) {
+  if (!trunkEndpointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onTrunkEndpointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onTrunkEndpointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { trunkId, type, _lastX, _lastY } = trunkEndpointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      const trunk = fiberTrunks.value.find(t => t.id === trunkId)
+      if (trunk) {
+        // 更新起点或终点坐标
+        const updateData = {}
+        if (type === 'start') {
+          updateData.start_x_percent = Number(_lastX.toFixed(2))
+          updateData.start_y_percent = Number(_lastY.toFixed(2))
+
+          // 检查是否靠近某个设备（起点可以关联核心交换机）
+          const nearbyNode = findNearbyDevice(_lastX, _lastY, 5)  // 5% 范围内
+          if (nearbyNode) {
+            updateData.start_device_id = nearbyNode.device_id
+            ElMessage.success(`${t('connectedToDevice')}: ${nearbyNode.device_name || nearbyNode.name}`)
+          }
+        } else {
+          updateData.end_x_percent = Number(_lastX.toFixed(2))
+          updateData.end_y_percent = Number(_lastY.toFixed(2))
+        }
+
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${trunkId}`, updateData)
+
+        // 更新本地数据
+        if (type === 'start') {
+          trunk.start_x_percent = _lastX.toFixed(2)
+          trunk.start_y_percent = _lastY.toFixed(2)
+          if (updateData.start_device_id) {
+            trunk.start_device_id = updateData.start_device_id
+          }
+        } else {
+          trunk.end_x_percent = _lastX.toFixed(2)
+          trunk.end_y_percent = _lastY.toFixed(2)
+        }
+
+        // 重建主干
+        disposeGroup('fiber-trunks')
+        buildFiberTrunks()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新主干端点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复端点球颜色
+  if (selectedTrunkEndpointSphere) {
+    const ep = selectedTrunkEndpointSphere.userData.trunkEndpoint
+    selectedTrunkEndpointSphere.material.color.set(ep.type === 'start' ? 0x22c55e : 0xef4444)
+  }
+
+  trunkEndpointDragState = null
+  selectedTrunkEndpointSphere = null
+  isDragging = false
+}
+
+// 分支点拖动处理
+function onBranchPointDragMove(e) {
+  if (!branchPointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  branchPointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  branchPointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新分支点球位置
+  if (selectedBranchPointSphere) {
+    const bpHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002 + 1
+    const w = percentToWorld(branchPointDragState._lastX, branchPointDragState._lastY, bpHeight)
+    selectedBranchPointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+// 分支点拖动结束
+async function onBranchPointDragEnd(e) {
+  if (!branchPointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onBranchPointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onBranchPointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { branchPointId, _lastX, _lastY } = branchPointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      const bp = fiberBranchPoints.value.find(b => b.id === branchPointId)
+      if (bp) {
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points/${branchPointId}`, {
+          x_percent: Number(_lastX.toFixed(2)),
+          y_percent: Number(_lastY.toFixed(2)),
+        })
+
+        // 更新本地数据
+        bp.x_percent = _lastX.toFixed(2)
+        bp.y_percent = _lastY.toFixed(2)
+
+        // 重建分支点
+        disposeGroup('branch-points')
+        buildBranchPoints()
+
+        // 同时重建分支光缆（位置变了）
+        disposeGroup('branch-links')
+        buildBranchLinks()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新分支点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复分支点球颜色
+  if (selectedBranchPointSphere) {
+    selectedBranchPointSphere.material.color.set(0xfbbf24)  // 黄色
+  }
+
+  branchPointDragState = null
+  selectedBranchPointSphere = null
+  isDragging = false
+}
+
+// 分支光缆拐点拖动处理
+function onBranchLinkWaypointDragMove(e) {
+  if (!branchLinkWaypointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  branchLinkWaypointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  branchLinkWaypointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新拐点球位置
+  if (selectedBranchLinkWaypointSphere) {
+    const branchHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+    const branchRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+    const w = percentToWorld(branchLinkWaypointDragState._lastX, branchLinkWaypointDragState._lastY, branchHeight + branchRadius * 3)
+    selectedBranchLinkWaypointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+// 分支光缆拐点拖动结束
+async function onBranchLinkWaypointDragEnd(e) {
+  if (!branchLinkWaypointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onBranchLinkWaypointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onBranchLinkWaypointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { linkId, index, _lastX, _lastY } = branchLinkWaypointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      const link = fiberBranchLinks.value.find(l => l.id === linkId)
+      if (link) {
+        // 解析拐点
+        let waypoints = []
+        if (typeof link.waypoints === 'string') {
+          waypoints = JSON.parse(link.waypoints) || []
+        } else if (Array.isArray(link.waypoints)) {
+          waypoints = link.waypoints
+        }
+
+        // 更新指定索引的拐点
+        if (index < waypoints.length) {
+          waypoints[index] = { x: Number(_lastX.toFixed(2)), y: Number(_lastY.toFixed(2)) }
+        }
+
+        const waypointsJson = JSON.stringify(waypoints)
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/links/${linkId}`, {
+          waypoints: waypointsJson
+        })
+
+        // 更新本地数据
+        link.waypoints = waypointsJson
+
+        // 更新 userData
+        if (selectedBranchLinkWaypointSphere) {
+          selectedBranchLinkWaypointSphere.userData.branchLinkWaypoint.x = _lastX
+          selectedBranchLinkWaypointSphere.userData.branchLinkWaypoint.y = _lastY
+        }
+
+        // 重建分支光缆
+        disposeGroup('branch-links')
+        buildBranchLinks()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新分支光缆拐点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复拐点球颜色
+  if (selectedBranchLinkWaypointSphere) {
+    selectedBranchLinkWaypointSphere.material.color.set(0xffffff)
+  }
+
+  branchLinkWaypointDragState = null
+  selectedBranchLinkWaypointSphere = null
+  isDragging = false
+}
+
+// 查找附近的设备节点
+function findNearbyDevice(x_percent, y_percent, threshold) {
+  for (const node of nodes.value) {
+    const dx = Math.abs(node.x_percent - x_percent)
+    const dy = Math.abs(node.y_percent - y_percent)
+    if (dx < threshold && dy < threshold) {
+      // 找到对应的设备
+      const device = devices.value.find(d => d.id === node.device_id)
+      return {
+        device_id: node.device_id,
+        device_name: device ? device.name : null,
+        name: device ? device.name : `设备 ${node.device_id}`
+      }
+    }
+  }
+  return null
 }
 
 // 查看模式点击选中
@@ -2518,6 +3227,16 @@ watch([filterType, filterStatus], () => {
   }
 })
 
+// 监听编辑模式变化，重建主干光缆（显示/隐藏控制点）
+watch(isEditMode, () => {
+  if (ctx.value.scene) {
+    disposeGroup('fiber-trunks')
+    buildFiberTrunks()
+    disposeGroup('branch-links')
+    buildBranchLinks()
+  }
+})
+
 // 监听选中节点变化，同步缩放值
 watch(selectedNode, (node) => {
   if (node) {
@@ -2564,6 +3283,9 @@ onMounted(async () => {
   buildDeviceModels()
   buildLinks()
   buildLabels()
+  buildFiberTrunks()  // 渲染主干光缆
+  buildBranchPoints()  // 渲染分支点
+  buildBranchLinks()  // 渲染分支光缆
 
   // 自动框景 - 延迟执行确保布局稳定
   requestAnimationFrame(() => fitView())

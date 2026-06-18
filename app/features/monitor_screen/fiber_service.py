@@ -77,6 +77,16 @@ def update_fiber_trunk(db: Session, plan_id: int, trunk_id: int, data) -> Option
         trunk.name = data.name
     if data.waypoints is not None:
         trunk.waypoints = data.waypoints
+    if data.start_x_percent is not None:
+        trunk.start_x_percent = data.start_x_percent
+    if data.start_y_percent is not None:
+        trunk.start_y_percent = data.start_y_percent
+    if data.start_device_id is not None:
+        trunk.start_device_id = data.start_device_id
+    if data.end_x_percent is not None:
+        trunk.end_x_percent = data.end_x_percent
+    if data.end_y_percent is not None:
+        trunk.end_y_percent = data.end_y_percent
 
     trunk.updated_at = datetime.utcnow()
     db.commit()
@@ -84,6 +94,11 @@ def update_fiber_trunk(db: Session, plan_id: int, trunk_id: int, data) -> Option
     return {
         "id": trunk.id,
         "name": trunk.name,
+        "start_x_percent": trunk.start_x_percent,
+        "start_y_percent": trunk.start_y_percent,
+        "start_device_id": trunk.start_device_id,
+        "end_x_percent": trunk.end_x_percent,
+        "end_y_percent": trunk.end_y_percent,
         "waypoints": json.loads(trunk.waypoints) if trunk.waypoints else None,
     }
 
@@ -245,11 +260,10 @@ def create_branch_link(db: Session, plan_id: int, data) -> Dict[str, Any]:
         raise ValueError("设备节点不存在")
 
     # 创建分支光缆（使用 DeviceLink 表，link_role='fiber_branch'）
-    # 分支光缆不需要 from_node_id/to_node_id，因为它连接的是分支点（不是节点）
-    # 我们用一个特殊的虚拟节点来表示分支点
+    # 分支光缆的 from_node_id 为 NULL（因为连接的是分支点，不是节点）
     link = DeviceLink(
         floor_plan_id=plan_id,
-        from_node_id=-1,  # 特殊标记：表示分支点连接
+        from_node_id=None,  # NULL 表示从分支点连接（无源节点）
         to_node_id=device_node.id,
         link_role="fiber_branch",
         link_type="fiber",
