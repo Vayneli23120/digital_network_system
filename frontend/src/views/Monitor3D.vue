@@ -223,49 +223,88 @@
 
           <!-- 光纤主干操作（编辑模式下显示） -->
           <div class="fiber-section" v-if="isEditMode">
-            <div class="section-header">{{ t('fiberTrunk') }}</div>
-            <el-button class="panel-action-btn" size="small" @click="startAddTrunk">
-              <el-icon><Plus /></el-icon>
-              {{ t('addFiberTrunk') }}
-            </el-button>
-            <el-button class="panel-action-btn" size="small" @click="startAddBranchPoint" v-if="fiberTrunks.length > 0 && isEditMode">
-              <el-icon><Position /></el-icon>
-              {{ t('addBranchPoint') }}
-            </el-button>
+            <!-- 操作按钮区域 -->
+            <div class="fiber-action-bar">
+              <button class="panel-action-btn" @click="startAddTrunk">
+                <el-icon><Plus /></el-icon>
+                <span>{{ t('addFiberTrunk') }}</span>
+              </button>
+              <button class="panel-action-btn" @click="startAddBranchPoint" v-if="fiberTrunks.length > 0">
+                <el-icon><Position /></el-icon>
+                <span>{{ t('addBranchPoint') }}</span>
+              </button>
+            </div>
 
-            <!-- 主干列表 -->
-            <div class="trunk-list" v-if="fiberTrunks.length > 0">
-              <div v-for="trunk in fiberTrunks" :key="trunk.id" class="trunk-item">
-                <span class="trunk-name">{{ trunk.name || `${t('fiberTrunk')} ${trunk.id}` }}</span>
-                <div class="trunk-actions">
-                  <el-button size="small" @click="openTrunkWaypointDialog(trunk)">{{ t('editWaypoints') }}</el-button>
-                  <el-button size="small" type="danger" @click="deleteTrunk(trunk.id)">{{ t('actionDelete') }}</el-button>
+            <!-- 主干树形列表 -->
+            <div class="fiber-tree" v-if="fiberTrunks.length > 0">
+              <div v-for="trunk in fiberTrunks" :key="trunk.id" class="fiber-tree-node trunk-node">
+                <!-- 主干节点 -->
+                <div class="tree-node-header" @click="toggleTrunkExpand(trunk.id)">
+                  <div class="tree-node-row">
+                    <el-icon class="tree-expand-icon">
+                      <ArrowDown v-if="expandedTrunks[trunk.id]" />
+                      <ArrowRight v-else />
+                    </el-icon>
+                    <span class="trunk-name" :title="getTrunkDisplayName(trunk)">{{ getTrunkDisplayName(trunk) }}</span>
+                  </div>
+                  <div class="tree-node-actions">
+                    <button class="icon-btn" @click.stop="openTrunkWaypointDialog(trunk)" :title="t('editWaypoints')">
+                      <el-icon><Connection /></el-icon>
+                    </button>
+                    <button class="icon-btn danger" @click.stop="deleteTrunk(trunk.id)" :title="t('actionDelete')">
+                      <el-icon><Delete /></el-icon>
+                    </button>
+                  </div>
+                </div>
+                <!-- 主干展开内容 -->
+                <div class="tree-node-children" v-if="expandedTrunks[trunk.id]">
+                  <div v-for="bp in getBranchPointsForTrunk(trunk.id)" :key="bp.id" class="fiber-tree-node branch-point-node">
+                    <div class="tree-node-header" @click="toggleBranchPointExpand(bp.id)">
+                      <div class="tree-node-row">
+                        <el-icon class="tree-expand-icon">
+                          <ArrowDown v-if="expandedBranchPoints[bp.id]" />
+                          <ArrowRight v-else />
+                        </el-icon>
+                        <span class="bp-name" :title="getBranchPointDisplayName(bp)">{{ getBranchPointDisplayName(bp) }}</span>
+                      </div>
+                      <div class="tree-node-actions">
+                        <button class="icon-btn" @click.stop="startConnectFromBranch(bp)" :title="t('connectDevice')">
+                          <el-icon><Position /></el-icon>
+                        </button>
+                        <button class="icon-btn danger" @click.stop="deleteBranchPoint(bp.id)" :title="t('actionDelete')">
+                          <el-icon><Delete /></el-icon>
+                        </button>
+                      </div>
+                    </div>
+                    <div class="tree-node-children" v-if="expandedBranchPoints[bp.id]">
+                      <div v-for="link in getBranchLinksForPoint(bp.id)" :key="link.id" class="fiber-tree-node branch-link-node">
+                        <div class="tree-node-header">
+                          <div class="tree-node-row">
+                            <span class="link-name" :title="getBranchLinkName(link)">{{ getBranchLinkName(link) }}</span>
+                          </div>
+                          <div class="tree-node-actions">
+                            <button class="icon-btn" @click.stop="openBranchLinkWaypointDialog(link)" :title="t('editWaypoints')">
+                              <el-icon><Connection /></el-icon>
+                            </button>
+                            <button class="icon-btn danger" @click.stop="deleteBranchLink(link.id)" :title="t('actionDelete')">
+                              <el-icon><Delete /></el-icon>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="getBranchLinksForPoint(bp.id).length === 0" class="tree-empty-hint">
+                        {{ t('noData') }}
+                      </div>
+                    </div>
+                  </div>
+                  <div v-if="getBranchPointsForTrunk(trunk.id).length === 0" class="tree-empty-hint">
+                    {{ t('noData') }}
+                  </div>
                 </div>
               </div>
             </div>
-
-            <!-- 分支点列表 -->
-            <div class="section-header" v-if="fiberBranchPoints.length > 0">{{ t('fiberBranchPoint') }}</div>
-            <div class="branch-point-list" v-if="fiberBranchPoints.length > 0">
-              <div v-for="bp in fiberBranchPoints" :key="bp.id" class="branch-point-item">
-                <span class="bp-name">{{ bp.name || `${t('fiberBranchPoint')} ${bp.id}` }}</span>
-                <div class="bp-actions">
-                  <el-button size="small" @click="startConnectFromBranch(bp)">{{ t('connectDevice') }}</el-button>
-                  <el-button size="small" type="danger" @click="deleteBranchPoint(bp.id)">{{ t('actionDelete') }}</el-button>
-                </div>
-              </div>
-            </div>
-
-            <!-- 分支光缆列表 -->
-            <div class="section-header" v-if="fiberBranchLinks.length > 0">{{ t('fiberBranchLink') }}</div>
-            <div class="branch-link-list" v-if="fiberBranchLinks.length > 0">
-              <div v-for="link in fiberBranchLinks" :key="link.id" class="branch-link-item">
-                <span class="link-name">{{ getBranchLinkName(link) }}</span>
-                <div class="link-actions">
-                  <el-button size="small" @click="openBranchLinkWaypointDialog(link)">{{ t('editWaypoints') }}</el-button>
-                  <el-button size="small" type="danger" @click="deleteBranchLink(link.id)">{{ t('actionDelete') }}</el-button>
-                </div>
-              </div>
+            <div v-if="fiberTrunks.length === 0" class="no-data">
+              {{ t('noData') }}
             </div>
           </div>
 
@@ -410,13 +449,13 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, shallowRef, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { useI18n } from '@/composables/useI18n'
 
@@ -546,6 +585,10 @@ const branchPointCreateMode = ref(false)  // 正在添加分支点
 const connectFromBranchMode = ref(false)  // 从分支点连接设备模式
 const selectedBranchPoint = ref(null)     // 选中的分支点
 
+// 树形展开状态
+const expandedTrunks = reactive({})
+const expandedBranchPoints = reactive({})
+
 // 监听全局主题变化
 window.addEventListener('theme-change', (e) => {
   isDark.value = e.detail.dark
@@ -580,6 +623,8 @@ function toggleEditMode() {
     // 退出编辑模式时清除交互状态
     trunkCreateMode.value = false
     trunkStartPoint.value = null
+    trunkEndPoint.value = null
+    branchPointCreateMode.value = false
     connectFromBranchMode.value = false
     selectedBranchPoint.value = null
   }
@@ -601,6 +646,26 @@ function startAddBranchPoint() {
   ElMessage.info(t('clickTrunkToAddBranch'))
 }
 
+// 切换主干展开/收起
+function toggleTrunkExpand(trunkId) {
+  expandedTrunks[trunkId] = !expandedTrunks[trunkId]
+}
+
+// 切换分支点展开/收起
+function toggleBranchPointExpand(bpId) {
+  expandedBranchPoints[bpId] = !expandedBranchPoints[bpId]
+}
+
+// 获取指定主干下的分支点
+function getBranchPointsForTrunk(trunkId) {
+  return fiberBranchPoints.value.filter(bp => bp.trunk_link_id === trunkId)
+}
+
+// 获取指定分支点下的分支光缆
+function getBranchLinksForPoint(bpId) {
+  return fiberBranchLinks.value.filter(link => link.branch_point_id === bpId)
+}
+
 // 开始从分支点连接设备
 function startConnectFromBranch(bp) {
   connectFromBranchMode.value = true
@@ -620,7 +685,7 @@ async function createFiberTrunk() {
 
   try {
     const res = await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-trunks`, {
-      name: `${t('fiberTrunk')} ${fiberTrunks.value.length + 1}`,
+      name: `${fiberTrunks.value.length + 1}`,  // 只存储数字序号，显示时动态翻译
       start_x_percent: trunkStartPoint.value.x,
       start_y_percent: trunkStartPoint.value.y,
       end_x_percent: trunkEndPoint.value.x,
@@ -716,7 +781,7 @@ async function addBranchPointOnTrunk(trunk, clickPos) {
     await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points`, {
       trunk_link_id: trunk.id,
       position_percent: positionPercent,
-      name: `${t('fiberBranchPoint')} ${fiberBranchPoints.value.length + 1}`,
+      name: `${fiberBranchPoints.value.length + 1}`,  // 只存储数字序号，显示时动态翻译
     })
     ElMessage.success(t('msgSaveSuccess'))
     await loadFiberData()
@@ -729,7 +794,11 @@ async function addBranchPointOnTrunk(trunk, clickPos) {
 // 计算点击位置在主干上的百分比
 function calculatePositionPercentOnTrunk(trunk, clickPos) {
   const points = [{ x: trunk.start_x_percent, y: trunk.start_y_percent }]
-  if (trunk.waypoints) points.push(...trunk.waypoints)
+  let waypoints = trunk.waypoints
+  if (typeof waypoints === 'string') {
+    try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
+  }
+  if (Array.isArray(waypoints)) points.push(...waypoints)
   points.push({ x: trunk.end_x_percent, y: trunk.end_y_percent })
 
   let totalLength = 0
@@ -742,22 +811,39 @@ function calculatePositionPercentOnTrunk(trunk, clickPos) {
     totalLength += len
   }
 
-  // 找到距离点击位置最近的点，返回其百分比
+  // 用向量投影精确计算最近点，替代暴力循环
   let minDist = Infinity
   let bestPercent = 0
   let accumulated = 0
 
   for (let i = 0; i < segmentLengths.length; i++) {
-    for (let t = 0; t <= 1; t += 0.01) {
-      const x = points[i].x + t * (points[i+1].x - points[i].x)
-      const y = points[i].y + t * (points[i+1].y - points[i].y)
-      const dist = Math.sqrt((x - clickPos.x)**2 + (y - clickPos.y)**2)
+    const segLen = segmentLengths[i]
+    const ax = points[i].x, ay = points[i].y
+    const bx = points[i+1].x, by = points[i+1].y
+    const dx = bx - ax, dy = by - ay
+
+    if (segLen === 0) {
+      const dist = Math.sqrt((ax - clickPos.x)**2 + (ay - clickPos.y)**2)
       if (dist < minDist) {
         minDist = dist
-        bestPercent = (accumulated + t * segmentLengths[i]) / totalLength * 100
+        bestPercent = accumulated / totalLength * 100
       }
+      accumulated += segLen
+      continue
     }
-    accumulated += segmentLengths[i]
+
+    // 向量投影: t = dot(P-A, B-A) / |B-A|^2
+    const t = ((clickPos.x - ax) * dx + (clickPos.y - ay) * dy) / (segLen * segLen)
+    const clampedT = Math.max(0, Math.min(1, t))
+    const projX = ax + clampedT * dx
+    const projY = ay + clampedT * dy
+    const dist = Math.sqrt((projX - clickPos.x)**2 + (projY - clickPos.y)**2)
+
+    if (dist < minDist) {
+      minDist = dist
+      bestPercent = (accumulated + clampedT * segLen) / totalLength * 100
+    }
+    accumulated += segLen
   }
 
   return bestPercent
@@ -988,7 +1074,7 @@ async function saveBranchLinkWaypoints() {
 
   try {
     const waypointsJson = JSON.stringify(editingBranchLinkWaypoints.value)
-    await axios.put(`/api/floor-plans/${currentPlanId.value}/links/${editingBranchLink.value.id}`, {
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-branch-links/${editingBranchLink.value.id}`, {
       waypoints: waypointsJson
     })
     ElMessage.success(t('msgSaveSuccess'))
@@ -1011,13 +1097,43 @@ async function saveBranchLinkWaypoints() {
   }
 }
 
-// 获取分支光缆名称
+// 动态翻译主干名称
+function getTrunkDisplayName(trunk) {
+  if (!trunk.name) return `${t('fiberTrunk')} ${trunk.id}`
+  // 如果名称是纯数字，添加翻译前缀
+  if (/^\d+$/.test(trunk.name)) return `${t('fiberTrunk')} ${trunk.name}`
+  // 如果名称包含中文或英文前缀，解析数字并重新翻译
+  const match = trunk.name.match(/(?:光纤主干|Fiber\s*Trunk)\s*(\d+)/i)
+  if (match) return `${t('fiberTrunk')} ${match[1]}`
+  // 其他情况直接显示
+  return trunk.name
+}
+
+// 动态翻译分支点名称
+function getBranchPointDisplayName(bp) {
+  if (!bp.name) return `${t('fiberBranchPoint')} ${bp.id}`
+  // 如果名称是纯数字，添加翻译前缀
+  if (/^\d+$/.test(bp.name)) return `${t('fiberBranchPoint')} ${bp.name}`
+  // 如果名称包含中文或英文前缀，解析数字并重新翻译
+  const match = bp.name.match(/(?:分支点|Branch\s*Point)\s*(\d+)/i)
+  if (match) return `${t('fiberBranchPoint')} ${match[1]}`
+  // 其他情况直接显示
+  return bp.name
+}
+
+// 获取分支光缆名称（完整显示）
 function getBranchLinkName(link) {
   const bp = fiberBranchPoints.value.find(bp => bp.id === link.branch_point_id)
   const device = devices.value.find(d => d.id === link.to_device_id)
-  const bpName = bp ? (bp.name || `分支点${bp.id}`) : `分支点${link.branch_point_id}`
-  const deviceName = device ? device.name : `设备${link.to_device_id}`
+  const bpName = bp ? getBranchPointDisplayName(bp) : `${t('fiberBranchPoint')} ${link.branch_point_id}`
+  const deviceName = device ? device.name : `Device ${link.to_device_id}`
   return `${bpName} → ${deviceName}`
+}
+
+// 获取分支光缆设备名称（只显示设备名，用于树节点）
+function getBranchLinkDeviceName(link) {
+  const device = devices.value.find(d => d.id === link.to_device_id)
+  return device ? device.name : `Device ${link.to_device_id}`
 }
 
 // 删除分支光缆
@@ -2649,14 +2765,14 @@ async function onTrunkEndpointDragEnd(e) {
 
         // 更新本地数据
         if (type === 'start') {
-          trunk.start_x_percent = _lastX.toFixed(2)
-          trunk.start_y_percent = _lastY.toFixed(2)
+          trunk.start_x_percent = Number(_lastX.toFixed(2))
+          trunk.start_y_percent = Number(_lastY.toFixed(2))
           if (updateData.start_device_id) {
             trunk.start_device_id = updateData.start_device_id
           }
         } else {
-          trunk.end_x_percent = _lastX.toFixed(2)
-          trunk.end_y_percent = _lastY.toFixed(2)
+          trunk.end_x_percent = Number(_lastX.toFixed(2))
+          trunk.end_y_percent = Number(_lastY.toFixed(2))
         }
 
         // 重建主干
@@ -2721,8 +2837,8 @@ async function onBranchPointDragEnd(e) {
         })
 
         // 更新本地数据
-        bp.x_percent = _lastX.toFixed(2)
-        bp.y_percent = _lastY.toFixed(2)
+        bp.x_percent = Number(_lastX.toFixed(2))
+        bp.y_percent = Number(_lastY.toFixed(2))
 
         // 重建分支点
         disposeGroup('branch-points')
@@ -2966,8 +3082,8 @@ async function onDragEnd(e) {
       // 更新本地nodes数据（不重建场景，保持选中状态）
       const node = nodes.value.find(n => n.id === nodeId)
       if (node) {
-        node.x_percent = _lastX.toFixed(2)
-        node.y_percent = _lastY.toFixed(2)
+        node.x_percent = Number(_lastX.toFixed(2))
+        node.y_percent = Number(_lastY.toFixed(2))
         // 同步 userData
         if (selectedModel && selectedModel.userData.node) {
           selectedModel.userData.node = { ...node }
@@ -3356,12 +3472,12 @@ onBeforeUnmount(() => {
   position: absolute;
   top: 0;
   right: 0;
-  width: 200px;
+  width: 260px;
   height: 100%;
   padding: 12px;
   background: rgba(17, 22, 31, 0.65);
   backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  -webkit-backpoint-filter: blur(12px);
   color: #e5e7eb;
   overflow-y: auto;
   border-left: 1px solid rgba(34, 211, 238, 0.2);
@@ -3487,7 +3603,7 @@ onBeforeUnmount(() => {
 /* 侧边栏展开/收起按钮 */
 .panel-toggle {
   position: absolute;
-  right: 200px;
+  right: 260px;
   top: 50%;
   transform: translateY(-50%);
   width: 24px;
@@ -3520,7 +3636,7 @@ onBeforeUnmount(() => {
 /* 画布右下角工具按钮（避开侧边栏） */
 .canvas-tools {
   position: absolute;
-  right: 216px;
+  right: 276px;
   bottom: 16px;
   display: flex;
   gap: 8px;
@@ -3610,29 +3726,141 @@ onBeforeUnmount(() => {
   margin-top: 10px;
 }
 
-.trunk-list, .branch-point-list {
-  max-height: 150px;
+/* 操作按钮区域：上下堆叠，200px面板并排太窄 */
+.fiber-action-bar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.fiber-action-bar .panel-action-btn {
+  width: 100%;
+  margin-bottom: 0;
+}
+
+/* 树形光纤列表 */
+.fiber-tree {
+  max-height: 400px;
   overflow-y: auto;
 }
 
-.trunk-item, .branch-point-item {
+.fiber-tree-node {
+  margin-bottom: 2px;
+}
+
+.tree-node-header {
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 6px;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
   background: rgba(26, 34, 48, 0.5);
   border-radius: 4px;
-  margin-bottom: 4px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+/* 第一行：展开图标 + 名称 */
+.tree-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tree-node-header:hover {
+  background: rgba(36, 48, 64, 0.6);
+}
+
+.tree-expand-icon {
+  font-size: 12px;
+  color: #6b7280;
+  transition: transform 0.15s;
+}
+
+.trunk-node > .tree-node-header .tree-expand-icon {
+  color: #a855f7;
+}
+
+.branch-point-node > .tree-node-header .tree-expand-icon {
+  color: #fbbf24;
 }
 
 .trunk-name, .bp-name {
   font-size: 11px;
   color: #e5e7eb;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
 }
 
-.trunk-actions, .bp-actions {
+.link-name {
+  font-size: 11px;
+  color: #06b6d4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.tree-node-actions {
   display: flex;
   gap: 4px;
+  padding-left: 18px;
+}
+
+.tree-node-children {
+  padding-left: 16px;
+  border-left: 1px solid rgba(34, 211, 238, 0.12);
+  margin-left: 10px;
+}
+
+.branch-link-node > .tree-node-header {
+  background: rgba(6, 182, 212, 0.08);
+  padding: 4px 6px;
+}
+
+.tree-empty-hint {
+  color: #6b7280;
+  font-size: 11px;
+  padding: 6px 8px;
+  text-align: center;
+}
+
+/* 明亮模式：树形光纤列表 */
+.side-panel:not(.dark) .tree-node-header {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.side-panel:not(.dark) .tree-node-header:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.side-panel:not(.dark) .trunk-node > .tree-node-header .tree-expand-icon {
+  color: #7c3aed;
+}
+
+.side-panel:not(.dark) .branch-point-node > .tree-node-header .tree-expand-icon {
+  color: #d97706;
+}
+
+.side-panel:not(.dark) .trunk-name,
+.side-panel:not(.dark) .bp-name {
+  color: #374151;
+}
+
+.side-panel:not(.dark) .link-name {
+  color: #0891b2;
+}
+
+.side-panel:not(.dark) .tree-node-children {
+  border-left: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.side-panel:not(.dark) .branch-link-node > .tree-node-header {
+  background: rgba(0, 120, 212, 0.06);
 }
 
 .selected-box {
