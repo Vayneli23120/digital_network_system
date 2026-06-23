@@ -546,7 +546,11 @@ const currentPlanId = ref(null)
 const topoCables = computed(() => {
   const cablesMap = new Map()
   topoEdges.value.forEach(edge => {
-    if (edge.cable_id && edge.cable_type !== 'trunk_to_core') {
+    // 跳过 trunk_to_core 类型（这是主干到核心的连接线，不作为独立光缆显示）
+    if (edge.cable_type === 'trunk_to_core') return
+
+    // 如果有 cable_id，按 cable_id 聚合
+    if (edge.cable_id) {
       if (!cablesMap.has(edge.cable_id)) {
         cablesMap.set(edge.cable_id, {
           cable_id: edge.cable_id,
@@ -557,6 +561,15 @@ const topoCables = computed(() => {
         })
       }
       cablesMap.get(edge.cable_id).edges.push(edge)
+    } else {
+      // 没有 cable_id 时，按边单独显示（临时方案）
+      cablesMap.set(`edge-${edge.id}`, {
+        cable_id: edge.id,  // 用 edge.id 作为临时 cable_id
+        cable_no: edge.cable_name || edge.cable_type,
+        cable_name: edge.cable_name,
+        cable_type: edge.cable_type,
+        edges: [edge],
+      })
     }
   })
   return Array.from(cablesMap.values())
@@ -569,7 +582,8 @@ const topoBranchPoints = computed(() => {
 
 // 优先使用 topo 数据，如果没有则使用旧数据
 const displayCables = computed(() => {
-  return topoCables.value.length > 0 ? topoCables.value : fiberTrunks.value.map(t => ({
+  if (topoEdges.value.length > 0) return topoCables.value
+  return fiberTrunks.value.map(t => ({
     cable_id: t.id,
     cable_no: t.name || `TRUNK-${t.id}`,
     cable_name: t.name,
@@ -579,7 +593,8 @@ const displayCables = computed(() => {
 })
 
 const displayBranchPoints = computed(() => {
-  return topoBranchPoints.value.length > 0 ? topoBranchPoints.value : fiberBranchPoints.value
+  if (topoNodes.value.length > 0) return topoBranchPoints.value
+  return fiberBranchPoints.value
 })
 
 // 统计数据
@@ -745,8 +760,17 @@ function getBranchLinksForPoint(bpId) {
 
 // 获取指定光缆关联的分支点（新 topo 模型）
 function getBranchPointsForCable(cableId) {
-  // 找到该光缆的所有边
-  const cableEdges = topoEdges.value.filter(e => e.cable_id === cableId)
+  // 找到该光缆的所有边（兼容没有 cable_id 的情况）
+  let cableEdges
+  if (typeof cableId === 'number' && !cableId.toString().startsWith('edge-')) {
+    // 正常的 cable_id
+    cableEdges = topoEdges.value.filter(e => e.cable_id === cableId)
+  } else {
+    // 临时生成的 cable_id（来自 edge.id）
+    const edgeId = parseInt(cableId.toString().replace('edge-', '')) || cableId
+    cableEdges = topoEdges.value.filter(e => e.id === edgeId || e.cable_id === cableId)
+  }
+
   // 找到这些边连接的 junction 节点（branch_point 类型）
   const nodeIds = new Set()
   cableEdges.forEach(e => {
