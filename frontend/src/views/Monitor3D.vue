@@ -921,7 +921,13 @@ async function deleteTrunk(trunkId) {
 // 删除光缆（新 topo API）
 async function deleteCable(cableId) {
   try {
-    await axios.delete(`/api/floor-plans/${currentPlanId.value}/cables/${cableId}`)
+    // 如果 cable_id 是临时生成的（以 "edge-" 开头），直接删除那条边
+    if (typeof cableId === 'string' && cableId.startsWith('edge-')) {
+      const edgeId = parseInt(cableId.replace('edge-', ''))
+      await axios.delete(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edgeId}`)
+    } else {
+      await axios.delete(`/api/floor-plans/${currentPlanId.value}/cables/${cableId}`)
+    }
     ElMessage.success(t('msgSaveSuccess'))
     await loadFiberData()
   } catch (e) {
