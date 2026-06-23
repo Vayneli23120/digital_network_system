@@ -3390,7 +3390,7 @@ async function onTopoEdgeWaypointDragEnd(e) {
         if (typeof edge.waypoints === 'string') {
           waypoints = JSON.parse(edge.waypoints) || []
         } else if (Array.isArray(edge.waypoints)) {
-          waypoints = edge.waypoints
+          waypoints = [...edge.waypoints]  // 复制数组
         }
 
         // 更新指定索引的拐点
@@ -3398,19 +3398,13 @@ async function onTopoEdgeWaypointDragEnd(e) {
           waypoints[index] = { x: Number(_lastX.toFixed(2)), y: Number(_lastY.toFixed(2)) }
         }
 
-        const waypointsJson = JSON.stringify(waypoints)
+        // 发送数组，不是 JSON 字符串
         await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edgeId}`, {
-          waypoints: waypointsJson
+          waypoints: waypoints
         })
 
         // 更新本地数据
-        edge.waypoints = waypointsJson
-
-        // 更新 userData
-        if (selectedTopoEdgeWaypointSphere) {
-          selectedTopoEdgeWaypointSphere.userData.topoEdgeWaypoint.x = _lastX
-          selectedTopoEdgeWaypointSphere.userData.topoEdgeWaypoint.y = _lastY
-        }
+        edge.waypoints = waypoints
 
         // 重建拓扑边
         buildTopoEdges()
