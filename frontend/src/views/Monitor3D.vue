@@ -664,8 +664,8 @@ function toggleEditMode() {
     cancelWiring()
     // 清除端口锚点
     disposeGroup('port-anchors')
-    // 清除 TopoEdge 渲染
-    disposeGroup('topo-edges')
+    // 重建 TopoEdge（去掉拐点球，保留边线）
+    buildTopoEdges()
   }
 }
 
