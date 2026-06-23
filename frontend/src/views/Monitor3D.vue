@@ -4161,10 +4161,15 @@ watch([filterType, filterStatus], () => {
 // 监听编辑模式变化，重建主干光缆（显示/隐藏控制点）
 watch(isEditMode, () => {
   if (ctx.value.scene) {
-    disposeGroup('fiber-trunks')
-    buildFiberTrunks()
-    disposeGroup('branch-links')
-    buildBranchLinks()
+    // 根据数据源选择渲染逻辑
+    if (topoEdges.value.length > 0) {
+      buildTopoEdges()
+    } else {
+      disposeGroup('fiber-trunks')
+      buildFiberTrunks()
+      disposeGroup('branch-links')
+      buildBranchLinks()
+    }
   }
 })
 
