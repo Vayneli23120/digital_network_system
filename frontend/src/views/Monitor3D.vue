@@ -623,6 +623,8 @@ function toggleEditMode() {
   isEditMode.value = !isEditMode.value
   if (isEditMode.value) {
     ElMessage.info(t('monitorEditMode') + ' - ' + t('clickDeviceHint'))
+    // 进入编辑模式时加载拓扑数据并显示端口锚点
+    loadTopoData()
   } else {
     ElMessage.info(t('monitorViewMode'))
     // 退出编辑模式时清除交互状态
@@ -632,6 +634,10 @@ function toggleEditMode() {
     branchPointCreateMode.value = false
     connectFromBranchMode.value = false
     selectedBranchPoint.value = null
+    // 取消连线态
+    cancelWiring()
+    // 清除端口锚点
+    disposeGroup('port-anchors')
   }
 }
 
@@ -2294,6 +2300,236 @@ function buildDataLinkPaths() {
   ctx.value.dataLinkPaths = pathGroup
 }
 
+// ========== PNetLab 式端口连线交互 ==========
+
+// 连线状态
+const wiringState = ref(null)  // { fromNodeId, fromWorldPos, rubberBandLine }
+const devicePorts = ref([])    // 设备端口数据
+const topoNodes = ref([])      // 拓扑节点数据
+const topoEdges = ref([])      // 拓扑边数据
+
+// 加载设备端口和拓扑数据
+async function loadTopoData() {
+  try {
+    // 加载设备端口（每个设备一个默认端口）
+    const portsPromises = devices.value.map(d =>
+      axios.get(`/api/devices/${d.id}/ports`).catch(() => ({ data: { items: [] } }))
+    )
+    const portsResults = await Promise.all(portsPromises)
+    devicePorts.value = portsResults.flatMap(r => r.data.items || [])
+
+    // 加载拓扑节点和边
+    const nodesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-nodes`)
+    topoNodes.value = nodesRes.data.items || []
+
+    const edgesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-edges`)
+    topoEdges.value = edgesRes.data.items || []
+
+    // 构建端口锚点
+    buildPortAnchors()
+  } catch (e) {
+    console.error('加载拓扑数据失败:', e)
+  }
+}
+
+// 构建端口锚点（设备上的小圆点）
+function buildPortAnchors() {
+  const { scene } = ctx.value
+  if (!scene) return
+
+  // 清除旧锚点
+  disposeGroup('port-anchors')
+
+  if (!isEditMode.value) return  // 只在编辑模式显示
+
+  const anchorGroup = new THREE.Group()
+  anchorGroup.name = 'port-anchors'
+
+  const anchorRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+  const anchorHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
+
+  // 遍历设备节点，显示端口锚点
+  nodes.value.forEach(node => {
+    const device = devices.value.find(d => d.id === node.device_id)
+    if (!device) return
+
+    // 获取该设备的端口
+    const ports = devicePorts.value.filter(p => p.device_id === device.id)
+    if (ports.length === 0) {
+      // 如果没有端口数据，显示默认中心锚点
+      ports.push({
+        id: `auto-${node.id}`,
+        device_id: device.id,
+        name: 'auto',
+        anchor_x: 0.5,
+        anchor_y: 0.5,
+        is_auto_created: true,
+      })
+    }
+
+    ports.forEach(port => {
+      // 计算锚点位置（设备坐标 + 锚点偏移）
+      const baseX = parseFloat(node.x_percent)
+      const baseY = parseFloat(node.y_percent)
+      const iconSize = 3.0  // 设备图标大小约 3%
+      const offsetX = (port.anchor_x - 0.5) * iconSize
+      const offsetY = (port.anchor_y - 0.5) * iconSize
+
+      const worldPos = percentToWorld(baseX + offsetX, baseY + offsetY, anchorHeight)
+
+      // 创建锚点球
+      const sphereGeo = new THREE.SphereGeometry(anchorRadius, 12, 12)
+      const sphereMat = new THREE.MeshBasicMaterial({
+        color: port.is_auto_created ? 0x888888 : 0x3b82f6,  // 自动=灰色，手动=蓝色
+        transparent: true,
+        opacity: 0.8,
+      })
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+      sphere.position.set(worldPos.x, worldPos.y, worldPos.z)
+      sphere.userData.portAnchor = {
+        portId: port.id,
+        deviceId: device.id,
+        deviceName: device.name,
+        anchorX: baseX + offsetX,
+        anchorY: baseY + offsetY,
+      }
+      sphere.name = `port-anchor-${device.id}-${port.id}`
+      anchorGroup.add(sphere)
+    })
+  })
+
+  scene.add(anchorGroup)
+  ctx.value.portAnchors = anchorGroup
+}
+
+// 处理端口锚点点击（开始连线）
+function onPortAnchorMouseDown(anchorData) {
+  if (!isEditMode.value) return
+
+  // 查找对应的 topoNode
+  const topoNode = topoNodes.value.find(n =>
+    n.node_kind === 'port' && devicePorts.value.some(p => p.id === n.port_id && p.device_id === anchorData.deviceId)
+  )
+
+  if (!topoNode) {
+    // 没有拓扑节点，需要先创建
+    console.log('需要先创建拓扑节点')
+    return
+  }
+
+  // 进入连线态
+  const worldPos = percentToWorld(anchorData.anchorX, anchorData.anchorY, Math.min(plan.real_width_m, plan.real_depth_m) * 0.003)
+
+  wiringState.value = {
+    fromNodeId: topoNode.id,
+    fromDeviceId: anchorData.deviceId,
+    fromWorldPos: worldPos,
+    fromAnchorX: anchorData.anchorX,
+    fromAnchorY: anchorData.anchorY,
+    rubberBandLine: null,
+  }
+
+  // 创建橡皮筋线
+  const { scene, renderer } = ctx.value
+  if (scene) {
+    const lineMat = new THREE.LineBasicMaterial({ color: 0x22c55e, linewidth: 2 })
+    const lineGeo = new THREE.BufferGeometry()
+    lineGeo.setFromPoints([
+      new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z),
+      new THREE.Vector3(worldPos.x, worldPos.y, worldPos.z),
+    ])
+    const line = new THREE.Line(lineGeo, lineMat)
+    line.name = 'rubber-band'
+    scene.add(line)
+    wiringState.value.rubberBandLine = line
+  }
+
+  // 添加鼠标移动和释放监听器
+  renderer?.domElement?.addEventListener('mousemove', onWiringMouseMove)
+  renderer?.domElement?.addEventListener('mouseup', onWiringMouseUp)
+}
+
+// 更新橡皮筋线位置
+function updateRubberBandLine(mouseWorldPos) {
+  if (!wiringState.value || !wiringState.value.rubberBandLine) return
+
+  const line = wiringState.value.rubberBandLine
+  const positions = line.geometry.attributes.position.array
+  positions[3] = mouseWorldPos.x
+  positions[4] = mouseWorldPos.y
+  positions[5] = mouseWorldPos.z
+  line.geometry.attributes.position.needsUpdate = true
+}
+
+// 结束连线（创建 TopoEdge）
+async function finishWiring(targetAnchorData) {
+  if (!wiringState.value) return
+
+  // 查找目标 topoNode
+  const targetTopoNode = topoNodes.value.find(n =>
+    n.node_kind === 'port' && devicePorts.value.some(p => p.id === n.port_id && p.device_id === targetAnchorData.deviceId)
+  )
+
+  if (!targetTopoNode) {
+    console.log('目标设备没有拓扑节点')
+    cancelWiring()
+    return
+  }
+
+  // 不能连接到自己
+  if (wiringState.value.fromDeviceId === targetAnchorData.deviceId) {
+    cancelWiring()
+    return
+  }
+
+  // 创建 TopoEdge
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/topo-edges`, {
+      floor_plan_id: currentPlanId.value,
+      a_node_id: wiringState.value.fromNodeId,
+      b_node_id: targetTopoNode.id,
+      cable_type: 'fiber',
+      cable_name: `${devices.value.find(d => d.id === wiringState.value.fromDeviceId)?.name || 'A'} - ${devices.value.find(d => d.id === targetAnchorData.deviceId)?.name || 'B'}`,
+      status: 'up',
+    })
+
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 重新加载拓扑数据
+    await loadTopoData()
+    await loadFiberData()
+  } catch (e) {
+    console.error('创建连接失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+
+  cancelWiring()
+}
+
+// 取消连线
+function cancelWiring() {
+  // 移除事件监听器
+  ctx.value.renderer?.domElement?.removeEventListener('mousemove', onWiringMouseMove)
+  ctx.value.renderer?.domElement?.removeEventListener('mouseup', onWiringMouseUp)
+
+  // 清除橡皮筋线
+  if (wiringState.value && wiringState.value.rubberBandLine) {
+    const { scene } = ctx.value
+    if (scene) {
+      scene.remove(wiringState.value.rubberBandLine)
+      wiringState.value.rubberBandLine.geometry.dispose()
+      wiringState.value.rubberBandLine.material.dispose()
+    }
+  }
+
+  // 恢复控制器
+  if (ctx.value.controls) {
+    ctx.value.controls.enabled = true
+  }
+
+  wiringState.value = null
+}
+
 // 构建设备标签（显示在设备上方）
 function buildLabels() {
   const { scene, deviceGroup } = ctx.value
@@ -2461,7 +2697,28 @@ function onCanvasMouseDown(e) {
     return
   }
 
-  // 检查是否点击了主干端点球（优先于拐点球）
+  // ========== PNetLab 式端口连线交互 ==========
+
+  // 检查是否处于连线态（更新橡皮筋）
+  if (wiringState.value) {
+    // 这是 mouseup 应该在另一个处理器中处理
+    return
+  }
+
+  // 检查是否点击了端口锚点（开始连线）
+  if (ctx.value.portAnchors) {
+    const anchorHits = raycaster.intersectObjects(ctx.value.portAnchors.children, false)
+    if (anchorHits.length > 0) {
+      const sphere = anchorHits[0].object
+      if (sphere.userData.portAnchor) {
+        onPortAnchorMouseDown(sphere.userData.portAnchor)
+        controls.enabled = false
+        return
+      }
+    }
+  }
+
+  // ========== 光纤主干交互 ==========
   if (fiberTrunkGroup) {
     const endpointSpheres = fiberTrunkGroup.children.filter(c => c.userData.trunkEndpoint)
     const epHits = raycaster.intersectObjects(endpointSpheres, false)
@@ -3237,7 +3494,57 @@ async function onDragEnd(e) {
   dragState.value = null
   isDragging = false
 }
-      
+
+// ========== PNetLab 连线态鼠标处理器 ==========
+
+function onWiringMouseMove(e) {
+  if (!wiringState.value) return
+
+  const { camera, renderer } = ctx.value
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+  raycaster.setFromCamera(pointer, camera)
+
+  // 计算鼠标在世界坐标中的位置（投射到平面）
+  const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -Math.min(plan.real_width_m, plan.real_depth_m) * 0.003)
+  const mouseWorld = new THREE.Vector3()
+  raycaster.ray.intersectPlane(plane, mouseWorld)
+
+  updateRubberBandLine(mouseWorld)
+}
+
+function onWiringMouseUp(e) {
+  if (!wiringState.value) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onWiringMouseMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onWiringMouseUp)
+  ctx.value.controls.enabled = true
+
+  const { camera, renderer } = ctx.value
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+
+  raycaster.setFromCamera(pointer, camera)
+
+  // 检查是否点击了另一个端口锚点
+  if (ctx.value.portAnchors) {
+    const anchorHits = raycaster.intersectObjects(ctx.value.portAnchors.children, false)
+    if (anchorHits.length > 0) {
+      const sphere = anchorHits[0].object
+      if (sphere.userData.portAnchor && sphere.userData.portAnchor.deviceId !== wiringState.value.fromDeviceId) {
+        finishWiring(sphere.userData.portAnchor)
+        return
+      }
+    }
+  }
+
+  // 没有点击到目标锚点，取消连线
+  cancelWiring()
+}
+
 // 聚焦到设备（带平滑动画）- 使用基于底图尺寸的距离
 let focusAnimationId = null
 function focusDevice(device) {
