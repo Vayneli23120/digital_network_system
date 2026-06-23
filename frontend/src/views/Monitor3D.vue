@@ -1244,6 +1244,7 @@ function buildTopoEdges() {
 
   const edgeHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
   const edgeRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+  const wpRadius = edgeRadius * 2.5  // 拐点球半径
 
   topoEdges.value.forEach(edge => {
     // 找两端节点坐标
@@ -1276,7 +1277,7 @@ function buildTopoEdges() {
     ]
 
     // 颜色根据 cable_type
-    let color = 0x22c55e  // 默认绿色
+    let color = 0x22c55e  // 默认绿色（分支光缆）
     if (edge.cable_type === 'trunk') color = 0x3b82f6  // 主干蓝色
     if (edge.cable_type === 'trunk_to_core') color = 0xf59e0b  // 核心-主干橙色
     if (edge.cable_type === 'trunk_segment') color = 0x8b5cf6  // 主干段紫色
@@ -1324,6 +1325,25 @@ function buildTopoEdges() {
       }
       cylinder.name = `topo-edge-${edge.id}-seg-${i}`
       edgeGroup.add(cylinder)
+    }
+
+    // 添加拐点球（白色，可拖拽）
+    if (waypoints.length > 0 && isEditMode.value) {
+      waypoints.forEach((wp, idx) => {
+        const wpWorld = percentToWorld(wp.x, wp.y, edgeHeight)
+        const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
+        const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 })
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+        sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
+        sphere.userData.topoEdgeWaypoint = {
+          edgeId: edge.id,
+          index: idx,
+          x: wp.x,
+          y: wp.y,
+        }
+        sphere.name = `topo-edge-waypoint-${edge.id}-${idx}`
+        edgeGroup.add(sphere)
+      })
     }
   })
 
@@ -3016,7 +3036,36 @@ function onCanvasMouseDown(e) {
     }
   }
 
-  // 检查是否点击了 TopoEdge（编辑模式下双击打开拐点对话框）
+  // 检查是否点击了 TopoEdge 拐点球（优先于边管体）
+  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+    const waypointSpheres = ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEdgeWaypoint)
+    const wpHits = raycaster.intersectObjects(waypointSpheres, false)
+
+    if (wpHits.length > 0) {
+      const sphere = wpHits[0].object
+      const wp = sphere.userData.topoEdgeWaypoint
+
+      topoEdgeWaypointDragState = {
+        edgeId: wp.edgeId,
+        index: wp.index,
+        startX: wp.x,
+        startY: wp.y,
+      }
+      selectedTopoEdgeWaypointSphere = sphere
+
+      // 高亮拐点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onTopoEdgeWaypointDragMove)
+      renderer.domElement.addEventListener('mouseup', onTopoEdgeWaypointDragEnd)
+      return
+    }
+  }
+
+  // 检查是否点击了 TopoEdge（编辑模式下点击打开拐点对话框）
   if (isEditMode.value && ctx.value.topoEdgesGroup) {
     const edgeHits = raycaster.intersectObjects(ctx.value.topoEdgesGroup.children, false)
     if (edgeHits.length > 0) {
@@ -3321,6 +3370,90 @@ async function onTrunkWaypointDragEnd(e) {
 
   trunkWaypointDragState = null
   selectedTrunkWaypointSphere = null
+  isDragging = false
+}
+
+// ========== TopoEdge 拐点球拖拽处理 ==========
+
+let topoEdgeWaypointDragState = null
+let selectedTopoEdgeWaypointSphere = null
+
+function onTopoEdgeWaypointDragMove(e) {
+  if (!topoEdgeWaypointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  topoEdgeWaypointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  topoEdgeWaypointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新拐点球位置
+  if (selectedTopoEdgeWaypointSphere) {
+    const edgeHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+    const w = percentToWorld(topoEdgeWaypointDragState._lastX, topoEdgeWaypointDragState._lastY, edgeHeight)
+    selectedTopoEdgeWaypointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+async function onTopoEdgeWaypointDragEnd(e) {
+  if (!topoEdgeWaypointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onTopoEdgeWaypointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onTopoEdgeWaypointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { edgeId, index, _lastX, _lastY } = topoEdgeWaypointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      // 更新 TopoEdge 拐点数据
+      const edge = topoEdges.value.find(e => e.id === edgeId)
+      if (edge) {
+        let waypoints = []
+        if (typeof edge.waypoints === 'string') {
+          waypoints = JSON.parse(edge.waypoints) || []
+        } else if (Array.isArray(edge.waypoints)) {
+          waypoints = edge.waypoints
+        }
+
+        // 更新指定索引的拐点
+        if (index < waypoints.length) {
+          waypoints[index] = { x: Number(_lastX.toFixed(2)), y: Number(_lastY.toFixed(2)) }
+        }
+
+        const waypointsJson = JSON.stringify(waypoints)
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edgeId}`, {
+          waypoints: waypointsJson
+        })
+
+        // 更新本地数据
+        edge.waypoints = waypointsJson
+
+        // 更新 userData
+        if (selectedTopoEdgeWaypointSphere) {
+          selectedTopoEdgeWaypointSphere.userData.topoEdgeWaypoint.x = _lastX
+          selectedTopoEdgeWaypointSphere.userData.topoEdgeWaypoint.y = _lastY
+        }
+
+        // 重建拓扑边
+        buildTopoEdges()
+
+        ElMessage.success(t('msgSaveSuccess'))
+      }
+    } catch (err) {
+      console.error('更新 TopoEdge 拐点失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复拐点球颜色
+  if (selectedTopoEdgeWaypointSphere) {
+    selectedTopoEdgeWaypointSphere.material.color.set(0xffffff)
+  }
+
+  topoEdgeWaypointDragState = null
+  selectedTopoEdgeWaypointSphere = null
   isDragging = false
 }
 
