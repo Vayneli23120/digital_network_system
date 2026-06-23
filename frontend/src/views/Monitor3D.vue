@@ -262,39 +262,36 @@
             </div>
 
             <!-- 主干树形列表 -->
-            <div class="fiber-tree" v-if="fiberTrunks.length > 0">
-              <div v-for="trunk in fiberTrunks" :key="trunk.id" class="fiber-tree-node trunk-node">
+            <div class="fiber-tree" v-if="displayCables.length > 0">
+              <div v-for="cable in displayCables" :key="cable.cable_id" class="fiber-tree-node trunk-node">
                 <!-- 主干节点 -->
-                <div class="tree-node-header" @click="toggleTrunkExpand(trunk.id)">
+                <div class="tree-node-header" @click="toggleTrunkExpand(cable.cable_id)">
                   <div class="tree-node-row">
                     <el-icon class="tree-expand-icon">
-                      <ArrowDown v-if="expandedTrunks[trunk.id]" />
+                      <ArrowDown v-if="expandedTrunks[cable.cable_id]" />
                       <ArrowRight v-else />
                     </el-icon>
-                    <span class="trunk-name" :title="getTrunkDisplayName(trunk)">{{ getTrunkDisplayName(trunk) }}</span>
+                    <span class="trunk-name" :title="cable.cable_name || cable.cable_no">{{ cable.cable_name || cable.cable_no }}</span>
                   </div>
                   <div class="tree-node-actions">
-                    <button class="icon-btn" @click.stop="openTrunkWaypointDialog(trunk)" :title="t('editWaypoints')">
-                      <el-icon><Connection /></el-icon>
-                    </button>
-                    <button class="icon-btn danger" @click.stop="deleteTrunk(trunk.id)" :title="t('actionDelete')">
+                    <button class="icon-btn danger" @click.stop="deleteCable(cable.cable_id)" :title="t('actionDelete')">
                       <el-icon><Delete /></el-icon>
                     </button>
                   </div>
                 </div>
                 <!-- 主干展开内容 -->
-                <div class="tree-node-children" v-if="expandedTrunks[trunk.id]">
-                  <div v-for="bp in getBranchPointsForTrunk(trunk.id)" :key="bp.id" class="fiber-tree-node branch-point-node">
+                <div class="tree-node-children" v-if="expandedTrunks[cable.cable_id]">
+                  <div v-for="bp in getBranchPointsForCable(cable.cable_id)" :key="bp.id" class="fiber-tree-node branch-point-node">
                     <div class="tree-node-header" @click="toggleBranchPointExpand(bp.id)">
                       <div class="tree-node-row">
                         <el-icon class="tree-expand-icon">
                           <ArrowDown v-if="expandedBranchPoints[bp.id]" />
                           <ArrowRight v-else />
                         </el-icon>
-                        <span class="bp-name" :title="getBranchPointDisplayName(bp)">{{ getBranchPointDisplayName(bp) }}</span>
+                        <span class="bp-name" :title="bp.label || `BP-${bp.id}`">{{ bp.label || `BP-${bp.id}` }}</span>
                       </div>
                       <div class="tree-node-actions">
-                        <button class="icon-btn" @click.stop="startConnectFromBranch(bp)" :title="t('connectDevice')">
+                        <button class="icon-btn" @click.stop="startConnectFromTopoBranch(bp)" :title="t('connectDevice')">
                           <el-icon><Position /></el-icon>
                         </button>
                         <button class="icon-btn danger" @click.stop="deleteBranchPoint(bp.id)" :title="t('actionDelete')">
@@ -303,33 +300,33 @@
                       </div>
                     </div>
                     <div class="tree-node-children" v-if="expandedBranchPoints[bp.id]">
-                      <div v-for="link in getBranchLinksForPoint(bp.id)" :key="link.id" class="fiber-tree-node branch-link-node">
+                      <div v-for="edge in getBranchLinksForTopoNode(bp.id)" :key="edge.id" class="fiber-tree-node branch-link-node">
                         <div class="tree-node-header">
                           <div class="tree-node-row">
-                            <span class="link-name" :title="getBranchLinkName(link)">{{ getBranchLinkName(link) }}</span>
+                            <span class="link-name" :title="edge.cable_name || `Link-${edge.id}`">{{ edge.cable_name || `Link-${edge.id}` }}</span>
                           </div>
                           <div class="tree-node-actions">
-                            <button class="icon-btn" @click.stop="openBranchLinkWaypointDialog(link)" :title="t('editWaypoints')">
+                            <button class="icon-btn" @click.stop="openTopoEdgeWaypointDialog(edge)" :title="t('editWaypoints')">
                               <el-icon><Connection /></el-icon>
                             </button>
-                            <button class="icon-btn danger" @click.stop="deleteBranchLink(link.id)" :title="t('actionDelete')">
+                            <button class="icon-btn danger" @click.stop="deleteTopoEdge(edge.id)" :title="t('actionDelete')">
                               <el-icon><Delete /></el-icon>
                             </button>
                           </div>
                         </div>
                       </div>
-                      <div v-if="getBranchLinksForPoint(bp.id).length === 0" class="tree-empty-hint">
+                      <div v-if="getBranchLinksForTopoNode(bp.id).length === 0" class="tree-empty-hint">
                         {{ t('noData') }}
                       </div>
                     </div>
                   </div>
-                  <div v-if="getBranchPointsForTrunk(trunk.id).length === 0" class="tree-empty-hint">
+                  <div v-if="getBranchPointsForCable(cable.cable_id).length === 0" class="tree-empty-hint">
                     {{ t('noData') }}
                   </div>
                 </div>
               </div>
             </div>
-            <div v-if="fiberTrunks.length === 0" class="no-data">
+            <div v-if="displayCables.length === 0" class="no-data">
               {{ t('noData') }}
             </div>
           </div>
@@ -537,13 +534,53 @@ const deviceScale = ref(1)
 const devices = ref([])
 const nodes = ref([])
 const links = ref([])
-const fiberTrunks = ref([])  // 主干光缆
-const fiberBranchPoints = ref([])  // 分支点
-const fiberBranchLinks = ref([])  // 分支光缆
+const fiberTrunks = ref([])  // 主干光缆（旧数据，面板备用）
+const fiberBranchPoints = ref([])  // 分支点（旧数据，面板备用）
+const fiberBranchLinks = ref([])  // 分支光缆（旧数据，面板备用）
 const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
+
+// 从 topoEdges 派生的光缆列表（用于面板显示）
+const topoCables = computed(() => {
+  const cablesMap = new Map()
+  topoEdges.value.forEach(edge => {
+    if (edge.cable_id && edge.cable_type !== 'trunk_to_core') {
+      if (!cablesMap.has(edge.cable_id)) {
+        cablesMap.set(edge.cable_id, {
+          cable_id: edge.cable_id,
+          cable_no: edge.cable_no || `Cable-${edge.cable_id}`,
+          cable_name: edge.cable_name,
+          cable_type: edge.cable_type,
+          edges: [],
+        })
+      }
+      cablesMap.get(edge.cable_id).edges.push(edge)
+    }
+  })
+  return Array.from(cablesMap.values())
+})
+
+// 从 topoNodes 派生的分支点列表（用于面板显示）
+const topoBranchPoints = computed(() => {
+  return topoNodes.value.filter(n => n.node_kind === 'junction' && n.junction_type === 'branch_point')
+})
+
+// 优先使用 topo 数据，如果没有则使用旧数据
+const displayCables = computed(() => {
+  return topoCables.value.length > 0 ? topoCables.value : fiberTrunks.value.map(t => ({
+    cable_id: t.id,
+    cable_no: t.name || `TRUNK-${t.id}`,
+    cable_name: t.name,
+    cable_type: 'trunk',
+    edges: [],
+  }))
+})
+
+const displayBranchPoints = computed(() => {
+  return topoBranchPoints.value.length > 0 ? topoBranchPoints.value : fiberBranchPoints.value
+})
 
 // 统计数据
 const stats = computed(() => {
@@ -614,7 +651,8 @@ const trunkStartPoint = ref(null)   // 主干起点
 const trunkEndPoint = ref(null)     // 主干终点
 const branchPointCreateMode = ref(false)  // 正在添加分支点
 const connectFromBranchMode = ref(false)  // 从分支点连接设备模式
-const selectedBranchPoint = ref(null)     // 选中的分支点
+const selectedBranchPoint = ref(null)     // 选中的分支点（旧模型）
+const selectedTopoBranchPoint = ref(null) // 选中的分支点（新 topo 模型）
 
 // 树形展开状态
 const expandedTrunks = reactive({})
@@ -695,14 +733,67 @@ function toggleBranchPointExpand(bpId) {
   expandedBranchPoints[bpId] = !expandedBranchPoints[bpId]
 }
 
-// 获取指定主干下的分支点
+// 获取指定主干下的分支点（旧模型）
 function getBranchPointsForTrunk(trunkId) {
   return fiberBranchPoints.value.filter(bp => bp.trunk_link_id === trunkId)
 }
 
-// 获取指定分支点下的分支光缆
+// 获取指定分支点下的分支光缆（旧模型）
 function getBranchLinksForPoint(bpId) {
   return fiberBranchLinks.value.filter(link => link.branch_point_id === bpId)
+}
+
+// 获取指定光缆关联的分支点（新 topo 模型）
+function getBranchPointsForCable(cableId) {
+  // 找到该光缆的所有边
+  const cableEdges = topoEdges.value.filter(e => e.cable_id === cableId)
+  // 找到这些边连接的 junction 节点（branch_point 类型）
+  const nodeIds = new Set()
+  cableEdges.forEach(e => {
+    nodeIds.add(e.a_node_id)
+    nodeIds.add(e.b_node_id)
+  })
+  return topoNodes.value.filter(n =>
+    n.node_kind === 'junction' &&
+    n.junction_type === 'branch_point' &&
+    nodeIds.has(n.id)
+  )
+}
+
+// 获取指定分支点连接的分支光缆（新 topo 模型）
+function getBranchLinksForTopoNode(nodeId) {
+  return topoEdges.value.filter(e =>
+    e.cable_type === 'fiber' &&
+    (e.a_node_id === nodeId || e.b_node_id === nodeId)
+  )
+}
+
+// 开始从分支点连接设备（新 topo 模型）
+function startConnectFromTopoBranch(bp) {
+  connectFromBranchMode.value = true
+  selectedTopoBranchPoint.value = bp
+  ElMessage.info(t('clickDeviceToConnect'))
+}
+
+// 从 topo 分支点连接设备
+async function connectDeviceFromTopoBranch(deviceId) {
+  if (!selectedTopoBranchPoint.value) return
+
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/branch-cable`, {
+      branch_point_id: selectedTopoBranchPoint.value.id,
+      to_device_id: deviceId,
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+
+    // 重置状态
+    connectFromBranchMode.value = false
+    selectedTopoBranchPoint.value = null
+  } catch (e) {
+    console.error('连接设备失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
 }
 
 // 开始从分支点连接设备
@@ -791,7 +882,7 @@ async function loadFiberData() {
   }
 }
 
-// 删除主干光缆
+// 删除主干光缆（旧 API）
 async function deleteTrunk(trunkId) {
   try {
     await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${trunkId}`)
@@ -803,7 +894,19 @@ async function deleteTrunk(trunkId) {
   }
 }
 
-// 删除分支点
+// 删除光缆（新 topo API）
+async function deleteCable(cableId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/cables/${cableId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除光缆失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除分支点（旧 API）
 async function deleteBranchPoint(bpId) {
   try {
     await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points/${bpId}`)
@@ -811,6 +914,18 @@ async function deleteBranchPoint(bpId) {
     await loadFiberData()
   } catch (e) {
     console.error('删除分支点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除拓扑边（新 topo API）
+async function deleteTopoEdge(edgeId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edgeId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除边失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }
@@ -2727,7 +2842,12 @@ function onCanvasMouseDown(e) {
         model = model.parent
       }
       if (model && model.userData.device) {
-        connectDeviceFromBranch(model.userData.device.id)
+        // 根据选中的分支点类型使用不同的连接函数
+        if (selectedTopoBranchPoint.value) {
+          connectDeviceFromTopoBranch(model.userData.device.id)
+        } else if (selectedBranchPoint.value) {
+          connectDeviceFromBranch(model.userData.device.id)
+        }
       }
     }
     return
