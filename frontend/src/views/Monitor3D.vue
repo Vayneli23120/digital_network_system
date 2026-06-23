@@ -182,6 +182,32 @@
       </template>
     </el-dialog>
 
+    <!-- TopoEdge 拐点编辑对话框 -->
+    <el-dialog v-model="showTopoEdgeWaypointDialog" :title="t('editWaypoints') + ' - TopoEdge'" width="500px">
+      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
+      <div class="waypoint-list">
+        <div v-for="(wp, idx) in editingTopoEdgeWaypoints" :key="idx" class="waypoint-item">
+          <span class="waypoint-index">{{ idx + 1 }}</span>
+          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
+          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
+          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeTopoEdgeWaypoint(idx)">
+            <el-icon><Delete /></el-icon>
+          </button>
+        </div>
+        <div v-if="editingTopoEdgeWaypoints.length === 0" class="no-data">
+          {{ t('noWaypoints') }}
+        </div>
+      </div>
+      <el-button type="primary" size="small" @click="addTopoEdgeWaypoint">
+        <el-icon><Plus /></el-icon>
+        {{ t('addWaypoint') }}
+      </el-button>
+      <template #footer>
+        <el-button @click="showTopoEdgeWaypointDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="saveTopoEdgeWaypoints">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
+
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel" :class="{ dark: isDark }">
       <div class="panel-header">
@@ -638,6 +664,8 @@ function toggleEditMode() {
     cancelWiring()
     // 清除端口锚点
     disposeGroup('port-anchors')
+    // 清除 TopoEdge 渲染
+    disposeGroup('topo-edges')
   }
 }
 
@@ -1119,6 +1147,170 @@ async function saveBranchLinkWaypoints() {
     console.error('保存分支光缆拐点失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
+}
+
+// ========== TopoEdge 拐点编辑 ==========
+
+const showTopoEdgeWaypointDialog = ref(false)
+const editingTopoEdge = ref(null)
+const editingTopoEdgeWaypoints = ref([])
+
+// 打开 TopoEdge 拐点编辑对话框
+function openTopoEdgeWaypointDialog(edge) {
+  editingTopoEdge.value = edge
+  try {
+    if (typeof edge.waypoints === 'string') {
+      editingTopoEdgeWaypoints.value = JSON.parse(edge.waypoints) || []
+    } else if (Array.isArray(edge.waypoints)) {
+      editingTopoEdgeWaypoints.value = edge.waypoints
+    } else {
+      editingTopoEdgeWaypoints.value = []
+    }
+  } catch (e) {
+    editingTopoEdgeWaypoints.value = []
+  }
+  showTopoEdgeWaypointDialog.value = true
+}
+
+// 添加 TopoEdge 拐点
+function addTopoEdgeWaypoint() {
+  editingTopoEdgeWaypoints.value.push({
+    x: 50,
+    y: 50
+  })
+}
+
+// 删除 TopoEdge 拐点
+function removeTopoEdgeWaypoint(idx) {
+  editingTopoEdgeWaypoints.value.splice(idx, 1)
+}
+
+// 保存 TopoEdge 拐点
+async function saveTopoEdgeWaypoints() {
+  if (!editingTopoEdge.value) return
+
+  try {
+    const waypointsJson = JSON.stringify(editingTopoEdgeWaypoints.value)
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${editingTopoEdge.value.id}`, {
+      waypoints: waypointsJson
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+
+    // 更新本地数据
+    const edge = topoEdges.value.find(e => e.id === editingTopoEdge.value.id)
+    if (edge) {
+      edge.waypoints = waypointsJson
+    }
+
+    // 重建拓扑边渲染
+    buildTopoEdges()
+
+    showTopoEdgeWaypointDialog.value = false
+    editingTopoEdge.value = null
+  } catch (e) {
+    console.error('保存 TopoEdge 拐点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 构建 TopoEdge 渲染
+function buildTopoEdges() {
+  const { scene } = ctx.value
+  if (!scene || topoEdges.value.length === 0) return
+
+  // 清除旧渲染
+  disposeGroup('topo-edges')
+
+  const edgeGroup = new THREE.Group()
+  edgeGroup.name = 'topo-edges'
+
+  const edgeHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+  const edgeRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+
+  topoEdges.value.forEach(edge => {
+    // 找两端节点坐标
+    const aNode = topoNodes.value.find(n => n.id === edge.a_node_id)
+    const bNode = topoNodes.value.find(n => n.id === edge.b_node_id)
+    if (!aNode || !bNode) return
+
+    const startX = parseFloat(aNode.x_percent)
+    const startY = parseFloat(aNode.y_percent)
+    const endX = parseFloat(bNode.x_percent)
+    const endY = parseFloat(bNode.y_percent)
+
+    // 解析拐点
+    let waypoints = []
+    try {
+      if (typeof edge.waypoints === 'string') {
+        waypoints = JSON.parse(edge.waypoints) || []
+      } else if (Array.isArray(edge.waypoints)) {
+        waypoints = edge.waypoints
+      }
+    } catch (e) {
+      waypoints = []
+    }
+
+    // 构建所有点
+    const points = [
+      { x: startX, y: startY },
+      ...waypoints,
+      { x: endX, y: endY }
+    ]
+
+    // 颜色根据 cable_type
+    let color = 0x22c55e  // 默认绿色
+    if (edge.cable_type === 'trunk') color = 0x3b82f6  // 主干蓝色
+    if (edge.cable_type === 'trunk_to_core') color = 0xf59e0b  // 核心-主干橙色
+    if (edge.cable_type === 'trunk_segment') color = 0x8b5cf6  // 主干段紫色
+    if (edge.status === 'down') color = 0xff4d4f  // 断开红色
+
+    const mat = new THREE.MeshBasicMaterial({
+      color,
+      transparent: true,
+      opacity: 0.8,
+    })
+
+    // 绘制每段
+    for (let i = 0; i < points.length - 1; i++) {
+      const pt1 = points[i]
+      const pt2 = points[i + 1]
+
+      const start = percentToWorld(pt1.x, pt1.y, edgeHeight)
+      const end = percentToWorld(pt2.x, pt2.y, edgeHeight)
+
+      const direction = new THREE.Vector3().subVectors(end, start)
+      const length = direction.length()
+
+      if (length < 1e-6) continue
+
+      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+
+      const cylinderGeo = new THREE.CylinderGeometry(edgeRadius, edgeRadius, length, 8)
+      const cylinder = new THREE.Mesh(cylinderGeo, mat)
+      cylinder.position.copy(midPoint)
+
+      const axis = new THREE.Vector3(0, 1, 0)
+      const normalizedDir = direction.clone().normalize()
+      if (normalizedDir.length() < 0.5) continue
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, normalizedDir)
+      cylinder.quaternion.copy(quaternion)
+
+      // 存储边信息用于点击选择
+      cylinder.userData.topoEdge = {
+        id: edge.id,
+        aNodeId: edge.a_node_id,
+        bNodeId: edge.b_node_id,
+        cableType: edge.cable_type,
+        cableName: edge.cable_name,
+        segmentIndex: i,
+      }
+      cylinder.name = `topo-edge-${edge.id}-seg-${i}`
+      edgeGroup.add(cylinder)
+    }
+  })
+
+  scene.add(edgeGroup)
+  ctx.value.topoEdgesGroup = edgeGroup
 }
 
 // 动态翻译主干名称
@@ -2327,6 +2519,8 @@ async function loadTopoData() {
 
     // 构建端口锚点
     buildPortAnchors()
+    // 构建 TopoEdge 渲染
+    buildTopoEdges()
   } catch (e) {
     console.error('加载拓扑数据失败:', e)
   }
@@ -2801,6 +2995,26 @@ function onCanvasMouseDown(e) {
       renderer.domElement.addEventListener('mousemove', onBranchLinkWaypointDragMove)
       renderer.domElement.addEventListener('mouseup', onBranchLinkWaypointDragEnd)
       return
+    }
+  }
+
+  // 检查是否点击了 TopoEdge（编辑模式下双击打开拐点对话框）
+  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+    const edgeHits = raycaster.intersectObjects(ctx.value.topoEdgesGroup.children, false)
+    if (edgeHits.length > 0) {
+      const cylinder = edgeHits[0].object
+      if (cylinder.userData.topoEdge) {
+        // 找到对应的 TopoEdge 数据
+        const edgeData = cylinder.userData.topoEdge
+        const edge = topoEdges.value.find(e => e.id === edgeData.id)
+        if (edge) {
+          // 双击打开拐点编辑对话框
+          if (isEditMode.value) {
+            openTopoEdgeWaypointDialog(edge)
+            return
+          }
+        }
+      }
     }
   }
 
