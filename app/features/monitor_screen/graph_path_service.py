@@ -10,6 +10,8 @@ Graph Path Service - PNetLab 式图寻路服务
 1. 用"角色规则"代替"真实连接" → 任意拓扑都支持
 2. 用几何投影推算路径 → 路径沿真实边走
 3. 拓扑和几何没分离 → 边自带拐点，直接拼接
+
+修复：只纳入光纤边 + 线缆类型权重，防止抄近路
 """
 
 from sqlalchemy.orm import Session
@@ -20,6 +22,20 @@ import json
 import math
 
 from app.shared.models import TopoNode, TopoEdge, DevicePort, Device, DeviceNode
+
+
+# 线缆类型权重（值越大越不优先走）
+CABLE_TYPE_WEIGHT = {
+    "fiber": 1.0,           # 分支光缆
+    "trunk": 1.0,           # 主干（整条）
+    "trunk_segment": 1.0,   # 主干切段
+    "trunk_to_core": 1.0,   # 主干到核心连接
+    "copper": 10.0,         # 铜缆（不优先）
+    "ethernet": 10.0,       # 以太网（不优先）
+}
+
+# 只纳入这些类型的边（数据链路必须沿光纤）
+ALLOWED_CABLE_TYPES = ["fiber", "trunk", "trunk_segment", "trunk_to_core"]
 
 
 def edge_geometry_length(edge: TopoEdge, node_positions: Dict[int, Tuple[float, float]]) -> float:
@@ -60,7 +76,7 @@ def edge_geometry_length(edge: TopoEdge, node_positions: Dict[int, Tuple[float, 
 
 
 def build_graph(db: Session, plan_id: int) -> Tuple[List[TopoNode], Dict[int, List[Tuple[int, TopoEdge, float, bool]]]]:
-    """构建邻接表
+    """构建邻接表（只纳入光纤边，按类型加权）
 
     Args:
         db: 数据库会话
@@ -71,9 +87,12 @@ def build_graph(db: Session, plan_id: int) -> Tuple[List[TopoNode], Dict[int, Li
         adj: {node_id: [(neighbor_id, edge, weight, reversed), ...]}
     """
     nodes = db.query(TopoNode).filter(TopoNode.floor_plan_id == plan_id).all()
+
+    # 只纳入光纤类型的边（防止抄近路）
     edges = db.query(TopoEdge).filter(
         TopoEdge.floor_plan_id == plan_id,
-        TopoEdge.status == "up"
+        TopoEdge.status == "up",
+        TopoEdge.cable_type.in_(ALLOWED_CABLE_TYPES)
     ).all()
 
     # 计算节点位置
@@ -82,7 +101,11 @@ def build_graph(db: Session, plan_id: int) -> Tuple[List[TopoNode], Dict[int, Li
     # 构建邻接表
     adj = defaultdict(list)
     for e in edges:
-        w = e.length_weight if e.length_weight else edge_geometry_length(e, node_positions)
+        # 几何长度 × 类型权重
+        geom_len = e.length_weight if e.length_weight else edge_geometry_length(e, node_positions)
+        type_weight = CABLE_TYPE_WEIGHT.get(e.cable_type, 1.0)
+        w = geom_len * type_weight
+
         adj[e.a_node_id].append((e.b_node_id, e, w, False))
         adj[e.b_node_id].append((e.a_node_id, e, w, True))
 
