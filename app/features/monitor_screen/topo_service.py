@@ -522,6 +522,30 @@ def delete_topo_edge(db: Session, plan_id: int, edge_id: int) -> bool:
     return True
 
 
+def delete_topo_node(db: Session, plan_id: int, node_id: int) -> bool:
+    """删除拓扑节点（连同关联的边）"""
+    node = db.query(TopoNode).filter(
+        TopoNode.id == node_id,
+        TopoNode.floor_plan_id == plan_id
+    ).first()
+
+    if not node:
+        return False
+
+    # 删除连接到该节点的所有边
+    edges = db.query(TopoEdge).filter(
+        TopoEdge.floor_plan_id == plan_id,
+        (TopoEdge.a_node_id == node_id) | (TopoEdge.b_node_id == node_id)
+    ).all()
+
+    for edge in edges:
+        db.delete(edge)
+
+    db.delete(node)
+    db.commit()
+    return True
+
+
 def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:
     """删除整条光缆（所有 cable_id 相同的边）"""
     edges = db.query(TopoEdge).filter(

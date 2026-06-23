@@ -294,7 +294,7 @@
                         <button class="icon-btn" @click.stop="startConnectFromTopoBranch(bp)" :title="t('connectDevice')">
                           <el-icon><Position /></el-icon>
                         </button>
-                        <button class="icon-btn danger" @click.stop="deleteBranchPoint(bp.id)" :title="t('actionDelete')">
+                        <button class="icon-btn danger" @click.stop="deleteTopoBranchPoint(bp.id)" :title="t('actionDelete')">
                           <el-icon><Delete /></el-icon>
                         </button>
                       </div>
@@ -950,6 +950,18 @@ async function deleteTopoEdge(edgeId) {
     await loadFiberData()
   } catch (e) {
     console.error('删除边失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 删除 topo 分支点（连同关联的分支光缆）
+async function deleteTopoBranchPoint(nodeId) {
+  try {
+    await axios.delete(`/api/floor-plans/${currentPlanId.value}/topo-nodes/${nodeId}`)
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('删除分支点失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }

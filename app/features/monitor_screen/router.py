@@ -545,7 +545,7 @@ async def get_global_summary_endpoint(db: Session = Depends(get_db)):
 from .topo_service import (
     get_cables, get_topo_nodes, get_topo_edges,
     create_trunk, create_branch_point, create_branch_cable,
-    update_topo_edge, delete_topo_edge, delete_cable,
+    update_topo_edge, delete_topo_edge, delete_topo_node, delete_cable,
 )
 
 
@@ -650,6 +650,15 @@ async def delete_topo_edge_endpoint(plan_id: int, edge_id: int, db: Session = De
     if not success:
         raise HTTPException(status_code=404, detail="边不存在")
     return {"message": "边删除成功"}
+
+
+@router.delete("/floor-plans/{plan_id}/topo-nodes/{node_id}")
+async def delete_topo_node_endpoint(plan_id: int, node_id: int, db: Session = Depends(get_db)):
+    """删除拓扑节点（连同关联的边）"""
+    success = delete_topo_node(db, plan_id, node_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="节点不存在")
+    return {"message": "节点删除成功"}
 
 
 @router.delete("/floor-plans/{plan_id}/cables/{cable_id}")
