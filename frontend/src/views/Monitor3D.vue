@@ -723,14 +723,15 @@ async function createFiberTrunk() {
   })
 
   try {
-    const res = await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-trunks`, {
-      name: `${fiberTrunks.value.length + 1}`,  // 只存储数字序号，显示时动态翻译
-      start_x_percent: trunkStartPoint.value.x,
-      start_y_percent: trunkStartPoint.value.y,
-      end_x_percent: trunkEndPoint.value.x,
-      end_y_percent: trunkEndPoint.value.y,
+    // 使用新的 topo API 创建主干
+    const res = await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/trunk`, {
+      name: `TRUNK-${fiberTrunks.value.length + 1}`,
+      start_x: trunkStartPoint.value.x,
+      start_y: trunkStartPoint.value.y,
+      end_x: trunkEndPoint.value.x,
+      end_y: trunkEndPoint.value.y,
     })
-    console.log('创建成功:', res.data)
+    console.log('创建主干成功:', res.data)
     ElMessage.success(t('msgSaveSuccess'))
 
     // 重新加载数据
@@ -835,7 +836,7 @@ async function connectDeviceFromBranch(deviceId) {
   }
 }
 
-// 在主干上添加分支点（点击主干时）
+// 在主干上添加分支点（点击主干时）- 使用旧的 fiber API
 async function addBranchPointOnTrunk(trunk, clickPos) {
   // 计算点击位置在主干上的百分比
   const positionPercent = calculatePositionPercentOnTrunk(trunk, clickPos)
@@ -845,6 +846,23 @@ async function addBranchPointOnTrunk(trunk, clickPos) {
       trunk_link_id: trunk.id,
       position_percent: positionPercent,
       name: `${fiberBranchPoints.value.length + 1}`,  // 只存储数字序号，显示时动态翻译
+    })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('添加分支点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 在主干上添加分支点（点击 TopoEdge 时）- 使用新的 topo API
+async function addBranchPointOnTopoEdge(cableId, clickPos) {
+  try {
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/branch-point`, {
+      trunk_cable_id: cableId,
+      x: clickPos.x,
+      y: clickPos.y,
+      label: `BP-${topoNodes.value.filter(n => n.junction_type === 'branch_point').length + 1}`,
     })
     ElMessage.success(t('msgSaveSuccess'))
     await loadFiberData()
@@ -1311,6 +1329,8 @@ function buildTopoEdges() {
         aNodeId: edge.a_node_id,
         bNodeId: edge.b_node_id,
         cableType: edge.cable_type,
+        cableId: edge.cable_id,
+        cableNo: edge.cable_no,
         cableName: edge.cable_name,
         segmentIndex: i,
       }
@@ -2899,14 +2919,16 @@ function onCanvasMouseDown(e) {
   }
 
   // 检查是否点击了主干光缆管体（添加分支点）- 需要进入分支点创建模式
-  if (branchPointCreateMode.value && fiberTrunkGroup) {
-    const trunkHits = raycaster.intersectObjects(fiberTrunkGroup.children.filter(c => c.userData.trunk), false)
-    if (trunkHits.length > 0) {
-      const tube = trunkHits[0].object
-      if (tube.userData.trunk) {
+  if (branchPointCreateMode.value && ctx.value.topoEdgesGroup) {
+    const topoEdgeHits = raycaster.intersectObjects(ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEdge), false)
+    if (topoEdgeHits.length > 0) {
+      const tube = topoEdgeHits[0].object
+      const edgeData = tube.userData.topoEdge
+      if (edgeData && edgeData.cableId) {
         const pos = screenToPercent(e)
         if (pos) {
-          addBranchPointOnTrunk(tube.userData.trunk, { x: pos.x_percent, y: pos.y_percent })
+          // 使用新的 topo API 创建分支点
+          addBranchPointOnTopoEdge(edgeData.cableId, { x: pos.x_percent, y: pos.y_percent })
           branchPointCreateMode.value = false  // 添加完成后退出模式
         }
       }
