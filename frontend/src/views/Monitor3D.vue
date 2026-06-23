@@ -274,6 +274,9 @@
                     <span class="trunk-name" :title="cable.cable_name || cable.cable_no">{{ cable.cable_name || cable.cable_no }}</span>
                   </div>
                   <div class="tree-node-actions">
+                    <button class="icon-btn" @click.stop="editCableWaypoints(cable)" :title="t('editWaypoints')">
+                      <el-icon><Connection /></el-icon>
+                    </button>
                     <button class="icon-btn danger" @click.stop="deleteCable(cable.cable_id)" :title="t('actionDelete')">
                       <el-icon><Delete /></el-icon>
                     </button>
@@ -933,6 +936,18 @@ async function deleteCable(cableId) {
   } catch (e) {
     console.error('删除光缆失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 编辑光缆拐点
+function editCableWaypoints(cable) {
+  // 找到主干类型的边（trunk 或 trunk_segment）
+  const trunkEdge = cable.edges.find(e => e.cable_type === 'trunk' || e.cable_type === 'trunk_segment')
+  if (trunkEdge) {
+    openTopoEdgeWaypointDialog(trunkEdge)
+  } else if (cable.edges.length > 0) {
+    // 如果没有 trunk 类型边，编辑第一条边
+    openTopoEdgeWaypointDialog(cable.edges[0])
   }
 }
 
