@@ -79,6 +79,7 @@ class Device(Base):
     maintenances = relationship("MaintenanceRecord", back_populates="device", cascade="all, delete-orphan")
     photos = relationship("DevicePhoto", back_populates="device", cascade="all, delete-orphan")
     nodes = relationship("DeviceNode", back_populates="device", cascade="all, delete-orphan")
+    ports = relationship("DevicePort", back_populates="device", cascade="all, delete-orphan")
     health_records = relationship("DeviceHealthScore", back_populates="device", cascade="all, delete-orphan")
     spare_relations = relationship("DeviceSpareRelation", back_populates="device", cascade="all, delete-orphan")
 
@@ -790,6 +791,113 @@ class FiberBranchPoint(Base):
 
     def __repr__(self):
         return f"<FiberBranchPoint(id={self.id}, trunk={self.trunk_link_id}, pos={self.position_percent})>"
+
+
+# =============================================================================
+# PNetLab 式拓扑图模型（统一模型）
+# =============================================================================
+
+class DevicePort(Base):
+    """设备端口/接口 - PNetLab 式连接锚点
+
+    端口是设备的连接点，用于建立物理拓扑连接。
+    端口锚点(anchor_x/anchor_y)决定线缆从设备图标哪一侧出来。
+    """
+    __tablename__ = "device_ports"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    name = Column(String(50), nullable=False)            # "Gi0/1", "Eth1/1", "Uplink-A", "auto-1"
+    port_type = Column(String(20), default="ethernet")   # ethernet/fiber/sfp/console
+    # 端口在设备图标上的相对锚点（0-1，决定线从设备哪一侧出来）
+    # (0,0)=左下, (1,0)=右下, (0.5,0.5)=中心, (1,0.5)=右侧, (0,0.5)=左侧
+    anchor_x = Column(Float, default=0.5)
+    anchor_y = Column(Float, default=0.5)
+    is_auto_created = Column(Boolean, default=True)      # 是否自动创建（用户未选端口时）
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    device = relationship("Device", back_populates="ports")
+    topo_nodes = relationship("TopoNode", back_populates="port")
+
+    def __repr__(self):
+        return f"<DevicePort(id={self.id}, device={self.device_id}, name={self.name})>"
+
+
+class TopoNode(Base):
+    """拓扑图节点 - 可以是设备端口，也可以是中间接头
+
+    统一的节点模型：
+    - port 类型：关联设备端口，坐标继承设备坐标+端口锚点偏移
+    - junction 类型：中间接头（分支点/熔接点/光交箱），有自己的坐标
+
+    这解决了 FiberBranchPoint 的 position_percent 投影坐标与实际坐标发散的问题。
+    """
+    __tablename__ = "topo_nodes"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+    node_kind = Column(String(20), nullable=False)       # 'port' | 'junction'
+
+    # port 类型：关联设备端口；junction 类型：NULL
+    port_id = Column(Integer, ForeignKey("device_ports.id", ondelete="CASCADE"), nullable=True, index=True)
+
+    # junction 类型：自己的坐标；port 类型：从设备坐标+锚点计算
+    x_percent = Column(Float, nullable=True)
+    y_percent = Column(Float, nullable=True)
+
+    label = Column(String(50), nullable=True)            # "分支点-1F-A", "光交箱-3", "熔接点-B2"
+    junction_type = Column(String(20), nullable=True)    # 'branch_point' | 'splice' | 'distribution_box'
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # 关系
+    floor_plan = relationship("FloorPlan")
+    port = relationship("DevicePort", back_populates="topo_nodes")
+    edges_a = relationship("TopoEdge", foreign_keys="[TopoEdge.a_node_id]", back_populates="a_node")
+    edges_b = relationship("TopoEdge", foreign_keys="[TopoEdge.b_node_id]", back_populates="b_node")
+
+    def __repr__(self):
+        return f"<TopoNode(id={self.id}, kind={self.node_kind}, port={self.port_id})>"
+
+
+class TopoEdge(Base):
+    """拓扑图的边 - 一段线缆，自带拐点折线
+
+    统一的边模型：
+    - 所有线缆（主干光缆、分支光缆、设备跳线）都是 TopoEdge
+    - 每条边有自己的 waypoints 拐点，精确到每段线缆
+    - 图寻路时直接拼接边的折线，不再是几何投影
+
+    这解决了"路径是算出来的，不是连出来的"问题。
+    """
+    __tablename__ = "topo_edges"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    a_node_id = Column(Integer, ForeignKey("topo_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
+    b_node_id = Column(Integer, ForeignKey("topo_nodes.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    cable_type = Column(String(20), default="fiber")     # fiber/copper/trunk/console
+    waypoints = Column(Text, nullable=True)              # 拐点折线: '[{"x":..,"y":..}]'
+    length_weight = Column(Float, nullable=True)         # 寻路权重（默认用几何长度）
+    status = Column(String(20), default="up", index=True)  # up/down（断边支持绕路）
+
+    # 冗余字段，方便查询和显示
+    cable_name = Column(String(50), nullable=True)       # "主干光缆-1", "分支光纤-A3"
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # 关系
+    floor_plan = relationship("FloorPlan")
+    a_node = relationship("TopoNode", foreign_keys=[a_node_id], back_populates="edges_a")
+    b_node = relationship("TopoNode", foreign_keys=[b_node_id], back_populates="edges_b")
+
+    def __repr__(self):
+        return f"<TopoEdge(id={self.id}, a={self.a_node_id}, b={self.b_node_id}, type={self.cable_type})>"
 
 
 # =============================================================================
