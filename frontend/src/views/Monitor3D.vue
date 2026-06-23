@@ -754,6 +754,16 @@ async function loadFiberData() {
     if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
     if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
 
+    // 加载新的 topo 数据
+    try {
+      const nodesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-nodes`)
+      topoNodes.value = nodesRes.data.items || []
+      const edgesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-edges`)
+      topoEdges.value = edgesRes.data.items || []
+    } catch (e) {
+      console.warn('加载 topo-nodes/edges 失败:', e)
+    }
+
     // 尝试从新 topo API 获取 device-paths（图寻路）
     try {
       const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
@@ -765,14 +775,22 @@ async function loadFiberData() {
       if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
     }
 
-    // 重建光纤渲染
+    // 重建光纤渲染（优先使用新 topo 数据）
     disposeGroup('fiber-trunks')
     disposeGroup('branch-points')
     disposeGroup('branch-links')
+    disposeGroup('topo-edges')
     disposeGroup('data-link-paths')
-    buildFiberTrunks()
-    buildBranchPoints()
-    buildBranchLinks()
+
+    // 如果有 topoEdges 数据，用新渲染逻辑
+    if (topoEdges.value.length > 0) {
+      buildTopoEdges()
+    } else {
+      // 否则用旧的渲染逻辑
+      buildFiberTrunks()
+      buildBranchPoints()
+      buildBranchLinks()
+    }
     buildDataLinkPaths()
   } catch (e) {
     console.error('加载光纤数据失败:', e)
@@ -3982,6 +4000,16 @@ async function loadData() {
       if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
       if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
       if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
+
+      // 加载新的 topo 数据
+      try {
+        const topoNodesRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topo-nodes`)
+        topoNodes.value = topoNodesRes.data.items || []
+        const topoEdgesRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topo-edges`)
+        topoEdges.value = topoEdgesRes.data.items || []
+      } catch (e) {
+        console.warn('加载 topo-nodes/edges 失败:', e)
+      }
     }
 
   } catch (e) {
@@ -4032,7 +4060,7 @@ watch([showPhysicalTopology, showDataLinks], () => {
     ctx.value.branchLinkGroup.visible = showPhysicalTopology.value
   }
   if (ctx.value.topoEdgesGroup) {
-    ctx.value.topoEdgesGroup.visible = showPhysicalTopology.value && isEditMode.value
+    ctx.value.topoEdgesGroup.visible = showPhysicalTopology.value
   }
 
   // 数据链路
@@ -4083,10 +4111,16 @@ onMounted(async () => {
   buildDeviceModels()
   buildLinks()
   buildLabels()
-  buildFiberTrunks()  // 渲染主干光缆
-  buildBranchPoints()  // 渲染分支点
-  buildBranchLinks()  // 渲染分支光缆
-  buildDataLinkPaths()  // 渲染数据链路路径
+
+  // 优先使用新 topo 数据渲染光纤拓扑
+  if (topoEdges.value.length > 0) {
+    buildTopoEdges()
+  } else {
+    buildFiberTrunks()
+    buildBranchPoints()
+    buildBranchLinks()
+  }
+  buildDataLinkPaths()
 
   // 自动框景 - 延迟执行确保布局稳定
   requestAnimationFrame(() => fitView())
