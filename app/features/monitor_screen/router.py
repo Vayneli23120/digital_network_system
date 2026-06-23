@@ -104,6 +104,10 @@ class FiberBranchLinkCreate(BaseModel):
     logical_uplink_device_id: Optional[int] = None  # 逻辑上联设备
 
 
+class FiberBranchLinkUpdate(BaseModel):
+    waypoints: Optional[str] = None  # JSON string
+
+
 # ============ 平面图管理 API ============
 
 @router.get("/floor-plans")
@@ -391,7 +395,7 @@ async def delete_link(plan_id: int, link_id: int, db: Session = Depends(get_db))
 from .fiber_service import (
     list_fiber_trunks, create_fiber_trunk, update_fiber_trunk, delete_fiber_trunk,
     list_branch_points, create_branch_point, update_branch_point, delete_branch_point,
-    create_branch_link, delete_branch_link,
+    create_branch_link, update_branch_link, delete_branch_link,
 )
 
 
@@ -461,6 +465,15 @@ async def remove_branch_point(plan_id: int, bp_id: int, db: Session = Depends(ge
 async def add_branch_link(plan_id: int, data: FiberBranchLinkCreate, db: Session = Depends(get_db)):
     """创建分支光缆（从分支点到设备）"""
     result = create_branch_link(db, plan_id, data)
+    return result
+
+
+@router.put("/floor-plans/{plan_id}/fiber-branch-links/{link_id}")
+async def modify_branch_link(plan_id: int, link_id: int, data: FiberBranchLinkUpdate, db: Session = Depends(get_db)):
+    """更新分支光缆拐点"""
+    result = update_branch_link(db, plan_id, link_id, data.waypoints)
+    if not result:
+        raise HTTPException(status_code=404, detail="分支光缆不存在")
     return result
 
 

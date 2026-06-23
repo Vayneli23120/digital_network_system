@@ -279,6 +279,29 @@ def create_branch_link(db: Session, plan_id: int, data) -> Dict[str, Any]:
         "to_device_id": device_node.device_id,
         "to_node_id": link.to_node_id,
         "logical_uplink_device_id": link.logical_uplink_device_id,
+        "waypoints": json.loads(link.waypoints) if link.waypoints else None,
+    }
+
+
+def update_branch_link(db: Session, plan_id: int, link_id: int, waypoints: str) -> Optional[Dict[str, Any]]:
+    """更新分支光缆拐点"""
+    link = db.query(DeviceLink).filter(
+        DeviceLink.id == link_id,
+        DeviceLink.floor_plan_id == plan_id,
+        DeviceLink.link_role == "fiber_branch"
+    ).first()
+    if not link:
+        return None
+
+    link.waypoints = waypoints
+    link.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(link)
+
+    return {
+        "id": link.id,
+        "branch_point_id": link.branch_point_id,
+        "waypoints": json.loads(link.waypoints) if link.waypoints else None,
     }
 
 

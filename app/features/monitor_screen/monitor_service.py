@@ -11,6 +11,7 @@ from sqlalchemy import func, desc, case
 import json
 
 from app.shared.models import Device, FloorPlan, DeviceNode, DeviceLink, BackupRecord, FaultRecord
+from .link_path_service import calculate_device_paths_to_core
 
 
 def get_floor_plans(db: Session) -> List[Dict[str, Any]]:
@@ -643,6 +644,9 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
     # 获取分支光缆数据
     fiber_branch_links = _get_fiber_branch_links(db, plan_id, device_node_map)
 
+    # 计算设备路径（沿着光纤拓扑）
+    device_paths = calculate_device_paths_to_core(db, plan_id)
+
     return {
         "nodes": nodes,
         "links": link_list,
@@ -651,6 +655,7 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
         "fiber_trunks": fiber_trunks,
         "fiber_branch_points": fiber_branch_points,
         "fiber_branch_links": fiber_branch_links,
+        "device_paths": device_paths,
         "timestamp": datetime.utcnow().isoformat(),
     }
 

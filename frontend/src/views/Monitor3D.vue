@@ -349,6 +349,8 @@
           <!-- 图层控制 -->
           <div class="layer-control">
             <h4>{{ t('layerControl') }}</h4>
+            <el-checkbox v-model="showPhysicalTopology">{{ t('showPhysicalTopology') }}</el-checkbox>
+            <el-checkbox v-model="showDataLinks">{{ t('showDataLinks') }}</el-checkbox>
             <el-checkbox v-model="showLabels">{{ t('showLabels') }}</el-checkbox>
             <el-checkbox v-model="showLinks">{{ t('showLinks') }}</el-checkbox>
             <div class="tilt-control">
@@ -466,6 +468,8 @@ const filterType = ref('')
 const filterStatus = ref('')
 const showLabels = ref(true)
 const showLinks = ref(true)
+const showPhysicalTopology = ref(true)  // 显示物理拓扑（光纤）
+const showDataLinks = ref(true)         // 显示数据链路（设备间连接）
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
 const { t } = useI18n()
@@ -510,6 +514,7 @@ const links = ref([])
 const fiberTrunks = ref([])  // 主干光缆
 const fiberBranchPoints = ref([])  // 分支点
 const fiberBranchLinks = ref([])  // 分支光缆
+const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
@@ -714,14 +719,17 @@ async function loadFiberData() {
     if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
     if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
     if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
+    if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
 
     // 重建光纤渲染
     disposeGroup('fiber-trunks')
     disposeGroup('branch-points')
     disposeGroup('branch-links')
+    disposeGroup('data-link-paths')
     buildFiberTrunks()
     buildBranchPoints()
     buildBranchLinks()
+    buildDataLinkPaths()
   } catch (e) {
     console.error('加载光纤数据失败:', e)
   }
@@ -1181,6 +1189,7 @@ const ctx = shallowRef({
   fiberTrunkGroup: null,
   branchPointGroup: null,
   branchLinkGroup: null,
+  dataLinkPaths: null,
 })
 
 // 厂区真实尺寸（米）
@@ -1751,11 +1760,13 @@ function rebuildScene() {
   disposeGroup('fiber-trunks')
   disposeGroup('branch-points')
   disposeGroup('branch-links')
+  disposeGroup('data-link-paths')
   buildDeviceModels()
   buildLinks()
   buildFiberTrunks()
   buildBranchPoints()
   buildBranchLinks()
+  buildDataLinkPaths()
   buildLabels()
 }
 
@@ -1766,8 +1777,11 @@ function buildLinks() {
   const linkGroup = new THREE.Group()
   linkGroup.name = 'links'
 
-  // 链路高度：贴近地面，底图短边的 0.2%
-  const linkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+  // 链路高度：比主干光缆稍微高一点，避免重叠
+  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+  const linkHeight = trunkHeight + 0.5  // 链路浮在主干上方
+  // 链路圆柱半径：比主干细一点
+  const linkRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
 
   links.value.forEach(link => {
     const fromNode = nodes.value.find(n => n.id === link.from_node_id || n.device_id === link.from)
@@ -1816,17 +1830,35 @@ function buildLinks() {
 
     points.push(new THREE.Vector3(b.x, b.y, b.z))
 
-    const geo = new THREE.BufferGeometry().setFromPoints(points)
-    const mat = new THREE.LineBasicMaterial({
-      color: link.status === 'broken' ? 0xff4d4f : 0x00d4ff,  // 更亮的青色
+    // 链路状态颜色：正常绿色，异常红色
+    const statusColor = link.status === 'broken' ? 0xff4d4f : 0x22c55e  // 红色/绿色
+    const mat = new THREE.MeshBasicMaterial({
+      color: statusColor,
       transparent: true,
-      opacity: 0.85,  // 提高可见度
-      linewidth: 2
+      opacity: 0.8,
     })
 
-    const line = new THREE.Line(geo, mat)
-    line.userData.link = link
-    linkGroup.add(line)
+    // 使用圆柱体绘制每段链路（更粗、更可见）
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i]
+      const end = points[i + 1]
+
+      const direction = new THREE.Vector3().subVectors(end, start)
+      const length = direction.length()
+      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+
+      const cylinderGeo = new THREE.CylinderGeometry(linkRadius, linkRadius, length, 8)
+      const cylinder = new THREE.Mesh(cylinderGeo, mat)
+      cylinder.position.copy(midPoint)
+
+      const axis = new THREE.Vector3(0, 1, 0)
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
+      cylinder.quaternion.copy(quaternion)
+
+      cylinder.userData.link = link
+      cylinder.name = `link-${link.id}-seg-${i}`
+      linkGroup.add(cylinder)
+    }
 
     // 如果有拐点且在编辑模式，添加拐点标记球
     if (link.waypoints && isEditMode.value) {
@@ -1837,11 +1869,11 @@ function buildLinks() {
           : link.waypoints
         if (Array.isArray(waypoints)) {
           waypoints.forEach((wp, idx) => {
-            const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + 2)
-            // 拐点球半径：底图短边的 0.3%，确保可见
-            const wpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
+            const wpWorld = percentToWorld(wp.x, wp.y, linkHeight + linkRadius * 2)
+            // 拐点球半径
+            const wpRadius = linkRadius * 2.5
             const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
-            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 1.0 })  // 更亮的黄色
+            const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffc107, transparent: true, opacity: 1.0 })  // 黄色
             const sphere = new THREE.Mesh(sphereGeo, sphereMat)
             sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
             sphere.userData.waypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
@@ -2167,6 +2199,75 @@ function calculatePositionOnTrunk(trunk, positionPercent) {
 
   // 超出范围返回终点
   return { x: trunk.end_x_percent, y: trunk.end_y_percent }
+}
+
+// 构建数据链路路径（沿着光纤拓扑）
+function buildDataLinkPaths() {
+  const { scene } = ctx.value
+  if (!scene || !devicePaths.value || Object.keys(devicePaths.value).length === 0) return
+
+  const pathGroup = new THREE.Group()
+  pathGroup.name = 'data-link-paths'
+
+  // 路径高度：在物理拓扑上方
+  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+  const pathHeight = trunkHeight + 0.8
+  // 路径线半径（比链路稍细）
+  const pathRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0008
+
+  Object.entries(devicePaths.value).forEach(([deviceId, path]) => {
+    if (!Array.isArray(path)) return
+
+    // 获取设备状态
+    const device = devices.value.find(d => d.id === parseInt(deviceId))
+    const status = device ? device.status : 'unknown'
+    const statusColor = status === 'online' ? 0x22c55e : 0xff4d4f  // 绿色/红色
+
+    // 构建路径点 - 所有点现在都是扁平格式，直接使用 x_percent, y_percent
+    const points = []
+
+    path.forEach(segment => {
+      // 所有类型的点现在都使用统一的 x_percent, y_percent 格式
+      if (segment.x_percent != null && segment.y_percent != null) {
+        const pos = percentToWorld(segment.x_percent, segment.y_percent, pathHeight)
+        points.push(new THREE.Vector3(pos.x, pos.y, pos.z))
+      }
+    })
+
+    // 如果点数少于2，无法绘制路径
+    if (points.length < 2) return
+
+    // 使用圆柱体绘制路径线
+    const mat = new THREE.MeshBasicMaterial({
+      color: statusColor,
+      transparent: true,
+      opacity: 0.7,
+    })
+
+    for (let i = 0; i < points.length - 1; i++) {
+      const start = points[i]
+      const end = points[i + 1]
+
+      const direction = new THREE.Vector3().subVectors(end, start)
+      const length = direction.length()
+      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
+
+      const cylinderGeo = new THREE.CylinderGeometry(pathRadius, pathRadius, length, 8)
+      const cylinder = new THREE.Mesh(cylinderGeo, mat)
+      cylinder.position.copy(midPoint)
+
+      const axis = new THREE.Vector3(0, 1, 0)
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
+      cylinder.quaternion.copy(quaternion)
+
+      cylinder.userData.dataPath = { deviceId: parseInt(deviceId), segmentIndex: i }
+      cylinder.name = `data-path-${deviceId}-seg-${i}`
+      pathGroup.add(cylinder)
+    }
+  })
+
+  scene.add(pathGroup)
+  ctx.value.dataLinkPaths = pathGroup
 }
 
 // 构建设备标签（显示在设备上方）
@@ -3221,6 +3322,7 @@ async function switchPlan(planId) {
     if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
     if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
     if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
+    if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
 
     // 重建场景
     loadFloorPlanTexture()
@@ -3362,6 +3464,29 @@ watch(selectedNode, (node) => {
   }
 })
 
+// 监听显示控制开关变化，重建拓扑图层
+watch([showPhysicalTopology, showDataLinks], () => {
+  if (!ctx.value.scene) return
+
+  // 重建物理拓扑
+  disposeGroup('fiber-trunks')
+  disposeGroup('branch-points')
+  disposeGroup('branch-links')
+  if (showPhysicalTopology.value) {
+    buildFiberTrunks()
+    buildBranchPoints()
+    buildBranchLinks()
+  }
+
+  // 重建数据链路
+  disposeGroup('links')
+  disposeGroup('data-link-paths')
+  if (showDataLinks.value) {
+    buildLinks()
+    buildDataLinkPaths()
+  }
+})
+
 // 监听图层控制
 watch(showLinks, (val) => {
   if (ctx.value.linkLines) {
@@ -3402,6 +3527,7 @@ onMounted(async () => {
   buildFiberTrunks()  // 渲染主干光缆
   buildBranchPoints()  // 渲染分支点
   buildBranchLinks()  // 渲染分支光缆
+  buildDataLinkPaths()  // 渲染数据链路路径
 
   // 自动框景 - 延迟执行确保布局稳定
   requestAnimationFrame(() => fitView())
