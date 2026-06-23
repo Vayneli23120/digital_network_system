@@ -1374,16 +1374,16 @@ async function saveTopoEdgeWaypoints() {
   if (!editingTopoEdge.value) return
 
   try {
-    const waypointsJson = JSON.stringify(editingTopoEdgeWaypoints.value)
+    // 后端期望 waypoints 是数组，不是 JSON 字符串
     await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${editingTopoEdge.value.id}`, {
-      waypoints: waypointsJson
+      waypoints: editingTopoEdgeWaypoints.value
     })
     ElMessage.success(t('msgSaveSuccess'))
 
     // 更新本地数据
     const edge = topoEdges.value.find(e => e.id === editingTopoEdge.value.id)
     if (edge) {
-      edge.waypoints = waypointsJson
+      edge.waypoints = editingTopoEdgeWaypoints.value
     }
 
     // 重建拓扑边渲染
