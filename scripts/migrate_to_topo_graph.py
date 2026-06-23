@@ -146,6 +146,27 @@ def migrate_plan(db: Session, plan_id: int, dry_run: bool = False) -> dict:
 
         stats["edges_created"] += 1
 
+        # 如果主干起点关联核心设备，创建连接边
+        if trunk.start_device_id:
+            core_topo_node = device_to_topo_node.get(trunk.start_device_id)
+            if core_topo_node:
+                # 连接主干起点到核心交换机端口
+                connect_edge = TopoEdge(
+                    floor_plan_id=plan_id,
+                    a_node_id=start_node.id,
+                    b_node_id=core_topo_node.id,
+                    cable_type="trunk_to_core",
+                    waypoints=None,
+                    cable_name=f"主干-{trunk.id}-到核心-{trunk.start_device_id}",
+                    status="up",
+                )
+                if not dry_run:
+                    db.add(connect_edge)
+                stats["edges_created"] += 1
+            db.add(edge)
+
+        stats["edges_created"] += 1
+
     # 3. FiberBranchPoint → junction TopoNode
     branch_points = db.query(FiberBranchPoint).filter(
         FiberBranchPoint.trunk_link_id.in_([t.id for t in fiber_trunks])
@@ -175,18 +196,49 @@ def migrate_plan(db: Session, plan_id: int, dry_run: bool = False) -> dict:
         # 在分支点和主干之间创建连接边
         trunk = next((t for t in fiber_trunks if t.id == bp.trunk_link_id), None)
         if trunk and trunk.id in trunk_to_nodes:
-            # 分支点连接到主干（这里需要判断分支点在哪一侧）
-            # 简化处理：分支点连接到主干两端
             start_node, end_node = trunk_to_nodes[trunk.id]
 
-            # 选择最近的端点
+            # 分支点连接到主干两端（形成图连通）
+            # 边1：分支点 → 主干起点方向（靠近起点的一侧）
+            # 边2：分支点 → 主干终点方向（靠近终点的一侧）
+
+            # 根据分支点位置，分段连接
+            # 分支点在主干中间，连接到两端
             bp_dist_start = (bp.x_percent - trunk.start_x_percent)**2 + (bp.y_percent - trunk.start_y_percent)**2
             bp_dist_end = (bp.x_percent - trunk.end_x_percent)**2 + (bp.y_percent - trunk.end_y_percent)**2
 
-            # 分支点应该连接到主干本身，这里简化处理
-            # 实际上分支点是主干的"分叉点"，应该直接在主干边上
-            # 这里暂时创建一条从分支点到主干端点的连接边
-            # 后续用户可能需要调整
+            # 创建连接边：分支点 ↔ 主干端点
+            # 注意：主干的 waypoints 已经在 trunk edge 中，这里只是连接分支点到主干节点
+
+            # 选择最近的端点创建连接（实际应该是分支点在主干中间位置）
+            # 简化处理：连接到距离最近的端点
+            if bp_dist_start < bp_dist_end:
+                # 分支点靠近起点，连接到起点
+                connect_edge = TopoEdge(
+                    floor_plan_id=plan_id,
+                    a_node_id=bp_node.id,
+                    b_node_id=start_node.id,
+                    cable_type="trunk_segment",
+                    waypoints=None,  # 分支点到主干起点，无拐点
+                    cable_name=f"分支点-{bp.id}-到起点",
+                    status="up",
+                )
+            else:
+                # 分支点靠近终点，连接到终点
+                connect_edge = TopoEdge(
+                    floor_plan_id=plan_id,
+                    a_node_id=bp_node.id,
+                    b_node_id=end_node.id,
+                    cable_type="trunk_segment",
+                    waypoints=None,
+                    cable_name=f"分支点-{bp.id}-到终点",
+                    status="up",
+                )
+
+            if not dry_run:
+                db.add(connect_edge)
+
+            stats["edges_created"] += 1
 
     # 4. DeviceLink(fiber_branch) → TopoEdge
     fiber_branch_links = db.query(DeviceLink).filter(
@@ -249,7 +301,7 @@ def main():
     args = parser.parse_args()
 
     db_manager = get_db_manager()
-    db = next(db_manager.get_db())
+    db = db_manager.get_session()
 
     if args.plan_id:
         plan_ids = [args.plan_id]
