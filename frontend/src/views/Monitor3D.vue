@@ -719,7 +719,17 @@ async function loadFiberData() {
     if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
     if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
     if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
-    if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+
+    // 尝试从新 topo API 获取 device-paths（图寻路）
+    try {
+      const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
+      if (topoPathsRes.data) {
+        devicePaths.value = topoPathsRes.data
+      }
+    } catch (e) {
+      // topo API 失败，尝试使用旧 topology 返回的 device_paths
+      if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+    }
 
     // 重建光纤渲染
     disposeGroup('fiber-trunks')
@@ -2201,7 +2211,7 @@ function calculatePositionOnTrunk(trunk, positionPercent) {
   return { x: trunk.end_x_percent, y: trunk.end_y_percent }
 }
 
-// 构建数据链路路径（沿着光纤拓扑）
+// 构建数据链路路径（沿着光纤拓扑）- 使用后端返回的 polyline
 function buildDataLinkPaths() {
   const { scene } = ctx.value
   if (!scene || !devicePaths.value || Object.keys(devicePaths.value).length === 0) return
@@ -2215,45 +2225,31 @@ function buildDataLinkPaths() {
   // 路径线半径（比链路稍细）
   const pathRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0008
 
-  Object.entries(devicePaths.value).forEach(([deviceId, path]) => {
-    if (!Array.isArray(path)) return
+  Object.entries(devicePaths.value).forEach(([deviceId, pathData]) => {
+    // 支持两种格式：
+    // 旧格式：pathData 是数组 [{x_percent, y_percent}, ...]
+    // 新格式：pathData 是对象 {reachable, polyline: [{x_percent, y_percent}, ...]}
+    let polyline = pathData
+    if (pathData && typeof pathData === 'object' && !Array.isArray(pathData)) {
+      if (!pathData.reachable) return  // 不可达，跳过
+      polyline = pathData.polyline || []
+    }
+
+    if (!Array.isArray(polyline) || polyline.length < 2) return
 
     // 获取设备状态
     const device = devices.value.find(d => d.id === parseInt(deviceId))
     const status = device ? device.status : 'unknown'
     const statusColor = status === 'online' ? 0x22c55e : 0xff4d4f  // 绿色/红色
 
-    // 构建路径点 - 所有点现在都是扁平格式，直接使用 x_percent, y_percent
-    const rawPoints = []
-
-    path.forEach(segment => {
-      // 所有类型的点现在都使用统一的 x_percent, y_percent 格式
-      if (segment.x_percent != null && segment.y_percent != null) {
-        rawPoints.push({ x: segment.x_percent, y: segment.y_percent })
+    // 直接使用 polyline 的 x_percent, y_percent（后端已去重）
+    const points = polyline.map(pt => {
+      if (pt.x_percent != null && pt.y_percent != null) {
+        const pos = percentToWorld(pt.x_percent, pt.y_percent, pathHeight)
+        return new THREE.Vector3(pos.x, pos.y, pos.z)
       }
-    })
-
-    // 去重：移除相邻重复点（坐标差值小于阈值）
-    const dedupedPoints = []
-    const DUPLICATE_THRESHOLD = 0.01  // 0.01% 坐标差值阈值
-    rawPoints.forEach((pt, i) => {
-      if (i === 0) {
-        dedupedPoints.push(pt)
-      } else {
-        const prev = dedupedPoints[dedupedPoints.length - 1]
-        const dx = Math.abs(pt.x - prev.x)
-        const dy = Math.abs(pt.y - prev.y)
-        if (dx > DUPLICATE_THRESHOLD || dy > DUPLICATE_THRESHOLD) {
-          dedupedPoints.push(pt)
-        }
-      }
-    })
-
-    // 转换为 Three.js 坐标
-    const points = dedupedPoints.map(pt => {
-      const pos = percentToWorld(pt.x, pt.y, pathHeight)
-      return new THREE.Vector3(pos.x, pos.y, pos.z)
-    })
+      return null
+    }).filter(p => p !== null)
 
     // 如果点数少于2，无法绘制路径
     if (points.length < 2) return
@@ -3350,7 +3346,14 @@ async function switchPlan(planId) {
     if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
     if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
     if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
-    if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+
+    // 尝试从新 topo API 获取 device-paths
+    try {
+      const topoPathsRes = await axios.get(`/api/floor-plans/${planId}/device-paths`)
+      if (topoPathsRes.data) devicePaths.value = topoPathsRes.data
+    } catch (e) {
+      if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+    }
 
     // 重建场景
     loadFloorPlanTexture()
