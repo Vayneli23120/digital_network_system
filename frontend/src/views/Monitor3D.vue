@@ -4020,29 +4020,27 @@ watch(selectedNode, (node) => {
 watch([showPhysicalTopology, showDataLinks], () => {
   if (!ctx.value.scene) return
 
-  // 重建物理拓扑
-  disposeGroup('fiber-trunks')
-  disposeGroup('branch-points')
-  disposeGroup('branch-links')
-  if (showPhysicalTopology.value) {
-    buildFiberTrunks()
-    buildBranchPoints()
-    buildBranchLinks()
+  // 使用 visible 属性控制显隐，不再 dispose+rebuild
+  // 物理拓扑
+  if (ctx.value.fiberTrunkGroup) {
+    ctx.value.fiberTrunkGroup.visible = showPhysicalTopology.value
+  }
+  if (ctx.value.branchPointGroup) {
+    ctx.value.branchPointGroup.visible = showPhysicalTopology.value
+  }
+  if (ctx.value.branchLinkGroup) {
+    ctx.value.branchLinkGroup.visible = showPhysicalTopology.value
+  }
+  if (ctx.value.topoEdgesGroup) {
+    ctx.value.topoEdgesGroup.visible = showPhysicalTopology.value && isEditMode.value
   }
 
-  // 重建数据链路
-  disposeGroup('links')
-  disposeGroup('data-link-paths')
-  // 清除旧引用，防止 showLinks watch 操作已 dispose 的对象
-  ctx.value.linkLines = null
-  ctx.value.dataLinkPaths = null
-  if (showDataLinks.value) {
-    buildLinks()
-    // buildLinks 会设置 ctx.value.linkLines
-    if (ctx.value.linkLines) {
-      ctx.value.linkLines.visible = showLinks.value
-    }
-    buildDataLinkPaths()
+  // 数据链路
+  if (ctx.value.linkLines) {
+    ctx.value.linkLines.visible = showDataLinks.value && showLinks.value
+  }
+  if (ctx.value.dataLinkPaths) {
+    ctx.value.dataLinkPaths.visible = showDataLinks.value
   }
 })
 
