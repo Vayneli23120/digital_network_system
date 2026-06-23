@@ -517,19 +517,62 @@ def calculate_link_path(db: Session, plan_id: int, source_device_id: int, target
                         "y_percent": wp["y_percent"],
                     })
 
-            # 源主干起点
-            path.append({
-                "type": "trunk_start_point",
-                "x_percent": source_trunk.start_x_percent,
-                "y_percent": source_trunk.start_y_percent,
-            })
+            # 源主干起点（连接的核心交换机）
+            if source_trunk.start_device_id:
+                # 查找核心交换机的位置
+                core_node = db.query(DeviceNode).filter(
+                    DeviceNode.device_id == source_trunk.start_device_id
+                ).first()
+                if core_node:
+                    path.append({
+                        "type": "device",
+                        "role": "intermediate_core",
+                        "device_id": source_trunk.start_device_id,
+                        "x_percent": float(core_node.x_percent),
+                        "y_percent": float(core_node.y_percent),
+                    })
+                else:
+                    # 如果找不到节点，使用主干起点坐标
+                    path.append({
+                        "type": "trunk_start_point",
+                        "x_percent": source_trunk.start_x_percent,
+                        "y_percent": source_trunk.start_y_percent,
+                    })
+            else:
+                path.append({
+                    "type": "trunk_start_point",
+                    "x_percent": source_trunk.start_x_percent,
+                    "y_percent": source_trunk.start_y_percent,
+                })
 
             # 目标主干起点
-            path.append({
-                "type": "trunk_start_point",
-                "x_percent": target_trunk.start_x_percent,
-                "y_percent": target_trunk.start_y_percent,
-            })
+            if target_trunk.start_device_id:
+                # 如果是同一个核心，不需要重复添加
+                if target_trunk.start_device_id != source_trunk.start_device_id:
+                    core_node = db.query(DeviceNode).filter(
+                        DeviceNode.device_id == target_trunk.start_device_id
+                    ).first()
+                    if core_node:
+                        path.append({
+                            "type": "device",
+                            "role": "intermediate_core",
+                            "device_id": target_trunk.start_device_id,
+                            "x_percent": float(core_node.x_percent),
+                            "y_percent": float(core_node.y_percent),
+                        })
+                    else:
+                        path.append({
+                            "type": "trunk_start_point",
+                            "x_percent": target_trunk.start_x_percent,
+                            "y_percent": target_trunk.start_y_percent,
+                        })
+                # 同一核心，跳过添加（已经在路径中）
+            else:
+                path.append({
+                    "type": "trunk_start_point",
+                    "x_percent": target_trunk.start_x_percent,
+                    "y_percent": target_trunk.start_y_percent,
+                })
 
             target_trunk_waypoints = get_trunk_waypoints_between(target_trunk, 0, target_branch_point.position_percent)
             if target_trunk_waypoints:
@@ -674,9 +717,6 @@ def get_trunk_waypoints_between(trunk: FiberTrunkLink, from_percent: float, to_p
         total_length += length
 
     # 找到两个百分比之间的点
-    from_length = total_length * from_percent / 100
-    to_length = total_length * to_percent / 100
-
     result_points = []
 
     # 起始点
@@ -706,55 +746,12 @@ def get_trunk_waypoints_between(trunk: FiberTrunkLink, from_percent: float, to_p
     return result_points
 
 
-def calculate_all_link_paths(db: Session, plan_id: int) -> Dict[str, List[Dict[str, Any]]]:
-    """计算平面图上所有数据链路的路径
-
-    对于每条链路（DeviceLink），根据源设备和目标设备计算路径
-
-    Args:
-        db: 数据库会话
-        plan_id: 平面图ID
-
-    Returns:
-        { link_id: path } 字典
-    """
-    # 获取所有链路（排除 fiber_branch 类型，因为那是物理拓扑）
-    links = db.query(DeviceLink).filter(
-        DeviceLink.floor_plan_id == plan_id,
-        DeviceLink.link_role != "fiber_branch"
-    ).all()
-
-    link_paths = {}
-    for link in links:
-        # 获取源和目标设备
-        from_node = db.query(DeviceNode).filter(
-            DeviceNode.id == link.from_node_id
-        ).first()
-
-        to_node = db.query(DeviceNode).filter(
-            DeviceNode.id == link.to_node_id
-        ).first()
-
-        if not from_node or not to_node:
-            continue
-
-        # 计算路径
-        path = calculate_link_path(db, plan_id, from_node.device_id, to_node.device_id)
-
-        if path:
-            link_paths[link.id] = {
-                "link_id": link.id,
-                "source_device_id": from_node.device_id,
-                "target_device_id": to_node.device_id,
-                "link_role": link.link_role,
-                "path": path,
-            }
-
-    return link_paths
-
-
 def calculate_device_paths_to_core(db: Session, plan_id: int) -> Dict[int, List[Dict[str, Any]]]:
-    """计算所有分支设备到核心交换机的路径（用于渲染）
+    """计算所有设备到其对应核心交换机的路径（用于渲染）
+
+    修复：
+    - 目标核心由设备所属主干的 trunk.start_device_id 决定，而非全局第一个
+    - 覆盖所有设备类型（core/branch/other），而非仅 branch
 
     Args:
         db: 数据库会话
@@ -770,24 +767,68 @@ def calculate_device_paths_to_core(db: Session, plan_id: int) -> Dict[int, List[
 
     device_paths = {}
 
-    # 找到核心交换机（目标）
-    core_devices = db.query(Device).filter(
-        Device.device_type == "core_switch"
-    ).all()
-
-    if not core_devices:
-        return device_paths
-
-    # 使用第一个核心交换机作为默认目标
-    target_core_id = core_devices[0].id
-
     for node in device_nodes:
         device_role = get_device_role(db, node.device_id)
 
-        # 只计算分支设备到核心的路径
+        # 核心交换机：不需要计算路径（它是目标）
+        if device_role == "core":
+            continue
+
+        # 分支设备：目标核心由其所属主干的 start_device_id 决定
         if device_role == "branch":
-            path = calculate_link_path(db, plan_id, node.device_id, target_core_id)
-            if path:
-                device_paths[node.device_id] = path
+            # 获取设备连接的分支光缆，找到主干，再找到目标核心
+            branch_link_info = get_branch_link_for_device(db, plan_id, node.device_id)
+            if branch_link_info:
+                branch_point = db.query(FiberBranchPoint).filter(
+                    FiberBranchPoint.id == branch_link_info["branch_point_id"]
+                ).first()
+                if branch_point:
+                    trunk = find_trunk_for_branch_point(db, branch_point.id)
+                    if trunk and trunk.start_device_id:
+                        # 目标核心由主干起点决定
+                        target_core_id = trunk.start_device_id
+                        path = calculate_link_path(db, plan_id, node.device_id, target_core_id)
+                        if path:
+                            device_paths[node.device_id] = path
+
+        # 其他设备类型（router/firewall/ap/普通switch）：
+        # 查找其 DeviceLink 连接的上联设备，沿链路递归到核心
+        else:
+            # 查找该设备作为 to_node 的链路（上联）
+            uplink = db.query(DeviceLink).filter(
+                DeviceLink.floor_plan_id == plan_id,
+                DeviceLink.to_node_id == node.id,
+                DeviceLink.link_role != "fiber_branch"
+            ).first()
+
+            if uplink:
+                # 找到上联设备
+                from_node = db.query(DeviceNode).filter(
+                    DeviceNode.id == uplink.from_node_id
+                ).first()
+                if from_node:
+                    # 递归查找上联设备的路径
+                    if from_node.device_id in device_paths:
+                        # 上联设备已有路径，在其起点添加当前设备
+                        upstream_path = device_paths[from_node.device_id]
+                        # 构建当前设备到上联设备的路径
+                        current_pos = {
+                            "type": "device",
+                            "role": "source",
+                            "device_id": node.device_id,
+                            "x_percent": float(node.x_percent),
+                            "y_percent": float(node.y_percent),
+                        }
+                        # 添加到上联设备的直连段
+                        target_pos = {
+                            "type": "device",
+                            "role": "intermediate",
+                            "device_id": from_node.device_id,
+                            "x_percent": float(from_node.x_percent),
+                            "y_percent": float(from_node.y_percent),
+                        }
+                        # 组合路径：当前设备 → 上联设备 → 上联设备的路径
+                        combined_path = [current_pos, target_pos] + upstream_path[2:]  # 跳过上联设备的起点（已添加）
+                        device_paths[node.device_id] = combined_path
 
     return device_paths

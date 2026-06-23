@@ -2224,14 +2224,35 @@ function buildDataLinkPaths() {
     const statusColor = status === 'online' ? 0x22c55e : 0xff4d4f  // 绿色/红色
 
     // 构建路径点 - 所有点现在都是扁平格式，直接使用 x_percent, y_percent
-    const points = []
+    const rawPoints = []
 
     path.forEach(segment => {
       // 所有类型的点现在都使用统一的 x_percent, y_percent 格式
       if (segment.x_percent != null && segment.y_percent != null) {
-        const pos = percentToWorld(segment.x_percent, segment.y_percent, pathHeight)
-        points.push(new THREE.Vector3(pos.x, pos.y, pos.z))
+        rawPoints.push({ x: segment.x_percent, y: segment.y_percent })
       }
+    })
+
+    // 去重：移除相邻重复点（坐标差值小于阈值）
+    const dedupedPoints = []
+    const DUPLICATE_THRESHOLD = 0.01  // 0.01% 坐标差值阈值
+    rawPoints.forEach((pt, i) => {
+      if (i === 0) {
+        dedupedPoints.push(pt)
+      } else {
+        const prev = dedupedPoints[dedupedPoints.length - 1]
+        const dx = Math.abs(pt.x - prev.x)
+        const dy = Math.abs(pt.y - prev.y)
+        if (dx > DUPLICATE_THRESHOLD || dy > DUPLICATE_THRESHOLD) {
+          dedupedPoints.push(pt)
+        }
+      }
+    })
+
+    // 转换为 Three.js 坐标
+    const points = dedupedPoints.map(pt => {
+      const pos = percentToWorld(pt.x, pt.y, pathHeight)
+      return new THREE.Vector3(pos.x, pos.y, pos.z)
     })
 
     // 如果点数少于2，无法绘制路径
@@ -2250,6 +2271,10 @@ function buildDataLinkPaths() {
 
       const direction = new THREE.Vector3().subVectors(end, start)
       const length = direction.length()
+
+      // 零长度段防御：跳过长度过小的段
+      if (length < 1e-6) continue
+
       const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
 
       const cylinderGeo = new THREE.CylinderGeometry(pathRadius, pathRadius, length, 8)
@@ -2257,7 +2282,10 @@ function buildDataLinkPaths() {
       cylinder.position.copy(midPoint)
 
       const axis = new THREE.Vector3(0, 1, 0)
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
+      const normalizedDir = direction.clone().normalize()
+      // 防止 normalize 后仍然是零向量（虽然上面已检查，但双重保险）
+      if (normalizedDir.length() < 0.5) continue
+      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, normalizedDir)
       cylinder.quaternion.copy(quaternion)
 
       cylinder.userData.dataPath = { deviceId: parseInt(deviceId), segmentIndex: i }
@@ -3481,15 +3509,24 @@ watch([showPhysicalTopology, showDataLinks], () => {
   // 重建数据链路
   disposeGroup('links')
   disposeGroup('data-link-paths')
+  // 清除旧引用，防止 showLinks watch 操作已 dispose 的对象
+  ctx.value.linkLines = null
+  ctx.value.dataLinkPaths = null
   if (showDataLinks.value) {
     buildLinks()
+    // buildLinks 会设置 ctx.value.linkLines
+    if (ctx.value.linkLines) {
+      ctx.value.linkLines.visible = showLinks.value
+    }
     buildDataLinkPaths()
   }
 })
 
-// 监听图层控制
+// 监听图层控制 - 只控制 links 组（直接链路线）
+// 注意：当 showDataLinks 为 false 时，links 组已被 dispose，此 watch 无效
 watch(showLinks, (val) => {
-  if (ctx.value.linkLines) {
+  if (ctx.value.linkLines && ctx.value.linkLines.parent) {
+    // 只有当 group 还在 scene 中时才设置 visible
     ctx.value.linkLines.visible = val
   }
 })
