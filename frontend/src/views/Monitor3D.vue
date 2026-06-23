@@ -1349,6 +1349,28 @@ function buildTopoEdges() {
 
   scene.add(edgeGroup)
   ctx.value.topoEdgesGroup = edgeGroup
+
+  // 渲染 junction 节点球（分支点）
+  const junctionNodes = topoNodes.value.filter(n => n.node_kind === 'junction' && n.junction_type === 'branch_point')
+  if (junctionNodes.length > 0) {
+    const bpHeight = edgeHeight + 1  // 分支点略高于边
+    const bpRadius = edgeRadius * 3  // 分支点球比边粗
+
+    junctionNodes.forEach(node => {
+      const bpWorld = percentToWorld(node.x_percent, node.y_percent, bpHeight)
+      const sphereGeo = new THREE.SphereGeometry(bpRadius, 16, 16)
+      const sphereMat = new THREE.MeshBasicMaterial({
+        color: 0xfbbf24,  // 黄色（分支点）
+        transparent: true,
+        opacity: 1.0,
+      })
+      const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+      sphere.position.set(bpWorld.x, bpWorld.y, bpWorld.z)
+      sphere.userData.topoNode = node
+      sphere.name = `junction-${node.id}`
+      edgeGroup.add(sphere)
+    })
+  }
 }
 
 // 动态翻译主干名称
