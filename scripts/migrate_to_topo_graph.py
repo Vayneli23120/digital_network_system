@@ -112,7 +112,9 @@ def project_point_on_polyline(point: Tuple[float, float],
 def extract_sub_waypoints(polyline: List[Tuple[float, float]],
                           s_start: float, s_end: float) -> List[dict]:
     """
-    从折线中提取 s_start 到 s_end 区间的拐点子集
+    从折线中提取 s_start 到 s_end 区间的拐点子集（不含投影点）
+
+    只提取真正的拐点（用户设置的），不插入分支点投影坐标
     返回适合存入 waypoints 字段的格式 [{'x': ..., 'y': ...}, ...]
     """
     if s_start >= s_end:
@@ -122,7 +124,7 @@ def extract_sub_waypoints(polyline: List[Tuple[float, float]],
     if total_len < 1e-10:
         return []
 
-    # 遍历折线，找出落在区间内的拐点
+    # 遍历折线，找出落在区间内的真实拐点（不包括投影点）
     result = []
     cumulative_len = 0.0
 
@@ -139,24 +141,11 @@ def extract_sub_waypoints(polyline: List[Tuple[float, float]],
             cumulative_len += seg_len
             continue
 
-        # 如果起点不是区间起点，且这段跨越 s_start，需要添加起点投影点
-        if seg_s_start < s_start and seg_s_end > s_start:
-            t = (s_start - seg_s_start) / seg_len
-            proj_x = seg_start[0] + t * (seg_end[0] - seg_start[0])
-            proj_y = seg_start[1] + t * (seg_end[1] - seg_start[1])
-            result.append({'x': proj_x, 'y': proj_y})
-
-        # 段内拐点（不是端点）
+        # 只提取真实的拐点（polyline[i]，当 i > 0 时）
+        # 不插入投影点（分支点位置不应成为拐点）
         if i > 0 and seg_s_start > s_start and seg_s_start < s_end:
             # polyline[i] 是拐点（不是起点终点）
             result.append({'x': seg_start[0], 'y': seg_start[1]})
-
-        # 如果终点不是区间终点，且这段跨越 s_end，需要添加终点投影点
-        if seg_s_start < s_end and seg_s_end > s_end:
-            t = (s_end - seg_s_start) / seg_len
-            proj_x = seg_start[0] + t * (seg_end[0] - seg_start[0])
-            proj_y = seg_start[1] + t * (seg_end[1] - seg_start[1])
-            result.append({'x': proj_x, 'y': proj_y})
 
         cumulative_len += seg_len
 

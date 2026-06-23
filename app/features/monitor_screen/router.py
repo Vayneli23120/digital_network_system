@@ -6,7 +6,7 @@ Monitor Screen Router - 系统监控大屏 API
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, List, Dict
 from pathlib import Path
 import shutil
 from datetime import datetime
@@ -538,3 +538,159 @@ async def get_global_summary_endpoint(db: Session = Depends(get_db)):
     聚合所有平面图数据，返回全厂整体健康状态。
     """
     return get_global_summary(db)
+
+
+# ============ 图模型拓扑 API（新设计） ============
+
+from .topo_service import (
+    get_cables, get_topo_nodes, get_topo_edges,
+    create_trunk, create_branch_point, create_branch_cable,
+    update_topo_edge, delete_topo_edge, delete_cable,
+)
+
+
+class TrunkCreate(BaseModel):
+    """创建主干光缆"""
+    name: Optional[str] = None
+    cable_no: Optional[str] = None
+    start_x: float
+    start_y: float
+    start_device_id: Optional[int] = None
+    end_x: float
+    end_y: float
+    waypoints: Optional[List[Dict[str, float]]] = None
+
+
+class BranchPointCreate(BaseModel):
+    """创建分支点"""
+    trunk_cable_id: int
+    x: float
+    y: float
+    label: Optional[str] = None
+
+
+class BranchCableCreate(BaseModel):
+    """创建分支光缆"""
+    branch_point_id: int
+    to_device_id: int
+    name: Optional[str] = None
+    cable_no: Optional[str] = None
+    waypoints: Optional[List[Dict[str, float]]] = None
+
+
+class TopoEdgeUpdate(BaseModel):
+    """更新拓扑边"""
+    waypoints: Optional[List[Dict[str, float]]] = None
+    cable_name: Optional[str] = None
+    cable_no: Optional[str] = None
+    status: Optional[str] = None
+
+
+@router.get("/floor-plans/{plan_id}/cables")
+async def list_cables(plan_id: int, db: Session = Depends(get_db)):
+    """获取所有光缆（按 cable_id 聚合）"""
+    return {"items": get_cables(db, plan_id)}
+
+
+@router.get("/floor-plans/{plan_id}/topo-nodes")
+async def list_topo_nodes(plan_id: int, db: Session = Depends(get_db)):
+    """获取所有拓扑节点"""
+    return {"items": get_topo_nodes(db, plan_id)}
+
+
+@router.get("/floor-plans/{plan_id}/topo-edges")
+async def list_topo_edges(plan_id: int, db: Session = Depends(get_db)):
+    """获取所有拓扑边"""
+    return {"items": get_topo_edges(db, plan_id)}
+
+
+@router.post("/floor-plans/{plan_id}/topo/trunk")
+async def create_topo_trunk(plan_id: int, data: TrunkCreate, db: Session = Depends(get_db)):
+    """创建主干光缆（图模型）"""
+    try:
+        result = create_trunk(db, plan_id, data)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/floor-plans/{plan_id}/topo/branch-point")
+async def create_topo_branch_point(plan_id: int, data: BranchPointCreate, db: Session = Depends(get_db)):
+    """在主干上创建分支点（切段主干）"""
+    try:
+        result = create_branch_point(db, plan_id, data)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.post("/floor-plans/{plan_id}/topo/branch-cable")
+async def create_topo_branch_cable(plan_id: int, data: BranchCableCreate, db: Session = Depends(get_db)):
+    """创建分支光缆（从分支点到设备）"""
+    try:
+        result = create_branch_cable(db, plan_id, data)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.put("/floor-plans/{plan_id}/topo-edges/{edge_id}")
+async def update_topo_edge_endpoint(plan_id: int, edge_id: int, data: TopoEdgeUpdate, db: Session = Depends(get_db)):
+    """更新拓扑边（拐点、名称等）"""
+    result = update_topo_edge(db, plan_id, edge_id, data)
+    if not result:
+        raise HTTPException(status_code=404, detail="边不存在")
+    return result
+
+
+@router.delete("/floor-plans/{plan_id}/topo-edges/{edge_id}")
+async def delete_topo_edge_endpoint(plan_id: int, edge_id: int, db: Session = Depends(get_db)):
+    """删除拓扑边"""
+    success = delete_topo_edge(db, plan_id, edge_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="边不存在")
+    return {"message": "边删除成功"}
+
+
+@router.delete("/floor-plans/{plan_id}/cables/{cable_id}")
+async def delete_cable_endpoint(plan_id: int, cable_id: int, db: Session = Depends(get_db)):
+    """删除整条光缆（所有 cable_id 相同的边）"""
+    success = delete_cable(db, plan_id, cable_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="光缆不存在")
+    return {"message": "光缆删除成功"}
+
+
+# ============ 数据链路路径 API ============
+
+from .graph_path_service import calculate_path, calculate_all_device_paths
+
+
+@router.get("/floor-plans/{plan_id}/device-path")
+async def get_device_path(
+    plan_id: int,
+    from_device_id: int,
+    to_device_id: int,
+    db: Session = Depends(get_db)
+):
+    """计算两个设备之间的数据链路路径（基于图模型寻路）
+
+    返回：
+    - reachable: 是否可达
+    - polyline: 路径折线坐标
+    - hops: 路径跳信息
+    - total_length: 总长度
+    """
+    result = calculate_path(db, plan_id, from_device_id, to_device_id)
+    return result
+
+
+@router.get("/floor-plans/{plan_id}/device-paths")
+async def get_all_device_paths(plan_id: int, db: Session = Depends(get_db)):
+    """计算所有设备到核心交换机的数据链路路径
+
+    返回：
+    {device_id: {reachable, polyline, total_length}}
+    """
+    result = calculate_all_device_paths(db, plan_id)
+    return {"paths": result}

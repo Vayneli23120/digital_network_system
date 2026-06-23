@@ -888,6 +888,10 @@ class TopoEdge(Base):
     # 冗余字段，方便查询和显示
     cable_name = Column(String(50), nullable=True)       # "主干光缆-1", "分支光纤-A3"
 
+    # 光缆编号（决策2：一条主干=一个编号，分支光缆单独编号）
+    cable_id = Column(Integer, nullable=True, index=True)    # 同一根光缆的所有分段共享同一 ID
+    cable_no = Column(String(50), nullable=True)             # 用户可见编号（如 "TRUNK-01" / "BR-12"）
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

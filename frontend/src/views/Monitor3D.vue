@@ -782,15 +782,8 @@ async function loadFiberData() {
     disposeGroup('topo-edges')
     disposeGroup('data-link-paths')
 
-    // 如果有 topoEdges 数据，用新渲染逻辑
-    if (topoEdges.value.length > 0) {
-      buildTopoEdges()
-    } else {
-      // 否则用旧的渲染逻辑
-      buildFiberTrunks()
-      buildBranchPoints()
-      buildBranchLinks()
-    }
+    // 使用新的图模型渲染
+    buildTopoEdges()
     buildDataLinkPaths()
   } catch (e) {
     console.error('加载光纤数据失败:', e)
@@ -1096,9 +1089,8 @@ async function saveTrunkWaypoints() {
       trunk.waypoints = editingTrunkWaypoints.value
     }
 
-    // 重建主干
-    disposeGroup('fiber-trunks')
-    buildFiberTrunks()
+    // 重新加载 topo 数据并重建渲染
+    await loadTopoData()
 
     showTrunkWaypointDialog.value = false
     editingTrunk.value = null
@@ -1155,9 +1147,8 @@ async function saveBranchLinkWaypoints() {
       link.waypoints = waypointsJson
     }
 
-    // 重建分支光缆
-    disposeGroup('branch-links')
-    buildBranchLinks()
+    // 重新加载 topo 数据并重建渲染
+    await loadTopoData()
 
     showBranchLinkWaypointDialog.value = false
     editingBranchLink.value = null
@@ -2031,9 +2022,7 @@ function rebuildScene() {
   disposeGroup('data-link-paths')
   buildDeviceModels()
   buildLinks()
-  buildFiberTrunks()
-  buildBranchPoints()
-  buildBranchLinks()
+  buildTopoEdges()
   buildDataLinkPaths()
   buildLabels()
 }
@@ -2155,277 +2144,6 @@ function buildLinks() {
 
   scene.add(linkGroup)
   ctx.value.linkLines = linkGroup
-}
-
-// 构建主干光缆（粗紫线）
-function buildFiberTrunks() {
-  const { scene } = ctx.value
-  if (!scene || fiberTrunks.value.length === 0) return
-
-  const trunkGroup = new THREE.Group()
-  trunkGroup.name = 'fiber-trunks'
-
-  // 主干高度：贴近地面
-  const trunkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
-  // 主干管道半径：比链路线稍粗（底图短边的 0.0015）
-  const trunkRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0015
-  // 端点球半径
-  const endpointRadius = trunkRadius * 3
-
-  fiberTrunks.value.forEach(trunk => {
-    const startPoint = percentToWorld(trunk.start_x_percent, trunk.start_y_percent, trunkHeight)
-    const endPoint = percentToWorld(trunk.end_x_percent, trunk.end_y_percent, trunkHeight)
-
-    // 构建主干路径点
-    const points = []
-    points.push(new THREE.Vector3(startPoint.x, startPoint.y, startPoint.z))
-
-    // 如果有拐点，按拐点绘制
-    let waypoints = trunk.waypoints
-    if (typeof waypoints === 'string') {
-      try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
-    }
-    if (Array.isArray(waypoints) && waypoints.length > 0) {
-      waypoints.forEach(wp => {
-        if (wp.x != null && wp.y != null) {
-          const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight)
-          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
-        }
-      })
-    }
-
-    points.push(new THREE.Vector3(endPoint.x, endPoint.y, endPoint.z))
-
-    // 使用圆柱体绘制直角折线（每段一个圆柱）
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0xa855f7,  // 紫色
-      transparent: true,
-      opacity: 0.9,
-    })
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const start = points[i]
-      const end = points[i + 1]
-
-      // 计算圆柱体参数
-      const direction = new THREE.Vector3().subVectors(end, start)
-      const length = direction.length()
-      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
-
-      // 创建圆柱体几何
-      const cylinderGeo = new THREE.CylinderGeometry(trunkRadius, trunkRadius, length, 8)
-
-      // 创建圆柱 Mesh
-      const cylinder = new THREE.Mesh(cylinderGeo, mat)
-
-      // 定位到中点
-      cylinder.position.copy(midPoint)
-
-      // 旋转圆柱使其指向终点方向
-      const axis = new THREE.Vector3(0, 1, 0)  // CylinderGeometry 默认沿 Y 轴
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
-      cylinder.quaternion.copy(quaternion)
-
-      cylinder.userData.trunk = trunk
-      cylinder.name = `trunk-${trunk.id}-seg-${i}`
-      trunkGroup.add(cylinder)
-    }
-
-    // 编辑模式下显示起点/终点拖拽球
-    if (isEditMode.value) {
-      const startSphereGeo = new THREE.SphereGeometry(endpointRadius, 16, 16)
-      const startSphereMat = new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 1.0 })  // 绿色
-      const startSphere = new THREE.Mesh(startSphereGeo, startSphereMat)
-      startSphere.position.set(startPoint.x, startPoint.y + trunkRadius * 2, startPoint.z)
-      startSphere.userData.trunkEndpoint = { trunkId: trunk.id, type: 'start', x: trunk.start_x_percent, y: trunk.start_y_percent }
-      startSphere.name = `trunk-start-${trunk.id}`
-      trunkGroup.add(startSphere)
-
-      const endSphereGeo = new THREE.SphereGeometry(endpointRadius, 16, 16)
-      const endSphereMat = new THREE.MeshBasicMaterial({ color: 0xef4444, transparent: true, opacity: 1.0 })  // 红色
-      const endSphere = new THREE.Mesh(endSphereGeo, endSphereMat)
-      endSphere.position.set(endPoint.x, endPoint.y + trunkRadius * 2, endPoint.z)
-      endSphere.userData.trunkEndpoint = { trunkId: trunk.id, type: 'end', x: trunk.end_x_percent, y: trunk.end_y_percent }
-      endSphere.name = `trunk-end-${trunk.id}`
-      trunkGroup.add(endSphere)
-    }
-
-    // 编辑模式下显示拐点球
-    if (isEditMode.value && Array.isArray(waypoints) && waypoints.length > 0) {
-      waypoints.forEach((wp, idx) => {
-        if (wp.x != null && wp.y != null) {
-          // 拐点球位置略高于管道
-          const wpWorld = percentToWorld(wp.x, wp.y, trunkHeight + trunkRadius * 3)
-          // 拐点球半径：管道半径的 2.5 倍
-          const wpRadius = trunkRadius * 2.5
-          const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
-          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 })  // 白色
-          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
-          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
-          sphere.userData.trunkWaypoint = { trunkId: trunk.id, index: idx, x: wp.x, y: wp.y }
-          sphere.name = `trunk-waypoint-${trunk.id}-${idx}`
-          trunkGroup.add(sphere)
-        }
-      })
-    }
-  })
-
-  scene.add(trunkGroup)
-  ctx.value.fiberTrunkGroup = trunkGroup
-}
-
-// 构建分支点（橙色圆点）
-function buildBranchPoints() {
-  const { scene } = ctx.value
-  if (!scene || fiberBranchPoints.value.length === 0) return
-
-  const bpGroup = new THREE.Group()
-  bpGroup.name = 'branch-points'
-
-  // 分支点高度：略高于主干
-  const bpHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002 + 1
-  // 分支点半径：底图短边的 0.3%
-  const bpRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
-
-  fiberBranchPoints.value.forEach(bp => {
-    let x = bp.x_percent
-    let y = bp.y_percent
-
-    // 如果没有坐标，根据 position_percent 在主干上计算
-    if (x == null || y == null) {
-      const trunk = fiberTrunks.value.find(t => t.id === bp.trunk_link_id)
-      if (trunk) {
-        const pos = calculatePositionOnTrunk(trunk, bp.position_percent)
-        x = pos.x
-        y = pos.y
-      }
-    }
-
-    if (x == null || y == null) return
-
-    const bpWorld = percentToWorld(x, y, bpHeight)
-
-    const sphereGeo = new THREE.SphereGeometry(bpRadius, 16, 16)
-    const sphereMat = new THREE.MeshBasicMaterial({
-      color: 0xfbbf24,  // 更亮的黄色
-      transparent: true,
-      opacity: 1.0  // 完全可见
-    })
-    const sphere = new THREE.Mesh(sphereGeo, sphereMat)
-    sphere.position.set(bpWorld.x, bpWorld.y, bpWorld.z)
-    sphere.userData.branchPoint = bp
-    sphere.name = `branch-point-${bp.id}`
-    bpGroup.add(sphere)
-  })
-
-  scene.add(bpGroup)
-  ctx.value.branchPointGroup = bpGroup
-}
-
-// 构建分支光缆（细青线，从分支点到设备）
-function buildBranchLinks() {
-  const { scene } = ctx.value
-  if (!scene || fiberBranchLinks.value.length === 0) return
-
-  const branchGroup = new THREE.Group()
-  branchGroup.name = 'branch-links'
-
-  // 分支光缆高度：贴近地面
-  const branchHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
-  // 分支光缆半径（比主干更细）
-  const branchRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
-
-  fiberBranchLinks.value.forEach(link => {
-    // 找分支点坐标
-    const bp = fiberBranchPoints.value.find(bp => bp.id === link.branch_point_id)
-    if (!bp) return
-
-    let bpX = bp.x_percent
-    let bpY = bp.y_percent
-    if (bpX == null || bpY == null) {
-      const trunk = fiberTrunks.value.find(t => t.id === bp.trunk_link_id)
-      if (trunk) {
-        const pos = calculatePositionOnTrunk(trunk, bp.position_percent)
-        bpX = pos.x
-        bpY = pos.y
-      }
-    }
-
-    // 找设备节点坐标
-    const deviceNode = nodes.value.find(n => n.device_id === link.to_device_id)
-    if (!deviceNode || bpX == null || bpY == null) return
-
-    const bpWorld = percentToWorld(bpX, bpY, branchHeight)
-    const deviceWorld = percentToWorld(deviceNode.x_percent, deviceNode.y_percent, branchHeight)
-
-    // 构建路径点
-    const points = []
-    points.push(new THREE.Vector3(bpWorld.x, bpWorld.y, bpWorld.z))
-
-    // 解析拐点
-    let waypoints = link.waypoints
-    if (typeof waypoints === 'string') {
-      try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
-    }
-    if (Array.isArray(waypoints) && waypoints.length > 0) {
-      waypoints.forEach(wp => {
-        if (wp.x != null && wp.y != null) {
-          const wpWorld = percentToWorld(wp.x, wp.y, branchHeight)
-          points.push(new THREE.Vector3(wpWorld.x, wpWorld.y, wpWorld.z))
-        }
-      })
-    }
-
-    points.push(new THREE.Vector3(deviceWorld.x, deviceWorld.y, deviceWorld.z))
-
-    // 使用圆柱体绘制直角折线
-    const mat = new THREE.MeshBasicMaterial({
-      color: 0x06b6d4,  // 青色
-      transparent: true,
-      opacity: 0.9,
-    })
-
-    for (let i = 0; i < points.length - 1; i++) {
-      const start = points[i]
-      const end = points[i + 1]
-
-      const direction = new THREE.Vector3().subVectors(end, start)
-      const length = direction.length()
-      const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
-
-      const cylinderGeo = new THREE.CylinderGeometry(branchRadius, branchRadius, length, 8)
-      const cylinder = new THREE.Mesh(cylinderGeo, mat)
-      cylinder.position.copy(midPoint)
-
-      const axis = new THREE.Vector3(0, 1, 0)
-      const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize())
-      cylinder.quaternion.copy(quaternion)
-
-      cylinder.userData.branchLink = link
-      cylinder.name = `branch-link-${link.id}-seg-${i}`
-      branchGroup.add(cylinder)
-    }
-
-    // 编辑模式下显示拐点球
-    if (isEditMode.value && Array.isArray(waypoints) && waypoints.length > 0) {
-      waypoints.forEach((wp, idx) => {
-        if (wp.x != null && wp.y != null) {
-          const wpWorld = percentToWorld(wp.x, wp.y, branchHeight + branchRadius * 3)
-          const wpRadius = branchRadius * 2.5
-          const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
-          const sphereMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 1.0 })
-          const sphere = new THREE.Mesh(sphereGeo, sphereMat)
-          sphere.position.set(wpWorld.x, wpWorld.y, wpWorld.z)
-          sphere.userData.branchLinkWaypoint = { linkId: link.id, index: idx, x: wp.x, y: wp.y }
-          sphere.name = `branch-link-waypoint-${link.id}-${idx}`
-          branchGroup.add(sphere)
-        }
-      })
-    }
-  })
-
-  scene.add(branchGroup)
-  ctx.value.branchLinkGroup = branchGroup
 }
 
 // 根据位置百分比计算主干上的坐标
@@ -3367,15 +3085,8 @@ async function onTrunkWaypointDragEnd(e) {
         // 更新本地数据
         trunk.waypoints = waypointsJson
 
-        // 更新 userData
-        if (selectedTrunkWaypointSphere) {
-          selectedTrunkWaypointSphere.userData.trunkWaypoint.x = _lastX
-          selectedTrunkWaypointSphere.userData.trunkWaypoint.y = _lastY
-        }
-
-        // 重建主干
-        disposeGroup('fiber-trunks')
-        buildFiberTrunks()
+        // 重新加载 topo 数据并重建渲染
+        await loadTopoData()
 
         ElMessage.success(t('msgSaveSuccess'))
       }
@@ -3544,9 +3255,8 @@ async function onTrunkEndpointDragEnd(e) {
           trunk.end_y_percent = Number(_lastY.toFixed(2))
         }
 
-        // 重建主干
-        disposeGroup('fiber-trunks')
-        buildFiberTrunks()
+        // 重新加载 topo 数据并重建渲染
+        await loadTopoData()
 
         ElMessage.success(t('msgSaveSuccess'))
       }
@@ -3609,13 +3319,8 @@ async function onBranchPointDragEnd(e) {
         bp.x_percent = Number(_lastX.toFixed(2))
         bp.y_percent = Number(_lastY.toFixed(2))
 
-        // 重建分支点
-        disposeGroup('branch-points')
-        buildBranchPoints()
-
-        // 同时重建分支光缆（位置变了）
-        disposeGroup('branch-links')
-        buildBranchLinks()
+        // 重新加载 topo 数据并重建渲染
+        await loadTopoData()
 
         ElMessage.success(t('msgSaveSuccess'))
       }
@@ -3691,14 +3396,8 @@ async function onBranchLinkWaypointDragEnd(e) {
         link.waypoints = waypointsJson
 
         // 更新 userData
-        if (selectedBranchLinkWaypointSphere) {
-          selectedBranchLinkWaypointSphere.userData.branchLinkWaypoint.x = _lastX
-          selectedBranchLinkWaypointSphere.userData.branchLinkWaypoint.y = _lastY
-        }
-
-        // 重建分支光缆
-        disposeGroup('branch-links')
-        buildBranchLinks()
+        // 重新加载 topo 数据并重建渲染
+        await loadTopoData()
 
         ElMessage.success(t('msgSaveSuccess'))
       }
@@ -4180,18 +3879,10 @@ watch([filterType, filterStatus], () => {
   }
 })
 
-// 监听编辑模式变化，重建主干光缆（显示/隐藏控制点）
+// 监听编辑模式变化，重建拓扑渲染（显示/隐藏控制点）
 watch(isEditMode, () => {
   if (ctx.value.scene) {
-    // 根据数据源选择渲染逻辑
-    if (topoEdges.value.length > 0) {
-      buildTopoEdges()
-    } else {
-      disposeGroup('fiber-trunks')
-      buildFiberTrunks()
-      disposeGroup('branch-links')
-      buildBranchLinks()
-    }
+    buildTopoEdges()
   }
 })
 
@@ -4272,14 +3963,8 @@ onMounted(async () => {
   buildLinks()
   buildLabels()
 
-  // 优先使用新 topo 数据渲染光纤拓扑
-  if (topoEdges.value.length > 0) {
-    buildTopoEdges()
-  } else {
-    buildFiberTrunks()
-    buildBranchPoints()
-    buildBranchLinks()
-  }
+  // 使用新 topo 数据渲染光纤拓扑
+  buildTopoEdges()
   buildDataLinkPaths()
 
   // 自动框景 - 延迟执行确保布局稳定
