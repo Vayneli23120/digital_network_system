@@ -1360,6 +1360,50 @@ function buildTopoEdges() {
       sphere.userData.topoNode = node
       sphere.name = `junction-${node.id}`
       edgeGroup.add(sphere)
+
+      // 添加分支点标签（CSS2D）
+      if (node.label && isEditMode.value) {
+        const labelEl = document.createElement('div')
+        labelEl.className = 'topo-label junction-label'
+        labelEl.textContent = node.label
+        const labelObj = new CSS2DObject(labelEl)
+        labelObj.position.set(bpWorld.x, bpWorld.y + bpRadius * 2, bpWorld.z)
+        edgeGroup.add(labelObj)
+      }
+    })
+  }
+
+  // 添加 cable_no 标签（只在编辑模式下显示）
+  if (isEditMode.value) {
+    // 按 cable_id 聚合，只在每条光缆的中点显示一个标签
+    const cablesMap = new Map()
+    topoEdges.value.forEach(edge => {
+      if (edge.cable_id && edge.cable_no) {
+        if (!cablesMap.has(edge.cable_id)) {
+          cablesMap.set(edge.cable_id, { cable_no: edge.cable_no, cable_name: edge.cable_name, edges: [] })
+        }
+        cablesMap.get(edge.cable_id).edges.push(edge)
+      }
+    })
+
+    cablesMap.forEach((cable, cableId) => {
+      // 计算光缆中点位置
+      const cableEdges = cable.edges
+      if (cableEdges.length === 0) return
+
+      // 取第一条边的起点作为标签位置
+      const firstEdge = cableEdges[0]
+      const aNode = topoNodes.value.find(n => n.id === firstEdge.a_node_id)
+      if (!aNode) return
+
+      const labelWorld = percentToWorld(aNode.x_percent, aNode.y_percent, edgeHeight + edgeRadius * 4)
+
+      const labelEl = document.createElement('div')
+      labelEl.className = 'topo-label cable-label'
+      labelEl.textContent = cable.cable_no
+      const labelObj = new CSS2DObject(labelEl)
+      labelObj.position.set(labelWorld.x, labelWorld.y, labelWorld.z)
+      edgeGroup.add(labelObj)
     })
   }
 }
@@ -4544,6 +4588,30 @@ onBeforeUnmount(() => {
 :deep(.device-label.maintenance) {
   background: rgba(255, 161, 22, 0.9);
   color: #fff;
+}
+
+/* 拓扑标签样式（CSS2D）- cable_no 和 junction label */
+:deep(.topo-label) {
+  padding: 2px 8px;
+  background: rgba(15, 23, 42, 0.9);
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+:deep(.cable-label) {
+  color: #22c55e;
+  background: rgba(22, 163, 74, 0.15);
+  border-color: rgba(34, 197, 94, 0.5);
+}
+
+:deep(.junction-label) {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.5);
 }
 
 @keyframes pulse {
