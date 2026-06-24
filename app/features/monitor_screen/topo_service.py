@@ -702,6 +702,9 @@ def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:
     if not edges:
         return False
 
+    # 主干类光缆删除时，需要级联删除挂载在该主干上的分支点与分支光缆
+    is_trunk_cable = any(e.cable_type in ["trunk", "trunk_segment", "trunk_to_core"] for e in edges)
+
     edge_ids_to_delete = {e.id for e in edges}
 
     # 收集本次删除光缆关联的 junction 节点候选
@@ -710,8 +713,35 @@ def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:
         candidate_junction_node_ids.add(edge.a_node_id)
         candidate_junction_node_ids.add(edge.b_node_id)
 
-    # 删除所有边
-    for edge in edges:
+    if is_trunk_cable:
+        # 找到挂在该主干上的分支点
+        branch_point_node_ids = set()
+        for node_id in list(candidate_junction_node_ids):
+            node = db.query(TopoNode).filter(
+                TopoNode.id == node_id,
+                TopoNode.floor_plan_id == plan_id,
+            ).first()
+            if node and node.node_kind == "junction" and node.junction_type == "branch_point":
+                branch_point_node_ids.add(node_id)
+
+        # 级联删除分支点连接的边（通常是分支光缆）
+        if branch_point_node_ids:
+            branch_edges = db.query(TopoEdge).filter(
+                TopoEdge.floor_plan_id == plan_id,
+                (TopoEdge.a_node_id.in_(branch_point_node_ids)) | (TopoEdge.b_node_id.in_(branch_point_node_ids))
+            ).all()
+
+            for edge in branch_edges:
+                edge_ids_to_delete.add(edge.id)
+                candidate_junction_node_ids.add(edge.a_node_id)
+                candidate_junction_node_ids.add(edge.b_node_id)
+
+    # 删除所有需要删除的边（主干 + 其挂载分支）
+    edges_to_delete = db.query(TopoEdge).filter(
+        TopoEdge.floor_plan_id == plan_id,
+        TopoEdge.id.in_(edge_ids_to_delete)
+    ).all()
+    for edge in edges_to_delete:
         db.delete(edge)
 
     # 删除关联的 junction 节点（排除本次整缆删除中的所有边后，若无剩余连接则删除）
