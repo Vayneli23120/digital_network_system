@@ -2657,8 +2657,9 @@ function onPortAnchorMouseDown(anchorData) {
   }
 
   // 添加鼠标移动和释放监听器
-  renderer?.domElement?.addEventListener('mousemove', onWiringMouseMove)
-  renderer?.domElement?.addEventListener('mouseup', onWiringMouseUp)
+  // 添加鼠标移动和释放监听器（挂在 window 上，保证在画布外松开也能结束连线）
+  window.addEventListener('mousemove', onWiringMouseMove)
+  window.addEventListener('mouseup', onWiringMouseUp)
 }
 
 // 更新橡皮筋线位置
@@ -2734,8 +2735,8 @@ async function finishWiring(targetAnchorData) {
 // 取消连线
 function cancelWiring() {
   // 移除事件监听器
-  ctx.value.renderer?.domElement?.removeEventListener('mousemove', onWiringMouseMove)
-  ctx.value.renderer?.domElement?.removeEventListener('mouseup', onWiringMouseUp)
+  window.removeEventListener('mousemove', onWiringMouseMove)
+  window.removeEventListener('mouseup', onWiringMouseUp)
 
   // 清除场景中所有橡皮筋线（包括可能残留的孤立线）
   const { scene } = ctx.value
@@ -3956,8 +3957,8 @@ function onWiringMouseMove(e) {
 function onWiringMouseUp(e) {
   if (!wiringState.value) return
 
-  ctx.value.renderer.domElement.removeEventListener('mousemove', onWiringMouseMove)
-  ctx.value.renderer.domElement.removeEventListener('mouseup', onWiringMouseUp)
+  window.removeEventListener('mousemove', onWiringMouseMove)
+  window.removeEventListener('mouseup', onWiringMouseUp)
   ctx.value.controls.enabled = true
 
   const { camera, renderer } = ctx.value
