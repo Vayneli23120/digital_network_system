@@ -30,40 +30,6 @@
       <el-icon><ArrowRight v-if="!hidePanel" /><ArrowLeft v-else /></el-icon>
     </div>
 
-    <!-- 新增链路对话框 -->
-    <el-dialog v-model="showAddLinkDialog" :title="t('actionAddLink')" width="400px">
-      <el-form>
-        <el-form-item :label="t('linkSource')">
-          <el-select v-model="newLinkSource" :placeholder="t('actionSelect')" size="small" popper-class="dark-select-popper">
-            <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('linkTarget')">
-          <el-select v-model="newLinkTarget" :placeholder="t('actionSelect')" size="small" popper-class="dark-select-popper">
-            <el-option v-for="node in nodes" :key="node.id" :label="getNodeName(node)" :value="node.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('linkRole')">
-          <el-select v-model="newLinkRole" size="small" popper-class="dark-select-popper">
-            <el-option :label="t('linkRoleUplink')" value="uplink" />
-            <el-option :label="t('linkRoleSvl')" value="svl" />
-            <el-option :label="t('linkRolePortchannel')" value="portchannel-member" />
-          </el-select>
-        </el-form-item>
-        <el-form-item :label="t('linkType')">
-          <el-select v-model="newLinkType" size="small" popper-class="dark-select-popper">
-            <el-option :label="t('linkTypeFiber')" value="fiber" />
-            <el-option :label="t('linkTypeEthernet')" value="ethernet" />
-            <el-option :label="t('linkTypeWireless')" value="wireless" />
-          </el-select>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showAddLinkDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="addLink">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
-
     <!-- 上传底图对话框 -->
     <el-dialog v-model="showUploadDialog" :title="t('uploadFloorPlan')" width="400px">
       <el-form>
@@ -402,31 +368,6 @@
               <div v-if="offlineDevices.length === 0" class="no-alert">
                 {{ t('noOfflineDevices') }}
               </div>
-            </div>
-          </div>
-        </el-tab-pane>
-
-        <!-- 链路标签页 -->
-        <el-tab-pane :label="t('deviceLinks')" name="links">
-          <button class="panel-action-btn" @click="showAddLinkDialog = true">
-            <el-icon><Plus /></el-icon>
-            <span>{{ t('actionAddLink') }}</span>
-          </button>
-          <div class="link-list">
-            <div v-for="link in links" :key="link.id" class="link-item">
-              <span class="link-info">{{ getLinkLabel(link) }}</span>
-              <span class="link-role-badge" :data-role="link.link_role">{{ link.link_role }}</span>
-              <div class="link-actions">
-                <button class="icon-btn" :title="t('editWaypoints')" @click="openWaypointDialog(link)">
-                  <el-icon><Connection /></el-icon>
-                </button>
-                <button class="icon-btn danger" :title="t('actionDelete')" @click="deleteLink(link.id)">
-                  <el-icon><Delete /></el-icon>
-                </button>
-              </div>
-            </div>
-            <div v-if="links.length === 0" class="no-data">
-              {{ t('noData') }}
             </div>
           </div>
         </el-tab-pane>
@@ -868,12 +809,7 @@ async function createFiberTrunk() {
 // 加载光纤数据
 async function loadFiberData() {
   try {
-    const topoRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topology`)
-    if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
-    if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
-    if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
-
-    // 加载新的 topo 数据
+    // 加载图模型拓扑数据（Gen3）
     try {
       const nodesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-nodes`)
       topoNodes.value = nodesRes.data.items || []
@@ -883,15 +819,13 @@ async function loadFiberData() {
       console.warn('加载 topo-nodes/edges 失败:', e)
     }
 
-    // 尝试从新 topo API 获取 device-paths（图寻路）
+    // 设备图寻路路径（Gen3）
     try {
       const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
-      if (topoPathsRes.data) {
-        devicePaths.value = topoPathsRes.data
-      }
+      devicePaths.value = topoPathsRes.data?.paths || {}
     } catch (e) {
-      // topo API 失败，尝试使用旧 topology 返回的 device_paths
-      if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+      console.warn('加载 device-paths 失败:', e)
+      devicePaths.value = {}
     }
 
     // 重建光纤渲染（优先使用新 topo 数据）
@@ -4090,27 +4024,22 @@ async function switchPlan(planId) {
     oldGround.material?.dispose()
   }
 
-  // 重新加载节点和链路
+  // 重新加载节点（Gen3：链路由 topo-edges 提供）
   try {
     const nodesRes = await axios.get(`/api/floor-plans/${planId}/nodes`)
     nodes.value = nodesRes.data.items || []
-
-    const linksRes = await axios.get(`/api/floor-plans/${planId}/links`)
-    links.value = linksRes.data.items || []
+    links.value = []
 
     const topoRes = await axios.get(`/api/floor-plans/${planId}/topology`)
     if (topoRes.data.nodes) nodes.value = topoRes.data.nodes
-    if (topoRes.data.links) links.value = topoRes.data.links
-    if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
-    if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
-    if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
 
-    // 尝试从新 topo API 获取 device-paths
+    // 设备图寻路路径（Gen3）
     try {
       const topoPathsRes = await axios.get(`/api/floor-plans/${planId}/device-paths`)
-      if (topoPathsRes.data) devicePaths.value = topoPathsRes.data
+      devicePaths.value = topoPathsRes.data?.paths || {}
     } catch (e) {
-      if (topoRes.data.device_paths) devicePaths.value = topoRes.data.device_paths
+      console.warn('加载 device-paths 失败:', e)
+      devicePaths.value = {}
     }
 
     // 重建场景
@@ -4209,18 +4138,12 @@ async function loadData() {
     if (currentPlan.value) {
       const nodesRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/nodes`)
       nodes.value = nodesRes.data.items || []
-
-      const linksRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/links`)
-      links.value = linksRes.data.items || []
+      links.value = []
 
       const topoRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topology`)
       if (topoRes.data.nodes) nodes.value = topoRes.data.nodes
-      if (topoRes.data.links) links.value = topoRes.data.links
-      if (topoRes.data.fiber_trunks) fiberTrunks.value = topoRes.data.fiber_trunks
-      if (topoRes.data.fiber_branch_points) fiberBranchPoints.value = topoRes.data.fiber_branch_points
-      if (topoRes.data.fiber_branch_links) fiberBranchLinks.value = topoRes.data.fiber_branch_links
 
-      // 加载新的 topo 数据
+      // 加载图模型拓扑数据（Gen3）
       try {
         const topoNodesRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topo-nodes`)
         topoNodes.value = topoNodesRes.data.items || []
