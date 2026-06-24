@@ -783,10 +783,14 @@ function startConnectFromBranch(bp) {
 async function createFiberTrunk() {
   if (!trunkStartPoint.value || !trunkEndPoint.value) return
 
+  // 起点靠近核心交换机时，自动把主干起点关联到核心设备（后端会生成 trunk_to_core 边）
+  const nearbyCore = findNearbyCoreDevice(trunkStartPoint.value.x, trunkStartPoint.value.y, 5)
+
   console.log('创建主干:', {
     planId: currentPlanId.value,
     start: trunkStartPoint.value,
-    end: trunkEndPoint.value
+    end: trunkEndPoint.value,
+    start_device_id: nearbyCore?.device_id || null,
   })
 
   try {
@@ -795,6 +799,7 @@ async function createFiberTrunk() {
       name: `TRUNK-${fiberTrunks.value.length + 1}`,
       start_x: trunkStartPoint.value.x,
       start_y: trunkStartPoint.value.y,
+      start_device_id: nearbyCore?.device_id,
       end_x: trunkEndPoint.value.x,
       end_y: trunkEndPoint.value.y,
     })
@@ -3786,6 +3791,24 @@ function findNearbyDevice(x_percent, y_percent, threshold) {
         device_id: node.device_id,
         device_name: device ? device.name : null,
         name: device ? device.name : `设备 ${node.device_id}`
+      }
+    }
+  }
+  return null
+}
+
+// 查找附近的核心交换机节点（用于主干起点自动关联核心）
+function findNearbyCoreDevice(x_percent, y_percent, threshold) {
+  for (const node of nodes.value) {
+    const dx = Math.abs(node.x_percent - x_percent)
+    const dy = Math.abs(node.y_percent - y_percent)
+    if (dx < threshold && dy < threshold) {
+      const device = devices.value.find(d => d.id === node.device_id)
+      if (device && device.device_type === 'core_switch') {
+        return {
+          device_id: node.device_id,
+          device_name: device.name,
+        }
       }
     }
   }
