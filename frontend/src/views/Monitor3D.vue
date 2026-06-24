@@ -2614,6 +2614,9 @@ function buildPortAnchors() {
 function onPortAnchorMouseDown(anchorData) {
   if (!isEditMode.value) return
 
+  // 如果已处于连线态，先清理，避免残留孤立的橡皮筋线
+  if (wiringState.value) cancelWiring()
+
   // 查找该端口对应的 topoNode（直接用锚点的 portId 精确匹配）
   const topoNode = topoNodes.value.find(n =>
     n.node_kind === 'port' && n.port_id === anchorData.portId
@@ -2734,14 +2737,15 @@ function cancelWiring() {
   ctx.value.renderer?.domElement?.removeEventListener('mousemove', onWiringMouseMove)
   ctx.value.renderer?.domElement?.removeEventListener('mouseup', onWiringMouseUp)
 
-  // 清除橡皮筋线
-  if (wiringState.value && wiringState.value.rubberBandLine) {
-    const { scene } = ctx.value
-    if (scene) {
-      scene.remove(wiringState.value.rubberBandLine)
-      wiringState.value.rubberBandLine.geometry.dispose()
-      wiringState.value.rubberBandLine.material.dispose()
-    }
+  // 清除场景中所有橡皮筋线（包括可能残留的孤立线）
+  const { scene } = ctx.value
+  if (scene) {
+    const strays = scene.children.filter(o => o.name === 'rubber-band')
+    strays.forEach(o => {
+      scene.remove(o)
+      o.geometry?.dispose?.()
+      o.material?.dispose?.()
+    })
   }
 
   // 恢复控制器
