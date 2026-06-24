@@ -2525,8 +2525,9 @@ function buildPortAnchors() {
   const anchorGroup = new THREE.Group()
   anchorGroup.name = 'port-anchors'
 
-  const anchorRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
-  const anchorHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.003
+  const refDim = Math.min(plan.real_width_m, plan.real_depth_m)
+  const anchorRadius = refDim * 0.004   // 放大，编辑模式下清晰可见
+  const anchorHeight = refDim * 0.006   // 抬高，浮在设备模型上方
 
   // 遍历设备节点，显示端口锚点
   nodes.value.forEach(node => {
@@ -2557,12 +2558,13 @@ function buildPortAnchors() {
 
       const worldPos = percentToWorld(baseX + offsetX, baseY + offsetY, anchorHeight)
 
-      // 创建锚点球
-      const sphereGeo = new THREE.SphereGeometry(anchorRadius, 12, 12)
+      const anchorColor = port.is_auto_created ? 0x22c55e : 0x3b82f6  // 自动=绿色 手动=蓝色
+
+      // 创建锚点球（核心，不透明、鲜亮）
+      const sphereGeo = new THREE.SphereGeometry(anchorRadius, 16, 16)
       const sphereMat = new THREE.MeshBasicMaterial({
-        color: port.is_auto_created ? 0x888888 : 0x3b82f6,  // 自动=灰色，手动=蓝色
-        transparent: true,
-        opacity: 0.8,
+        color: anchorColor,
+        transparent: false,
       })
       const sphere = new THREE.Mesh(sphereGeo, sphereMat)
       sphere.position.set(worldPos.x, worldPos.y, worldPos.z)
@@ -2575,6 +2577,19 @@ function buildPortAnchors() {
       }
       sphere.name = `port-anchor-${device.id}-${port.id}`
       anchorGroup.add(sphere)
+
+      // 外层发光光环（半透明，不参与射线拾取，避免遮挡核心球）
+      const haloGeo = new THREE.SphereGeometry(anchorRadius * 1.9, 16, 16)
+      const haloMat = new THREE.MeshBasicMaterial({
+        color: anchorColor,
+        transparent: true,
+        opacity: 0.22,
+        depthWrite: false,
+      })
+      const halo = new THREE.Mesh(haloGeo, haloMat)
+      halo.position.set(worldPos.x, worldPos.y, worldPos.z)
+      halo.raycast = () => {}
+      anchorGroup.add(halo)
     })
   })
 
@@ -2991,7 +3006,7 @@ function onCanvasMouseDown(e) {
   }
 
   // 检查是否点击了 TopoEndpoint（主干起点终点）
-  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+  if (isEditMode.value && !branchPointCreateMode.value && ctx.value.topoEdgesGroup) {
     const endpointSpheres = ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEndpoint)
     const epHits = raycaster.intersectObjects(endpointSpheres, false)
 
@@ -3020,7 +3035,7 @@ function onCanvasMouseDown(e) {
   }
 
   // 检查是否点击了 TopoEdge 拐点球（优先于边管体）
-  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+  if (isEditMode.value && !branchPointCreateMode.value && ctx.value.topoEdgesGroup) {
     const waypointSpheres = ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEdgeWaypoint)
     const wpHits = raycaster.intersectObjects(waypointSpheres, false)
 
@@ -3049,7 +3064,7 @@ function onCanvasMouseDown(e) {
   }
 
   // 检查是否点击了 TopoEdge（编辑模式下点击打开拐点对话框）
-  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+  if (isEditMode.value && !branchPointCreateMode.value && ctx.value.topoEdgesGroup) {
     const edgeHits = raycaster.intersectObjects(ctx.value.topoEdgesGroup.children, false)
     if (edgeHits.length > 0) {
       const cylinder = edgeHits[0].object
