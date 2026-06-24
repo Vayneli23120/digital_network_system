@@ -516,7 +516,7 @@ const topoCables = computed(() => {
     } else {
       // 没有 cable_id 时，按边单独显示（临时方案）
       cablesMap.set(`edge-${edge.id}`, {
-        cable_id: edge.id,  // 用 edge.id 作为临时 cable_id
+        cable_id: `edge-${edge.id}`,  // 用 "edge-{id}" 作为临时 cable_id，保证删除走 topo-edges 接口
         cable_no: edge.cable_name || edge.cable_type,
         cable_name: edge.cable_name,
         cable_type: edge.cable_type,
@@ -2592,7 +2592,7 @@ function buildPortAnchors() {
       anchorGroup.add(sphere)
 
       // 外层发光光环（半透明，不参与射线拾取，避免遮挡核心球）
-      const haloGeo = new THREE.SphereGeometry(anchorRadius * 1.9, 16, 16)
+      const haloGeo = new THREE.SphereGeometry(anchorRadius * 1.4, 16, 16)
       const haloMat = new THREE.MeshBasicMaterial({
         color: anchorColor,
         transparent: true,
@@ -2687,6 +2687,19 @@ async function finishWiring(targetAnchorData) {
 
   // 不能连接到自己
   if (wiringState.value.fromDeviceId === targetAnchorData.deviceId) {
+    cancelWiring()
+    return
+  }
+
+  // 防止重复连线：同一对端口节点之间已存在边则拒绝
+  const fromNodeId = wiringState.value.fromNodeId
+  const toNodeId = targetTopoNode.id
+  const duplicate = topoEdges.value.some(e =>
+    (e.a_node_id === fromNodeId && e.b_node_id === toNodeId) ||
+    (e.a_node_id === toNodeId && e.b_node_id === fromNodeId)
+  )
+  if (duplicate) {
+    ElMessage.warning('这两个端口之间已存在连线')
     cancelWiring()
     return
   }
