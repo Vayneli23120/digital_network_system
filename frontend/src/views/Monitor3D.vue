@@ -489,10 +489,19 @@ const currentPlanId = ref(null)
 
 // 从 topoEdges 派生的光缆列表（用于面板显示）
 const topoCables = computed(() => {
+  // 分支点 junction 节点 id 集合
+  const branchPointIds = new Set(
+    topoNodes.value
+      .filter(n => n.node_kind === 'junction' && n.junction_type === 'branch_point')
+      .map(n => n.id)
+  )
   const cablesMap = new Map()
   topoEdges.value.forEach(edge => {
     // 跳过 trunk_to_core 类型（这是主干到核心的连接线，不作为独立光缆显示）
     if (edge.cable_type === 'trunk_to_core') return
+
+    // 跳过分支光缆（连接到分支点的 fiber 边）——它们在分支点节点下嵌套显示，不作为顶层光缆，避免重复
+    if (edge.cable_type === 'fiber' && (branchPointIds.has(edge.a_node_id) || branchPointIds.has(edge.b_node_id))) return
 
     // 如果有 cable_id，按 cable_id 聚合
     if (edge.cable_id) {
