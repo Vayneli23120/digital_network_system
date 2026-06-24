@@ -702,23 +702,35 @@ def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:
     if not edges:
         return False
 
+    edge_ids_to_delete = {e.id for e in edges}
+
+    # 收集本次删除光缆关联的 junction 节点候选
+    candidate_junction_node_ids = set()
+    for edge in edges:
+        candidate_junction_node_ids.add(edge.a_node_id)
+        candidate_junction_node_ids.add(edge.b_node_id)
+
     # 删除所有边
     for edge in edges:
         db.delete(edge)
 
-    # 删除关联的 junction 节点（如果没有其他边连接）
-    for edge in edges:
-        for node_id in [edge.a_node_id, edge.b_node_id]:
-            node = db.query(TopoNode).filter(TopoNode.id == node_id).first()
-            if node and node.node_kind == "junction":
-                # 检查是否有其他边连接
-                other_edges = db.query(TopoEdge).filter(
-                    TopoEdge.floor_plan_id == plan_id,
-                    TopoEdge.id != edge.id,
-                    (TopoEdge.a_node_id == node_id) | (TopoEdge.b_node_id == node_id)
-                ).count()
-                if other_edges == 0:
-                    db.delete(node)
+    # 删除关联的 junction 节点（排除本次整缆删除中的所有边后，若无剩余连接则删除）
+    for node_id in candidate_junction_node_ids:
+        node = db.query(TopoNode).filter(
+            TopoNode.id == node_id,
+            TopoNode.floor_plan_id == plan_id,
+        ).first()
+        if not node or node.node_kind != "junction":
+            continue
+
+        remaining_edges = db.query(TopoEdge).filter(
+            TopoEdge.floor_plan_id == plan_id,
+            ~TopoEdge.id.in_(edge_ids_to_delete),
+            (TopoEdge.a_node_id == node_id) | (TopoEdge.b_node_id == node_id)
+        ).count()
+
+        if remaining_edges == 0:
+            db.delete(node)
 
     db.commit()
     return True
