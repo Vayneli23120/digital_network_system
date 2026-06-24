@@ -3911,9 +3911,15 @@ async function onDragEnd(e) {
         }
       }
 
-      // 只重建链路（不重建设备模型和标签）
+      // 重建旧链路（兼容遗留数据）
       disposeGroup('links')
       buildLinks()
+
+      // 同步重建 topo 图模型连线，避免设备拖动后需刷新页面才更新
+      await loadFiberData()
+      if (isEditMode.value) {
+        buildPortAnchors()
+      }
 
       // 清除高亮
       if (selectedModel) {
