@@ -344,7 +344,6 @@
             <el-checkbox v-model="showPhysicalTopology">{{ t('showPhysicalTopology') }}</el-checkbox>
             <el-checkbox v-model="showDataLinks">{{ t('showDataLinks') }}</el-checkbox>
             <el-checkbox v-model="showLabels">{{ t('showLabels') }}</el-checkbox>
-            <el-checkbox v-model="showLinks">{{ t('showLinks') }}</el-checkbox>
             <div class="tilt-control">
               <span>{{ t('floorPlanTilt') }}:</span>
               <el-slider v-model="floorTiltAngle" :min="0" :max="90" :step="5" :show-tooltip="true" size="small" />
@@ -434,7 +433,6 @@ const selectedDevice = ref(null)
 const filterType = ref('')
 const filterStatus = ref('')
 const showLabels = ref(true)
-const showLinks = ref(true)
 const showPhysicalTopology = ref(true)  // 显示物理拓扑（光纤）
 const showDataLinks = ref(true)         // 显示数据链路（设备间连接）
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
@@ -4242,19 +4240,10 @@ watch([showPhysicalTopology, showDataLinks], () => {
 
   // 数据链路
   if (ctx.value.linkLines) {
-    ctx.value.linkLines.visible = showDataLinks.value && showLinks.value
+    ctx.value.linkLines.visible = showDataLinks.value
   }
   if (ctx.value.dataLinkPaths) {
     ctx.value.dataLinkPaths.visible = showDataLinks.value
-  }
-})
-
-// 监听图层控制 - 只控制 links 组（直接链路线）
-// 注意：当 showDataLinks 为 false 时，links 组已被 dispose，此 watch 无效
-watch(showLinks, (val) => {
-  if (ctx.value.linkLines && ctx.value.linkLines.parent) {
-    // 只有当 group 还在 scene 中时才设置 visible
-    ctx.value.linkLines.visible = val
   }
 })
 
