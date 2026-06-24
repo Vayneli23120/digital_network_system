@@ -2498,6 +2498,9 @@ const topoEdges = ref([])      // 拓扑边数据
 // 加载设备端口和拓扑数据
 async function loadTopoData() {
   try {
+    // 先幂等补建所有设备的端口及端口拓扑节点（兼容旧设备），确保连线可用
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/ensure-topo-ports`).catch(() => {})
+
     // 加载设备端口（每个设备一个默认端口）
     const portsPromises = devices.value.map(d =>
       axios.get(`/api/devices/${d.id}/ports`).catch(() => ({ data: { items: [] } }))

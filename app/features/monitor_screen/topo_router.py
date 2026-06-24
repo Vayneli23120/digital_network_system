@@ -164,6 +164,27 @@ async def delete_device_port(
     return {"message": "端口删除成功"}
 
 
+@router.post("/floor-plans/{plan_id}/ensure-topo-ports")
+async def ensure_plan_topo_ports(plan_id: int, db: Session = Depends(get_db)):
+    """为平面图上所有已放置设备补建端口及端口 TopoNode（幂等）。
+
+    用于回填在自动建端口逻辑之前放置的旧设备，确保端口到端口连线可用。
+    """
+    from app.shared.models import DeviceNode
+    from .topo_service import ensure_device_topo_ports
+
+    device_nodes = db.query(DeviceNode).filter(
+        DeviceNode.floor_plan_id == plan_id
+    ).all()
+
+    created = 0
+    for dn in device_nodes:
+        nodes = ensure_device_topo_ports(db, plan_id, dn.device_id)
+        created += len(nodes)
+    db.commit()
+    return {"message": "端口拓扑节点已补建", "device_count": len(device_nodes), "port_node_count": created}
+
+
 # ============ 拓扑节点管理 API ============
 
 @router.get("/floor-plans/{plan_id}/topo-nodes")
