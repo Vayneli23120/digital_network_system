@@ -682,18 +682,6 @@ export function deleteDeviceNode(planId, nodeId) {
   return api.delete(`/floor-plans/${planId}/nodes/${nodeId}`)
 }
 
-export function getMonitorDeviceDetail(deviceId) {
-  return api.get(`/monitor-screen/device/${deviceId}/detail`)
-}
-
-export function getOfflineAlerts() {
-  return api.get('/monitor-screen/offline-alerts')
-}
-
-export function getMonitorStats() {
-  return api.get('/monitor-screen/stats')
-}
-
 // ============ 设备健康评分 API ============
 export function getHealthDashboard() {
   return api.get('/health/dashboard')

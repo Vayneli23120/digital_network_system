@@ -296,20 +296,6 @@ const routes = [
       }
     ]
   },
-  // v1.4 系统监控大屏
-  {
-    path: '/monitor-screen',
-    name: 'MonitorScreenLayout',
-    component: Layout,
-    children: [
-      {
-        path: '',
-        name: 'MonitorScreen',
-        component: () => import('@/views/MonitorScreen.vue'),
-        meta: { title: '系统监控大屏' }
-      }
-    ]
-  },
   // 3D 数字孪生监控大屏
   {
     path: '/monitor-3d',

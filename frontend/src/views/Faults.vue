@@ -815,7 +815,7 @@ const viewDetail = (row) => {
 }
 
 const locateDevice = (row) => {
-  router.push(`/monitor-screen?device_id=${row.device_id}`)
+  router.push(`/monitor-3d?device_id=${row.device_id}`)
 }
 
 const resetForm = () => {
