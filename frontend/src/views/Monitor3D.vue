@@ -2941,11 +2941,15 @@ function onCanvasMouseDown(e) {
   if (ctx.value.portAnchors) {
     const anchorHits = raycaster.intersectObjects(ctx.value.portAnchors.children, false)
     if (anchorHits.length > 0) {
-      const sphere = anchorHits[0].object
-      if (sphere.userData.portAnchor) {
-        onPortAnchorMouseDown(sphere.userData.portAnchor)
-        controls.enabled = false
-        return
+      // 默认优先允许拖动设备；按住 Ctrl/Meta 再点击锚点才进入连线态
+      // 这样在设备缩得很小时，锚点不会挡住设备拖拽
+      if (e.ctrlKey || e.metaKey) {
+        const sphere = anchorHits[0].object
+        if (sphere.userData.portAnchor) {
+          onPortAnchorMouseDown(sphere.userData.portAnchor)
+          controls.enabled = false
+          return
+        }
       }
     }
   }
