@@ -1938,6 +1938,9 @@ function handleWheel(e) {
 // 初始化场景
 function initScene() {
   const host = canvasHost.value
+  if (!host) return
+  // 清除可能残留的旧画布（HMR/重复挂载防护，避免画布堆叠导致设备等重影）
+  while (host.firstChild) host.removeChild(host.firstChild)
   const W = host.clientWidth
   const H = host.clientHeight
 
@@ -2168,12 +2171,8 @@ async function loadFloorPlanTexture() {
 function buildDeviceModels() {
   const { scene } = ctx.value
 
-  // 清除旧设备组
-  const oldGroup = scene?.getObjectByName('devices')
-  if (oldGroup) {
-    oldGroup.traverse(o => { o.geometry?.dispose?.(); o.material?.dispose?.() })
-    scene.remove(oldGroup)
-  }
+  // 清除旧设备组（移除所有同名组，防止重复累积）
+  disposeGroup('devices')
 
   const group = new THREE.Group()
   group.name = 'devices'
@@ -2198,18 +2197,21 @@ function buildDeviceModels() {
 
 // 清理组资源
 function disposeGroup(name) {
-  const { scene, labelRenderer } = ctx.value
-  const g = scene?.getObjectByName(name)
-  if (!g) return
-  g.traverse(o => {
-    // 清理 CSS2DObject 的 DOM 元素
-    if (o.element && o.element.parentNode) {
-      o.element.parentNode.removeChild(o.element)
-    }
-    o.geometry?.dispose?.()
-    o.material?.dispose?.()
+  const { scene } = ctx.value
+  if (!scene) return
+  // 移除所有同名直接子组（防止同名组残留导致重复渲染）
+  const groups = scene.children.filter(o => o.name === name)
+  groups.forEach(g => {
+    g.traverse(o => {
+      // 清理 CSS2DObject 的 DOM 元素
+      if (o.element && o.element.parentNode) {
+        o.element.parentNode.removeChild(o.element)
+      }
+      o.geometry?.dispose?.()
+      o.material?.dispose?.()
+    })
+    scene.remove(g)
   })
-  scene.remove(g)
 }
 
 // 重建场景（底图切换或节点变化后）
