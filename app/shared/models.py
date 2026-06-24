@@ -658,8 +658,6 @@ class FloorPlan(Base):
 
     # 关系
     nodes = relationship("DeviceNode", back_populates="floor_plan", cascade="all, delete-orphan")
-    links = relationship("DeviceLink", back_populates="floor_plan", cascade="all, delete-orphan")
-    fiber_trunks = relationship("FiberTrunkLink", back_populates="floor_plan", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<FloorPlan(name='{self.name}', id={self.id})>"
@@ -681,116 +679,9 @@ class DeviceNode(Base):
     # 关系
     device = relationship("Device", back_populates="nodes")
     floor_plan = relationship("FloorPlan", back_populates="nodes")
-    outgoing_links = relationship("DeviceLink", foreign_keys="[DeviceLink.from_node_id]", back_populates="from_node", cascade="all, delete-orphan")
-    incoming_links = relationship("DeviceLink", foreign_keys="[DeviceLink.to_node_id]", back_populates="to_node", cascade="all, delete-orphan")
 
     def __repr__(self):
         return f"<DeviceNode(device_id={self.device_id}, x={self.x_percent}, y={self.y_percent}, scale={self.scale})>"
-
-
-class DeviceLink(Base):
-    """设备链路(边)表 - 支持双上联、PortChannel、SVL 堆叠连线
-
-    架构背景:
-    - SVL 核心: 2× Cisco C9410 堆叠，link_role='svl' 连接两台核心
-    - 接入双上联: 每台接入交换机 2 条 PortChannel 成员链路，
-      link_role='portchannel-member', link_group='po-<接入设备id>'
-    """
-    __tablename__ = "device_links"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
-    from_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=True, index=True)  # 下游(接入)，NULL表示从分支点连接
-    to_node_id = Column(Integer, ForeignKey("device_nodes.id", ondelete="CASCADE"), nullable=False, index=True)    # 上游(核心)
-    link_role = Column(String(20), default="uplink", nullable=False)   # uplink / svl / portchannel-member / fiber_branch
-    link_group = Column(String(40), nullable=True, index=True)         # PortChannel 成员共享 group id
-    link_type = Column(String(20), default="fiber", nullable=False)    # fiber / ethernet / wireless
-    waypoints = Column(Text, nullable=True)                            # 正交折线人工拐点 JSON '[{"x":30,"y":40},...]'
-
-    # 预接式光纤分支相关
-    branch_point_id = Column(Integer, ForeignKey("fiber_branch_points.id", ondelete="SET NULL"), nullable=True, index=True)  # 所属分支点
-    logical_uplink_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)  # 逻辑上联设备
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # 关系
-    floor_plan = relationship("FloorPlan", back_populates="links")
-    from_node = relationship("DeviceNode", foreign_keys=[from_node_id], back_populates="outgoing_links")
-    to_node = relationship("DeviceNode", foreign_keys=[to_node_id], back_populates="incoming_links")
-    branch_point = relationship("FiberBranchPoint", back_populates="branch_links")
-    logical_uplink_device = relationship("Device", foreign_keys=[logical_uplink_device_id])
-
-    def __repr__(self):
-        return f"<DeviceLink(id={self.id}, role={self.link_role}, group={self.link_group})>"
-
-
-# =============================================================================
-# 预接式光纤主干+分支拓扑
-# =============================================================================
-
-class FiberTrunkLink(Base):
-    """主干光缆表 - 预接式光纤主路由
-
-    主干光缆特点：
-    - 从核心交换机位置出发，延伸到各楼层/区域
-    - 主干本身是"光纤路由线"，不连接设备
-    - 主干沿途有多个分支点
-    """
-    __tablename__ = "fiber_trunk_links"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    floor_plan_id = Column(Integer, ForeignKey("floor_plans.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(50), nullable=True)  # 主干名称（如"主干-楼层A"）
-
-    # 起点（百分比坐标）
-    start_x_percent = Column(Float, nullable=False)
-    start_y_percent = Column(Float, nullable=False)
-    start_device_id = Column(Integer, ForeignKey("devices.id"), nullable=True)  # 可选：起点的核心设备
-
-    # 终点（百分比坐标）
-    end_x_percent = Column(Float, nullable=False)
-    end_y_percent = Column(Float, nullable=False)
-
-    # 主干走向拐点
-    waypoints = Column(Text, nullable=True)  # '[{"x":30,"y":40},...]'
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # 关系
-    floor_plan = relationship("FloorPlan", back_populates="fiber_trunks")
-    branch_points = relationship("FiberBranchPoint", back_populates="trunk_link", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<FiberTrunkLink(id={self.id}, name={self.name})>"
-
-
-class FiberBranchPoint(Base):
-    """光纤分支点表 - 主干上的分支节点
-
-    分支点是主干光缆上的虚拟节点（不是物理设备）
-    从分支点引出分支光缆连接到实际设备
-    """
-    __tablename__ = "fiber_branch_points"
-
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    trunk_link_id = Column(Integer, ForeignKey("fiber_trunk_links.id", ondelete="CASCADE"), nullable=False, index=True)
-    name = Column(String(50), nullable=True)  # 分支点名称（如"分支-1F-A"）
-    position_percent = Column(Float, nullable=False)  # 在主干上的位置百分比 (0-100)
-
-    # 分支点实际坐标（由 position_percent 计算，或用户微调）
-    x_percent = Column(Float, nullable=True)
-    y_percent = Column(Float, nullable=True)
-
-    created_at = Column(DateTime, default=datetime.utcnow)
-
-    # 关系
-    trunk_link = relationship("FiberTrunkLink", back_populates="branch_points")
-    branch_links = relationship("DeviceLink", back_populates="branch_point", cascade="all, delete-orphan")
-
-    def __repr__(self):
-        return f"<FiberBranchPoint(id={self.id}, trunk={self.trunk_link_id}, pos={self.position_percent})>"
 
 
 # =============================================================================

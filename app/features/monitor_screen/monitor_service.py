@@ -10,8 +10,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, desc, case
 import json
 
-from app.shared.models import Device, FloorPlan, DeviceNode, DeviceLink, BackupRecord, FaultRecord
-from .link_path_service import calculate_device_paths_to_core
+from app.shared.models import Device, FloorPlan, DeviceNode, BackupRecord, FaultRecord
+from .topo_service import ensure_device_topo_ports, sync_device_port_node_positions
 
 
 def get_floor_plans(db: Session) -> List[Dict[str, Any]]:
@@ -162,6 +162,9 @@ def create_device_node(db: Session, plan_id: int, device_id: int, x_percent: flo
         existing.x_percent = x_percent
         existing.y_percent = y_percent
         existing.updated_at = datetime.utcnow()
+        # 确保端口节点存在并同步到新位置（图寻路基础）
+        ensure_device_topo_ports(db, plan_id, device_id)
+        sync_device_port_node_positions(db, plan_id, device_id)
         db.commit()
         db.refresh(existing)
         return {
@@ -181,6 +184,9 @@ def create_device_node(db: Session, plan_id: int, device_id: int, x_percent: flo
         y_percent=y_percent,
     )
     db.add(node)
+    db.flush()
+    # 自动为设备创建默认上行端口 + 端口拓扑节点（PNetLab 式图模型基础）
+    ensure_device_topo_ports(db, plan_id, device_id)
     db.commit()
     db.refresh(node)
     return {
@@ -212,6 +218,8 @@ def update_device_node(db: Session, plan_id: int, node_id: int, x_percent: float
         node.scale = max(0.5, min(3.0, scale))
 
     node.updated_at = datetime.utcnow()
+    # 设备移动/缩放后同步端口拓扑节点坐标，链路端点随之联动
+    sync_device_port_node_positions(db, plan_id, node.device_id)
     db.commit()
     db.refresh(node)
     return {
@@ -224,172 +232,37 @@ def update_device_node(db: Session, plan_id: int, node_id: int, x_percent: float
 
 
 def delete_device_node(db: Session, plan_id: int, node_id: int) -> bool:
-    """删除设备节点"""
+    """删除设备节点（连带清理该平面图上的端口拓扑节点及相连的边）"""
+    from app.shared.models import TopoNode, TopoEdge, DevicePort
+
     node = db.query(DeviceNode).filter(
         DeviceNode.floor_plan_id == plan_id,
         DeviceNode.id == node_id
     ).first()
     if not node:
         return False
+
+    # 找出该设备在本平面图上的端口拓扑节点
+    port_nodes = db.query(TopoNode).join(
+        DevicePort, TopoNode.port_id == DevicePort.id
+    ).filter(
+        TopoNode.floor_plan_id == plan_id,
+        TopoNode.node_kind == "port",
+        DevicePort.device_id == node.device_id,
+    ).all()
+    port_node_ids = [n.id for n in port_nodes]
+
+    if port_node_ids:
+        # 删除连接到这些端口节点的边
+        db.query(TopoEdge).filter(
+            TopoEdge.floor_plan_id == plan_id,
+            (TopoEdge.a_node_id.in_(port_node_ids)) | (TopoEdge.b_node_id.in_(port_node_ids)),
+        ).delete(synchronize_session=False)
+        # 删除端口拓扑节点
+        for n in port_nodes:
+            db.delete(n)
+
     db.delete(node)
-    db.commit()
-    return True
-
-
-def list_device_links(db: Session, plan_id: int) -> List[Dict[str, Any]]:
-    """获取平面图上的所有设备链路"""
-    links = db.query(DeviceLink).filter(DeviceLink.floor_plan_id == plan_id).all()
-    return [
-        {
-            "id": l.id,
-            "floor_plan_id": l.floor_plan_id,
-            "from_node_id": l.from_node_id,
-            "to_node_id": l.to_node_id,
-            "link_role": l.link_role,
-            "link_group": l.link_group,
-            "link_type": l.link_type,
-            "waypoints": json.loads(l.waypoints) if l.waypoints else None,
-            "created_at": l.created_at.isoformat() if l.created_at else None,
-        }
-        for l in links
-    ]
-
-
-def create_device_link(
-    db: Session,
-    plan_id: int,
-    from_node_id: int,
-    to_node_id: int,
-    link_role: str = "uplink",
-    link_group: Optional[str] = None,
-    link_type: str = "fiber"
-) -> Optional[Dict[str, Any]]:
-    """创建设备链路
-
-    校验规则：
-    - 两端节点必须属于该平面图
-    - 禁止自环（from_node_id != to_node_id）
-    - link_role 必须在白名单内（uplink/svl/portchannel-member）
-    - 防止重复链路（同方向同两端）
-    """
-    # 校验 link_role 白名单
-    valid_roles = ["uplink", "svl", "portchannel-member"]
-    if link_role not in valid_roles:
-        return None
-
-    # 校验自环
-    if from_node_id == to_node_id:
-        return None
-
-    # 校验两端节点属于该平面图
-    from_node = db.query(DeviceNode).filter(
-        DeviceNode.id == from_node_id,
-        DeviceNode.floor_plan_id == plan_id
-    ).first()
-    to_node = db.query(DeviceNode).filter(
-        DeviceNode.id == to_node_id,
-        DeviceNode.floor_plan_id == plan_id
-    ).first()
-
-    if not from_node or not to_node:
-        return None
-
-    # 校验重复链路（同方向）
-    existing = db.query(DeviceLink).filter(
-        DeviceLink.floor_plan_id == plan_id,
-        DeviceLink.from_node_id == from_node_id,
-        DeviceLink.to_node_id == to_node_id,
-    ).first()
-    if existing:
-        # 更新已有链路而非重复创建
-        existing.link_role = link_role
-        existing.link_group = link_group
-        existing.link_type = link_type
-        db.commit()
-        db.refresh(existing)
-        return {
-            "id": existing.id,
-            "from_node_id": from_node_id,
-            "to_node_id": to_node_id,
-            "link_role": link_role,
-            "message": "链路已更新",
-        }
-
-    # 创建新链路
-    link = DeviceLink(
-        floor_plan_id=plan_id,
-        from_node_id=from_node_id,
-        to_node_id=to_node_id,
-        link_role=link_role,
-        link_group=link_group,
-        link_type=link_type,
-    )
-    db.add(link)
-    db.commit()
-    db.refresh(link)
-
-    return {
-        "id": link.id,
-        "from_node_id": from_node_id,
-        "to_node_id": to_node_id,
-        "link_role": link_role,
-        "link_group": link_group,
-        "message": "链路创建成功",
-    }
-
-
-def update_device_link(
-    db: Session,
-    plan_id: int,
-    link_id: int,
-    link_role: Optional[str] = None,
-    link_group: Optional[str] = None,
-    waypoints: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
-    """更新设备链路"""
-    link = db.query(DeviceLink).filter(
-        DeviceLink.floor_plan_id == plan_id,
-        DeviceLink.id == link_id
-    ).first()
-    if not link:
-        return None
-
-    # 校验 link_role 白名单
-    if link_role:
-        valid_roles = ["uplink", "svl", "portchannel-member"]
-        if link_role not in valid_roles:
-            return None
-        link.link_role = link_role
-
-    if link_group:
-        link.link_group = link_group
-
-    # waypoints 允许为空（用户清空所有拐点）
-    if waypoints is not None:
-        link.waypoints = waypoints
-
-    link.updated_at = datetime.utcnow()
-    db.commit()
-    db.refresh(link)
-
-    return {
-        "id": link.id,
-        "link_role": link.link_role,
-        "link_group": link.link_group,
-        "waypoints": link.waypoints,
-        "message": "链路更新成功",
-    }
-
-
-def delete_device_link(db: Session, plan_id: int, link_id: int) -> bool:
-    """删除设备链路"""
-    link = db.query(DeviceLink).filter(
-        DeviceLink.floor_plan_id == plan_id,
-        DeviceLink.id == link_id
-    ).first()
-    if not link:
-        return False
-    db.delete(link)
     db.commit()
     return True
 
@@ -576,13 +449,14 @@ def get_plan_snapshot(db: Session, plan_id: int) -> Dict[str, Any]:
 
 
 def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
-    """获取平面图拓扑数据 - 包含节点、链路、聚合组、影响传播
+    """获取平面图拓扑数据（Gen3 图模型）
 
-    返回用于前端渲染拓扑图的所有数据：
-    - nodes: 节点列表（包含位置、状态）
-    - links: 链路列表（包含角色、分组）
-    - groups: PortChannel/SVL 聚合组（逻辑链路）
-    - impacted_node_ids: 受影响节点 IDs（冗余感知）
+    返回用于前端渲染数字孪生拓扑的所有数据：
+    - nodes: 设备节点（位置 + 可达性状态）
+    - topo_nodes: 拓扑节点（设备端口 port + 接头/分支点 junction）
+    - topo_edges: 拓扑边（线缆，自带拐点 waypoints）
+    - cables: 按 cable_id 聚合的光缆（主干/分支）
+    - device_paths: 各设备沿真实 TopoEdge 拓扑到核心的图寻路折线
 
     Args:
         db: 数据库会话
@@ -591,253 +465,23 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
     Returns:
         拓扑数据字典
     """
-    # 获取所有节点
+    from .topo_service import get_topo_nodes, get_topo_edges, get_cables
+    from .graph_path_service import calculate_all_device_paths
+
     nodes = get_floor_plan_nodes(db, plan_id)
-    node_map = {n["device_id"]: n for n in nodes}
-
-    # 获取所有链路
-    links = db.query(DeviceLink).filter(DeviceLink.floor_plan_id == plan_id).all()
-
-    # 获取该平面图的所有 DeviceNode，避免 N+1 查询
-    device_nodes = db.query(DeviceNode).filter(DeviceNode.floor_plan_id == plan_id).all()
-    device_node_map = {dn.id: dn for dn in device_nodes}
-
-    # 构建链路列表
-    link_list = []
-    for link in links:
-        # 从内存字典获取节点信息（避免 N+1）
-        from_node = device_node_map.get(link.from_node_id)
-        to_node = device_node_map.get(link.to_node_id)
-
-        if not from_node or not to_node:
-            continue
-
-        # 获取设备状态
-        from_device = node_map.get(from_node.device_id)
-        to_device = node_map.get(to_node.device_id)
-
-        link_list.append({
-            "id": link.id,
-            "from": from_node.device_id,
-            "to": to_node.device_id,
-            "from_node_id": from_node.id,
-            "to_node_id": to_node.id,
-            "link_role": link.link_role,
-            "link_group": link.link_group,
-            "link_type": link.link_type,
-            "waypoints": json.loads(link.waypoints) if link.waypoints else None,
-            "status": _calculate_link_status(from_device, to_device, link.link_role, link.link_group),
-        })
-
-    # 构建聚合组（PortChannel/SVL）
-    groups = _build_link_groups(link_list)
-
-    # 计算受影响节点（冗余感知）
-    impacted_node_ids = _propagate_impact(nodes, link_list, groups)
-
-    # 获取主干光缆数据
-    fiber_trunks = _get_fiber_trunks(db, plan_id)
-
-    # 获取分支点数据
-    fiber_branch_points = _get_fiber_branch_points(db, plan_id)
-
-    # 获取分支光缆数据
-    fiber_branch_links = _get_fiber_branch_links(db, plan_id, device_node_map)
-
-    # 计算设备路径（沿着光纤拓扑）
-    device_paths = calculate_device_paths_to_core(db, plan_id)
+    topo_nodes = get_topo_nodes(db, plan_id)
+    topo_edges = get_topo_edges(db, plan_id)
+    cables = get_cables(db, plan_id)
+    device_paths = calculate_all_device_paths(db, plan_id)
 
     return {
         "nodes": nodes,
-        "links": link_list,
-        "groups": groups,
-        "impacted_node_ids": impacted_node_ids,
-        "fiber_trunks": fiber_trunks,
-        "fiber_branch_points": fiber_branch_points,
-        "fiber_branch_links": fiber_branch_links,
+        "topo_nodes": topo_nodes,
+        "topo_edges": topo_edges,
+        "cables": cables,
         "device_paths": device_paths,
         "timestamp": datetime.utcnow().isoformat(),
     }
-
-
-def _calculate_link_status(
-    from_device: Optional[Dict],
-    to_device: Optional[Dict],
-    link_role: str,
-    link_group: Optional[str]
-) -> str:
-    """计算单条链路状态
-
-    ⚠️ 设计限制说明（诚实兜底）：
-    当前使用"两端设备 ICMP 可达性"推导链路状态，这在双上联冗余场景有盲区：
-    - PortChannel 单条成员物理断开时，两端设备仍 reachable（设备活着，只是某条链路 down）
-    - 因此"链路降级(degraded)"状态目前无法真实检测
-
-    真正的 PortChannel 成员状态需要接口级采集（SNMP/CLI show etherchannel summary），
-    这属于 P2-3"实时指标叠加"的工作，届时会新增 DeviceLink.member_status 字段。
-
-    当前策略：诚实兜底，只返回 normal/broken，不假装能检测 degraded。
-    - normal: 两端设备都 reachable（设备级在线）
-    - broken: 任一端 unreachable（设备级离线）
-
-    Args:
-        from_device: 下游设备信息
-        to_device: 上游设备信息
-        link_role: 链路角色
-        link_group: 链路分组
-
-    Returns:
-        状态: normal / broken（诚实兜底，暂无 degraded）
-    """
-    if not from_device or not to_device:
-        return "broken"
-
-    from_status = from_device.get("reachability", "unknown")
-    to_status = to_device.get("reachability", "unknown")
-
-    # 任一端 unreachable 则链路断开（设备级离线）
-    if from_status == "unreachable" or to_status == "unreachable":
-        return "broken"
-
-    # 两端都 reachable 则正常（设备级在线）
-    # 注意：这里不检测 degraded，因为 ICMP 无法感知单链路物理断开
-    if from_status == "reachable" and to_status == "reachable":
-        return "normal"
-
-    # unknown 状态暂时也返回 normal（保守策略，避免误报断链）
-    return "normal"
-
-
-def _build_link_groups(links: List[Dict]) -> List[Dict]:
-    """构建链路聚合组
-
-    ⚠️ 设计限制说明（诚实兜底）：
-    真正的 PortChannel 成员状态（接口 up/down）需要 SNMP/CLI 采集（P2-3）。
-    当前基于设备 ICMP 可达性推导，无法检测"单成员物理断开"的降级场景。
-    因此聚合组只判定：
-    - broken: 所有成员的端设备都 unreachable（设备级离线）
-    - normal: 至少有一个成员两端设备都 reachable（设备级在线）
-
-    将接口级采集列入 P2-3，届时可真正检测部分成员失效的 degraded 状态。
-
-    Args:
-        links: 链路列表
-
-    Returns:
-        聚合组列表
-    """
-    groups = {}
-
-    for link in links:
-        group_id = link.get("link_group")
-        if not group_id:
-            continue
-
-        if group_id not in groups:
-            groups[group_id] = {
-                "link_group": group_id,
-                "member_link_ids": [],
-                "member_links": [],
-                "link_role": link["link_role"],
-            }
-
-        groups[group_id]["member_link_ids"].append(link["id"])
-        groups[group_id]["member_links"].append(link)
-
-    # 计算每组逻辑状态（诚实兜底：暂无 degraded）
-    result = []
-    for group_id, group in groups.items():
-        # 统计成员状态
-        broken_count = sum(1 for l in group["member_links"] if l["status"] == "broken")
-        total_count = len(group["member_links"])
-
-        # 诚实判定：只有全部设备级离线才判 broken
-        # 单成员物理断开（设备仍活着）目前无法检测，暂不判 degraded
-        if broken_count == total_count and total_count > 0:
-            group["logical_status"] = "broken"
-        else:
-            group["logical_status"] = "normal"
-
-        result.append(group)
-
-    return result
-
-
-def _propagate_impact(
-    nodes: List[Dict],
-    links: List[Dict],
-    groups: List[Dict]
-) -> List[int]:
-    """冗余感知的影响传播计算
-
-    核心业务逻辑：
-    - 接入单上联断: 链路降级(黄)，设备不报离线
-    - 接入双上联全断: 接入失联(红)
-    - SVL 单核心宕: 核心红，下游不连带
-    - SVL 双核心全宕: 全厂中断(橙)
-
-    Args:
-        nodes: 节点列表
-        links: 链路列表
-        groups: 聚合组列表
-
-    Returns:
-        受影响节点 device_id 列表（橙色脉冲，区别于自身 unreachable）
-    """
-    # 构建上游依赖图
-    # downstream_to_upstreams: {下游device_id: [上游device_id列表]}
-    downstream_to_upstreams = {}
-
-    # PortChannel 组状态映射
-    group_status = {g["link_group"]: g["logical_status"] for g in groups}
-
-    for link in links:
-        if link["link_role"] == "svl":
-            # SVL 链路特殊处理，不计入下游依赖
-            continue
-
-        from_id = link["from"]
-        to_id = link["to"]
-
-        if from_id not in downstream_to_upstreams:
-            downstream_to_upstreams[from_id] = []
-
-        # PortChannel 成员按组状态判定
-        if link["link_role"] == "portchannel-member" and link["link_group"]:
-            # 使用组逻辑状态而非单链路状态
-            group_id = link["link_group"]
-            effective_status = group_status.get(group_id, "normal")
-
-            if effective_status == "broken":
-                # 组完全断开，计入失效上游
-                downstream_to_upstreams[from_id].append((to_id, "broken"))
-            else:
-                # 组正常（当前无 degraded，诚实兜底）
-                downstream_to_upstreams[from_id].append((to_id, "normal"))
-        else:
-            # 普通 uplink
-            downstream_to_upstreams[from_id].append((to_id, link["status"]))
-
-    # 计算受影响节点
-    impacted = set()
-    node_status = {n["device_id"]: n.get("reachability", "unknown") for n in nodes}
-
-    for downstream_id, upstreams in downstream_to_upstreams.items():
-        # 自身 unreachable 的节点不算"受影响"，直接离线
-        if node_status.get(downstream_id) == "unreachable":
-            continue
-
-        # 统计上游状态
-        broken_upstreams = [u for u, s in upstreams if s == "broken"]
-
-        if len(broken_upstreams) == len(upstreams) and len(upstreams) > 0:
-            # 所有上游都失效 → 下游受影响（橙色）
-            impacted.add(downstream_id)
-        elif len(broken_upstreams) > 0:
-            # 部分上游失效 → 链路降级，设备不受影响
-            pass
-
-    return list(impacted)
 
 
 def get_global_summary(db: Session) -> Dict[str, Any]:
@@ -873,16 +517,9 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
     # 计算健康度（reachable / total）
     health_score = round((reachable / total * 100) if total > 0 else 100, 1)
 
-    # 统计受影响设备（聚合所有平面图）
-    # 注意：degraded_links 暂时恒为0，因为 ICMP 无法检测 PortChannel 单成员断开
-    # 待 P2-3 接口级采集后再启用
+    # 受影响设备：接口级采集（P2-3）落地前暂恒 0
+    # Gen3 图模型下，"受影响"应由图寻路连通性推导，待实时指标叠加阶段启用
     impacted_devices = 0
-
-    plans = db.query(FloorPlan).all()
-    for plan in plans:
-        topology = get_plan_topology(db, plan.id)
-        # 统计受影响设备
-        impacted_devices += len(topology.get("impacted_node_ids", []))
 
     # 活跃告警数（未关闭的告警）
     # 注意：项目使用 FaultRecord 存储故障，AlertRecord 不存在
@@ -906,72 +543,3 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         "active_alerts": active_alerts,
         "timestamp": datetime.utcnow().isoformat(),
     }
-
-
-# ============ 预接式光纤主干+分支辅助函数 ============
-
-def _get_fiber_trunks(db: Session, plan_id: int) -> List[Dict[str, Any]]:
-    """获取主干光缆列表"""
-    from app.shared.models import FiberTrunkLink
-    import json
-
-    trunks = db.query(FiberTrunkLink).filter(
-        FiberTrunkLink.floor_plan_id == plan_id
-    ).all()
-
-    return [
-        {
-            "id": t.id,
-            "name": t.name,
-            "start_x_percent": t.start_x_percent,
-            "start_y_percent": t.start_y_percent,
-            "start_device_id": t.start_device_id,
-            "end_x_percent": t.end_x_percent,
-            "end_y_percent": t.end_y_percent,
-            "waypoints": json.loads(t.waypoints) if t.waypoints else None,
-        }
-        for t in trunks
-    ]
-
-
-def _get_fiber_branch_points(db: Session, plan_id: int) -> List[Dict[str, Any]]:
-    """获取分支点列表"""
-    from app.shared.models import FiberBranchPoint, FiberTrunkLink
-
-    branch_points = db.query(FiberBranchPoint).join(FiberTrunkLink).filter(
-        FiberTrunkLink.floor_plan_id == plan_id
-    ).all()
-
-    return [
-        {
-            "id": bp.id,
-            "trunk_link_id": bp.trunk_link_id,
-            "name": bp.name,
-            "position_percent": bp.position_percent,
-            "x_percent": bp.x_percent,
-            "y_percent": bp.y_percent,
-        }
-        for bp in branch_points
-    ]
-
-
-def _get_fiber_branch_links(db: Session, plan_id: int, device_node_map: Dict) -> List[Dict[str, Any]]:
-    """获取分支光缆列表"""
-    branch_links = db.query(DeviceLink).filter(
-        DeviceLink.floor_plan_id == plan_id,
-        DeviceLink.link_role == "fiber_branch"
-    ).all()
-
-    result = []
-    for link in branch_links:
-        to_node = device_node_map.get(link.to_node_id)
-        result.append({
-            "id": link.id,
-            "branch_point_id": link.branch_point_id,
-            "to_device_id": to_node.device_id if to_node else None,
-            "to_node_id": link.to_node_id,
-            "logical_uplink_device_id": link.logical_uplink_device_id,
-            "waypoints": json.loads(link.waypoints) if link.waypoints else None,
-        })
-
-    return result

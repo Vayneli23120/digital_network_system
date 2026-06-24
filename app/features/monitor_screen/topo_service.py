@@ -19,6 +19,118 @@ from app.shared.models import (
 )
 
 
+# ========== 设备端口自动化（PNetLab 式图模型基础） ==========
+
+# 设备图标占平面的百分比尺寸，用于把端口锚点换算成平面坐标偏移
+PORT_ICON_SIZE = 3.0
+
+# 每台设备默认创建的上行端口（预留扩展：后期可增删端口）
+# anchor_x/anchor_y 为端口在设备图标上的相对位置（0-1，0.5=中心）
+# 上行端口放在图标顶部两侧，朝向核心方向
+DEFAULT_UPLINK_PORTS = [
+    {"name": "Uplink-1", "anchor_x": 0.3, "anchor_y": 0.0},
+    {"name": "Uplink-2", "anchor_x": 0.7, "anchor_y": 0.0},
+]
+
+
+def resolve_port_node_position(device_node: DeviceNode, anchor_x: float, anchor_y: float) -> Tuple[float, float]:
+    """根据设备节点坐标 + 端口锚点计算端口节点的平面坐标（单一真理源）。
+
+    端口节点坐标永远由"设备坐标 + 锚点偏移"推导，设备一移动端口随之移动，
+    避免端口坐标与设备坐标发散。
+    """
+    base_x = float(device_node.x_percent)
+    base_y = float(device_node.y_percent)
+    scale = float(device_node.scale) if device_node.scale else 1.0
+    size = PORT_ICON_SIZE * scale
+    return (
+        base_x + (float(anchor_x) - 0.5) * size,
+        base_y + (float(anchor_y) - 0.5) * size,
+    )
+
+
+def ensure_device_topo_ports(db: Session, plan_id: int, device_id: int) -> List[TopoNode]:
+    """确保设备在该平面图上拥有端口及对应的端口 TopoNode。
+
+    - 若设备尚无任何端口，按 DEFAULT_UPLINK_PORTS 创建默认上行端口。
+    - 为每个端口确保存在一个 node_kind='port' 的 TopoNode（图寻路依赖它）。
+
+    返回端口 TopoNode 列表。调用方负责 commit。
+    """
+    device_node = db.query(DeviceNode).filter(
+        DeviceNode.device_id == device_id,
+        DeviceNode.floor_plan_id == plan_id,
+    ).first()
+    if not device_node:
+        return []
+
+    # 1. 确保设备有端口（全局，不分平面图）
+    ports = db.query(DevicePort).filter(DevicePort.device_id == device_id).all()
+    if not ports:
+        ports = []
+        for spec in DEFAULT_UPLINK_PORTS:
+            p = DevicePort(
+                device_id=device_id,
+                name=spec["name"],
+                port_type="fiber",
+                anchor_x=spec["anchor_x"],
+                anchor_y=spec["anchor_y"],
+                is_auto_created=True,
+            )
+            db.add(p)
+            ports.append(p)
+        db.flush()
+
+    # 2. 为每个端口确保 TopoNode(port)（按平面图）
+    port_nodes: List[TopoNode] = []
+    for p in ports:
+        node = db.query(TopoNode).filter(
+            TopoNode.floor_plan_id == plan_id,
+            TopoNode.node_kind == "port",
+            TopoNode.port_id == p.id,
+        ).first()
+        if not node:
+            x, y = resolve_port_node_position(device_node, p.anchor_x, p.anchor_y)
+            node = TopoNode(
+                floor_plan_id=plan_id,
+                node_kind="port",
+                port_id=p.id,
+                x_percent=x,
+                y_percent=y,
+                label=p.name,
+            )
+            db.add(node)
+        port_nodes.append(node)
+    db.flush()
+    return port_nodes
+
+
+def sync_device_port_node_positions(db: Session, plan_id: int, device_id: int) -> None:
+    """设备移动/缩放后，同步其所有端口 TopoNode 的坐标。调用方负责 commit。"""
+    device_node = db.query(DeviceNode).filter(
+        DeviceNode.device_id == device_id,
+        DeviceNode.floor_plan_id == plan_id,
+    ).first()
+    if not device_node:
+        return
+
+    port_nodes = db.query(TopoNode).join(
+        DevicePort, TopoNode.port_id == DevicePort.id
+    ).filter(
+        TopoNode.floor_plan_id == plan_id,
+        TopoNode.node_kind == "port",
+        DevicePort.device_id == device_id,
+    ).all()
+
+    for node in port_nodes:
+        port = db.query(DevicePort).filter(DevicePort.id == node.port_id).first()
+        if port:
+            node.x_percent, node.y_percent = resolve_port_node_position(
+                device_node, port.anchor_x, port.anchor_y
+            )
+    db.flush()
+
+
 # ========== 光缆聚合查询 ==========
 
 def get_cables(db: Session, plan_id: int) -> List[Dict[str, Any]]:
