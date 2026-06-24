@@ -5,7 +5,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean,
-    DECIMAL, Float, ForeignKey, Index, CheckConstraint, Table
+    DECIMAL, Float, ForeignKey, Index, CheckConstraint, Table, UniqueConstraint
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -666,6 +666,9 @@ class FloorPlan(Base):
 class DeviceNode(Base):
     """设备节点表 - 存储设备在平面图上的位置和大小"""
     __tablename__ = "device_nodes"
+    __table_args__ = (
+        UniqueConstraint("floor_plan_id", "device_id", name="uq_device_node_plan_device"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)

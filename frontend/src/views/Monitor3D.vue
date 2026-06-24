@@ -66,7 +66,7 @@
       </el-select>
       <template #footer>
         <el-button @click="cancelBind">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="confirmBindDevice">{{ t('actionConfirm') }}</el-button>
+        <el-button type="primary" :loading="bindSubmitting" @click="confirmBindDevice">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
 
@@ -461,6 +461,7 @@ const deviceTemplates = [
 const showBindDialog = ref(false)
 const bindCandidates = ref([])
 const bindDeviceId = ref(null)
+const bindSubmitting = ref(false)
 let pendingPlacement = null  // { deviceType, x_percent, y_percent }
 
 // 链路拐点编辑相关
@@ -1825,6 +1826,8 @@ function cancelBind() {
 // 确认绑定设备
 async function confirmBindDevice() {
   if (!bindDeviceId.value || !pendingPlacement) return
+  if (bindSubmitting.value) return  // 防止双击重复提交
+  bindSubmitting.value = true
   try {
     await axios.post(`/api/floor-plans/${currentPlanId.value}/nodes`, {
       device_id: bindDeviceId.value,
@@ -1838,6 +1841,8 @@ async function confirmBindDevice() {
     rebuildScene()
   } catch (e) {
     ElMessage.error(t('msgUpdateFailed'))
+  } finally {
+    bindSubmitting.value = false
   }
 }
 
