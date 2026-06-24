@@ -255,7 +255,7 @@
                 <el-icon><Plus /></el-icon>
                 <span>{{ t('addFiberTrunk') }}</span>
               </button>
-              <button class="panel-action-btn" @click="startAddBranchPoint" v-if="fiberTrunks.length > 0">
+              <button class="panel-action-btn" @click="startAddBranchPoint" v-if="displayCables.length > 0">
                 <el-icon><Position /></el-icon>
                 <span>{{ t('addBranchPoint') }}</span>
               </button>
@@ -1563,6 +1563,37 @@ function buildTopoEdges() {
         edgeGroup.add(labelObj)
       }
     })
+  }
+
+  // 渲染 trunk_endpoint（主干起点终点，编辑模式下可拖拽）
+  if (isEditMode.value) {
+    const trunkEndpoints = topoNodes.value.filter(n => n.node_kind === 'junction' && n.junction_type === 'trunk_endpoint')
+    if (trunkEndpoints.length > 0) {
+      const epHeight = edgeHeight + edgeRadius * 2
+      const epRadius = edgeRadius * 4  // 起点终点球更大
+
+      trunkEndpoints.forEach(node => {
+        const epWorld = percentToWorld(node.x_percent, node.y_percent, epHeight)
+        const sphereGeo = new THREE.SphereGeometry(epRadius, 16, 16)
+        // 起点绿色，终点红色
+        const isStart = node.label && node.label.includes('起点')
+        const sphereMat = new THREE.MeshBasicMaterial({
+          color: isStart ? 0x22c55e : 0xef4444,
+          transparent: true,
+          opacity: 1.0,
+        })
+        const sphere = new THREE.Mesh(sphereGeo, sphereMat)
+        sphere.position.set(epWorld.x, epWorld.y, epWorld.z)
+        sphere.userData.topoEndpoint = {
+          nodeId: node.id,
+          type: isStart ? 'start' : 'end',
+          x: node.x_percent,
+          y: node.y_percent,
+        }
+        sphere.name = `topo-endpoint-${node.id}`
+        edgeGroup.add(sphere)
+      })
+    }
   }
 
   // 添加 cable_no 标签（只在编辑模式下显示）
@@ -2960,18 +2991,19 @@ function onCanvasMouseDown(e) {
     }
   }
 
-  // 检查是否点击了分支点球（可拖动调整位置）
-  if (branchPointGroup) {
-    const bpHits = raycaster.intersectObjects(branchPointGroup.children, false)
-    if (bpHits.length > 0) {
-      const sphere = bpHits[0].object
-      if (sphere.userData.branchPoint) {
-        const bp = sphere.userData.branchPoint
+  // 检查是否点击了分支点球（可拖动调整位置）- 新 topo 模型
+  if (ctx.value.topoEdgesGroup) {
+    const bpSpheres = ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoNode && c.userData.topoNode.junction_type === 'branch_point')
+    if (bpSpheres.length > 0) {
+      const bpHits = raycaster.intersectObjects(bpSpheres, false)
+      if (bpHits.length > 0) {
+        const sphere = bpHits[0].object
+        const node = sphere.userData.topoNode
 
         branchPointDragState = {
-          branchPointId: bp.id,
-          startX: bp.x_percent,
-          startY: bp.y_percent,
+          nodeId: node.id,
+          startX: node.x_percent,
+          startY: node.y_percent,
         }
         selectedBranchPointSphere = sphere
 
@@ -3013,6 +3045,35 @@ function onCanvasMouseDown(e) {
 
       renderer.domElement.addEventListener('mousemove', onBranchLinkWaypointDragMove)
       renderer.domElement.addEventListener('mouseup', onBranchLinkWaypointDragEnd)
+      return
+    }
+  }
+
+  // 检查是否点击了 TopoEndpoint（主干起点终点）
+  if (isEditMode.value && ctx.value.topoEdgesGroup) {
+    const endpointSpheres = ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEndpoint)
+    const epHits = raycaster.intersectObjects(endpointSpheres, false)
+
+    if (epHits.length > 0) {
+      const sphere = epHits[0].object
+      const ep = sphere.userData.topoEndpoint
+
+      topoEndpointDragState = {
+        nodeId: ep.nodeId,
+        type: ep.type,
+        startX: ep.x,
+        startY: ep.y,
+      }
+      selectedTopoEndpointSphere = sphere
+
+      // 高亮端点球
+      sphere.material.color.set(0x22d3ee)
+
+      controls.enabled = false
+      isDragging = false
+
+      renderer.domElement.addEventListener('mousemove', onTopoEndpointDragMove)
+      renderer.domElement.addEventListener('mouseup', onTopoEndpointDragEnd)
       return
     }
   }
@@ -3099,15 +3160,17 @@ function onCanvasMouseDown(e) {
   if (branchPointCreateMode.value && ctx.value.topoEdgesGroup) {
     const topoEdgeHits = raycaster.intersectObjects(ctx.value.topoEdgesGroup.children.filter(c => c.userData.topoEdge), false)
     if (topoEdgeHits.length > 0) {
-      const tube = topoEdgeHits[0].object
+      const hit = topoEdgeHits[0]
+      const tube = hit.object
       const edgeData = tube.userData.topoEdge
       if (edgeData && edgeData.cableId) {
-        const pos = screenToPercent(e)
-        if (pos) {
-          // 使用新的 topo API 创建分支点
-          addBranchPointOnTopoEdge(edgeData.cableId, { x: pos.x_percent, y: pos.y_percent })
-          branchPointCreateMode.value = false  // 添加完成后退出模式
-        }
+        // 直接使用射线与管体的交点坐标，而不是地面平面交点
+        const worldPos = hit.point
+        const x_percent = Math.max(0, Math.min(100, (worldPos.x / plan.real_width_m) * 100))
+        const y_percent = Math.max(0, Math.min(100, (worldPos.z / plan.real_depth_m) * 100))
+        // 使用新的 topo API 创建分支点
+        addBranchPointOnTopoEdge(edgeData.cableId, { x: x_percent, y: y_percent })
+        branchPointCreateMode.value = false  // 添加完成后退出模式
       }
       return
     }
@@ -3354,6 +3417,10 @@ async function onTrunkWaypointDragEnd(e) {
 let topoEdgeWaypointDragState = null
 let selectedTopoEdgeWaypointSphere = null
 
+// TopoEndpoint 拖拽状态
+let topoEndpointDragState = null
+let selectedTopoEndpointSphere = null
+
 function onTopoEdgeWaypointDragMove(e) {
   if (!topoEdgeWaypointDragState) return
   isDragging = true
@@ -3427,7 +3494,74 @@ async function onTopoEdgeWaypointDragEnd(e) {
   isDragging = false
 }
 
-// 主干端点拖动处理
+// ========== TopoEndpoint（主干起点终点）拖拽处理 ==========
+
+function onTopoEndpointDragMove(e) {
+  if (!topoEndpointDragState) return
+  isDragging = true
+
+  const pos = screenToPercent(e)
+  if (!pos) return
+
+  topoEndpointDragState._lastX = Math.max(0, Math.min(100, pos.x_percent))
+  topoEndpointDragState._lastY = Math.max(0, Math.min(100, pos.y_percent))
+
+  // 实时更新端点球位置
+  if (selectedTopoEndpointSphere) {
+    const edgeHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002
+    const edgeRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.001
+    const epHeight = edgeHeight + edgeRadius * 2
+    const w = percentToWorld(topoEndpointDragState._lastX, topoEndpointDragState._lastY, epHeight)
+    selectedTopoEndpointSphere.position.set(w.x, w.y, w.z)
+  }
+}
+
+async function onTopoEndpointDragEnd(e) {
+  if (!topoEndpointDragState) return
+
+  ctx.value.renderer.domElement.removeEventListener('mousemove', onTopoEndpointDragMove)
+  ctx.value.renderer.domElement.removeEventListener('mouseup', onTopoEndpointDragEnd)
+  ctx.value.controls.enabled = true
+
+  const { nodeId, type, _lastX, _lastY } = topoEndpointDragState
+
+  if (isDragging && _lastX != null && _lastY != null) {
+    try {
+      // 更新 TopoNode 位置
+      await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-nodes/${nodeId}`, {
+        x_percent: _lastX,
+        y_percent: _lastY,
+      })
+
+      // 更新本地数据
+      const node = topoNodes.value.find(n => n.id === nodeId)
+      if (node) {
+        node.x_percent = _lastX
+        node.y_percent = _lastY
+      }
+
+      // 重建拓扑边渲染
+      buildTopoEdges()
+
+      ElMessage.success(t('msgSaveSuccess'))
+    } catch (err) {
+      console.error('更新 TopoEndpoint 位置失败:', err)
+      ElMessage.error(t('msgUpdateFailed'))
+    }
+  }
+
+  // 恢复端点球颜色
+  if (selectedTopoEndpointSphere) {
+    const isStart = selectedTopoEndpointSphere.userData.topoEndpoint.type === 'start'
+    selectedTopoEndpointSphere.material.color.set(isStart ? 0x22c55e : 0xef4444)
+  }
+
+  topoEndpointDragState = null
+  selectedTopoEndpointSphere = null
+  isDragging = false
+}
+
+// ========== 主干端点拖动处理（旧系统） ==========
 function onTrunkEndpointDragMove(e) {
   if (!trunkEndpointDragState) return
   isDragging = true
@@ -3541,26 +3675,20 @@ async function onBranchPointDragEnd(e) {
   ctx.value.renderer.domElement.removeEventListener('mouseup', onBranchPointDragEnd)
   ctx.value.controls.enabled = true
 
-  const { branchPointId, _lastX, _lastY } = branchPointDragState
+  const { nodeId, _lastX, _lastY } = branchPointDragState
 
   if (isDragging && _lastX != null && _lastY != null) {
     try {
-      const bp = fiberBranchPoints.value.find(b => b.id === branchPointId)
-      if (bp) {
-        await axios.put(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points/${branchPointId}`, {
-          x_percent: Number(_lastX.toFixed(2)),
-          y_percent: Number(_lastY.toFixed(2)),
-        })
+      // 使用新的 topo API 更新节点位置
+      await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-nodes/${nodeId}`, {
+        x_percent: Number(_lastX.toFixed(2)),
+        y_percent: Number(_lastY.toFixed(2)),
+      })
 
-        // 更新本地数据
-        bp.x_percent = Number(_lastX.toFixed(2))
-        bp.y_percent = Number(_lastY.toFixed(2))
+      // 重新加载 topo 数据并重建渲染
+      await loadFiberData()
 
-        // 重新加载 topo 数据并重建渲染
-        await loadTopoData()
-
-        ElMessage.success(t('msgSaveSuccess'))
-      }
+      ElMessage.success(t('msgSaveSuccess'))
     } catch (err) {
       console.error('更新分支点失败:', err)
       ElMessage.error(t('msgUpdateFailed'))

@@ -273,7 +273,7 @@ def create_branch_point(db: Session, plan_id: int, data) -> Dict[str, Any]:
         s, proj = project_point_on_polyline(bp_coord, polyline)
         proj_dist = math.sqrt((bp_coord[0] - proj[0])**2 + (bp_coord[1] - proj[1])**2)
 
-        if proj_dist < 5.0:  # 5% 容差
+        if proj_dist < 10.0:  # 10% 容差（允许用户点击主干附近）
             if best_edge is None or proj_dist < math.sqrt((bp_coord[0] - best_proj[0])**2 + (bp_coord[1] - best_proj[1])**2):
                 best_edge = edge
                 best_s = s
@@ -544,6 +544,40 @@ def delete_topo_node(db: Session, plan_id: int, node_id: int) -> bool:
     db.delete(node)
     db.commit()
     return True
+
+
+def update_topo_node(db: Session, plan_id: int, node_id: int, data) -> Optional[Dict[str, Any]]:
+    """更新拓扑节点位置"""
+    node = db.query(TopoNode).filter(
+        TopoNode.id == node_id,
+        TopoNode.floor_plan_id == plan_id
+    ).first()
+
+    if not node:
+        return None
+
+    if data.x_percent is not None:
+        node.x_percent = data.x_percent
+    if data.y_percent is not None:
+        node.y_percent = data.y_percent
+    if data.label is not None:
+        node.label = data.label
+
+    node.updated_at = datetime.utcnow()
+    db.commit()
+    db.refresh(node)
+
+    result = {
+        "id": node.id,
+        "node_kind": node.node_kind,
+        "x_percent": node.x_percent,
+        "y_percent": node.y_percent,
+        "label": node.label,
+    }
+    if node.node_kind == "junction":
+        result["junction_type"] = node.junction_type
+
+    return result
 
 
 def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:
