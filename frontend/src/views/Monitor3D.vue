@@ -2501,12 +2501,15 @@ async function loadTopoData() {
     // 先幂等补建所有设备的端口及端口拓扑节点（兼容旧设备），确保连线可用
     await axios.post(`/api/floor-plans/${currentPlanId.value}/ensure-topo-ports`).catch(() => {})
 
-    // 加载设备端口（每个设备一个默认端口）
-    const portsPromises = devices.value.map(d =>
-      axios.get(`/api/devices/${d.id}/ports`).catch(() => ({ data: { items: [] } }))
+    // 加载设备端口（每个设备一个默认端口）。在客户端为每个端口注入 device_id，
+    // 不依赖后端返回该字段，保证端口与设备关联可靠。
+    const portsResults = await Promise.all(
+      devices.value.map(async d => {
+        const r = await axios.get(`/api/devices/${d.id}/ports`).catch(() => ({ data: { items: [] } }))
+        return (r.data.items || []).map(p => ({ ...p, device_id: d.id }))
+      })
     )
-    const portsResults = await Promise.all(portsPromises)
-    devicePorts.value = portsResults.flatMap(r => r.data.items || [])
+    devicePorts.value = portsResults.flat()
 
     // 加载拓扑节点和边
     const nodesRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/topo-nodes`)
