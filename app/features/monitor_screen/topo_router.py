@@ -101,6 +101,7 @@ async def list_device_ports(device_id: int, db: Session = Depends(get_db)):
     return {"items": [
         {
             "id": p.id,
+            "device_id": p.device_id,
             "name": p.name,
             "port_type": p.port_type,
             "anchor_x": p.anchor_x,

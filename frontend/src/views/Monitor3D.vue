@@ -2610,14 +2610,15 @@ function buildPortAnchors() {
 function onPortAnchorMouseDown(anchorData) {
   if (!isEditMode.value) return
 
-  // 查找对应的 topoNode
+  // 查找该端口对应的 topoNode（直接用锚点的 portId 精确匹配）
   const topoNode = topoNodes.value.find(n =>
-    n.node_kind === 'port' && devicePorts.value.some(p => p.id === n.port_id && p.device_id === anchorData.deviceId)
+    n.node_kind === 'port' && n.port_id === anchorData.portId
   )
 
   if (!topoNode) {
     // 没有拓扑节点，需要先创建
     console.log('需要先创建拓扑节点')
+    ElMessage.warning(t('msgUpdateFailed'))
     return
   }
 
@@ -2669,9 +2670,9 @@ function updateRubberBandLine(mouseWorldPos) {
 async function finishWiring(targetAnchorData) {
   if (!wiringState.value) return
 
-  // 查找目标 topoNode
+  // 查找目标 topoNode（直接用锚点的 portId 精确匹配）
   const targetTopoNode = topoNodes.value.find(n =>
-    n.node_kind === 'port' && devicePorts.value.some(p => p.id === n.port_id && p.device_id === targetAnchorData.deviceId)
+    n.node_kind === 'port' && n.port_id === targetAnchorData.portId
   )
 
   if (!targetTopoNode) {
