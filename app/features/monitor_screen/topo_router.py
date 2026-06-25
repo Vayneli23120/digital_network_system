@@ -185,6 +185,37 @@ async def ensure_plan_topo_ports(plan_id: int, db: Session = Depends(get_db)):
     return {"message": "端口拓扑节点已补建", "device_count": len(device_nodes), "port_node_count": created}
 
 
+@router.post("/floor-plans/{plan_id}/normalize-topo-ports")
+async def normalize_plan_topo_ports(plan_id: int, db: Session = Depends(get_db)):
+    """将平面图上所有设备的自动上行端口规整为单个（顶部居中）。
+
+    用于统一锚点：删除旧设备多余的自动端口及其端口节点和相连边，
+    保留单个居中端口。手动添加的端口不受影响。幂等。
+    """
+    from app.shared.models import DeviceNode
+    from .topo_service import (
+        normalize_device_ports_to_single,
+        ensure_device_topo_ports,
+        sync_device_port_node_positions,
+    )
+
+    device_nodes = db.query(DeviceNode).filter(
+        DeviceNode.floor_plan_id == plan_id
+    ).all()
+
+    removed_total = 0
+    for dn in device_nodes:
+        removed_total += normalize_device_ports_to_single(db, dn.device_id)
+        ensure_device_topo_ports(db, plan_id, dn.device_id)
+        sync_device_port_node_positions(db, plan_id, dn.device_id)
+    db.commit()
+    return {
+        "message": "端口已统一为单锚点",
+        "device_count": len(device_nodes),
+        "removed_ports": removed_total,
+    }
+
+
 # ============ 拓扑节点管理 API ============
 
 @router.get("/floor-plans/{plan_id}/topo-nodes")

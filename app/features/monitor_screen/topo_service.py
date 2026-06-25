@@ -26,10 +26,9 @@ PORT_ICON_SIZE = 3.0
 
 # 每台设备默认创建的上行端口（预留扩展：后期可增删端口）
 # anchor_x/anchor_y 为端口在设备图标上的相对位置（0-1，0.5=中心）
-# 上行端口放在图标顶部两侧，朝向核心方向
+# 暂时统一为单个锚点，放在图标顶部居中，朝向核心方向
 DEFAULT_UPLINK_PORTS = [
-    {"name": "Uplink-1", "anchor_x": 0.3, "anchor_y": 0.0},
-    {"name": "Uplink-2", "anchor_x": 0.7, "anchor_y": 0.0},
+    {"name": "Uplink-1", "anchor_x": 0.5, "anchor_y": 0.0},
 ]
 
 
@@ -129,6 +128,45 @@ def sync_device_port_node_positions(db: Session, plan_id: int, device_id: int) -
                 device_node, port.anchor_x, port.anchor_y
             )
     db.flush()
+
+
+def normalize_device_ports_to_single(db: Session, device_id: int) -> int:
+    """将设备自动生成的上行端口规整为单个（顶部居中）。
+
+    - 仅处理 is_auto_created 的 fiber 端口；手动添加的端口保持不变。
+    - 保留 id 最小的自动端口并移到中心，删除其余自动端口及其
+      端口 TopoNode（所有平面图）和相连的 TopoEdge。
+
+    返回删除的端口数。调用方负责 commit。
+    """
+    auto_ports = db.query(DevicePort).filter(
+        DevicePort.device_id == device_id,
+        DevicePort.is_auto_created == True,  # noqa: E712
+        DevicePort.port_type == "fiber",
+    ).order_by(DevicePort.id).all()
+
+    if not auto_ports:
+        return 0
+
+    # 保留第一个并移到中心
+    keep = auto_ports[0]
+    keep.anchor_x = DEFAULT_UPLINK_PORTS[0]["anchor_x"]
+    keep.anchor_y = DEFAULT_UPLINK_PORTS[0]["anchor_y"]
+    keep.name = DEFAULT_UPLINK_PORTS[0]["name"]
+
+    removed = 0
+    for p in auto_ports[1:]:
+        # 删除该端口的所有端口 TopoNode（跨平面图）及相连边
+        nodes = db.query(TopoNode).filter(TopoNode.port_id == p.id).all()
+        for n in nodes:
+            db.query(TopoEdge).filter(
+                (TopoEdge.a_node_id == n.id) | (TopoEdge.b_node_id == n.id)
+            ).delete(synchronize_session=False)
+            db.delete(n)
+        db.delete(p)
+        removed += 1
+    db.flush()
+    return removed
 
 
 # ========== 光缆聚合查询 ==========
