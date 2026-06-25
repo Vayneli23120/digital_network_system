@@ -4236,8 +4236,13 @@ async function loadData() {
         topoNodes.value = topoNodesRes.data.items || []
         const topoEdgesRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/topo-edges`)
         topoEdges.value = topoEdgesRes.data.items || []
+
+        // 加载设备图寻路路径（Gen3）
+        const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/device-paths`)
+        devicePaths.value = topoPathsRes.data?.paths || {}
       } catch (e) {
-        console.warn('加载 topo-nodes/edges 失败:', e)
+        console.warn('加载 topo-nodes/edges/device-paths 失败:', e)
+        devicePaths.value = {}
       }
     }
 
