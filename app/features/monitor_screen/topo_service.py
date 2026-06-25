@@ -282,7 +282,7 @@ def create_trunk(db: Session, plan_id: int, data) -> Dict[str, Any]:
 
     cable_id = (max_cable_id.cable_id + 1) if max_cable_id else 1
     cable_no = data.cable_no or f"TRUNK-{cable_id}"
-    cable_name = data.name or f"主干光缆-{cable_id}"
+    cable_name = data.name or unique_cable_name(db, plan_id, f"主干光缆-{cable_id}")
 
     # 创建起点 junction
     start_node = TopoNode(
@@ -588,7 +588,7 @@ def create_branch_cable(db: Session, plan_id: int, data) -> Dict[str, Any]:
 
     cable_id = (max_cable_id.cable_id + 1) if max_cable_id else 1
     cable_no = data.cable_no or f"BR-{cable_id}"
-    cable_name = data.name or f"分支光缆-{cable_id}"
+    cable_name = data.name or unique_cable_name(db, plan_id, f"分支光缆-{cable_id}")
 
     # 创建分支光缆边
     waypoints_json = json.dumps(data.waypoints) if data.waypoints else None
@@ -728,6 +728,49 @@ def update_topo_node(db: Session, plan_id: int, node_id: int, data) -> Optional[
         result["junction_type"] = node.junction_type
 
     return result
+
+
+def rename_cable(db: Session, plan_id: int, cable_id: int, new_name: str) -> bool:
+    """重命名整条光缆（更新所有 cable_id 相同的边的 cable_name）。
+
+    返回是否成功。调用方负责 commit。
+    """
+    edges = db.query(TopoEdge).filter(
+        TopoEdge.floor_plan_id == plan_id,
+        TopoEdge.cable_id == cable_id,
+    ).all()
+    if not edges:
+        return False
+    for e in edges:
+        e.cable_name = new_name
+    db.flush()
+    return True
+
+
+def is_cable_name_duplicated(db: Session, plan_id: int, new_name: str, exclude_cable_id: Optional[int] = None) -> bool:
+    """检查光缆名是否与同平面图其他光缆重复（按 cable_id 区分）。"""
+    q = db.query(TopoEdge).filter(
+        TopoEdge.floor_plan_id == plan_id,
+        TopoEdge.cable_name == new_name,
+    )
+    edges = q.all()
+    for e in edges:
+        if exclude_cable_id is not None and e.cable_id == exclude_cable_id:
+            continue
+        return True
+    return False
+
+
+def unique_cable_name(db: Session, plan_id: int, base_name: str) -> str:
+    """若 base_name 已被占用，追加 -2/-3... 直到唯一。"""
+    if not is_cable_name_duplicated(db, plan_id, base_name):
+        return base_name
+    i = 2
+    while True:
+        candidate = f"{base_name}-{i}"
+        if not is_cable_name_duplicated(db, plan_id, candidate):
+            return candidate
+        i += 1
 
 
 def delete_cable(db: Session, plan_id: int, cable_id: int) -> bool:

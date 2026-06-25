@@ -240,6 +240,9 @@
                     <span class="trunk-name" :title="cable.cable_name || cable.cable_no">{{ cable.cable_name || cable.cable_no }}</span>
                   </div>
                   <div class="tree-node-actions">
+                    <button class="icon-btn" @click.stop="renameCable(cable)" :title="t('actionRename')">
+                      <el-icon><Edit /></el-icon>
+                    </button>
                     <button class="icon-btn" @click.stop="editCableWaypoints(cable)" :title="t('editWaypoints')">
                       <el-icon><Connection /></el-icon>
                     </button>
@@ -260,6 +263,9 @@
                         <span class="bp-name" :title="bp.label || `BP-${bp.id}`">{{ bp.label || `BP-${bp.id}` }}</span>
                       </div>
                       <div class="tree-node-actions">
+                        <button class="icon-btn" @click.stop="renameBranchPoint(bp)" :title="t('actionRename')">
+                          <el-icon><Edit /></el-icon>
+                        </button>
                         <button class="icon-btn" @click.stop="startConnectFromTopoBranch(bp)" :title="t('connectDevice')">
                           <el-icon><Position /></el-icon>
                         </button>
@@ -275,6 +281,9 @@
                             <span class="link-name" :title="edge.cable_name || `Link-${edge.id}`">{{ edge.cable_name || `Link-${edge.id}` }}</span>
                           </div>
                           <div class="tree-node-actions">
+                            <button class="icon-btn" @click.stop="renameBranchLink(edge)" :title="t('actionRename')">
+                              <el-icon><Edit /></el-icon>
+                            </button>
                             <button class="icon-btn" @click.stop="openTopoEdgeWaypointDialog(edge)" :title="t('editWaypoints')">
                               <el-icon><Connection /></el-icon>
                             </button>
@@ -422,8 +431,8 @@ import { useRouter } from 'vue-router'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
-import { ElMessage } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { useI18n } from '@/composables/useI18n'
 
@@ -892,6 +901,103 @@ async function deleteCable(cableId) {
     await loadFiberData()
   } catch (e) {
     console.error('删除光缆失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 重命名主干光缆（按 cable_id 更新所有分段；edge-xxx 形式更新单条边）
+async function renameCable(cable) {
+  const current = cable.cable_name || cable.cable_no || ''
+  let value
+  try {
+    const res = await ElMessageBox.prompt(t('renameCablePrompt'), t('actionRename'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      inputValue: current,
+      inputValidator: (v) => (v && v.trim() ? true : t('nameRequired')),
+    })
+    value = res.value.trim()
+  } catch {
+    return  // 用户取消
+  }
+
+  const cableId = cable.cable_id
+  try {
+    if (typeof cableId === 'string' && cableId.startsWith('edge-')) {
+      const edgeId = parseInt(cableId.replace('edge-', ''))
+      await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edgeId}`, { cable_name: value })
+    } else {
+      try {
+        await axios.put(`/api/floor-plans/${currentPlanId.value}/cables/${cableId}/rename`, { name: value })
+      } catch (err) {
+        if (err?.response?.status === 409) {
+          // 重名，确认后强制
+          await ElMessageBox.confirm(t('cableNameDuplicateConfirm'), t('nameDuplicate'), {
+            type: 'warning',
+            confirmButtonText: t('confirm'),
+            cancelButtonText: t('cancel'),
+          })
+          await axios.put(`/api/floor-plans/${currentPlanId.value}/cables/${cableId}/rename`, { name: value, force: true })
+        } else {
+          throw err
+        }
+      }
+    }
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    if (e === 'cancel' || e === 'close') return
+    console.error('重命名光缆失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 重命名分支点（更新 TopoNode.label）
+async function renameBranchPoint(bp) {
+  const current = bp.label || `BP-${bp.id}`
+  let value
+  try {
+    const res = await ElMessageBox.prompt(t('renameBranchPointPrompt'), t('actionRename'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      inputValue: current,
+      inputValidator: (v) => (v && v.trim() ? true : t('nameRequired')),
+    })
+    value = res.value.trim()
+  } catch {
+    return
+  }
+  try {
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-nodes/${bp.id}`, { label: value })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('重命名分支点失败:', e)
+    ElMessage.error(t('msgUpdateFailed'))
+  }
+}
+
+// 重命名分支光缆（更新 TopoEdge.cable_name）
+async function renameBranchLink(edge) {
+  const current = edge.cable_name || `Link-${edge.id}`
+  let value
+  try {
+    const res = await ElMessageBox.prompt(t('renameBranchLinkPrompt'), t('actionRename'), {
+      confirmButtonText: t('confirm'),
+      cancelButtonText: t('cancel'),
+      inputValue: current,
+      inputValidator: (v) => (v && v.trim() ? true : t('nameRequired')),
+    })
+    value = res.value.trim()
+  } catch {
+    return
+  }
+  try {
+    await axios.put(`/api/floor-plans/${currentPlanId.value}/topo-edges/${edge.id}`, { cable_name: value })
+    ElMessage.success(t('msgSaveSuccess'))
+    await loadFiberData()
+  } catch (e) {
+    console.error('重命名分支光缆失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
 }

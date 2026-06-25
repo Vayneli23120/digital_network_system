@@ -352,6 +352,7 @@ from .topo_service import (
     get_cables, get_topo_nodes, get_topo_edges,
     create_trunk, create_branch_point, create_branch_cable,
     update_topo_edge, update_topo_node, delete_topo_edge, delete_topo_node, delete_cable,
+    rename_cable, is_cable_name_duplicated,
 )
 
 
@@ -490,6 +491,31 @@ async def delete_cable_endpoint(plan_id: int, cable_id: int, db: Session = Depen
     if not success:
         raise HTTPException(status_code=404, detail="光缆不存在")
     return {"message": "光缆删除成功"}
+
+
+class CableRenameBody(BaseModel):
+    name: str
+    force: bool = False
+
+
+@router.put("/floor-plans/{plan_id}/cables/{cable_id}/rename")
+async def rename_cable_endpoint(
+    plan_id: int,
+    cable_id: int,
+    body: CableRenameBody,
+    db: Session = Depends(get_db),
+):
+    """重命名整条光缆（更新所有分段）。重名时返回 409，除非 force=True。"""
+    new_name = (body.name or "").strip()
+    if not new_name:
+        raise HTTPException(status_code=400, detail="名称不能为空")
+    if not body.force and is_cable_name_duplicated(db, plan_id, new_name, exclude_cable_id=cable_id):
+        raise HTTPException(status_code=409, detail="光缆名称已存在")
+    success = rename_cable(db, plan_id, cable_id, new_name)
+    if not success:
+        raise HTTPException(status_code=404, detail="光缆不存在")
+    db.commit()
+    return {"message": "光缆已重命名", "cable_id": cable_id, "name": new_name}
 
 
 # ============ 数据链路路径 API ============
