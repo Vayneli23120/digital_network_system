@@ -836,8 +836,18 @@ async function loadFiberData() {
     try {
       const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
       devicePaths.value = topoPathsRes.data?.paths || {}
+      // 诊断：如果后端有诊断信息，优先显示；否则显示通用提示
+      if (!devicePaths.value || Object.keys(devicePaths.value).length === 0) {
+        const diagnostic = topoPathsRes.data?.diagnostic
+        if (diagnostic) {
+          ElMessage.info(`数据链路诊断：${diagnostic}`)
+        } else {
+          ElMessage.info('暂无数据链路可显示（检查：1. 是否有核心交换机设备，2. 设备间是否已连接）')
+        }
+      }
     } catch (e) {
       console.warn('加载 device-paths 失败:', e)
+      ElMessage.warning('数据链路加载失败，请检查网络连接或服务状态')
       devicePaths.value = {}
     }
 
@@ -4294,7 +4304,7 @@ watch([showPhysicalTopology, showDataLinks], () => {
     ctx.value.topoEdgesGroup.visible = showPhysicalTopology.value
   }
 
-  // 数据链路
+  // 数据链路（诊断：若用户打开但无数据则提示）
   if (ctx.value.linkLines) {
     ctx.value.linkLines.visible = showDataLinks.value
   }

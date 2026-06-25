@@ -1,9 +1,8 @@
 /* 科技感双主题设计 - 笔合企业级 UI 标准 */
 
-/* ===== 全局字体引入 ===== */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
-/* 备用：Satoshi 字体 */
-@import url('https://fonts.googleapis.com/css2?family=Satoshi:wght@300;400;500;600&display=swap');
+/* ===== 全局字体 =====
+ * 注：不引入外部 Google Fonts CDN（内网/离线环境无法解析 fonts.googleapis.com，
+ * 会导致 ERR_NAME_NOT_RESOLVED）。字体回退到系统字体栈。 */
 
 :root {
   /* ===== 通用变量 ===== */

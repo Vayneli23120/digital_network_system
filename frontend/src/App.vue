@@ -12,8 +12,7 @@ const locale = ref(zhCn)
 </script>
 
 <style>
-/* 使用 Geist 字体（企业级标准） */
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600&family=Geist+Mono:wght@400;500&display=swap');
+/* 字体回退到系统字体栈（不引入外部 Google Fonts CDN，避免内网/离线环境 ERR_NAME_NOT_RESOLVED） */
 
 * {
   margin: 0;

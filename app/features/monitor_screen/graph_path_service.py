@@ -350,7 +350,7 @@ def calculate_path(
     }
 
 
-def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str, Any]]:
+def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[str, Any]:
     """计算所有设备到最近核心交换机的路径
 
     Args:
@@ -358,8 +358,13 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str,
         plan_id: 平面图ID
 
     Returns:
-        {device_id: {reachable, polyline, ...}} 字典
+        {
+          "paths": {device_id: {reachable, polyline, ...}},
+          "diagnostic": diagnostic message (if any issue)
+        }
     """
+    result = {"paths": {}, "diagnostic": None}
+
     # 建图
     nodes, adj = build_graph(db, plan_id)
     node_positions = get_node_positions(db, nodes)
@@ -367,6 +372,10 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str,
     # 找所有核心交换机的端口节点（作为终点）
     core_devices = db.query(Device).filter(Device.device_type == "core_switch").all()
     core_device_ids = [d.id for d in core_devices]
+
+    if not core_device_ids:
+        result["diagnostic"] = "未检测到核心交换机设备"
+        return result
 
     core_port_nodes = []
     for n in nodes:
@@ -376,7 +385,8 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str,
                 core_port_nodes.append(n.id)
 
     if not core_port_nodes:
-        return {}
+        result["diagnostic"] = "核心交换机未在平面图上放置或未创建端口拓扑节点"
+        return result
 
     # 找所有非核心设备的端口节点（作为起点）
     all_port_nodes = []
@@ -393,6 +403,10 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str,
 
     # 排除核心设备
     non_core_devices = [d for d in device_to_nodes.keys() if d not in core_device_ids]
+
+    if not non_core_devices:
+        result["diagnostic"] = "拓扑上仅有核心交换机，无其他设备"
+        return result
 
     device_paths = {}
 
@@ -429,7 +443,8 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[int, Dict[str,
                 "reason": "无连通路径",
             }
 
-    return device_paths
+    result["paths"] = device_paths
+    return result
 
 
 def shortest_path_multi_target(

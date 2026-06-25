@@ -521,7 +521,7 @@ async def get_all_device_paths(plan_id: int, db: Session = Depends(get_db)):
     """计算所有设备到核心交换机的数据链路路径
 
     返回：
-    {device_id: {reachable, polyline, total_length}}
+    {paths: {device_id: {reachable, polyline, total_length}}, diagnostic: "error message or null"}
     """
     result = calculate_all_device_paths(db, plan_id)
-    return {"paths": result}
+    return result
