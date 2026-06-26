@@ -39,7 +39,17 @@ export default defineConfig(({ mode }) => {
         '/ws': {
           target: apiBaseUrl,
           changeOrigin: true,
-          ws: true  // 启用 WebSocket 代理
+          ws: true,
+          // 重要：WSS → WS 协议转换
+          configure: (proxy, _options) => {
+            proxy.on('error', (err, _req, _res) => {
+              console.log('proxy error', err);
+            });
+            proxy.on('proxyReqWs', (proxyReq, req, socket, options, head) => {
+              // WebSocket 代理请求时的事件
+              console.log('WebSocket proxy request:', req.url);
+            });
+          }
         }
       }
     }

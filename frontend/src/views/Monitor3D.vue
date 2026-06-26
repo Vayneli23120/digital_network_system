@@ -4584,8 +4584,13 @@ function handleDeviceStatusChange(msg) {
 
 function connectDeviceStatusWs() {
   try {
+    // WebSocket 连接地址：
+    // 开发环境：通过 vite 代理（wss://），代理会转发到后端 ws://
+    // 生产环境：使用当前 host（前端与后端同域部署）
+    let wsUrl
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    deviceStatusWs = new WebSocket(`${proto}://${location.host}/ws/device-status`)
+    wsUrl = `${proto}://${location.host}/ws/device-status`
+    deviceStatusWs = new WebSocket(wsUrl)
     deviceStatusWs.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)
