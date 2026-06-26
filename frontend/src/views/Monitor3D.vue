@@ -4227,7 +4227,7 @@ function ensureHudPanel() {
   if (!scene) return
   hudEl = document.createElement('div')
   hudEl.className = 'device-hud'
-  hudEl.style.display = 'none'
+  // CSS 通过 opacity:0 + visibility:hidden 控制隐藏，无需设置 display
   hudObj = new CSS2DObject(hudEl)
   hudObj.name = 'device-hud'
   hudObj.visible = false
@@ -4317,20 +4317,20 @@ function onCanvasMouseMove(e) {
     }
     const base = getDeviceBaseSize(device.device_type)
     const topY = (model.position.y || 0) + base * 1.6
-    const wasHidden = !hudObj.visible
     hudObj.position.set(model.position.x, topY, model.position.z)
     hudObj.visible = true
-    if (hudEl) hudEl.style.display = 'block'
-    // 首次显示时立即同步一次标签渲染，让 CSS2D 变换在浏览器绘制前就定位到设备上方，
-    // 避免 HUD 先在左上角闪一下再跳过来
-    if (wasHidden && labelRenderer && scene && camera) {
+    // 先渲染 CSS2D（计算位置），再添加 visible class 显示，避免左上角闪烁
+    if (labelRenderer && scene && camera) {
       labelRenderer.render(scene, camera)
     }
+    requestAnimationFrame(() => {
+      if (hudEl) hudEl.classList.add('visible')
+    })
     renderer.domElement.style.cursor = 'pointer'
   } else {
     hudDeviceId = null
     if (hudObj) hudObj.visible = false
-    if (hudEl) hudEl.style.display = 'none'
+    if (hudEl) hudEl.classList.remove('visible')
     renderer.domElement.style.cursor = ''
   }
 }
@@ -5790,7 +5790,15 @@ onBeforeUnmount(() => {
   line-height: 1.5;
   pointer-events: none;
   overflow: hidden;
-  animation: hudIn 0.18s ease-out;
+  /* 默认隐藏，通过 class 控制显示，避免闪烁 */
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s ease-out, visibility 0s linear 0.15s;
+}
+:deep(.device-hud.visible) {
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: opacity 0.15s ease-out, visibility 0s linear 0s;
 }
 /* 顶部高亮描边 */
 :deep(.device-hud::before) {
