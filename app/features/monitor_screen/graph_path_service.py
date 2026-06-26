@@ -21,7 +21,7 @@ import heapq
 import json
 import math
 
-from app.shared.models import TopoNode, TopoEdge, DevicePort, Device, DeviceNode
+from app.shared.models import TopoNode, TopoEdge, DevicePort, Device, DeviceNode, DeviceInterface
 
 
 # 线缆类型权重（值越大越不优先走）
@@ -444,7 +444,50 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[str, Any]:
             }
 
     result["paths"] = device_paths
+    result["neighbor_paths"] = calculate_neighbor_device_paths(db, plan_id)
     return result
+
+
+def calculate_neighbor_device_paths(db: Session, plan_id: int) -> Dict[str, Any]:
+    """计算 CDP/LLDP 邻居关系在光缆拓扑上的最短数据链路路径
+
+    邻居发现给出的是逻辑直连关系；这里复用图寻路，把它转换为与数据链路一致的
+    光缆拓扑 polyline。不可达时保留诊断，不回退画直线。
+    """
+    rows = db.query(DeviceInterface).filter(
+        DeviceInterface.neighbor_source.isnot(None),
+        DeviceInterface.peer_device_id.isnot(None),
+    ).all()
+
+    paths = {}
+    seen_pairs = set()
+    for iface in rows:
+        if iface.device_id == iface.peer_device_id:
+            continue
+        pair = tuple(sorted((iface.device_id, iface.peer_device_id)))
+        if pair in seen_pairs:
+            continue
+        seen_pairs.add(pair)
+
+        key = f"neighbor:{pair[0]}:{pair[1]}"
+        path = calculate_path(db, plan_id, iface.device_id, iface.peer_device_id)
+        if not path:
+            path = {"reachable": False, "reason": "无法计算路径"}
+
+        paths[key] = {
+            **path,
+            "path_source": "neighbor",
+            "neighbor_source": iface.neighbor_source,
+            "device_id": iface.device_id,
+            "peer_device_id": iface.peer_device_id,
+            "if_index": iface.if_index,
+            "if_name": iface.if_name,
+            "peer_if_name": iface.peer_if_name,
+            "peer_device_name": iface.peer_device_name,
+            "oper_status": iface.oper_status,
+        }
+
+    return paths
 
 
 def shortest_path_multi_target(

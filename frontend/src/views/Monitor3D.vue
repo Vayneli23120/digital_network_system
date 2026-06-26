@@ -355,7 +355,6 @@
             <h4>{{ t('layerControl') }}</h4>
             <el-checkbox v-model="showPhysicalTopology">{{ t('showPhysicalTopology') }}</el-checkbox>
             <el-checkbox v-model="showDataLinks">{{ t('showDataLinks') }}</el-checkbox>
-            <el-checkbox v-model="showNeighborLinks">{{ t('showNeighborLinks') }}</el-checkbox>
             <el-checkbox v-model="showLabels">{{ t('showLabels') }}</el-checkbox>
             <div class="tilt-control">
               <span>{{ t('floorPlanTilt') }}:</span>
@@ -451,7 +450,6 @@ const filterStatus = ref('')
 const showLabels = ref(true)
 const showPhysicalTopology = ref(true)  // 显示物理拓扑（光纤）
 const showDataLinks = ref(true)         // 显示数据链路（设备间连接）
-const showNeighborLinks = ref(true)     // 显示 CDP/LLDP 自动发现的邻居链路
 const autoFocusOffline = ref(true)      // 设备离线时自动锁定镜头（默认开）
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
@@ -499,7 +497,6 @@ const fiberTrunks = ref([])  // 主干光缆（旧数据，面板备用）
 const fiberBranchPoints = ref([])  // 分支点（旧数据，面板备用）
 const fiberBranchLinks = ref([])  // 分支光缆（旧数据，面板备用）
 const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
-const neighborLinks = ref([])  // CDP/LLDP 自动发现的邻居链路
 const discoveringNeighbors = ref(false)  // 邻居发现进行中
 const floorPlans = ref([])
 const currentPlan = ref(null)
@@ -893,7 +890,10 @@ async function loadFiberData() {
     // 设备图寻路路径（Gen3）
     try {
       const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
-      devicePaths.value = topoPathsRes.data?.paths || {}
+      devicePaths.value = {
+        ...(topoPathsRes.data?.paths || {}),
+        ...(topoPathsRes.data?.neighbor_paths || {}),
+      }
       // 诊断：如果后端有诊断信息，优先显示；否则显示通用提示
       if (!devicePaths.value || Object.keys(devicePaths.value).length === 0) {
         const diagnostic = topoPathsRes.data?.diagnostic
@@ -909,21 +909,16 @@ async function loadFiberData() {
       devicePaths.value = {}
     }
 
-    // CDP/LLDP 自动发现的邻居链路
-    await fetchNeighborLinks()
-
     // 重建光纤渲染（优先使用新 topo 数据）
     disposeGroup('fiber-trunks')
     disposeGroup('branch-points')
     disposeGroup('branch-links')
     disposeGroup('topo-edges')
     disposeGroup('data-link-paths')
-    disposeGroup('neighbor-links')
 
     // 使用新的图模型渲染
     buildTopoEdges()
     buildDataLinkPaths()
-    buildNeighborLinks()
   } catch (e) {
     console.error('加载光纤数据失败:', e)
   }
@@ -1833,7 +1828,6 @@ const ctx = shallowRef({
   branchPointGroup: null,
   branchLinkGroup: null,
   dataLinkPaths: null,
-  neighborLinkGroup: null,
 })
 
 // 厂区真实尺寸（米）
@@ -2423,12 +2417,10 @@ function rebuildScene() {
   disposeGroup('branch-points')
   disposeGroup('branch-links')
   disposeGroup('data-link-paths')
-  disposeGroup('neighbor-links')
   buildDeviceModels()
   buildLinks()
   buildTopoEdges()
   buildDataLinkPaths()
-  buildNeighborLinks()
   buildLabels()
   buildOfflineGlow()
 }
@@ -2616,7 +2608,7 @@ function buildDataLinkPaths() {
   // 路径线半径（比链路稍细）
   const pathRadius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0008
 
-  Object.entries(devicePaths.value).forEach(([deviceId, pathData]) => {
+  Object.entries(devicePaths.value).forEach(([pathKey, pathData]) => {
     // 支持两种格式：
     // 旧格式：pathData 是数组 [{x_percent, y_percent}, ...]
     // 新格式：pathData 是对象 {reachable, polyline: [{x_percent, y_percent}, ...]}
@@ -2629,8 +2621,15 @@ function buildDataLinkPaths() {
     if (!Array.isArray(polyline) || polyline.length < 2) return
 
     // 获取设备状态（以可达性判断，unreachable 显示红色）
-    const device = devices.value.find(d => d.id === parseInt(deviceId))
-    const statusColor = device && isDeviceOffline(device) ? 0xff4d4f : 0x22c55e  // 红色/绿色
+    const deviceId = pathData?.device_id || parseInt(pathKey)
+    const device = devices.value.find(d => d.id === deviceId)
+    const isNeighborPath = pathData?.path_source === 'neighbor'
+    let statusColor = device && isDeviceOffline(device) ? 0xff4d4f : 0x22c55e  // 红色/绿色
+    if (isNeighborPath) {
+      statusColor = pathData.oper_status === 'down'
+        ? 0xff4d4f
+        : (pathData.neighbor_source === 'lldp' ? 0x38bdf8 : 0x22c55e)
+    }
 
     // 直接使用 polyline 的 x_percent, y_percent（后端已去重）
     const points = polyline.map(pt => {
@@ -2674,8 +2673,15 @@ function buildDataLinkPaths() {
       const quaternion = new THREE.Quaternion().setFromUnitVectors(axis, normalizedDir)
       cylinder.quaternion.copy(quaternion)
 
-      cylinder.userData.dataPath = { deviceId: parseInt(deviceId), segmentIndex: i }
-      cylinder.name = `data-path-${deviceId}-seg-${i}`
+      cylinder.userData.dataPath = {
+        pathKey,
+        deviceId,
+        peerDeviceId: pathData?.peer_device_id,
+        source: pathData?.path_source || 'core',
+        neighborSource: pathData?.neighbor_source,
+        segmentIndex: i,
+      }
+      cylinder.name = `data-path-${pathKey}-seg-${i}`
       pathGroup.add(cylinder)
     }
   })
@@ -2686,82 +2692,6 @@ function buildDataLinkPaths() {
   pathGroup.visible = showDataLinks.value
 }
 
-// 取设备在场景中的世界坐标（优先用模型实际位置，回退到节点百分比坐标）
-function getDeviceWorldPos(deviceId, elevation = 0) {
-  const { deviceGroup } = ctx.value
-  const model = deviceGroup?.children?.find(c => c?.userData?.device?.id === deviceId)
-  if (model) {
-    return new THREE.Vector3(model.position.x, elevation, model.position.z)
-  }
-  const node = nodes.value.find(n => n.device_id === deviceId)
-  if (node) {
-    const w = percentToWorld(node.x_percent, node.y_percent, elevation)
-    return new THREE.Vector3(w.x, w.y, w.z)
-  }
-  return null
-}
-
-// 绘制 CDP/LLDP 自动发现的邻居链路（仅两端都在系统内的链路，去重双向）
-function buildNeighborLinks() {
-  const { scene } = ctx.value
-  if (!scene) return
-
-  const group = new THREE.Group()
-  group.name = 'neighbor-links'
-
-  const linkHeight = Math.min(plan.real_width_m, plan.real_depth_m) * 0.002 + 1.2
-  const radius = Math.min(plan.real_width_m, plan.real_depth_m) * 0.0007
-
-  const drawn = new Set()
-  ;(neighborLinks.value || []).forEach(l => {
-    if (l.peer_device_id == null) return
-    const a = l.device_id
-    const b = l.peer_device_id
-    if (a === b) return
-    const key = a < b ? `${a}-${b}` : `${b}-${a}`
-    if (drawn.has(key)) return
-    drawn.add(key)
-
-    const pa = getDeviceWorldPos(a, linkHeight)
-    const pb = getDeviceWorldPos(b, linkHeight)
-    if (!pa || !pb) return
-
-    // 颜色：端口 down 红色；lldp 用青色，cdp 用绿色
-    let color = 0x22c55e
-    if (l.oper_status === 'down') color = 0xff4d4f
-    else if (l.source === 'lldp') color = 0x38bdf8
-
-    const direction = new THREE.Vector3().subVectors(pb, pa)
-    const length = direction.length()
-    if (length < 1e-6) return
-    const midPoint = new THREE.Vector3().addVectors(pa, pb).multiplyScalar(0.5)
-
-    const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.65 })
-    mat.userData.offlineLink = (l.oper_status === 'down')
-    const geo = new THREE.CylinderGeometry(radius, radius, length, 6)
-    const cyl = new THREE.Mesh(geo, mat)
-    cyl.position.copy(midPoint)
-    const axis = new THREE.Vector3(0, 1, 0)
-    cyl.quaternion.copy(new THREE.Quaternion().setFromUnitVectors(axis, direction.clone().normalize()))
-    cyl.userData.neighborLink = { device_id: a, peer_device_id: b, source: l.source }
-    cyl.name = `neighbor-link-${key}`
-    group.add(cyl)
-  })
-
-  scene.add(group)
-  ctx.value.neighborLinkGroup = group
-  group.visible = showNeighborLinks.value
-}
-
-async function fetchNeighborLinks() {
-  try {
-    const res = await axios.get('/api/devices/monitor/neighbor-links')
-    neighborLinks.value = res.data?.links || []
-  } catch (e) {
-    neighborLinks.value = []
-  }
-}
-
 // 手动触发：对所有启用 SNMP 的设备执行 CDP/LLDP 邻居发现，并重绘拓扑线
 async function discoverNeighbors() {
   if (discoveringNeighbors.value) return
@@ -2769,9 +2699,15 @@ async function discoverNeighbors() {
   try {
     const res = await axios.post('/api/devices/monitor/discover-neighbors-all')
     const d = res.data || {}
-    await fetchNeighborLinks()
-    disposeGroup('neighbor-links')
-    buildNeighborLinks()
+    if (currentPlanId.value) {
+      const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
+      devicePaths.value = {
+        ...(topoPathsRes.data?.paths || {}),
+        ...(topoPathsRes.data?.neighbor_paths || {}),
+      }
+      disposeGroup('data-link-paths')
+      buildDataLinkPaths()
+    }
     ElMessage.success(
       `${t('discoverNeighbors')}: ${d.devices || 0} ${t('hudCheck')} · ` +
       `${t('hudPeer')} ${d.total_found || 0} · ${t('hudUplink')} ${d.total_uplinks_marked || 0}`
@@ -5203,12 +5139,6 @@ watch([showPhysicalTopology, showDataLinks], () => {
   }
 })
 
-watch(showNeighborLinks, (val) => {
-  if (ctx.value.neighborLinkGroup) {
-    ctx.value.neighborLinkGroup.visible = val
-  }
-})
-
 watch(showLabels, (val) => {
   if (ctx.value.labels) {
     ctx.value.labels.visible = val
@@ -5246,12 +5176,10 @@ function refreshDeviceVisuals() {
   disposeGroup('labels')
   disposeGroup('links')
   disposeGroup('data-link-paths')
-  disposeGroup('neighbor-links')
   buildDeviceModels()
   buildLabels()
   buildLinks()
   buildDataLinkPaths()
-  buildNeighborLinks()
   buildOfflineGlow()
 }
 
@@ -5422,7 +5350,6 @@ onMounted(async () => {
   // 使用新 topo 数据渲染光纤拓扑
   buildTopoEdges()
   buildDataLinkPaths()
-  buildNeighborLinks()
 
   // 离线设备红色光晕
   buildOfflineGlow()
