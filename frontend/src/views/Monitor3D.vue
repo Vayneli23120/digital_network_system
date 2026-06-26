@@ -450,7 +450,7 @@ const showDataLinks = ref(true)         // 显示数据链路（设备间连接�
 const autoFocusOffline = ref(true)      // 设备离线时自动锁定镜头（默认开）
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
-const { t } = useI18n()
+const { t, currentLang } = useI18n()
 const hidePanel = ref(false)  // 隐藏侧边栏
 
 // 上传底图相关
@@ -621,6 +621,27 @@ function getDeviceTypeLabel(type) {
 
 function getStatusLabel(status) {
   return statusMap[status] || status
+}
+
+// i18n 版本：随语言切换显示状态/设备类型（用于 HUD 等动态渲染）
+const statusI18nKey = { online: 'statusOnline', offline: 'statusOffline', maintenance: 'statusMaintenance', unknown: 'statusUnknown' }
+function getStatusLabelI18n(status) {
+  const key = statusI18nKey[status]
+  return key ? t(key) : (statusMap[status] || status)
+}
+const deviceTypeI18nKey = {
+  office_switch: 'deviceTypeOfficeSwitch',
+  core_switch: 'deviceTypeCoreSwitch',
+  server_switch: 'deviceTypeServerSwitch',
+  uce: 'deviceTypeUCE',
+  ap: 'deviceTypeAP',
+  wlc: 'deviceTypeWLC',
+  router: 'deviceTypeRouter',
+  firewall: 'deviceTypeFirewall',
+}
+function getDeviceTypeLabelI18n(type) {
+  const key = deviceTypeI18nKey[type]
+  return key ? t(key) : (deviceTypeMap[type] || type)
 }
 
 // 统一以可达性(reachability)推导设备显示状态，替代旧 status 字段
@@ -4074,15 +4095,15 @@ let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
 // 计算设备上行链路状态（基于设备寻路路径 devicePaths，回退到链路 links）
 function getUplinkStatus(device) {
   if (!device) return { text: '—', cls: 'unknown' }
-  if (isDeviceOffline(device)) return { text: '中断', cls: 'offline' }
+  if (isDeviceOffline(device)) return { text: t('hudUplinkDown'), cls: 'offline' }
 
   // 主依据：设备到核心的寻路路径（与大屏绿色数据链路同源）
   const path = devicePaths.value?.[device.id] ?? devicePaths.value?.[String(device.id)]
   if (path) {
     const reachable = Array.isArray(path) ? path.length >= 2 : path.reachable !== false
     return reachable
-      ? { text: '正常', cls: 'online' }
-      : { text: '降级', cls: 'maintenance' }
+      ? { text: t('hudUplinkNormal'), cls: 'online' }
+      : { text: t('hudUplinkDegraded'), cls: 'maintenance' }
   }
 
   // 回退：手动绘制的链路（编辑模式下使用）
@@ -4094,10 +4115,10 @@ function getUplinkStatus(device) {
   })
   if (touched.length > 0) {
     return touched.some(l => l.status === 'broken')
-      ? { text: '降级', cls: 'maintenance' }
-      : { text: '正常', cls: 'online' }
+      ? { text: t('hudUplinkDegraded'), cls: 'maintenance' }
+      : { text: t('hudUplinkNormal'), cls: 'online' }
   }
-  return { text: '无上行', cls: 'unknown' }
+  return { text: t('hudUplinkNone'), cls: 'unknown' }
 }
 
 // 统计设备当前告警数（离线计 1，相连故障链路各计 1）
@@ -4143,7 +4164,7 @@ function ensureHudPanel() {
 function updateHudContent(device) {
   if (!hudEl) return
   const status = deviceStatus(device)
-  const statusText = getStatusLabel(status)
+  const statusText = getStatusLabelI18n(status)
   const latency = device.reachability_latency_ms != null
     ? `${device.reachability_latency_ms} ms` : '—'
   const uplink = getUplinkStatus(device)
@@ -4155,17 +4176,17 @@ function updateHudContent(device) {
       <span class="hud-dot ${status}"></span>
       <span class="hud-name">${device.name || '—'}</span>
     </div>
-    <div class="hud-sub">${getDeviceTypeLabel(device.device_type)} · ${device.ip || '—'}</div>
+    <div class="hud-sub">${getDeviceTypeLabelI18n(device.device_type)} · ${device.ip || '—'}</div>
     <div class="hud-grid">
-      <div class="hud-k">状态</div>
+      <div class="hud-k">${t('hudStatus')}</div>
       <div class="hud-v ${status}">${statusText}</div>
-      <div class="hud-k">延迟</div>
+      <div class="hud-k">${t('hudLatency')}</div>
       <div class="hud-v">${latency}</div>
-      <div class="hud-k">上行</div>
+      <div class="hud-k">${t('hudUplink')}</div>
       <div class="hud-v ${uplink.cls}">${uplink.text}</div>
-      <div class="hud-k">告警</div>
+      <div class="hud-k">${t('hudAlarm')}</div>
       <div class="hud-v ${alarms > 0 ? 'offline' : 'online'}">${alarms}</div>
-      <div class="hud-k">检测</div>
+      <div class="hud-k">${t('hudCheck')}</div>
       <div class="hud-v hud-time">${formatCheckTime(device.last_reachability_check)}</div>
     </div>
   `
@@ -4814,6 +4835,14 @@ watch([showPhysicalTopology, showDataLinks], () => {
 watch(showLabels, (val) => {
   if (ctx.value.labels) {
     ctx.value.labels.visible = val
+  }
+})
+
+// 语言切换时刷新当前悬浮的 HUD 文案
+watch(currentLang, () => {
+  if (hudDeviceId != null && hudEl && hudObj && hudObj.visible) {
+    const d = devices.value.find(x => x.id === hudDeviceId)
+    if (d) updateHudContent(d)
   }
 })
 
