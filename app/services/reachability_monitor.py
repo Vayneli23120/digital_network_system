@@ -45,13 +45,13 @@ class ReachabilityMonitor:
         # 分级阈值（连续多少周期失败才判离线）
         # 单次探测内已有快速重试抑制误判，故可降低阈值加快告警
         self.tier_thresholds = {
-            "critical": 2,    # 核心设备 2 个周期失败即告警（约 20s）
+            "critical": 3,    # 核心设备 3 个周期失败即告警（约 30s，抗瞬时抖动）
             "normal": 2,      # 普通设备 2 个周期（约 60s）
             "low": 2,         # 低优先级 2 个周期（约 240s）
         }
 
         # 单次探测内的 ICMP 快速重试次数（抑制单包丢失误判）
-        self.icmp_retries = 3
+        self.icmp_retries = 5
 
         # 并发控制（网络检测）
         self.max_concurrency = 50
