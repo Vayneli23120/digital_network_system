@@ -1,5 +1,6 @@
 """Device management router"""
 
+import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 from typing import Optional, List
@@ -22,7 +23,7 @@ except ImportError:
 from pydantic import BaseModel
 
 from app.shared.database import get_db
-from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart
+from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart, DeviceInterface, InterfaceTrafficSample
 from app.shared.config import get_config
 
 config = get_config()
@@ -702,4 +703,152 @@ async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
             for i in instances
         ],
         "total": len(instances)
+    }
+
+
+# ============ SNMP 接口监控（阶段 A） ============
+
+class SnmpConfig(BaseModel):
+    snmp_enabled: Optional[bool] = None
+    snmp_version: Optional[str] = None       # '1' | '2c'
+    snmp_community: Optional[str] = None
+    snmp_port: Optional[int] = None
+
+
+class InterfaceUpdate(BaseModel):
+    is_uplink: Optional[bool] = None
+    monitored: Optional[bool] = None
+
+
+def _iface_to_dict(i: DeviceInterface) -> dict:
+    return {
+        "id": i.id,
+        "if_index": i.if_index,
+        "if_name": i.if_name,
+        "if_descr": i.if_descr,
+        "oper_status": i.oper_status,
+        "admin_status": i.admin_status,
+        "speed_mbps": i.speed_mbps,
+        "is_uplink": bool(i.is_uplink),
+        "monitored": bool(i.monitored),
+        "last_in_bps": i.last_in_bps,
+        "last_out_bps": i.last_out_bps,
+        "last_in_util": i.last_in_util,
+        "last_out_util": i.last_out_util,
+        "last_in_errors": i.last_in_errors,
+        "last_out_errors": i.last_out_errors,
+        "last_sample_at": i.last_sample_at.isoformat() if i.last_sample_at else None,
+        "last_check": i.last_check.isoformat() if i.last_check else None,
+    }
+
+
+@router.put("/{device_id}/snmp")
+async def update_device_snmp(device_id: int, cfg: SnmpConfig, db: Session = Depends(get_db)):
+    """配置设备 SNMP 参数（启用/版本/团体名/端口）"""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    if cfg.snmp_enabled is not None:
+        device.snmp_enabled = cfg.snmp_enabled
+    if cfg.snmp_version is not None:
+        device.snmp_version = cfg.snmp_version
+    if cfg.snmp_community is not None:
+        device.snmp_community = cfg.snmp_community
+    if cfg.snmp_port is not None:
+        device.snmp_port = cfg.snmp_port
+    db.commit()
+    return {
+        "device_id": device.id,
+        "snmp_enabled": bool(device.snmp_enabled),
+        "snmp_version": device.snmp_version,
+        "snmp_port": device.snmp_port,
+        "snmp_community_set": bool(device.snmp_community),
+    }
+
+
+@router.post("/{device_id}/interfaces/discover")
+async def discover_device_interfaces(device_id: int, db: Session = Depends(get_db)):
+    """通过 SNMP 发现设备接口（walk ifName/ifDescr），落库供标记上行口/监控"""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    from app.services.interface_monitor import get_interface_monitor
+    # discover 内部使用 asyncio.run，需在线程中执行以避免与当前事件循环冲突
+    result = await asyncio.to_thread(get_interface_monitor().discover_interfaces, device_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "发现失败"))
+    return result
+
+
+@router.get("/{device_id}/interfaces")
+async def list_device_interfaces(device_id: int, monitored_only: bool = False, db: Session = Depends(get_db)):
+    """列出设备接口"""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    q = db.query(DeviceInterface).filter(DeviceInterface.device_id == device_id)
+    if monitored_only:
+        q = q.filter(DeviceInterface.monitored == True)  # noqa: E712
+    interfaces = q.order_by(DeviceInterface.if_index).all()
+    return {
+        "device_id": device_id,
+        "items": [_iface_to_dict(i) for i in interfaces],
+        "total": len(interfaces),
+    }
+
+
+@router.put("/{device_id}/interfaces/{if_index}")
+async def update_device_interface(device_id: int, if_index: int, update: InterfaceUpdate, db: Session = Depends(get_db)):
+    """标记接口为上行口 / 纳入监控"""
+    iface = db.query(DeviceInterface).filter(
+        DeviceInterface.device_id == device_id,
+        DeviceInterface.if_index == if_index,
+    ).first()
+    if not iface:
+        raise HTTPException(status_code=404, detail="接口不存在，请先发现接口")
+
+    if update.is_uplink is not None:
+        iface.is_uplink = update.is_uplink
+    if update.monitored is not None:
+        iface.monitored = update.monitored
+    db.commit()
+    return _iface_to_dict(iface)
+
+
+@router.get("/{device_id}/interfaces/{if_index}/traffic")
+async def get_interface_traffic(device_id: int, if_index: int, limit: int = 60, db: Session = Depends(get_db)):
+    """获取接口最近流量样本（默认最近 60 个点，倒序时间）"""
+    iface = db.query(DeviceInterface).filter(
+        DeviceInterface.device_id == device_id,
+        DeviceInterface.if_index == if_index,
+    ).first()
+    if not iface:
+        raise HTTPException(status_code=404, detail="接口不存在")
+
+    limit = max(1, min(limit, 500))
+    samples = db.query(InterfaceTrafficSample).filter(
+        InterfaceTrafficSample.interface_id == iface.id,
+    ).order_by(InterfaceTrafficSample.ts.desc()).limit(limit).all()
+
+    return {
+        "device_id": device_id,
+        "if_index": if_index,
+        "if_name": iface.if_name,
+        "interface": _iface_to_dict(iface),
+        "samples": [
+            {
+                "ts": s.ts.isoformat() if s.ts else None,
+                "in_bps": s.in_bps,
+                "out_bps": s.out_bps,
+                "in_util": s.in_util,
+                "out_util": s.out_util,
+                "in_errors": s.in_errors,
+                "out_errors": s.out_errors,
+                "oper_status": s.oper_status,
+            }
+            for s in reversed(samples)
+        ],
     }

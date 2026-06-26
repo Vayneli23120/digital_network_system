@@ -284,6 +284,14 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"启动可达性监控服务失败: {e}")
 
+    # 启动 SNMP 接口监控服务（接口状态/流量）
+    try:
+        from .services.interface_monitor import start_interface_monitor
+        start_interface_monitor()
+        logger.info("SNMP 接口监控服务已启动")
+    except Exception as e:
+        logger.warning(f"启动接口监控服务失败: {e}")
+
 
 # ============ 优雅关闭 ============
 
@@ -300,6 +308,14 @@ def handle_shutdown(signum, frame):
         logger.info("可达性监控服务已停止")
     except Exception as e:
         logger.warning(f"停止可达性监控服务失败: {e}")
+
+    # 停止 SNMP 接口监控服务
+    try:
+        from .services.interface_monitor import stop_interface_monitor
+        stop_interface_monitor()
+        logger.info("SNMP 接口监控服务已停止")
+    except Exception as e:
+        logger.warning(f"停止接口监控服务失败: {e}")
 
     try:
         get_db_manager().engine.dispose()

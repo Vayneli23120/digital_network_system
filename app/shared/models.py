@@ -5,7 +5,7 @@
 from datetime import datetime
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean,
-    DECIMAL, Float, ForeignKey, Index, CheckConstraint, Table, UniqueConstraint
+    DECIMAL, Float, ForeignKey, Index, CheckConstraint, Table, UniqueConstraint, BigInteger
 )
 from sqlalchemy.orm import relationship, declarative_base
 
@@ -73,6 +73,12 @@ class Device(Base):
     # AI分析
     ai_last_analyzed = Column(DateTime)  # AI最后分析时间
 
+    # ===== SNMP 监控配置（接口状态/流量采集）=====
+    snmp_enabled = Column(Boolean, default=False)          # 是否启用 SNMP 采集
+    snmp_version = Column(String(10), default="2c")        # SNMP 版本：2c / 3
+    snmp_community = Column(String(200))                   # v2c 只读团体名（如 gyread）
+    snmp_port = Column(Integer, default=161)               # SNMP 端口
+
     # 关系
     backups = relationship("BackupRecord", back_populates="device", cascade="all, delete-orphan")
     faults = relationship("FaultRecord", back_populates="device", cascade="all, delete-orphan")
@@ -82,7 +88,6 @@ class Device(Base):
     ports = relationship("DevicePort", back_populates="device", cascade="all, delete-orphan")
     health_records = relationship("DeviceHealthScore", back_populates="device", cascade="all, delete-orphan")
     spare_relations = relationship("DeviceSpareRelation", back_populates="device", cascade="all, delete-orphan")
-
     def __repr__(self):
         return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}', health={self.health_score})>"
 
@@ -842,6 +847,76 @@ class DeviceHealthScore(Base):
             except:
                 return []
         return []
+
+
+class DeviceInterface(Base):
+    """设备接口表 - SNMP 采集的接口状态/上行口标记
+
+    每行代表设备上一个被纳管的物理/逻辑接口（来自 IF-MIB）。
+    is_uplink 标记上行口（当前手动标记，后续可按拓扑自动推断）。
+    """
+    __tablename__ = "device_interfaces"
+    __table_args__ = (
+        UniqueConstraint("device_id", "if_index", name="uq_device_if_index"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
+    if_index = Column(Integer, nullable=False)            # ifIndex（ifindex persist 后稳定）
+    if_name = Column(String(100), index=True)            # ifName，如 TenGigabitEthernet1/0/1
+    if_descr = Column(String(200))                       # ifDescr
+    # SNMP 采集的状态
+    oper_status = Column(String(20), default="unknown")  # up/down/testing/unknown
+    admin_status = Column(String(20), default="unknown") # up/down（区分人为 shutdown）
+    speed_mbps = Column(Integer)                         # ifHighSpeed（Mbps）
+    # 监控控制
+    is_uplink = Column(Boolean, default=False, index=True)  # 是否上行口
+    monitored = Column(Boolean, default=False, index=True)  # 是否纳入轮询采集
+    # 最近一次流量速率（便于大屏/HUD 直接读取，无需查样本表）
+    last_in_bps = Column(BigInteger)
+    last_out_bps = Column(BigInteger)
+    last_in_util = Column(Float)                         # 入向利用率 %
+    last_out_util = Column(Float)                        # 出向利用率 %
+    last_in_errors = Column(BigInteger)
+    last_out_errors = Column(BigInteger)
+    # 速率计算用的上一次采样（原始 64 位计数器 + 时间戳）
+    last_in_octets = Column(BigInteger)
+    last_out_octets = Column(BigInteger)
+    last_sample_at = Column(DateTime)
+    last_check = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    device = relationship("Device")
+
+    def __repr__(self):
+        return f"<DeviceInterface(device={self.device_id}, if={self.if_name}, oper={self.oper_status})>"
+
+
+class InterfaceTrafficSample(Base):
+    """接口流量样本表 - 时序数据（速率/利用率/错误）
+
+    每个采样周期为被监控接口写入一行，用于大屏流量曲线与历史回看。
+    """
+    __tablename__ = "interface_traffic_samples"
+    __table_args__ = (
+        Index("idx_iface_sample_iface_ts", "interface_id", "ts"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    interface_id = Column(Integer, ForeignKey("device_interfaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    device_id = Column(Integer, index=True)              # 冗余，便于按设备聚合
+    ts = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    in_bps = Column(BigInteger)
+    out_bps = Column(BigInteger)
+    in_util = Column(Float)                              # %
+    out_util = Column(Float)                             # %
+    in_errors = Column(BigInteger)
+    out_errors = Column(BigInteger)
+    oper_status = Column(String(20))
+
+    def __repr__(self):
+        return f"<InterfaceTrafficSample(iface={self.interface_id}, ts={self.ts})>"
 
 
 class WorkflowRule(Base):
