@@ -400,6 +400,33 @@ async def get_monitor_status():
     return monitor.get_stats()
 
 
+@router.get("/monitor/diagnostics")
+async def get_monitor_diagnostics():
+    """可达性监控诊断
+
+    列出哪些设备正在被监控、哪些被跳过（及原因），以及每台设备的当前状态与检测历史。
+    用于排查"设备离线但大屏无反应"的问题。
+    """
+    from app.services.reachability_monitor import get_reachability_monitor
+    monitor = get_reachability_monitor()
+    return monitor.diagnostics()
+
+
+@router.post("/monitor/check-now")
+async def trigger_monitor_check_now(tier: Optional[str] = None):
+    """立即触发一次可达性检测（测试用，免等定时周期）
+
+    Args:
+        tier: 可选，指定分级 critical/normal/low，不传则检测全部分级
+    """
+    import asyncio as _asyncio
+    from app.services.reachability_monitor import get_reachability_monitor
+    monitor = get_reachability_monitor()
+    # 在工作线程中运行（check_now 内部使用 asyncio.run，不能在运行中的事件循环里调用）
+    summary = await _asyncio.to_thread(monitor.check_now, tier)
+    return {"triggered": True, "tier": tier or "all", "result": summary}
+
+
 @router.get("/{device_id}/metrics")
 async def get_device_performance_metrics(device_id: int, db: Session = Depends(get_db)):
     """获取设备性能指标

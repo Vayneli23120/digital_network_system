@@ -430,6 +430,81 @@ class ReachabilityMonitor:
             "max_concurrency": self.max_concurrency,
         }
 
+    def check_now(self, tier: Optional[str] = None) -> Dict[str, any]:
+        """立即触发一次检测（同步阻塞，用于测试/手动刷新）
+
+        注意：内部使用 asyncio.run，必须在没有运行中事件循环的线程里调用
+        （FastAPI 端点中请用 await asyncio.to_thread(monitor.check_now)）。
+
+        Args:
+            tier: 指定分级，None 表示全部分级
+
+        Returns:
+            各分级检测结果摘要
+        """
+        tiers = [tier] if tier else list(self.tier_intervals.keys())
+        summary = {}
+        for t in tiers:
+            try:
+                asyncio.run(self._check_tier(t))
+                summary[t] = "ok"
+            except Exception as e:
+                summary[t] = f"error: {e}"
+        return summary
+
+    def diagnostics(self) -> Dict[str, any]:
+        """监控诊断：列出被监控/被跳过的设备及当前状态，定位为何无告警。"""
+        db = next(get_db())
+        try:
+            all_devices = db.query(Device).all()
+            in_use = [d for d in all_devices if d.deployment_status == 'in-use' and d.ip]
+            not_monitored = [d for d in all_devices if d.deployment_status != 'in-use' or not d.ip]
+
+            tier_counts = {t: 0 for t in self.tier_intervals}
+            invalid_tier = []
+            for d in in_use:
+                t = d.monitor_tier or 'normal'
+                if t in tier_counts:
+                    tier_counts[t] += 1
+                else:
+                    # 分级不在 critical/normal/low 之内 → 不会被任何定时任务检测
+                    invalid_tier.append({"id": d.id, "name": d.name, "monitor_tier": d.monitor_tier})
+
+            monitored = [
+                {
+                    "id": d.id,
+                    "name": d.name,
+                    "ip": d.ip,
+                    "monitor_tier": d.monitor_tier or 'normal',
+                    "reachability": d.reachability,
+                    "last_check": d.last_reachability_check.isoformat() if d.last_reachability_check else None,
+                    "check_history": self._get_check_history(d.id),
+                }
+                for d in in_use
+            ]
+
+            return {
+                "running": self._running,
+                "total_devices": len(all_devices),
+                "monitored_count": len(in_use),
+                "tier_counts": tier_counts,
+                "invalid_tier_devices": invalid_tier,
+                "not_monitored_count": len(not_monitored),
+                "not_monitored_sample": [
+                    {
+                        "id": d.id,
+                        "name": d.name,
+                        "ip": d.ip,
+                        "deployment_status": d.deployment_status,
+                        "reason": "deployment_status 非 in-use" if d.deployment_status != 'in-use' else "缺少 IP",
+                    }
+                    for d in not_monitored[:30]
+                ],
+                "monitored_devices": monitored,
+            }
+        finally:
+            db.close()
+
 
 # 全局服务实例
 _reachability_monitor: Optional[ReachabilityMonitor] = None
