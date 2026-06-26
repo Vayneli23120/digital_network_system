@@ -413,6 +413,13 @@ async def get_monitor_diagnostics():
     return monitor.diagnostics()
 
 
+@router.get("/monitor/trap-diagnostics")
+async def get_trap_diagnostics():
+    """SNMP Trap 接收器诊断（是否在监听、收到/应用的 trap 数量）"""
+    from app.services.trap_receiver import get_trap_receiver
+    return get_trap_receiver().diagnostics()
+
+
 @router.post("/monitor/check-now")
 async def trigger_monitor_check_now(tier: Optional[str] = None):
     """立即触发一次可达性检测（测试用，免等定时周期）

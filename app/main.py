@@ -292,6 +292,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"启动接口监控服务失败: {e}")
 
+    # 启动 SNMP Trap 接收器（秒级 linkDown/linkUp）
+    try:
+        from .services.trap_receiver import start_trap_receiver
+        start_trap_receiver()
+    except Exception as e:
+        logger.warning(f"启动 Trap 接收器失败: {e}")
+
 
 # ============ 优雅关闭 ============
 
@@ -316,6 +323,13 @@ def handle_shutdown(signum, frame):
         logger.info("SNMP 接口监控服务已停止")
     except Exception as e:
         logger.warning(f"停止接口监控服务失败: {e}")
+
+    # 停止 SNMP Trap 接收器
+    try:
+        from .services.trap_receiver import stop_trap_receiver
+        stop_trap_receiver()
+    except Exception as e:
+        logger.warning(f"停止 Trap 接收器失败: {e}")
 
     try:
         get_db_manager().engine.dispose()
