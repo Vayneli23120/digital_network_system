@@ -4140,6 +4140,21 @@ function getPrimaryTrafficInterface(device) {
   return uplinks.length > 0 ? uplinks[0] : null
 }
 
+// 取设备上行口的对端信息（CDP/LLDP 邻居发现结果），优先取已匹配到系统内设备的那条
+function getPeerInfo(device) {
+  const uplinks = getUplinkInterfaces(device)
+  if (!uplinks.length) return null
+  const withPeer = uplinks.filter(i => i.peer_device_name || i.peer_ip)
+  if (!withPeer.length) return null
+  const best = withPeer.find(i => i.peer_device_id) || withPeer[0]
+  return {
+    name: best.peer_device_name || best.peer_ip || '—',
+    port: best.peer_if_name || '',
+    source: best.neighbor_source || '',
+    matched: !!best.peer_device_id,
+  }
+}
+
 async function fetchUplinkTrafficSamples(deviceId, force = false) {
   if (deviceId == null) return
   const device = devices.value.find(x => x.id === deviceId)
@@ -4392,6 +4407,7 @@ function updateHudContent(device) {
   const alarms = getDeviceAlarmCount(device)
   const traffic = getUplinkTraffic(device)
   const trendSvg = getUplinkTrendSvg(device)
+  const peer = getPeerInfo(device)
 
   hudEl.innerHTML = `
     <div class="hud-scan"></div>
@@ -4407,6 +4423,10 @@ function updateHudContent(device) {
       <div class="hud-v">${latency}</div>
       <div class="hud-k">${t('hudUplink')}</div>
       <div class="hud-v ${uplink.cls}">${uplink.text}</div>
+      ${peer ? `
+      <div class="hud-k">${t('hudPeer')}</div>
+      <div class="hud-v hud-peer ${peer.matched ? 'online' : ''}">${peer.name}${peer.port ? ` <span class="hud-peer-port">${peer.port}</span>` : ''}${peer.source ? ` <span class="hud-peer-src">${peer.source.toUpperCase()}</span>` : ''}</div>
+      ` : ''}
       ${traffic ? `
       <div class="hud-k">${t('hudTraffic')}</div>
       <div class="hud-v hud-traffic">↓ ${formatBps(traffic.inBps)}&nbsp;&nbsp;↑ ${formatBps(traffic.outBps)}</div>
@@ -6020,6 +6040,9 @@ onBeforeUnmount(() => {
 :deep(.device-hud .hud-v.unknown) { color: #94a3b8; }
 :deep(.device-hud .hud-time) { font-size: 10px; opacity: 0.9; }
 :deep(.device-hud .hud-traffic) { font-size: 10px; color: #7dd3fc; letter-spacing: 0.2px; white-space: nowrap; }
+:deep(.device-hud .hud-peer) { font-size: 10px; letter-spacing: 0.2px; white-space: nowrap; }
+:deep(.device-hud .hud-peer-port) { opacity: 0.7; font-size: 9px; }
+:deep(.device-hud .hud-peer-src) { font-size: 8px; opacity: 0.6; border: 1px solid rgba(148,163,184,0.4); border-radius: 3px; padding: 0 3px; margin-left: 2px; }
 :deep(.device-hud .hud-v-trend) { padding-top: 2px; }
 :deep(.device-hud .hud-trend-wrap) { display: flex; flex-direction: column; gap: 3px; }
 :deep(.device-hud .hud-spark) { width: 100%; height: 36px; display: block; overflow: visible; }

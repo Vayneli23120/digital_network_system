@@ -44,6 +44,16 @@ OID_CDP_DEVICE_ID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"   # cdpCacheDeviceId（对端
 OID_CDP_DEVICE_PORT = "1.3.6.1.4.1.9.9.23.1.2.1.1.7"  # cdpCacheDevicePort（对端端口名）
 OID_CDP_PLATFORM = "1.3.6.1.4.1.9.9.23.1.2.1.1.8"    # cdpCachePlatform（对端型号）
 
+# ===== LLDP-MIB（标准，覆盖非 Cisco）=====
+# lldpRemTable 索引 = lldpRemTimeMark.lldpRemLocalPortNum.lldpRemIndex
+OID_LLDP_REM_PORT_ID = "1.0.8802.1.1.2.1.4.1.1.7"     # lldpRemPortId（对端端口）
+OID_LLDP_REM_PORT_DESC = "1.0.8802.1.1.2.1.4.1.1.8"   # lldpRemPortDesc
+OID_LLDP_REM_SYS_NAME = "1.0.8802.1.1.2.1.4.1.1.9"    # lldpRemSysName（对端主机名）
+OID_LLDP_REM_SYS_DESC = "1.0.8802.1.1.2.1.4.1.1.10"   # lldpRemSysDesc（对端描述/型号）
+# lldpLocPortTable 索引 = lldpLocPortNum；lldpLocPortId 通常即本地端口名
+OID_LLDP_LOC_PORT_ID = "1.0.8802.1.1.2.1.3.7.1.3"     # lldpLocPortId
+OID_LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"   # lldpLocPortDesc
+
 COUNTER64_MAX = 2 ** 64
 
 # 设备层级排名：数值越大越靠核心；对端排名 > 本端排名 → 该接口判为上行口
@@ -99,6 +109,19 @@ def _cdp_local_ifindex(suffix: str) -> Optional[int]:
     head = suffix.lstrip(".").split(".")[0]
     try:
         return int(head)
+    except ValueError:
+        return None
+
+
+def _lldp_local_portnum(suffix: str) -> Optional[int]:
+    """lldpRem 索引 'timeMark.localPortNum.remIndex' → 本地 portNum"""
+    if not suffix:
+        return None
+    parts = suffix.lstrip(".").split(".")
+    if len(parts) < 2:
+        return None
+    try:
+        return int(parts[1])
     except ValueError:
         return None
 
@@ -394,7 +417,10 @@ class InterfaceMonitor:
             db.close()
 
     def discover_neighbors(self, device_id: int) -> Dict:
-        """基于 CDP 自动发现邻居，回写对端关联并推断上行口（第一版仅 Cisco CDP）"""
+        """基于 CDP + LLDP 自动发现邻居，回写对端关联并推断上行口
+
+        CDP 优先（含对端管理 IP，匹配最准）；LLDP 作为补充覆盖非 Cisco 设备。
+        """
         if not SNMP_AVAILABLE:
             return {"ok": False, "error": "SNMP 库未安装（puresnmp）"}
         db = next(get_db())
@@ -411,29 +437,29 @@ class InterfaceMonitor:
             def walk(oid):
                 return asyncio.run(svc.snmp_walk_raw_async(device.ip, community, oid, timeout=self.snmp_timeout))
 
-            addr = walk(OID_CDP_ADDRESS)
-            dev_id = walk(OID_CDP_DEVICE_ID)
-            dev_port = walk(OID_CDP_DEVICE_PORT)
-            platform = walk(OID_CDP_PLATFORM)
-
-            if not (dev_id or addr):
-                return {"ok": False, "error": "CDP 无响应（检查设备 cdp run / 团体名）"}
+            # CDP 优先，LLDP 补充；按本地接口去重（CDP 已覆盖的接口不再被 LLDP 覆盖）
+            raw_neighbors = self._collect_cdp(walk) + self._collect_lldp(walk)
+            if not raw_neighbors:
+                return {"ok": False, "error": "CDP/LLDP 无响应（检查 cdp run / lldp run / 团体名）"}
 
             self_rank = _tier_rank(getattr(device, "device_type", None))
             neighbors = []
             matched = 0
             uplinks_marked = 0
+            seen_ifaces = set()   # 已处理的本地接口（按 if_index），CDP 先于 LLDP
 
-            # 以索引 suffix 聚合（同一 suffix 对应同一条 CDP 表项）
-            suffixes = set(dev_id) | set(addr) | set(dev_port)
-            for suffix in suffixes:
-                if_index = _cdp_local_ifindex(suffix)
-                if if_index is None:
+            for n in raw_neighbors:
+                iface = self._resolve_local_iface(db, device_id, n)
+                if iface is None:
                     continue
-                remote_host = _decode_str(dev_id.get(suffix))
-                remote_port = _decode_str(dev_port.get(suffix))
-                remote_ip = _decode_ip(addr.get(suffix))
-                remote_platform = _decode_str(platform.get(suffix))
+                if iface.if_index in seen_ifaces:
+                    continue
+                seen_ifaces.add(iface.if_index)
+
+                remote_host = n.get("remote_host") or ""
+                remote_port = n.get("remote_port") or ""
+                remote_ip = n.get("remote_ip") or ""
+                remote_platform = n.get("remote_platform") or ""
 
                 # 匹配系统内对端设备：先 IP，再主机名（含去域名）
                 peer = None
@@ -449,18 +475,10 @@ class InterfaceMonitor:
                             func.lower(Device.name) == short.lower()
                         ).first()
 
-                iface = db.query(DeviceInterface).filter(
-                    DeviceInterface.device_id == device_id,
-                    DeviceInterface.if_index == if_index,
-                ).first()
-                if not iface:
-                    iface = DeviceInterface(device_id=device_id, if_index=if_index)
-                    db.add(iface)
-
                 iface.peer_device_name = remote_host or None
                 iface.peer_ip = remote_ip or None
                 iface.peer_if_name = remote_port or None
-                iface.neighbor_source = "cdp"
+                iface.neighbor_source = n.get("source")
                 iface.neighbor_updated_at = datetime.utcnow()
 
                 is_uplink = False
@@ -476,11 +494,12 @@ class InterfaceMonitor:
                         iface.monitored = True
 
                 neighbors.append({
-                    "local_if_index": if_index,
+                    "local_if_index": iface.if_index,
                     "remote_ip": remote_ip,
                     "remote_host": remote_host,
                     "remote_port": remote_port,
                     "remote_platform": remote_platform,
+                    "source": n.get("source"),
                     "peer_device_id": peer.id if peer else None,
                     "is_uplink": is_uplink,
                 })
@@ -499,6 +518,93 @@ class InterfaceMonitor:
             return {"ok": False, "error": str(e)}
         finally:
             db.close()
+
+    def _collect_cdp(self, walk) -> List[Dict]:
+        """采集 CISCO-CDP-MIB 邻居 → [{local_if_index, remote_ip, remote_host, remote_port, remote_platform, source}]"""
+        addr = walk(OID_CDP_ADDRESS)
+        dev_id = walk(OID_CDP_DEVICE_ID)
+        dev_port = walk(OID_CDP_DEVICE_PORT)
+        platform = walk(OID_CDP_PLATFORM)
+        out = []
+        for suffix in (set(dev_id) | set(addr) | set(dev_port)):
+            if_index = _cdp_local_ifindex(suffix)
+            if if_index is None:
+                continue
+            out.append({
+                "local_if_index": if_index,
+                "local_if_name": None,
+                "remote_ip": _decode_ip(addr.get(suffix)),
+                "remote_host": _decode_str(dev_id.get(suffix)),
+                "remote_port": _decode_str(dev_port.get(suffix)),
+                "remote_platform": _decode_str(platform.get(suffix)),
+                "source": "cdp",
+            })
+        return out
+
+    def _collect_lldp(self, walk) -> List[Dict]:
+        """采集 LLDP-MIB 邻居 → [{local_if_name/local_if_index, remote_host, remote_port, ...}]
+
+        LLDP 本地端口号(lldpLocPortNum)不一定等于 ifIndex，故用 lldpLocPortId 映射成端口名，
+        在写库阶段按 if_name 匹配 DeviceInterface。
+        """
+        rem_port = walk(OID_LLDP_REM_PORT_ID)
+        rem_port_desc = walk(OID_LLDP_REM_PORT_DESC)
+        rem_sys = walk(OID_LLDP_REM_SYS_NAME)
+        rem_sys_desc = walk(OID_LLDP_REM_SYS_DESC)
+        loc_port_id = walk(OID_LLDP_LOC_PORT_ID)   # {portNum: 端口名}
+
+        # 本地端口号 → 端口名映射
+        loc_map = {}
+        for k, v in loc_port_id.items():
+            try:
+                loc_map[int(k.lstrip(".").split(".")[0])] = _decode_str(v)
+            except (ValueError, TypeError):
+                continue
+
+        out = []
+        for suffix in (set(rem_sys) | set(rem_port)):
+            port_num = _lldp_local_portnum(suffix)
+            if port_num is None:
+                continue
+            local_if_name = loc_map.get(port_num)
+            remote_port = _decode_str(rem_port_desc.get(suffix)) or _decode_str(rem_port.get(suffix))
+            out.append({
+                # 若 portNum 恰好等于 ifIndex，写库阶段也会兜底尝试
+                "local_if_index": port_num if not local_if_name else None,
+                "local_if_name": local_if_name,
+                "remote_ip": "",
+                "remote_host": _decode_str(rem_sys.get(suffix)),
+                "remote_port": remote_port,
+                "remote_platform": _decode_str(rem_sys_desc.get(suffix))[:120],
+                "source": "lldp",
+            })
+        return out
+
+    def _resolve_local_iface(self, db, device_id: int, n: Dict) -> Optional[DeviceInterface]:
+        """把邻居记录解析到本地 DeviceInterface 行（按 if_index 或 if_name）"""
+        if n.get("local_if_index") is not None:
+            iface = db.query(DeviceInterface).filter(
+                DeviceInterface.device_id == device_id,
+                DeviceInterface.if_index == n["local_if_index"],
+            ).first()
+            if not iface:
+                iface = DeviceInterface(device_id=device_id, if_index=n["local_if_index"])
+                db.add(iface)
+                db.flush()
+            return iface
+        name = n.get("local_if_name")
+        if name:
+            iface = db.query(DeviceInterface).filter(
+                DeviceInterface.device_id == device_id,
+                func.lower(DeviceInterface.if_name) == name.lower(),
+            ).first()
+            if iface:
+                return iface
+            return db.query(DeviceInterface).filter(
+                DeviceInterface.device_id == device_id,
+                DeviceInterface.if_name.ilike(f"%{name}%"),
+            ).first()
+        return None
 
 
 def _to_int(val) -> Optional[int]:
