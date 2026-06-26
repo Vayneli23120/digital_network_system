@@ -879,3 +879,69 @@ async def get_interface_traffic(device_id: int, if_index: int, limit: int = 60, 
             for s in reversed(samples)
         ],
     }
+
+
+@router.post("/monitor/discover-neighbors-all")
+async def discover_neighbors_all(db: Session = Depends(get_db)):
+    """对所有启用 SNMP 的设备批量执行 CDP/LLDP 邻居发现"""
+    devices = db.query(Device).filter(
+        Device.snmp_enabled == True,  # noqa: E712
+        Device.ip.isnot(None),
+        Device.snmp_community.isnot(None),
+    ).all()
+    if not devices:
+        return {"ok": True, "devices": 0, "results": []}
+
+    from app.services.interface_monitor import get_interface_monitor
+    monitor = get_interface_monitor()
+
+    results = []
+    total_found = total_matched = total_uplinks = 0
+    for dev in devices:
+        res = await asyncio.to_thread(monitor.discover_neighbors, dev.id)
+        results.append({
+            "device_id": dev.id,
+            "device_name": dev.name,
+            "ok": res.get("ok", False),
+            "found": res.get("found", 0),
+            "matched": res.get("matched", 0),
+            "uplinks_marked": res.get("uplinks_marked", 0),
+            "error": res.get("error"),
+        })
+        if res.get("ok"):
+            total_found += res.get("found", 0)
+            total_matched += res.get("matched", 0)
+            total_uplinks += res.get("uplinks_marked", 0)
+
+    return {
+        "ok": True,
+        "devices": len(devices),
+        "total_found": total_found,
+        "total_matched": total_matched,
+        "total_uplinks_marked": total_uplinks,
+        "results": results,
+    }
+
+
+@router.get("/monitor/neighbor-links")
+async def list_neighbor_links(db: Session = Depends(get_db)):
+    """返回 CDP/LLDP 发现的邻居链路（供大屏自动绘制拓扑线）"""
+    rows = db.query(DeviceInterface).filter(
+        DeviceInterface.neighbor_source.isnot(None),
+    ).all()
+    links = []
+    for i in rows:
+        links.append({
+            "device_id": i.device_id,
+            "if_index": i.if_index,
+            "if_name": i.if_name,
+            "oper_status": i.oper_status,
+            "is_uplink": bool(i.is_uplink),
+            "peer_device_id": i.peer_device_id,
+            "peer_device_name": i.peer_device_name,
+            "peer_ip": i.peer_ip,
+            "peer_if_name": i.peer_if_name,
+            "source": i.neighbor_source,
+            "updated_at": i.neighbor_updated_at.isoformat() if i.neighbor_updated_at else None,
+        })
+    return {"count": len(links), "links": links}
