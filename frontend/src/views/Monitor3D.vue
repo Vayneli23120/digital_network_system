@@ -2165,6 +2165,9 @@ function initScene() {
     // 离线设备地面红色光晕呼吸
     updateOfflineGlow()
 
+    // 离线/故障链路红色呼吸闪烁
+    pulseOfflineLinks()
+
     // 根据相机距离更新标签可见性
     updateLabelVisibility()
 
@@ -2460,6 +2463,8 @@ function buildLinks() {
       transparent: true,
       opacity: 0.8,
     })
+    // 标记“离线/故障链路”，供动画循环做呼吸闪烁
+    mat.userData.offlineLink = (link.status === 'broken' || endpointOffline)
 
     // 使用圆柱体绘制每段链路（更粗、更可见）
     for (let i = 0; i < points.length - 1; i++) {
@@ -3053,6 +3058,22 @@ function updateOfflineGlow() {
     if (mesh.material) mesh.material.opacity = 0.9 * breath
     const s = 0.92 + (breath - 0.82) * 0.6
     mesh.scale.setScalar(s)
+  })
+}
+
+// 离线/故障链路呼吸闪烁（与设备/光晕同相，红色透明度脉动）
+function pulseOfflineLinks() {
+  const { linkLines } = ctx.value
+  if (!linkLines) return
+  // 与设备呼吸同相：pulse 0.4 ~ 1.0
+  const pulse = Math.sin(pulseTime) * 0.3 + 0.7
+  const seen = new Set()
+  linkLines.children.forEach(child => {
+    const mat = child.material
+    if (!mat || !mat.userData || !mat.userData.offlineLink) return
+    if (seen.has(mat)) return   // 同一链路多段共享材质，仅设置一次
+    seen.add(mat)
+    mat.opacity = 0.4 + 0.5 * pulse   // 0.6 ~ 0.9 区间脉动
   })
 }
 
