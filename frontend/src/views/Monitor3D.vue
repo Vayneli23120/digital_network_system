@@ -4375,8 +4375,23 @@ function focusOfflineCluster(list) {
   animateCameraTo(targetPos, targetLookAt)
 }
 
-// 自动锁定离线设备（去抖：批量掉线时合并判定）
-// 单台离线 → 锁定该设备；多台同时离线 → 框住整片受影响区域
+// 平滑复位到全景（与 fitView 同一取景，但带缓动动画）
+function resetViewAnimated() {
+  const { camera } = ctx.value
+  if (!camera) return
+  const fovV = THREE.MathUtils.degToRad(camera.fov)
+  const aspect = camera.aspect || 1
+  const distV = (plan.real_depth_m / 2) / Math.tan(fovV / 2)
+  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
+  const distH = (plan.real_width_m / 2) / Math.tan(fovH / 2)
+  const dist = Math.max(distV, distH) * 1.05
+  const targetPos = { x: plan.real_width_m / 2, y: dist * 0.6, z: plan.real_depth_m / 2 + dist * 0.8 }
+  const targetLookAt = { x: plan.real_width_m / 2, y: 0, z: plan.real_depth_m / 2 }
+  animateCameraTo(targetPos, targetLookAt)
+}
+
+// 自动锁定离线设备（去抖：批量掉线/逐台恢复时合并判定）
+// 0 台离线 → 视角复位；1 台 → 锁定该设备；多台 → 框住整片受影响区域
 let autoFocusDebounceTimer = null
 function scheduleAutoFocusOffline() {
   if (!autoFocusOffline.value) return
@@ -4387,11 +4402,12 @@ function scheduleAutoFocusOffline() {
     const offline = filteredDevices.value.filter(d =>
       isDeviceOffline(d) && nodes.value.some(n => n.device_id === d.id)
     )
-    if (offline.length === 0) return
-    if (offline.length === 1) {
-      focusDevice(offline[0])
+    if (offline.length === 0) {
+      resetViewAnimated()           // 全部恢复，地图视角复位
+    } else if (offline.length === 1) {
+      focusDevice(offline[0])       // 仅剩一台，锁定该设备
     } else {
-      focusOfflineCluster(offline)
+      focusOfflineCluster(offline)  // 多台仍离线，重新框住剩余区域
     }
   }, 600)
 }
@@ -4670,6 +4686,8 @@ function handleDeviceStatusChange(msg) {
     scheduleAutoFocusOffline()
   } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
     ElMessage.success({ message: `设备恢复：${label}`, duration: 4000 })
+    // 逐台恢复时重新框定剩余离线区域；全部恢复则视角复位
+    scheduleAutoFocusOffline()
   }
 }
 
@@ -4725,12 +4743,15 @@ async function reconcileDeviceReachability() {
 
     let changed = false
     let newlyOffline = false
+    let recovered = false
     devices.value.forEach(d => {
       const fresh = latest.get(d.id)
       if (!fresh) return
       if (fresh.reachability !== d.reachability) {
         if (fresh.reachability === 'unreachable' && d.reachability !== 'unreachable') {
           newlyOffline = true
+        } else if (d.reachability === 'unreachable' && fresh.reachability !== 'unreachable') {
+          recovered = true
         }
         d.reachability = fresh.reachability
         changed = true
@@ -4743,8 +4764,9 @@ async function reconcileDeviceReachability() {
     if (changed) {
       // 仅在状态真正变化时重建可视化，避免无谓开销
       refreshDeviceVisuals()
-      // 轮询发现新离线设备时也自动锁定（WS 未连通时的兜底）
-      if (newlyOffline) scheduleAutoFocusOffline()
+      // 新离线或有设备恢复时重新取景（WS 未连通时的兜底）
+      // 恢复会重新框定剩余离线区域，全部恢复则复位
+      if (newlyOffline || recovered) scheduleAutoFocusOffline()
     }
   } catch (e) {
     // 轮询失败静默处理，下个周期重试
