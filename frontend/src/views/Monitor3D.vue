@@ -4071,19 +4071,33 @@ let hudObj = null          // CSS2DObject
 let hudEl = null           // HUD 根 DOM
 let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
 
-// 计算设备上行链路状态（基于连接到该设备的链路）
+// 计算设备上行链路状态（基于设备寻路路径 devicePaths，回退到链路 links）
 function getUplinkStatus(device) {
   if (!device) return { text: '—', cls: 'unknown' }
   if (isDeviceOffline(device)) return { text: '中断', cls: 'offline' }
+
+  // 主依据：设备到核心的寻路路径（与大屏绿色数据链路同源）
+  const path = devicePaths.value?.[device.id] ?? devicePaths.value?.[String(device.id)]
+  if (path) {
+    const reachable = Array.isArray(path) ? path.length >= 2 : path.reachable !== false
+    return reachable
+      ? { text: '正常', cls: 'online' }
+      : { text: '降级', cls: 'maintenance' }
+  }
+
+  // 回退：手动绘制的链路（编辑模式下使用）
   const touched = links.value.filter(l => {
     const fromNode = nodes.value.find(n => n.id === l.from_node_id || n.device_id === l.from)
     const toNode = nodes.value.find(n => n.id === l.to_node_id || n.device_id === l.to)
     return (fromNode && fromNode.device_id === device.id) ||
            (toNode && toNode.device_id === device.id)
   })
-  if (touched.some(l => l.status === 'broken')) return { text: '降级', cls: 'maintenance' }
-  if (touched.length === 0) return { text: '无上行', cls: 'unknown' }
-  return { text: '正常', cls: 'online' }
+  if (touched.length > 0) {
+    return touched.some(l => l.status === 'broken')
+      ? { text: '降级', cls: 'maintenance' }
+      : { text: '正常', cls: 'online' }
+  }
+  return { text: '无上行', cls: 'unknown' }
 }
 
 // 统计设备当前告警数（离线计 1，相连故障链路各计 1）
