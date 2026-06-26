@@ -2448,8 +2448,13 @@ function buildLinks() {
 
     points.push(new THREE.Vector3(b.x, b.y, b.z))
 
-    // 链路状态颜色：正常绿色，异常红色
-    const statusColor = link.status === 'broken' ? 0xff4d4f : 0x22c55e  // 红色/绿色
+    // 链路状态颜色：正常绿色；链路本身故障或任一端设备离线时变红
+    const fromDevice = devices.value.find(d => d.id === fromNode.device_id)
+    const toDevice = devices.value.find(d => d.id === toNode.device_id)
+    const endpointOffline =
+      (fromDevice && isDeviceOffline(fromDevice)) ||
+      (toDevice && isDeviceOffline(toDevice))
+    const statusColor = (link.status === 'broken' || endpointOffline) ? 0xff4d4f : 0x22c55e  // 红色/绿色
     const mat = new THREE.MeshBasicMaterial({
       color: statusColor,
       transparent: true,
@@ -2504,6 +2509,8 @@ function buildLinks() {
   })
 
   scene.add(linkGroup)
+  // 保留显隐状态（rebuild 后仍跟随“数据链路”开关）
+  linkGroup.visible = showDataLinks.value
   ctx.value.linkLines = linkGroup
 }
 
@@ -2628,6 +2635,8 @@ function buildDataLinkPaths() {
 
   scene.add(pathGroup)
   ctx.value.dataLinkPaths = pathGroup
+  // 保留显隐状态（rebuild 后仍跟随“数据链路”开关）
+  pathGroup.visible = showDataLinks.value
 }
 
 // ========== PNetLab 式端口连线交互 ==========
@@ -4654,9 +4663,11 @@ watch(floorTiltAngle, () => {
 function refreshDeviceVisuals() {
   disposeGroup('devices')
   disposeGroup('labels')
+  disposeGroup('links')
   disposeGroup('data-link-paths')
   buildDeviceModels()
   buildLabels()
+  buildLinks()
   buildDataLinkPaths()
   buildOfflineGlow()
 }
