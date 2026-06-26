@@ -4094,6 +4094,8 @@ function findNearbyCoreDevice(x_percent, y_percent, threshold) {
 let hudObj = null          // CSS2DObject
 let hudEl = null           // HUD 根 DOM
 let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
+let hudPinnedDeviceId = null
+let hudAutoHideTimer = null
 
 // SNMP 上行接口数据缓存：deviceId -> { ts, items }
 const snmpIfaceCache = new Map()
@@ -4234,6 +4236,67 @@ function ensureHudPanel() {
   scene.add(hudObj)
 }
 
+function hideHudPanel() {
+  if (hudObj) hudObj.visible = false
+  if (hudEl) {
+    hudEl.classList.remove('visible')
+    hudEl.style.display = 'none'
+  }
+}
+
+function positionHudForDevice(device) {
+  if (!hudObj || !device) return false
+  const { deviceGroup } = ctx.value
+  const model = deviceGroup?.children?.find(child => child?.userData?.device?.id === device.id)
+  if (model) {
+    const base = getDeviceBaseSize(device.device_type)
+    const topY = (model.position.y || 0) + base * 1.6
+    hudObj.position.set(model.position.x, topY, model.position.z)
+    return true
+  }
+
+  const node = nodes.value.find(n => n.device_id === device.id)
+  if (!node) return false
+  const world = percentToWorld(node.x_percent, node.y_percent, 0)
+  const base = getDeviceBaseSize(device.device_type)
+  hudObj.position.set(world.x, base * 1.6, world.z)
+  return true
+}
+
+function showHudForDevice(device, durationMs = 0) {
+  if (!device || isEditMode.value) return
+  ensureHudPanel()
+  if (!hudObj || !hudEl) return
+
+  const { camera, labelRenderer, scene } = ctx.value
+  hudDeviceId = device.id
+  updateHudContent(device)
+  if (!positionHudForDevice(device)) return
+
+  hudObj.visible = true
+  hudEl.style.display = 'block'
+  if (labelRenderer && scene && camera) {
+    labelRenderer.render(scene, camera)
+  }
+  requestAnimationFrame(() => {
+    if (hudEl) hudEl.classList.add('visible')
+  })
+
+  if (hudAutoHideTimer) {
+    clearTimeout(hudAutoHideTimer)
+    hudAutoHideTimer = null
+  }
+  if (durationMs > 0) {
+    hudPinnedDeviceId = device.id
+    hudAutoHideTimer = setTimeout(() => {
+      if (hudPinnedDeviceId === device.id) {
+        hudPinnedDeviceId = null
+        hideHudPanel()
+      }
+    }, durationMs)
+  }
+}
+
 // 刷新 HUD 内容
 function updateHudContent(device) {
   if (!hudEl) return
@@ -4286,16 +4349,16 @@ function refreshHoveredHud() {
 }
 function onCanvasMouseMove(e) {
   if (isEditMode.value || isDragging || dragState.value) {
-    if (hudObj) hudObj.visible = false
-    if (hudEl) hudEl.style.display = 'none'
+    hideHudPanel()
     hudDeviceId = null
+    hudPinnedDeviceId = null
     return
   }
   const now = performance.now()
   if (now - lastHoverCheck < 60) return   // 节流
   lastHoverCheck = now
 
-  const { camera, renderer, deviceGroup, labelRenderer, scene } = ctx.value
+  const { camera, renderer, deviceGroup } = ctx.value
   if (!camera || !deviceGroup) return
 
   const rect = renderer.domElement.getBoundingClientRect()
@@ -4308,29 +4371,18 @@ function onCanvasMouseMove(e) {
   while (model && !model.userData.device) model = model.parent
 
   if (model && model.userData.device) {
-    ensureHudPanel()
     const device = model.userData.device
     if (hudDeviceId !== device.id) {
-      hudDeviceId = device.id
       fetchDeviceInterfaces(device.id)   // 异步拉取 SNMP 上行口状态/流量
-      updateHudContent(device)
     }
-    const base = getDeviceBaseSize(device.device_type)
-    const topY = (model.position.y || 0) + base * 1.6
-    hudObj.position.set(model.position.x, topY, model.position.z)
-    hudObj.visible = true
-    // 先渲染 CSS2D（计算位置），再添加 visible class 显示，避免左上角闪烁
-    if (labelRenderer && scene && camera) {
-      labelRenderer.render(scene, camera)
-    }
-    requestAnimationFrame(() => {
-      if (hudEl) hudEl.classList.add('visible')
-    })
+    hudPinnedDeviceId = null
+    showHudForDevice(device)
     renderer.domElement.style.cursor = 'pointer'
   } else {
-    hudDeviceId = null
-    if (hudObj) hudObj.visible = false
-    if (hudEl) hudEl.classList.remove('visible')
+    if (!hudPinnedDeviceId) {
+      hudDeviceId = null
+      hideHudPanel()
+    }
     renderer.domElement.style.cursor = ''
   }
 }
@@ -4992,6 +5044,10 @@ function handleInterfaceStatusChange(msg) {
   const dName = msg.device_name || device?.name || `#${msg.device_id}`
   const ifName = msg.if_name || `if${msg.if_index}`
   const uplinkTag = msg.is_uplink ? '上行口 ' : ''
+  if (device && (msg.is_uplink || msg.source === 'trap')) {
+    focusDevice(device)
+    showHudForDevice(device, 6000)
+  }
   if (msg.new_status === 'down') {
     ElMessage.error({ message: `${uplinkTag}${ifName} 中断：${dName}`, duration: 5000 })
   } else if (msg.new_status === 'up' && msg.old_status === 'down') {
@@ -5153,6 +5209,11 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onResize)
+
+  if (hudAutoHideTimer) {
+    clearTimeout(hudAutoHideTimer)
+    hudAutoHideTimer = null
+  }
 
   // 停止对账轮询
   stopReachabilityPoll()
