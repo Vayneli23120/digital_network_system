@@ -17,6 +17,9 @@
       </el-button>
       <el-button size="small" @click="resetView">{{ t('viewReset') }}</el-button>
       <el-button size="small" @click="topView">{{ t('viewTop') }}</el-button>
+      <el-button size="small" :loading="discoveringNeighbors" @click="discoverNeighbors">
+        {{ t('discoverNeighbors') }}
+      </el-button>
       <el-button size="small" type="primary" @click="showUploadDialog = true">
         {{ t('uploadFloorPlan') }}
       </el-button>
@@ -497,6 +500,7 @@ const fiberBranchPoints = ref([])  // 分支点（旧数据，面板备用）
 const fiberBranchLinks = ref([])  // 分支光缆（旧数据，面板备用）
 const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
 const neighborLinks = ref([])  // CDP/LLDP 自动发现的邻居链路
+const discoveringNeighbors = ref(false)  // 邻居发现进行中
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
@@ -2755,6 +2759,27 @@ async function fetchNeighborLinks() {
     neighborLinks.value = res.data?.links || []
   } catch (e) {
     neighborLinks.value = []
+  }
+}
+
+// 手动触发：对所有启用 SNMP 的设备执行 CDP/LLDP 邻居发现，并重绘拓扑线
+async function discoverNeighbors() {
+  if (discoveringNeighbors.value) return
+  discoveringNeighbors.value = true
+  try {
+    const res = await axios.post('/api/devices/monitor/discover-neighbors-all')
+    const d = res.data || {}
+    await fetchNeighborLinks()
+    disposeGroup('neighbor-links')
+    buildNeighborLinks()
+    ElMessage.success(
+      `${t('discoverNeighbors')}: ${d.devices || 0} ${t('hudCheck')} · ` +
+      `${t('hudPeer')} ${d.total_found || 0} · ${t('hudUplink')} ${d.total_uplinks_marked || 0}`
+    )
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || t('discoverNeighbors') + ' 失败')
+  } finally {
+    discoveringNeighbors.value = false
   }
 }
 
