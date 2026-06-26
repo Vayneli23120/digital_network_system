@@ -347,15 +347,16 @@ def get_device_detail(db: Session, device_id: int) -> Optional[Dict[str, Any]]:
 
 
 def get_offline_alerts(db: Session) -> List[Dict[str, Any]]:
-    """获取离线设备告警列表"""
-    offline_devices = db.query(Device).filter(Device.status == "offline").all()
+    """获取离线设备告警列表（基于 reachability）"""
+    # Phase2: 统一以 reachability 驱动设备状态
+    offline_devices = db.query(Device).filter(Device.reachability == "unreachable").all()
     alerts = []
     for device in offline_devices:
         # 计算离线时长
         offline_hours = 0
         offline_str = "N/A"
-        if device.updated_at:
-            offline_seconds = (datetime.utcnow() - device.updated_at).total_seconds()
+        if device.last_reachability_check:
+            offline_seconds = (datetime.utcnow() - device.last_reachability_check).total_seconds()
             offline_hours = offline_seconds / 3600
             days = int(offline_hours / 24)
             hours = int(offline_hours % 24)
@@ -372,7 +373,8 @@ def get_offline_alerts(db: Session) -> List[Dict[str, Any]]:
             "device_type": device.device_type or "switch",
             "offline_hours": round(offline_hours, 1),
             "offline_str": offline_str,
-            "last_online": device.updated_at.isoformat() if device.updated_at else None,
+            "last_online": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
+            "reachability": device.reachability,
         })
     return alerts
 
