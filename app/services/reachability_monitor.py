@@ -52,8 +52,9 @@ class ReachabilityMonitor:
         # 并发控制（网络检测）
         self.max_concurrency = 50
 
-        # 数据库写入锁（SQLite 串行化）
-        self._db_lock = asyncio.Lock()
+        # 数据库写入锁（使用线程锁，兼容 APScheduler 后台线程 + asyncio.run）
+        import threading
+        self._db_lock = threading.Lock()
 
         # 检测历史缓存（Redis 内存缓存）
         self._history_cache_prefix = "reachability_history:"
@@ -131,8 +132,8 @@ class ReachabilityMonitor:
                 logger.error(f"Detection failed: {detect_result}")
                 continue
 
-            # 使用锁确保串行写入
-            async with self._db_lock:
+            # 使用线程锁确保串行写入（兼容 APScheduler 后台线程）
+            with self._db_lock:
                 await asyncio.to_thread(self._update_device_status, detect_result)
 
         # 清除 Dashboard 缓存
