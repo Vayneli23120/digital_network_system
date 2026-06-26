@@ -4305,6 +4305,97 @@ function focusDevice(device) {
   }
 }
 
+// 通用相机平滑动画（缓动到指定位置与注视点）
+function animateCameraTo(targetPos, targetLookAt, duration = 60) {
+  const { camera, controls } = ctx.value
+  if (!camera) return
+  if (focusAnimationId) cancelAnimationFrame(focusAnimationId)
+
+  const startPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
+  const startLookAt = { x: controls.target.x, y: controls.target.y, z: controls.target.z }
+  let frame = 0
+
+  const animate = () => {
+    frame++
+    const progress = Math.min(frame / duration, 1)
+    const ease = 1 - Math.pow(1 - progress, 3)
+
+    camera.position.x = startPos.x + (targetPos.x - startPos.x) * ease
+    camera.position.y = startPos.y + (targetPos.y - startPos.y) * ease
+    camera.position.z = startPos.z + (targetPos.z - startPos.z) * ease
+
+    controls.target.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * ease
+    controls.target.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * ease
+    controls.target.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * ease
+
+    if (progress < 1) {
+      focusAnimationId = requestAnimationFrame(animate)
+    } else {
+      focusAnimationId = null
+    }
+  }
+  animate()
+}
+
+// 框住多台离线设备所在区域（多设备同时掉线时俯视取景）
+function focusOfflineCluster(list) {
+  const { camera } = ctx.value
+  if (!camera) return
+
+  const pts = []
+  list.forEach(d => {
+    const node = nodes.value.find(n => n.device_id === d.id)
+    if (node) pts.push(percentToWorld(node.x_percent, node.y_percent, 0))
+  })
+  if (pts.length === 0) return
+
+  // 计算包围盒中心与跨度
+  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
+  pts.forEach(p => {
+    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x)
+    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z)
+  })
+  const cx = (minX + maxX) / 2
+  const cz = (minZ + maxZ) / 2
+  const spanX = Math.max(maxX - minX, 1)
+  const spanZ = Math.max(maxZ - minZ, 1)
+  const ref = Math.min(plan.real_width_m, plan.real_depth_m)
+
+  // 取景距离：用 FOV 反算容纳整个簇，并留边距
+  const fovV = THREE.MathUtils.degToRad(camera.fov)
+  const aspect = camera.aspect || 1
+  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
+  const distV = (spanZ / 2) / Math.tan(fovV / 2)
+  const distH = (spanX / 2) / Math.tan(fovH / 2)
+  let dist = Math.max(distV, distH) * 1.6 + ref * 0.04
+  dist = Math.max(dist, ref * 0.1)   // 簇很小时也别贴太近
+
+  const targetPos = { x: cx, y: dist * 0.6, z: cz + dist * 0.8 }
+  const targetLookAt = { x: cx, y: 0, z: cz }
+  animateCameraTo(targetPos, targetLookAt)
+}
+
+// 自动锁定离线设备（去抖：批量掉线时合并判定）
+// 单台离线 → 锁定该设备；多台同时离线 → 框住整片受影响区域
+let autoFocusDebounceTimer = null
+function scheduleAutoFocusOffline() {
+  if (!autoFocusOffline.value) return
+  if (autoFocusDebounceTimer) clearTimeout(autoFocusDebounceTimer)
+  autoFocusDebounceTimer = setTimeout(() => {
+    autoFocusDebounceTimer = null
+    if (!autoFocusOffline.value) return
+    const offline = filteredDevices.value.filter(d =>
+      isDeviceOffline(d) && nodes.value.some(n => n.device_id === d.id)
+    )
+    if (offline.length === 0) return
+    if (offline.length === 1) {
+      focusDevice(offline[0])
+    } else {
+      focusOfflineCluster(offline)
+    }
+  }, 600)
+}
+
 // 跳转设备详情
 function goToDeviceDetail(deviceId) {
   router.push(`/devices/${deviceId}`)
@@ -4575,10 +4666,8 @@ function handleDeviceStatusChange(msg) {
   const label = `${msg.device_name || device.name}（${msg.ip || device.ip}）`
   if (msg.new_state === 'unreachable') {
     ElMessage.error({ message: `设备离线：${label}`, duration: 5000 })
-    // 自动锁定镜头到离线设备（可开关，默认开）
-    if (autoFocusOffline.value) {
-      focusDevice(device)
-    }
+    // 自动锁定镜头（去抖：多台同时掉线会合并为框住整片区域，避免镜头乱跳）
+    scheduleAutoFocusOffline()
   } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
     ElMessage.success({ message: `设备恢复：${label}`, duration: 4000 })
   }
@@ -4635,10 +4724,14 @@ async function reconcileDeviceReachability() {
     const latest = new Map(items.map(d => [d.id, d]))
 
     let changed = false
+    let newlyOffline = false
     devices.value.forEach(d => {
       const fresh = latest.get(d.id)
       if (!fresh) return
       if (fresh.reachability !== d.reachability) {
+        if (fresh.reachability === 'unreachable' && d.reachability !== 'unreachable') {
+          newlyOffline = true
+        }
         d.reachability = fresh.reachability
         changed = true
       }
@@ -4650,6 +4743,8 @@ async function reconcileDeviceReachability() {
     if (changed) {
       // 仅在状态真正变化时重建可视化，避免无谓开销
       refreshDeviceVisuals()
+      // 轮询发现新离线设备时也自动锁定（WS 未连通时的兜底）
+      if (newlyOffline) scheduleAutoFocusOffline()
     }
   } catch (e) {
     // 轮询失败静默处理，下个周期重试
@@ -4706,6 +4801,12 @@ onBeforeUnmount(() => {
 
   // 断开设备状态 WebSocket
   disconnectDeviceStatusWs()
+
+  // 清除自动锁定去抖定时器
+  if (autoFocusDebounceTimer) {
+    clearTimeout(autoFocusDebounceTimer)
+    autoFocusDebounceTimer = null
+  }
 
   // 移除全屏事件监听
   document.removeEventListener('fullscreenchange', onFullscreenChange)
