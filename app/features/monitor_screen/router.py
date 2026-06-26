@@ -317,9 +317,10 @@ async def get_stats(db: Session = Depends(get_db)):
     from sqlalchemy import or_
 
     total_devices = db.query(Device).count()
-    online_devices = db.query(Device).filter(Device.status == "online").count()
-    offline_devices = db.query(Device).filter(Device.status == "offline").count()
-    maintenance_devices = db.query(Device).filter(Device.status == "maintenance").count()
+    # Phase2: 统一以 reachability 驱动在线/离线统计
+    online_devices = db.query(Device).filter(Device.reachability == "reachable").count()
+    offline_devices = db.query(Device).filter(Device.reachability == "unreachable").count()
+    maintenance_devices = db.query(Device).filter(Device.deployment_status == "maintenance").count()
 
     # 交换机：包括 office_switch、core_switch、server_switch（项目实际枚举值）
     switch_count = db.query(Device).filter(

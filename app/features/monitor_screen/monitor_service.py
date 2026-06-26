@@ -97,7 +97,7 @@ def get_floor_plan_nodes(db: Session, plan_id: int) -> List[Dict[str, Any]]:
         if device:
             # 计算连续在线时长
             uptime_hours = 0
-            if device.status == "online" and device.updated_at:
+            if device.reachability == "reachable" and device.updated_at:
                 uptime_hours = (datetime.utcnow() - device.updated_at).total_seconds() / 3600
 
             # 计算使用寿命（从 purchase_date 到现在）
@@ -276,7 +276,7 @@ def get_device_detail(db: Session, device_id: int) -> Optional[Dict[str, Any]]:
     # 计算连续在线时长
     uptime_hours = 0
     uptime_str = "N/A"
-    if device.status == "online" and device.updated_at:
+    if device.reachability == "reachable" and device.updated_at:
         uptime_seconds = (datetime.utcnow() - device.updated_at).total_seconds()
         uptime_hours = uptime_seconds / 3600
         # 格式化为天/小时
