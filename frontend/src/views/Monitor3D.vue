@@ -315,8 +315,8 @@
             <p><strong>IP:</strong> {{ selectedDevice.ip }}</p>
             <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabel(selectedDevice.device_type) }}</p>
             <p><strong>{{ t('deviceStatus') }}:</strong>
-              <el-tag :type="selectedDevice.status === 'online' ? 'success' : 'danger'" size="small">
-                {{ getStatusLabel(selectedDevice.status) }}
+              <el-tag :type="isDeviceOnline(selectedDevice) ? 'success' : (isDeviceOffline(selectedDevice) ? 'danger' : 'info')" size="small">
+                {{ getStatusLabel(deviceStatus(selectedDevice)) }}
               </el-tag>
             </p>
             <!-- 设备缩放调节 -->
@@ -563,14 +563,14 @@ const stats = computed(() => {
   const filtered = filteredDevices.value
   return {
     total: filtered.length,
-    online: filtered.filter(d => d.status === 'online').length,
-    offline: filtered.filter(d => d.status === 'offline').length,
+    online: filtered.filter(isDeviceOnline).length,
+    offline: filtered.filter(isDeviceOffline).length,
   }
 })
 
 // 离线设备列表
 const offlineDevices = computed(() => {
-  return devices.value.filter(d => d.status === 'offline').slice(0, 10)
+  return devices.value.filter(isDeviceOffline).slice(0, 10)
 })
 
 // 筛选后的设备
@@ -585,7 +585,9 @@ const filteredDevices = computed(() => {
     }
   }
   if (filterStatus.value) {
-    result = result.filter(d => d.status === filterStatus.value)
+    if (filterStatus.value === 'online') result = result.filter(isDeviceOnline)
+    else if (filterStatus.value === 'offline') result = result.filter(isDeviceOffline)
+    else result = result.filter(d => deviceStatus(d) === filterStatus.value)
   }
   return result
 })
@@ -606,6 +608,7 @@ const statusMap = {
   'online': '在线',
   'offline': '离线',
   'maintenance': '维护中',
+  'unknown': '未知',
 }
 
 function getDeviceTypeLabel(type) {
@@ -614,6 +617,20 @@ function getDeviceTypeLabel(type) {
 
 function getStatusLabel(status) {
   return statusMap[status] || status
+}
+
+// 统一以可达性(reachability)推导设备显示状态，替代旧 status 字段
+// reachable -> online, unreachable -> offline, 其余 -> unknown
+function deviceStatus(d) {
+  if (d?.reachability === 'unreachable') return 'offline'
+  if (d?.reachability === 'reachable') return 'online'
+  return 'unknown'
+}
+function isDeviceOffline(d) {
+  return d?.reachability === 'unreachable'
+}
+function isDeviceOnline(d) {
+  return d?.reachability === 'reachable'
 }
 
 // 标签页和编辑模式
@@ -2314,7 +2331,7 @@ function buildDeviceModels() {
     const node = nodes.value.find(n => n.device_id === d.id)
     if (!node) return
 
-    const model = createDeviceModel(d.device_type, d.status)
+    const model = createDeviceModel(d.device_type, deviceStatus(d))
     const elevation = getDeviceBaseSize(d.device_type) * 0.5
     const w = percentToWorld(node.x_percent, node.y_percent, elevation)
     model.position.set(w.x, w.y, w.z)
@@ -2549,10 +2566,9 @@ function buildDataLinkPaths() {
 
     if (!Array.isArray(polyline) || polyline.length < 2) return
 
-    // 获取设备状态
+    // 获取设备状态（以可达性判断，unreachable 显示红色）
     const device = devices.value.find(d => d.id === parseInt(deviceId))
-    const status = device ? device.status : 'unknown'
-    const statusColor = status === 'online' ? 0x22c55e : 0xff4d4f  // 绿色/红色
+    const statusColor = device && isDeviceOffline(device) ? 0xff4d4f : 0x22c55e  // 红色/绿色
 
     // 直接使用 polyline 的 x_percent, y_percent（后端已去重）
     const points = polyline.map(pt => {
@@ -2901,14 +2917,14 @@ function buildLabels() {
     const w = percentToWorld(node.x_percent, node.y_percent, labelHeight)
 
     const el = document.createElement('div')
-    el.className = `device-label ${d.status}`
+    el.className = `device-label ${deviceStatus(d)}`
     el.textContent = d.name
     el.style.opacity = '0'
 
     const label = new CSS2DObject(el)
     label.position.set(w.x, w.y, w.z)
     label.userData.deviceId = d.id
-    label.userData.deviceStatus = d.status
+    label.userData.deviceStatus = deviceStatus(d)
     label.visible = false
     labelGroup.add(label)
   })
@@ -2936,7 +2952,7 @@ function pulseOfflineDevices() {
 
   deviceGroup.children.forEach(model => {
     const device = model.userData.device
-    if (device && device.status === 'offline') {
+    if (device && isDeviceOffline(device)) {
       model.traverse(child => {
         if (child.material && child.material.color) {
           const baseColor = STATUS_COLOR.offline
@@ -4444,6 +4460,77 @@ watch(floorTiltAngle, () => {
   }
 })
 
+// ===== 设备状态实时刷新（仅重建设备/标签/数据链路，状态变化时调用）=====
+function refreshDeviceVisuals() {
+  disposeGroup('devices')
+  disposeGroup('labels')
+  disposeGroup('data-link-paths')
+  buildDeviceModels()
+  buildLabels()
+  buildDataLinkPaths()
+}
+
+// ===== 设备可达性实时推送（WebSocket /ws/device-status）=====
+let deviceStatusWs = null
+let deviceStatusWsReconnectTimer = null
+let deviceStatusWsClosed = false
+
+function handleDeviceStatusChange(msg) {
+  const device = devices.value.find(d => d.id === msg.device_id)
+  if (!device) return
+  device.reachability = msg.new_state
+  device.reachability_latency_ms = msg.latency_ms ?? null
+  if (msg.timestamp) device.last_reachability_check = msg.timestamp
+
+  // 刷新 3D 可视化（颜色/标签/链路随可达性变化）
+  refreshDeviceVisuals()
+
+  // 离线/恢复告警提示
+  const label = `${msg.device_name || device.name}（${msg.ip || device.ip}）`
+  if (msg.new_state === 'unreachable') {
+    ElMessage.error({ message: `设备离线：${label}`, duration: 5000 })
+  } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
+    ElMessage.success({ message: `设备恢复：${label}`, duration: 4000 })
+  }
+}
+
+function connectDeviceStatusWs() {
+  try {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws'
+    deviceStatusWs = new WebSocket(`${proto}://${location.host}/ws/device-status`)
+    deviceStatusWs.onmessage = (ev) => {
+      try {
+        const msg = JSON.parse(ev.data)
+        if (msg && msg.event === 'device_status_change') {
+          handleDeviceStatusChange(msg)
+        }
+      } catch (e) { /* 忽略非 JSON 消息 */ }
+    }
+    deviceStatusWs.onclose = () => {
+      if (deviceStatusWsClosed) return
+      // 断线自动重连
+      deviceStatusWsReconnectTimer = setTimeout(connectDeviceStatusWs, 5000)
+    }
+    deviceStatusWs.onerror = () => {
+      try { deviceStatusWs && deviceStatusWs.close() } catch (e) { /* noop */ }
+    }
+  } catch (e) {
+    console.warn('设备状态 WebSocket 连接失败:', e)
+  }
+}
+
+function disconnectDeviceStatusWs() {
+  deviceStatusWsClosed = true
+  if (deviceStatusWsReconnectTimer) {
+    clearTimeout(deviceStatusWsReconnectTimer)
+    deviceStatusWsReconnectTimer = null
+  }
+  if (deviceStatusWs) {
+    try { deviceStatusWs.close() } catch (e) { /* noop */ }
+    deviceStatusWs = null
+  }
+}
+
 onMounted(async () => {
   initScene()
   await loadData()
@@ -4459,6 +4546,9 @@ onMounted(async () => {
   // 自动框景 - 延迟执行确保布局稳定
   requestAnimationFrame(() => fitView())
 
+  // 订阅设备实时可达性状态变化
+  connectDeviceStatusWs()
+
   // 全屏事件监听
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
@@ -4467,6 +4557,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onResize)
+
+  // 断开设备状态 WebSocket
+  disconnectDeviceStatusWs()
 
   // 移除全屏事件监听
   document.removeEventListener('fullscreenchange', onFullscreenChange)
