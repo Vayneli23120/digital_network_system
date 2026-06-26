@@ -21,6 +21,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
+from sqlalchemy import func
 
 from app.shared.database import get_db
 from app.shared.models import Device, DeviceInterface, InterfaceTrafficSample
@@ -37,7 +38,70 @@ OID_IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 OID_IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
 OID_IF_HIGH_SPEED = "1.3.6.1.2.1.31.1.1.1.15"   # Mbps
 
+# ===== CISCO-CDP-MIB cdpCacheTable（索引 = ifIndex.deviceIndex）=====
+OID_CDP_ADDRESS = "1.3.6.1.4.1.9.9.23.1.2.1.1.4"     # cdpCacheAddress（对端 IP）
+OID_CDP_DEVICE_ID = "1.3.6.1.4.1.9.9.23.1.2.1.1.6"   # cdpCacheDeviceId（对端主机名）
+OID_CDP_DEVICE_PORT = "1.3.6.1.4.1.9.9.23.1.2.1.1.7"  # cdpCacheDevicePort（对端端口名）
+OID_CDP_PLATFORM = "1.3.6.1.4.1.9.9.23.1.2.1.1.8"    # cdpCachePlatform（对端型号）
+
 COUNTER64_MAX = 2 ** 64
+
+# 设备层级排名：数值越大越靠核心；对端排名 > 本端排名 → 该接口判为上行口
+DEVICE_TIER_RANK = {
+    "firewall": 100,
+    "router": 95,
+    "core_switch": 90,
+    "server_switch": 70,
+    "wlc": 60,
+    "office_switch": 50,
+    "switch": 50,
+    "uce": 30,
+    "ap": 20,
+}
+
+
+def _tier_rank(device_type: Optional[str]) -> int:
+    return DEVICE_TIER_RANK.get((device_type or "").lower(), 40)
+
+
+def _decode_str(v) -> str:
+    """OctetString → str（保留可读文本）"""
+    if v is None:
+        return ""
+    if isinstance(v, (bytes, bytearray)):
+        return bytes(v).decode("utf-8", "ignore").strip()
+    return str(v).strip()
+
+
+def _decode_ip(v) -> str:
+    """cdpCacheAddress → 点分 IP（puresnmp 可能给 bytes/IPv4Address/str）"""
+    if v is None:
+        return ""
+    if isinstance(v, (bytes, bytearray)):
+        b = bytes(v)
+        if len(b) == 4:
+            return ".".join(str(x) for x in b)
+        # 兼容十六进制字符串形式
+        if len(b) == 8:
+            try:
+                return ".".join(str(int(b[i:i + 2], 16)) for i in range(0, 8, 2))
+            except ValueError:
+                return ""
+        return ""
+    s = str(v).strip()
+    return s
+
+
+def _cdp_local_ifindex(suffix: str) -> Optional[int]:
+    """cdpCache 索引 'ifIndex.deviceIndex' → 本地 ifIndex"""
+    if not suffix:
+        return None
+    head = suffix.lstrip(".").split(".")[0]
+    try:
+        return int(head)
+    except ValueError:
+        return None
+
 
 
 def oper_status_text(raw) -> str:
@@ -325,6 +389,113 @@ class InterfaceMonitor:
         except Exception as e:
             db.rollback()
             logger.error(f"Discover interfaces failed (device {device_id}): {e}")
+            return {"ok": False, "error": str(e)}
+        finally:
+            db.close()
+
+    def discover_neighbors(self, device_id: int) -> Dict:
+        """基于 CDP 自动发现邻居，回写对端关联并推断上行口（第一版仅 Cisco CDP）"""
+        if not SNMP_AVAILABLE:
+            return {"ok": False, "error": "SNMP 库未安装（puresnmp）"}
+        db = next(get_db())
+        try:
+            device = db.query(Device).filter(Device.id == device_id).first()
+            if not device:
+                return {"ok": False, "error": "设备不存在"}
+            if not (device.snmp_enabled and device.ip and device.snmp_community):
+                return {"ok": False, "error": "设备未启用 SNMP 或缺少团体名/IP"}
+
+            svc = get_snmp_service()
+            community = device.snmp_community
+
+            def walk(oid):
+                return asyncio.run(svc.snmp_walk_raw_async(device.ip, community, oid, timeout=self.snmp_timeout))
+
+            addr = walk(OID_CDP_ADDRESS)
+            dev_id = walk(OID_CDP_DEVICE_ID)
+            dev_port = walk(OID_CDP_DEVICE_PORT)
+            platform = walk(OID_CDP_PLATFORM)
+
+            if not (dev_id or addr):
+                return {"ok": False, "error": "CDP 无响应（检查设备 cdp run / 团体名）"}
+
+            self_rank = _tier_rank(getattr(device, "device_type", None))
+            neighbors = []
+            matched = 0
+            uplinks_marked = 0
+
+            # 以索引 suffix 聚合（同一 suffix 对应同一条 CDP 表项）
+            suffixes = set(dev_id) | set(addr) | set(dev_port)
+            for suffix in suffixes:
+                if_index = _cdp_local_ifindex(suffix)
+                if if_index is None:
+                    continue
+                remote_host = _decode_str(dev_id.get(suffix))
+                remote_port = _decode_str(dev_port.get(suffix))
+                remote_ip = _decode_ip(addr.get(suffix))
+                remote_platform = _decode_str(platform.get(suffix))
+
+                # 匹配系统内对端设备：先 IP，再主机名（含去域名）
+                peer = None
+                if remote_ip:
+                    peer = db.query(Device).filter(Device.ip == remote_ip).first()
+                if peer is None and remote_host:
+                    short = remote_host.split(".")[0]
+                    peer = db.query(Device).filter(
+                        func.lower(Device.name) == remote_host.lower()
+                    ).first()
+                    if peer is None and short:
+                        peer = db.query(Device).filter(
+                            func.lower(Device.name) == short.lower()
+                        ).first()
+
+                iface = db.query(DeviceInterface).filter(
+                    DeviceInterface.device_id == device_id,
+                    DeviceInterface.if_index == if_index,
+                ).first()
+                if not iface:
+                    iface = DeviceInterface(device_id=device_id, if_index=if_index)
+                    db.add(iface)
+
+                iface.peer_device_name = remote_host or None
+                iface.peer_ip = remote_ip or None
+                iface.peer_if_name = remote_port or None
+                iface.neighbor_source = "cdp"
+                iface.neighbor_updated_at = datetime.utcnow()
+
+                is_uplink = False
+                if peer is not None:
+                    matched += 1
+                    iface.peer_device_id = peer.id
+                    peer_rank = _tier_rank(getattr(peer, "device_type", None))
+                    if peer_rank > self_rank:
+                        is_uplink = True
+                        if not iface.is_uplink:
+                            uplinks_marked += 1
+                        iface.is_uplink = True
+                        iface.monitored = True
+
+                neighbors.append({
+                    "local_if_index": if_index,
+                    "remote_ip": remote_ip,
+                    "remote_host": remote_host,
+                    "remote_port": remote_port,
+                    "remote_platform": remote_platform,
+                    "peer_device_id": peer.id if peer else None,
+                    "is_uplink": is_uplink,
+                })
+
+            db.commit()
+            return {
+                "ok": True,
+                "neighbors": neighbors,
+                "found": len(neighbors),
+                "matched": matched,
+                "uplinks_marked": uplinks_marked,
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Discover neighbors failed (device {device_id}): {e}")
             return {"ok": False, "error": str(e)}
         finally:
             db.close()

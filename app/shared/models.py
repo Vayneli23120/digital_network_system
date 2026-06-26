@@ -872,6 +872,13 @@ class DeviceInterface(Base):
     # 监控控制
     is_uplink = Column(Boolean, default=False, index=True)  # 是否上行口
     monitored = Column(Boolean, default=False, index=True)  # 是否纳入轮询采集
+    # 邻居发现（CDP/LLDP 自动推断的对端关联）
+    peer_device_id = Column(Integer, index=True)          # 对端设备（匹配上系统内设备时）
+    peer_device_name = Column(String(200))                # 对端主机名（CDP/LLDP 上报）
+    peer_ip = Column(String(64))                          # 对端管理 IP（CDP cdpCacheAddress）
+    peer_if_name = Column(String(100))                    # 对端端口名
+    neighbor_source = Column(String(20))                  # cdp / lldp
+    neighbor_updated_at = Column(DateTime)                # 最近一次邻居发现时间
     # 最近一次流量速率（便于大屏/HUD 直接读取，无需查样本表）
     last_in_bps = Column(BigInteger)
     last_out_bps = Column(BigInteger)

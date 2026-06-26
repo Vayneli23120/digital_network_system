@@ -738,6 +738,12 @@ def _iface_to_dict(i: DeviceInterface) -> dict:
         "speed_mbps": i.speed_mbps,
         "is_uplink": bool(i.is_uplink),
         "monitored": bool(i.monitored),
+        "peer_device_id": i.peer_device_id,
+        "peer_device_name": i.peer_device_name,
+        "peer_ip": i.peer_ip,
+        "peer_if_name": i.peer_if_name,
+        "neighbor_source": i.neighbor_source,
+        "neighbor_updated_at": i.neighbor_updated_at.isoformat() if i.neighbor_updated_at else None,
         "last_in_bps": i.last_in_bps,
         "last_out_bps": i.last_out_bps,
         "last_in_util": i.last_in_util,
@@ -786,6 +792,20 @@ async def discover_device_interfaces(device_id: int, db: Session = Depends(get_d
     result = await asyncio.to_thread(get_interface_monitor().discover_interfaces, device_id)
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "发现失败"))
+    return result
+
+
+@router.post("/{device_id}/interfaces/discover-neighbors")
+async def discover_device_neighbors(device_id: int, db: Session = Depends(get_db)):
+    """通过 CDP 自动发现邻居，回写对端关联并按层级推断上行口（第一版仅 Cisco CDP）"""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    from app.services.interface_monitor import get_interface_monitor
+    result = await asyncio.to_thread(get_interface_monitor().discover_neighbors, device_id)
+    if not result.get("ok"):
+        raise HTTPException(status_code=400, detail=result.get("error", "邻居发现失败"))
     return result
 
 

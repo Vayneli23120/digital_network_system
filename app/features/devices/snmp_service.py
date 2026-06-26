@@ -154,6 +154,37 @@ class SNMPService:
             logger.debug(f"SNMP walk failed {ip}/{oid}: {e}")
             return {}
 
+    async def snmp_walk_raw_async(self, ip: str, community: str, oid: str, timeout: int = 3) -> Dict[str, Any]:
+        """异步 SNMP WALK（保留原始值，不做 utf-8 解码）
+
+        用于 CDP/LLDP 等含 IpAddress / 二进制字段的列，避免被 utf-8 解码破坏。
+        返回 {index_suffix: raw_value}，raw_value 可能是 bytes/int/str。
+        """
+        if not SNMP_AVAILABLE:
+            return {}
+
+        result = {}
+        try:
+            wrapper = await self._create_wrapper(ip, community)
+            count = 0
+            max_items = 500
+            try:
+                async for item in wrapper.walk(oid):
+                    if count >= max_items:
+                        break
+                    if hasattr(item, 'oid') and hasattr(item, 'value'):
+                        full_oid = str(item.oid)
+                        suffix = full_oid.replace(oid, "").lstrip(".")
+                        result[suffix] = item.value   # 原始值，不解码
+                        count += 1
+            except asyncio.TimeoutError:
+                logger.debug(f"SNMP raw walk timeout {ip}/{oid} after {timeout}s")
+                return result
+            return result
+        except Exception as e:
+            logger.debug(f"SNMP raw walk failed {ip}/{oid}: {e}")
+            return {}
+
     def snmp_get(self, ip: str, community: str, oid: str, timeout: int = 2) -> Optional[Any]:
         """同步 SNMP GET"""
         try:
