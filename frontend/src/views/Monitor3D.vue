@@ -4295,7 +4295,7 @@ function onCanvasMouseMove(e) {
   if (now - lastHoverCheck < 60) return   // 节流
   lastHoverCheck = now
 
-  const { camera, renderer, deviceGroup } = ctx.value
+  const { camera, renderer, deviceGroup, labelRenderer, scene } = ctx.value
   if (!camera || !deviceGroup) return
 
   const rect = renderer.domElement.getBoundingClientRect()
@@ -4317,9 +4317,15 @@ function onCanvasMouseMove(e) {
     }
     const base = getDeviceBaseSize(device.device_type)
     const topY = (model.position.y || 0) + base * 1.6
+    const wasHidden = !hudObj.visible
     hudObj.position.set(model.position.x, topY, model.position.z)
     hudObj.visible = true
     if (hudEl) hudEl.style.display = 'block'
+    // 首次显示时立即同步一次标签渲染，让 CSS2D 变换在浏览器绘制前就定位到设备上方，
+    // 避免 HUD 先在左上角闪一下再跳过来
+    if (wasHidden && labelRenderer && scene && camera) {
+      labelRenderer.render(scene, camera)
+    }
     renderer.domElement.style.cursor = 'pointer'
   } else {
     hudDeviceId = null
