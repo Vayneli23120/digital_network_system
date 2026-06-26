@@ -2189,6 +2189,9 @@ function initScene() {
     // 离线/故障链路红色呼吸闪烁
     pulseOfflineLinks()
 
+    // 悬浮 HUD 实时刷新（上行口状态/流量）
+    refreshHoveredHud()
+
     // 根据相机距离更新标签可见性
     updateLabelVisibility()
 
@@ -4092,12 +4095,81 @@ let hudObj = null          // CSS2DObject
 let hudEl = null           // HUD 根 DOM
 let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
 
-// 计算设备上行链路状态（基于设备寻路路径 devicePaths，回退到链路 links）
+// SNMP 上行接口数据缓存：deviceId -> { ts, items }
+const snmpIfaceCache = new Map()
+const SNMP_IFACE_TTL = 8000   // 缓存有效期（ms），自带节流避免重复请求
+
+// 拉取设备被监控接口（含上行口 oper_status 与实时流量）
+async function fetchDeviceInterfaces(deviceId, force = false) {
+  if (deviceId == null) return
+  const cached = snmpIfaceCache.get(deviceId)
+  if (!force && cached && (Date.now() - cached.ts) < SNMP_IFACE_TTL) return
+  // 先占位（保留旧 items），避免并发重复请求
+  snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
+  try {
+    const res = await axios.get(`/api/devices/${deviceId}/interfaces`, { params: { monitored_only: true } })
+    const items = res.data?.items || []
+    snmpIfaceCache.set(deviceId, { ts: Date.now(), items })
+    // 数据回来后若仍悬浮该设备，立即刷新 HUD
+    if (hudDeviceId === deviceId) {
+      const d = devices.value.find(x => x.id === deviceId)
+      if (d) updateHudContent(d)
+    }
+  } catch (e) {
+    // 静默失败（设备未配置 SNMP / 无接口等），保留旧缓存
+    snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
+  }
+}
+
+// 取设备已标记为上行口的被监控接口
+function getUplinkInterfaces(device) {
+  if (!device) return []
+  const cached = snmpIfaceCache.get(device.id)
+  if (!cached) return []
+  return (cached.items || []).filter(i => i.is_uplink)
+}
+
+// 格式化速率
+function formatBps(bps) {
+  if (bps == null) return '—'
+  const v = Number(bps)
+  if (!isFinite(v)) return '—'
+  if (v >= 1e9) return (v / 1e9).toFixed(2) + ' Gbps'
+  if (v >= 1e6) return (v / 1e6).toFixed(2) + ' Mbps'
+  if (v >= 1e3) return (v / 1e3).toFixed(1) + ' Kbps'
+  return v.toFixed(0) + ' bps'
+}
+
+// 汇总上行口实时流量
+function getUplinkTraffic(device) {
+  const uplinks = getUplinkInterfaces(device)
+  if (uplinks.length === 0) return null
+  let inSum = 0, outSum = 0, hasData = false
+  uplinks.forEach(i => {
+    if (i.last_in_bps != null) { inSum += Number(i.last_in_bps); hasData = true }
+    if (i.last_out_bps != null) { outSum += Number(i.last_out_bps); hasData = true }
+  })
+  if (!hasData) return null
+  return { inBps: inSum, outBps: outSum }
+}
+
+// 计算设备上行链路状态（优先 SNMP 上行口真实状态，回退寻路路径/手绘链路）
 function getUplinkStatus(device) {
   if (!device) return { text: '—', cls: 'unknown' }
   if (isDeviceOffline(device)) return { text: t('hudUplinkDown'), cls: 'offline' }
 
-  // 主依据：设备到核心的寻路路径（与大屏绿色数据链路同源）
+  // 优先依据：SNMP 监控的上行接口真实 oper_status
+  const uplinks = getUplinkInterfaces(device)
+  if (uplinks.length > 0) {
+    const downs = uplinks.filter(i => i.oper_status === 'down').length
+    const ups = uplinks.filter(i => i.oper_status === 'up').length
+    if (downs > 0 && ups === 0) return { text: t('hudUplinkDown'), cls: 'offline' }
+    if (downs > 0) return { text: t('hudUplinkDegraded'), cls: 'maintenance' }
+    if (ups > 0) return { text: t('hudUplinkNormal'), cls: 'online' }
+    // 全部 unknown：落到下方路径判断
+  }
+
+  // 次依据：设备到核心的寻路路径（与大屏绿色数据链路同源）
   const path = devicePaths.value?.[device.id] ?? devicePaths.value?.[String(device.id)]
   if (path) {
     const reachable = Array.isArray(path) ? path.length >= 2 : path.reachable !== false
@@ -4121,7 +4193,7 @@ function getUplinkStatus(device) {
   return { text: t('hudUplinkNone'), cls: 'unknown' }
 }
 
-// 统计设备当前告警数（离线计 1，相连故障链路各计 1）
+// 统计设备当前告警数（离线计 1，相连故障链路各计 1，SNMP 上行口 down 各计 1）
 function getDeviceAlarmCount(device) {
   if (!device) return 0
   let count = isDeviceOffline(device) ? 1 : 0
@@ -4132,6 +4204,8 @@ function getDeviceAlarmCount(device) {
     if ((fromNode && fromNode.device_id === device.id) ||
         (toNode && toNode.device_id === device.id)) count++
   })
+  // SNMP 上行口 down 计入告警
+  count += getUplinkInterfaces(device).filter(i => i.oper_status === 'down').length
   return count
 }
 
@@ -4169,6 +4243,7 @@ function updateHudContent(device) {
     ? `${device.reachability_latency_ms} ms` : '—'
   const uplink = getUplinkStatus(device)
   const alarms = getDeviceAlarmCount(device)
+  const traffic = getUplinkTraffic(device)
 
   hudEl.innerHTML = `
     <div class="hud-scan"></div>
@@ -4184,6 +4259,10 @@ function updateHudContent(device) {
       <div class="hud-v">${latency}</div>
       <div class="hud-k">${t('hudUplink')}</div>
       <div class="hud-v ${uplink.cls}">${uplink.text}</div>
+      ${traffic ? `
+      <div class="hud-k">${t('hudTraffic')}</div>
+      <div class="hud-v hud-traffic">↓ ${formatBps(traffic.inBps)}&nbsp;&nbsp;↑ ${formatBps(traffic.outBps)}</div>
+      ` : ''}
       <div class="hud-k">${t('hudAlarm')}</div>
       <div class="hud-v ${alarms > 0 ? 'offline' : 'online'}">${alarms}</div>
       <div class="hud-k">${t('hudCheck')}</div>
@@ -4194,6 +4273,17 @@ function updateHudContent(device) {
 
 // 悬浮检测：在设备上方显示 HUD，移开则隐藏
 let lastHoverCheck = 0
+let lastHudRefresh = 0
+// 悬浮时定期刷新 HUD（上行口状态/流量），自带节流
+function refreshHoveredHud() {
+  if (hudDeviceId == null || !hudObj || !hudObj.visible) return
+  const now = performance.now()
+  if (now - lastHudRefresh < 2000) return   // 每 2s 刷新一次
+  lastHudRefresh = now
+  fetchDeviceInterfaces(hudDeviceId)        // 自带 8s TTL 节流
+  const d = devices.value.find(x => x.id === hudDeviceId)
+  if (d) updateHudContent(d)
+}
 function onCanvasMouseMove(e) {
   if (isEditMode.value || isDragging || dragState.value) {
     if (hudObj) hudObj.visible = false
@@ -4222,6 +4312,7 @@ function onCanvasMouseMove(e) {
     const device = model.userData.device
     if (hudDeviceId !== device.id) {
       hudDeviceId = device.id
+      fetchDeviceInterfaces(device.id)   // 异步拉取 SNMP 上行口状态/流量
       updateHudContent(device)
     }
     const base = getDeviceBaseSize(device.device_type)
@@ -4883,6 +4974,25 @@ let deviceStatusWsClosed = false
 let reachabilityPollTimer = null
 const REACHABILITY_POLL_INTERVAL = 20000  // 对账轮询间隔（毫秒）
 
+// SNMP 接口状态变化（上行口 up/down）：失效缓存并刷新 HUD/告警
+function handleInterfaceStatusChange(msg) {
+  if (msg.device_id == null) return
+  // 失效该设备的接口缓存，强制下次拉取最新
+  snmpIfaceCache.delete(msg.device_id)
+  // 立即重新拉取（若正悬浮该设备会自动刷新 HUD）
+  fetchDeviceInterfaces(msg.device_id, true)
+
+  const device = devices.value.find(d => d.id === msg.device_id)
+  const dName = msg.device_name || device?.name || `#${msg.device_id}`
+  const ifName = msg.if_name || `if${msg.if_index}`
+  const uplinkTag = msg.is_uplink ? '上行口 ' : ''
+  if (msg.new_status === 'down') {
+    ElMessage.error({ message: `${uplinkTag}${ifName} 中断：${dName}`, duration: 5000 })
+  } else if (msg.new_status === 'up' && msg.old_status === 'down') {
+    ElMessage.success({ message: `${uplinkTag}${ifName} 恢复：${dName}`, duration: 4000 })
+  }
+}
+
 function handleDeviceStatusChange(msg) {
   const device = devices.value.find(d => d.id === msg.device_id)
   if (!device) return
@@ -4923,6 +5033,8 @@ function connectDeviceStatusWs() {
         const msg = JSON.parse(ev.data)
         if (msg && msg.event === 'device_status_change') {
           handleDeviceStatusChange(msg)
+        } else if (msg && msg.event === 'interface_status_change') {
+          handleInterfaceStatusChange(msg)
         }
       } catch (e) { /* 忽略非 JSON 消息 */ }
     }
@@ -5738,6 +5850,7 @@ onBeforeUnmount(() => {
 :deep(.device-hud .hud-v.maintenance) { color: #ffb454; }
 :deep(.device-hud .hud-v.unknown) { color: #94a3b8; }
 :deep(.device-hud .hud-time) { font-size: 10px; opacity: 0.9; }
+:deep(.device-hud .hud-traffic) { font-size: 10px; color: #7dd3fc; letter-spacing: 0.2px; white-space: nowrap; }
 
 @keyframes hudIn {
   from { opacity: 0; transform: translateY(-4px) scale(0.96); }
