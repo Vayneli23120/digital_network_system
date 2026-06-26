@@ -362,7 +362,10 @@
 
           <!-- 告警列表 -->
           <div class="alert-section">
-            <h4>{{ t('alertList') }}</h4>
+            <div class="alert-header">
+              <h4>{{ t('alertList') }}<span v-if="offlineDevices.length" class="alert-badge">{{ offlineDevices.length }}</span></h4>
+              <el-checkbox v-model="autoFocusOffline" size="small">{{ t('autoFocusOffline') }}</el-checkbox>
+            </div>
             <div class="alert-list">
               <div
                 v-for="alert in offlineDevices"
@@ -444,6 +447,7 @@ const filterStatus = ref('')
 const showLabels = ref(true)
 const showPhysicalTopology = ref(true)  // 显示物理拓扑（光纤）
 const showDataLinks = ref(true)         // 显示数据链路（设备间连接）
+const autoFocusOffline = ref(true)      // 设备离线时自动锁定镜头（默认开）
 const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
 const { t } = useI18n()
@@ -2158,6 +2162,9 @@ function initScene() {
     // 离线设备呼吸动画
     pulseOfflineDevices()
 
+    // 离线设备地面红色光晕呼吸
+    updateOfflineGlow()
+
     // 根据相机距离更新标签可见性
     updateLabelVisibility()
 
@@ -2378,6 +2385,7 @@ function rebuildScene() {
   buildTopoEdges()
   buildDataLinkPaths()
   buildLabels()
+  buildOfflineGlow()
 }
 
 // 构建链路（支持 waypoints 正交折线）
@@ -2961,6 +2969,81 @@ function pulseOfflineDevices() {
         }
       })
     }
+  })
+}
+
+// ===== 离线设备红色径向渐变光晕（以设备为中心向外渐变浅红，不覆盖整图）=====
+const OFFLINE_GLOW_RADIUS_FACTOR = 7   // 光晕半径 = 设备基准尺寸 × 系数
+let offlineGlowTexture = null
+
+function createRadialGlowTexture() {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const c = canvas.getContext('2d')
+  const grad = c.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  // 中心较浓红 → 边缘完全透明，形成淡淡一层向外渐变
+  grad.addColorStop(0.0, 'rgba(255, 70, 70, 0.55)')
+  grad.addColorStop(0.35, 'rgba(255, 40, 40, 0.30)')
+  grad.addColorStop(0.7, 'rgba(255, 20, 20, 0.10)')
+  grad.addColorStop(1.0, 'rgba(255, 0, 0, 0)')
+  c.fillStyle = grad
+  c.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+// 构建离线设备地面光晕（独立 Group，便于单独清理/重建）
+function buildOfflineGlow() {
+  disposeGroup('offline-glow')
+  const { scene } = ctx.value
+  if (!scene) return
+
+  const offline = filteredDevices.value.filter(isDeviceOffline)
+  if (offline.length === 0) return
+
+  if (!offlineGlowTexture) offlineGlowTexture = createRadialGlowTexture()
+
+  const group = new THREE.Group()
+  group.name = 'offline-glow'
+
+  offline.forEach(d => {
+    const node = nodes.value.find(n => n.device_id === d.id)
+    if (!node) return
+    const w = percentToWorld(node.x_percent, node.y_percent, 0)
+    const radius = getDeviceBaseSize(d.device_type) * OFFLINE_GLOW_RADIUS_FACTOR
+    const geo = new THREE.PlaneGeometry(radius * 2, radius * 2)
+    const mat = new THREE.MeshBasicMaterial({
+      map: offlineGlowTexture,
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+    })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.rotation.x = -Math.PI / 2          // 平铺在地面
+    mesh.position.set(w.x, 0.2, w.z)        // 略高于底图避免 z-fighting
+    mesh.renderOrder = 2
+    mesh.userData = { deviceId: d.id }
+    group.add(mesh)
+  })
+
+  scene.add(group)
+}
+
+// 离线光晕呼吸动画（透明度+缩放轻微脉动）
+function updateOfflineGlow() {
+  const { scene } = ctx.value
+  if (!scene) return
+  const group = scene.getObjectByName('offline-glow')
+  if (!group || group.children.length === 0) return
+
+  const breath = Math.sin(pulseTime * 1.2) * 0.18 + 0.82  // 0.64 ~ 1.0
+  group.children.forEach(mesh => {
+    if (mesh.material) mesh.material.opacity = 0.9 * breath
+    const s = 0.92 + (breath - 0.82) * 0.6
+    mesh.scale.setScalar(s)
   })
 }
 
@@ -4468,6 +4551,7 @@ function refreshDeviceVisuals() {
   buildDeviceModels()
   buildLabels()
   buildDataLinkPaths()
+  buildOfflineGlow()
 }
 
 // ===== 设备可达性实时推送（WebSocket /ws/device-status）=====
@@ -4489,6 +4573,10 @@ function handleDeviceStatusChange(msg) {
   const label = `${msg.device_name || device.name}（${msg.ip || device.ip}）`
   if (msg.new_state === 'unreachable') {
     ElMessage.error({ message: `设备离线：${label}`, duration: 5000 })
+    // 自动锁定镜头到离线设备（可开关，默认开）
+    if (autoFocusOffline.value) {
+      focusDevice(device)
+    }
   } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
     ElMessage.success({ message: `设备恢复：${label}`, duration: 4000 })
   }
@@ -4542,6 +4630,9 @@ onMounted(async () => {
   // 使用新 topo 数据渲染光纤拓扑
   buildTopoEdges()
   buildDataLinkPaths()
+
+  // 离线设备红色光晕
+  buildOfflineGlow()
 
   // 自动框景 - 延迟执行确保布局稳定
   requestAnimationFrame(() => fitView())
@@ -5064,6 +5155,37 @@ onBeforeUnmount(() => {
 .alert-section h4 {
   margin: 0 0 6px;
   font-size: 12px;
+}
+
+.alert-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.alert-header h4 {
+  margin: 0;
+}
+
+.alert-badge {
+  display: inline-block;
+  min-width: 16px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 8px;
+  background: #ff4d4f;
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  animation: alert-badge-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes alert-badge-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255, 77, 79, 0.6); }
+  50% { box-shadow: 0 0 6px 3px rgba(255, 77, 79, 0.45); }
 }
 
 .alert-list {
