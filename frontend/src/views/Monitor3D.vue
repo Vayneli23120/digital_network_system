@@ -4558,6 +4558,8 @@ function refreshDeviceVisuals() {
 let deviceStatusWs = null
 let deviceStatusWsReconnectTimer = null
 let deviceStatusWsClosed = false
+let reachabilityPollTimer = null
+const REACHABILITY_POLL_INTERVAL = 20000  // 对账轮询间隔（毫秒）
 
 function handleDeviceStatusChange(msg) {
   const device = devices.value.find(d => d.id === msg.device_id)
@@ -4624,6 +4626,48 @@ function disconnectDeviceStatusWs() {
   }
 }
 
+// ===== 可达性对账轮询（WS 安全网：即使漏掉事件，也能在数十秒内自愈）=====
+// 解决"设备已恢复但大屏报警未消失"——后端状态切换已完成、不会再发新 WS 事件的情况
+async function reconcileDeviceReachability() {
+  try {
+    const res = await axios.get('/api/devices')
+    const items = res.data.items || res.data || []
+    const latest = new Map(items.map(d => [d.id, d]))
+
+    let changed = false
+    devices.value.forEach(d => {
+      const fresh = latest.get(d.id)
+      if (!fresh) return
+      if (fresh.reachability !== d.reachability) {
+        d.reachability = fresh.reachability
+        changed = true
+      }
+      // 同步延迟/检测时间（不触发重建）
+      d.reachability_latency_ms = fresh.reachability_latency_ms
+      d.last_reachability_check = fresh.last_reachability_check
+    })
+
+    if (changed) {
+      // 仅在状态真正变化时重建可视化，避免无谓开销
+      refreshDeviceVisuals()
+    }
+  } catch (e) {
+    // 轮询失败静默处理，下个周期重试
+  }
+}
+
+function startReachabilityPoll() {
+  stopReachabilityPoll()
+  reachabilityPollTimer = setInterval(reconcileDeviceReachability, REACHABILITY_POLL_INTERVAL)
+}
+
+function stopReachabilityPoll() {
+  if (reachabilityPollTimer) {
+    clearInterval(reachabilityPollTimer)
+    reachabilityPollTimer = null
+  }
+}
+
 onMounted(async () => {
   initScene()
   await loadData()
@@ -4645,6 +4689,9 @@ onMounted(async () => {
   // 订阅设备实时可达性状态变化
   connectDeviceStatusWs()
 
+  // 启动对账轮询（WS 安全网，自愈）
+  startReachabilityPoll()
+
   // 全屏事件监听
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
@@ -4653,6 +4700,9 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onResize)
+
+  // 停止对账轮询
+  stopReachabilityPoll()
 
   // 断开设备状态 WebSocket
   disconnectDeviceStatusWs()
