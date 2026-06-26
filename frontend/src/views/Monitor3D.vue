@@ -4136,9 +4136,8 @@ function getUplinkInterfaces(device) {
 
 function getPrimaryTrafficInterface(device) {
   if (!device) return null
-  const cached = snmpIfaceCache.get(device.id)
-  const items = cached?.items || []
-  return items.find(i => i.is_uplink) || items[0] || null
+  const uplinks = getUplinkInterfaces(device)
+  return uplinks.length > 0 ? uplinks[0] : null
 }
 
 async function fetchUplinkTrafficSamples(deviceId, force = false) {
@@ -4213,6 +4212,7 @@ function buildSparklinePath(values, width, height, padding = 3) {
 }
 
 function getUplinkTrendSvg(device) {
+  if (getUplinkInterfaces(device).length === 0) return ''
   const samples = getUplinkTrafficSamples(device)
   if (!samples.length) return ''
 
