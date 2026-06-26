@@ -35,19 +35,23 @@ class ReachabilityMonitor:
         self.scheduler = BackgroundScheduler()
         self._running = False
 
-        # 分级探测配置
+        # 分级探测配置（间隔越短告警越快）
         self.tier_intervals = {
-            "critical": 15,   # 核心设备 15 秒探测
-            "normal": 60,     # 普通设备 60 秒探测
-            "low": 300,       # 低优先级 300 秒探测
+            "critical": 10,   # 核心设备 10 秒探测
+            "normal": 30,     # 普通设备 30 秒探测
+            "low": 120,       # 低优先级 120 秒探测
         }
 
-        # 分级阈值
+        # 分级阈值（连续多少周期失败才判离线）
+        # 单次探测内已有快速重试抑制误判，故可降低阈值加快告警
         self.tier_thresholds = {
-            "critical": 2,    # 核心设备 2 次失败即告警
-            "normal": 3,      # 普通设备 3 次
-            "low": 3,         # 低优先级 3 次
+            "critical": 2,    # 核心设备 2 个周期失败即告警（约 20s）
+            "normal": 2,      # 普通设备 2 个周期（约 60s）
+            "low": 2,         # 低优先级 2 个周期（约 240s）
         }
+
+        # 单次探测内的 ICMP 快速重试次数（抑制单包丢失误判）
+        self.icmp_retries = 3
 
         # 并发控制（网络检测）
         self.max_concurrency = 50
@@ -151,8 +155,12 @@ class ReachabilityMonitor:
         """
         results = []
 
-        # Layer 1: ICMP Ping
-        ping_result = self._icmp_check(ip)
+        # Layer 1: ICMP Ping（单次探测内快速重试，抑制单包丢失误判）
+        ping_result = {'reachable': False, 'latency_ms': None}
+        for attempt in range(max(1, self.icmp_retries)):
+            ping_result = self._icmp_check(ip)
+            if ping_result['reachable']:
+                break
         results.append(('icmp', ping_result['reachable'], ping_result['latency_ms']))
 
         # Layer 2: SSH Port Check (如果 ICMP 失败)
