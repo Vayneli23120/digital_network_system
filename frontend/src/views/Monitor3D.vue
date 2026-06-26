@@ -4100,6 +4100,8 @@ let hudAutoHideTimer = null
 // SNMP 上行接口数据缓存：deviceId -> { ts, items }
 const snmpIfaceCache = new Map()
 const SNMP_IFACE_TTL = 8000   // 缓存有效期（ms），自带节流避免重复请求
+const snmpTrafficCache = new Map()
+const SNMP_TRAFFIC_TTL = 12000
 
 // 拉取设备被监控接口（含上行口 oper_status 与实时流量）
 async function fetchDeviceInterfaces(deviceId, force = false) {
@@ -4112,6 +4114,7 @@ async function fetchDeviceInterfaces(deviceId, force = false) {
     const res = await axios.get(`/api/devices/${deviceId}/interfaces`, { params: { monitored_only: true } })
     const items = res.data?.items || []
     snmpIfaceCache.set(deviceId, { ts: Date.now(), items })
+    fetchUplinkTrafficSamples(deviceId, true)
     // 数据回来后若仍悬浮该设备，立即刷新 HUD
     if (hudDeviceId === deviceId) {
       const d = devices.value.find(x => x.id === deviceId)
@@ -4129,6 +4132,37 @@ function getUplinkInterfaces(device) {
   const cached = snmpIfaceCache.get(device.id)
   if (!cached) return []
   return (cached.items || []).filter(i => i.is_uplink)
+}
+
+function getPrimaryTrafficInterface(device) {
+  if (!device) return null
+  const cached = snmpIfaceCache.get(device.id)
+  const items = cached?.items || []
+  return items.find(i => i.is_uplink) || items[0] || null
+}
+
+async function fetchUplinkTrafficSamples(deviceId, force = false) {
+  if (deviceId == null) return
+  const device = devices.value.find(x => x.id === deviceId)
+  const iface = getPrimaryTrafficInterface(device)
+  if (!iface?.if_index) return
+
+  const cacheKey = `${deviceId}:${iface.if_index}`
+  const cached = snmpTrafficCache.get(cacheKey)
+  if (!force && cached && (Date.now() - cached.ts) < SNMP_TRAFFIC_TTL) return
+
+  snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
+  try {
+    const res = await axios.get(`/api/devices/${deviceId}/interfaces/${iface.if_index}/traffic`, { params: { limit: 24 } })
+    const samples = res.data?.samples || []
+    snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples })
+    if (hudDeviceId === deviceId) {
+      const d = devices.value.find(x => x.id === deviceId)
+      if (d) updateHudContent(d)
+    }
+  } catch (e) {
+    snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
+  }
 }
 
 // 格式化速率
@@ -4153,6 +4187,56 @@ function getUplinkTraffic(device) {
   })
   if (!hasData) return null
   return { inBps: inSum, outBps: outSum }
+}
+
+function getUplinkTrafficSamples(device) {
+  const iface = getPrimaryTrafficInterface(device)
+  if (!device || !iface?.if_index) return []
+  const cached = snmpTrafficCache.get(`${device.id}:${iface.if_index}`)
+  return cached?.samples || []
+}
+
+function buildSparklinePath(values, width, height, padding = 3) {
+  if (!values.length) return ''
+  if (values.length === 1) {
+    const y = height / 2
+    return `M ${padding} ${y} L ${width - padding} ${y}`
+  }
+  const max = Math.max(...values, 1)
+  const min = Math.min(...values, 0)
+  const span = Math.max(max - min, 1)
+  return values.map((value, index) => {
+    const x = padding + (index / (values.length - 1)) * (width - padding * 2)
+    const y = height - padding - ((value - min) / span) * (height - padding * 2)
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`
+  }).join(' ')
+}
+
+function getUplinkTrendSvg(device) {
+  const samples = getUplinkTrafficSamples(device)
+  if (!samples.length) return ''
+
+  const inValues = samples.map(s => Number(s.in_bps || 0))
+  const outValues = samples.map(s => Number(s.out_bps || 0))
+  const width = 156
+  const height = 36
+  const inPath = buildSparklinePath(inValues, width, height)
+  const outPath = buildSparklinePath(outValues, width, height)
+  if (!inPath && !outPath) return ''
+
+  return `
+    <div class="hud-trend-wrap">
+      <svg class="hud-spark" viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M 2 ${height - 2} L ${width - 2} ${height - 2}" class="grid" />
+        ${inPath ? `<path d="${inPath}" class="in" />` : ''}
+        ${outPath ? `<path d="${outPath}" class="out" />` : ''}
+      </svg>
+      <div class="hud-trend-legend">
+        <span class="in">↓ In</span>
+        <span class="out">↑ Out</span>
+      </div>
+    </div>
+  `
 }
 
 // 计算设备上行链路状态（优先 SNMP 上行口真实状态，回退寻路路径/手绘链路）
@@ -4307,6 +4391,7 @@ function updateHudContent(device) {
   const uplink = getUplinkStatus(device)
   const alarms = getDeviceAlarmCount(device)
   const traffic = getUplinkTraffic(device)
+  const trendSvg = getUplinkTrendSvg(device)
 
   hudEl.innerHTML = `
     <div class="hud-scan"></div>
@@ -4326,6 +4411,10 @@ function updateHudContent(device) {
       <div class="hud-k">${t('hudTraffic')}</div>
       <div class="hud-v hud-traffic">↓ ${formatBps(traffic.inBps)}&nbsp;&nbsp;↑ ${formatBps(traffic.outBps)}</div>
       ` : ''}
+      ${trendSvg ? `
+      <div class="hud-k">Trend</div>
+      <div class="hud-v hud-v-trend">${trendSvg}</div>
+      ` : ''}
       <div class="hud-k">${t('hudAlarm')}</div>
       <div class="hud-v ${alarms > 0 ? 'offline' : 'online'}">${alarms}</div>
       <div class="hud-k">${t('hudCheck')}</div>
@@ -4344,6 +4433,7 @@ function refreshHoveredHud() {
   if (now - lastHudRefresh < 2000) return   // 每 2s 刷新一次
   lastHudRefresh = now
   fetchDeviceInterfaces(hudDeviceId)        // 自带 8s TTL 节流
+  fetchUplinkTrafficSamples(hudDeviceId)
   const d = devices.value.find(x => x.id === hudDeviceId)
   if (d) updateHudContent(d)
 }
@@ -5037,8 +5127,12 @@ function handleInterfaceStatusChange(msg) {
   if (msg.device_id == null) return
   // 失效该设备的接口缓存，强制下次拉取最新
   snmpIfaceCache.delete(msg.device_id)
+  for (const key of Array.from(snmpTrafficCache.keys())) {
+    if (String(key).startsWith(`${msg.device_id}:`)) snmpTrafficCache.delete(key)
+  }
   // 立即重新拉取（若正悬浮该设备会自动刷新 HUD）
   fetchDeviceInterfaces(msg.device_id, true)
+  fetchUplinkTrafficSamples(msg.device_id, true)
 
   const device = devices.value.find(d => d.id === msg.device_id)
   const dName = msg.device_name || device?.name || `#${msg.device_id}`
@@ -5926,6 +6020,15 @@ onBeforeUnmount(() => {
 :deep(.device-hud .hud-v.unknown) { color: #94a3b8; }
 :deep(.device-hud .hud-time) { font-size: 10px; opacity: 0.9; }
 :deep(.device-hud .hud-traffic) { font-size: 10px; color: #7dd3fc; letter-spacing: 0.2px; white-space: nowrap; }
+:deep(.device-hud .hud-v-trend) { padding-top: 2px; }
+:deep(.device-hud .hud-trend-wrap) { display: flex; flex-direction: column; gap: 3px; }
+:deep(.device-hud .hud-spark) { width: 100%; height: 36px; display: block; overflow: visible; }
+:deep(.device-hud .hud-spark .grid) { fill: none; stroke: rgba(148, 163, 184, 0.25); stroke-width: 1; stroke-dasharray: 3 3; }
+:deep(.device-hud .hud-spark .in) { fill: none; stroke: #22d3ee; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgba(34, 211, 238, 0.45)); }
+:deep(.device-hud .hud-spark .out) { fill: none; stroke: #60a5fa; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 2px rgba(96, 165, 250, 0.35)); }
+:deep(.device-hud .hud-trend-legend) { display: flex; justify-content: space-between; font-size: 9px; line-height: 1; opacity: 0.85; }
+:deep(.device-hud .hud-trend-legend .in) { color: #22d3ee; }
+:deep(.device-hud .hud-trend-legend .out) { color: #60a5fa; }
 
 @keyframes hudIn {
   from { opacity: 0; transform: translateY(-4px) scale(0.96); }
