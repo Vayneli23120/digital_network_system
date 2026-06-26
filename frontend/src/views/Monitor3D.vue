@@ -2179,6 +2179,9 @@ function initScene() {
   // 点击事件（查看模式选中）
   renderer.domElement.addEventListener('click', onCanvasClick)
 
+  // 悬浮 HUD 全息面板（查看模式）
+  renderer.domElement.addEventListener('mousemove', onCanvasMouseMove)
+
   // 鼠标按下事件（编辑模式拖动起点）
   renderer.domElement.addEventListener('mousedown', onCanvasMouseDown)
 
@@ -4063,6 +4066,143 @@ function findNearbyCoreDevice(x_percent, y_percent, threshold) {
 }
 
 // 查看模式点击选中
+// ===== 悬浮 HUD 全息玻璃面板 =====
+let hudObj = null          // CSS2DObject
+let hudEl = null           // HUD 根 DOM
+let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
+
+// 计算设备上行链路状态（基于连接到该设备的链路）
+function getUplinkStatus(device) {
+  if (!device) return { text: '—', cls: 'unknown' }
+  if (isDeviceOffline(device)) return { text: '中断', cls: 'offline' }
+  const touched = links.value.filter(l => {
+    const fromNode = nodes.value.find(n => n.id === l.from_node_id || n.device_id === l.from)
+    const toNode = nodes.value.find(n => n.id === l.to_node_id || n.device_id === l.to)
+    return (fromNode && fromNode.device_id === device.id) ||
+           (toNode && toNode.device_id === device.id)
+  })
+  if (touched.some(l => l.status === 'broken')) return { text: '降级', cls: 'maintenance' }
+  if (touched.length === 0) return { text: '无上行', cls: 'unknown' }
+  return { text: '正常', cls: 'online' }
+}
+
+// 统计设备当前告警数（离线计 1，相连故障链路各计 1）
+function getDeviceAlarmCount(device) {
+  if (!device) return 0
+  let count = isDeviceOffline(device) ? 1 : 0
+  links.value.forEach(l => {
+    if (l.status !== 'broken') return
+    const fromNode = nodes.value.find(n => n.id === l.from_node_id || n.device_id === l.from)
+    const toNode = nodes.value.find(n => n.id === l.to_node_id || n.device_id === l.to)
+    if ((fromNode && fromNode.device_id === device.id) ||
+        (toNode && toNode.device_id === device.id)) count++
+  })
+  return count
+}
+
+function formatCheckTime(ts) {
+  if (!ts) return '—'
+  try {
+    const d = new Date(ts)
+    if (isNaN(d.getTime())) return '—'
+    return d.toLocaleString()
+  } catch (e) {
+    return '—'
+  }
+}
+
+// 创建 HUD 面板（懒加载，挂到场景，默认隐藏）
+function ensureHudPanel() {
+  if (hudObj) return
+  const { scene } = ctx.value
+  if (!scene) return
+  hudEl = document.createElement('div')
+  hudEl.className = 'device-hud'
+  hudEl.style.display = 'none'
+  hudObj = new CSS2DObject(hudEl)
+  hudObj.name = 'device-hud'
+  hudObj.visible = false
+  scene.add(hudObj)
+}
+
+// 刷新 HUD 内容
+function updateHudContent(device) {
+  if (!hudEl) return
+  const status = deviceStatus(device)
+  const statusText = getStatusLabel(status)
+  const latency = device.reachability_latency_ms != null
+    ? `${device.reachability_latency_ms} ms` : '—'
+  const uplink = getUplinkStatus(device)
+  const alarms = getDeviceAlarmCount(device)
+
+  hudEl.innerHTML = `
+    <div class="hud-scan"></div>
+    <div class="hud-head">
+      <span class="hud-dot ${status}"></span>
+      <span class="hud-name">${device.name || '—'}</span>
+    </div>
+    <div class="hud-sub">${getDeviceTypeLabel(device.device_type)} · ${device.ip || '—'}</div>
+    <div class="hud-grid">
+      <div class="hud-k">状态</div>
+      <div class="hud-v ${status}">${statusText}</div>
+      <div class="hud-k">延迟</div>
+      <div class="hud-v">${latency}</div>
+      <div class="hud-k">上行</div>
+      <div class="hud-v ${uplink.cls}">${uplink.text}</div>
+      <div class="hud-k">告警</div>
+      <div class="hud-v ${alarms > 0 ? 'offline' : 'online'}">${alarms}</div>
+      <div class="hud-k">检测</div>
+      <div class="hud-v hud-time">${formatCheckTime(device.last_reachability_check)}</div>
+    </div>
+  `
+}
+
+// 悬浮检测：在设备上方显示 HUD，移开则隐藏
+let lastHoverCheck = 0
+function onCanvasMouseMove(e) {
+  if (isEditMode.value || isDragging || dragState.value) {
+    if (hudObj) hudObj.visible = false
+    if (hudEl) hudEl.style.display = 'none'
+    hudDeviceId = null
+    return
+  }
+  const now = performance.now()
+  if (now - lastHoverCheck < 60) return   // 节流
+  lastHoverCheck = now
+
+  const { camera, renderer, deviceGroup } = ctx.value
+  if (!camera || !deviceGroup) return
+
+  const rect = renderer.domElement.getBoundingClientRect()
+  pointer.x = ((e.clientX - rect.left) / rect.width) * 2 - 1
+  pointer.y = -((e.clientY - rect.top) / rect.height) * 2 + 1
+  raycaster.setFromCamera(pointer, camera)
+
+  const hits = raycaster.intersectObjects(deviceGroup.children, true)
+  let model = hits.length ? hits[0].object : null
+  while (model && !model.userData.device) model = model.parent
+
+  if (model && model.userData.device) {
+    ensureHudPanel()
+    const device = model.userData.device
+    if (hudDeviceId !== device.id) {
+      hudDeviceId = device.id
+      updateHudContent(device)
+    }
+    const base = getDeviceBaseSize(device.device_type)
+    const topY = (model.position.y || 0) + base * 1.6
+    hudObj.position.set(model.position.x, topY, model.position.z)
+    hudObj.visible = true
+    if (hudEl) hudEl.style.display = 'block'
+    renderer.domElement.style.cursor = 'pointer'
+  } else {
+    hudDeviceId = null
+    if (hudObj) hudObj.visible = false
+    if (hudEl) hudEl.style.display = 'none'
+    renderer.domElement.style.cursor = ''
+  }
+}
+
 function onCanvasClick(e) {
   // 如果刚完成拖动，不处理点击
   if (isDragging) return
@@ -4710,6 +4850,9 @@ function handleDeviceStatusChange(msg) {
   // 刷新 3D 可视化（颜色/标签/链路随可达性变化）
   refreshDeviceVisuals()
 
+  // 若正悬浮该设备，实时刷新 HUD 内容
+  if (hudDeviceId === device.id) updateHudContent(device)
+
   // 离线/恢复告警提示
   const label = `${msg.device_name || device.name}（${msg.ip || device.ip}）`
   if (msg.new_state === 'unreachable') {
@@ -4876,8 +5019,17 @@ onBeforeUnmount(() => {
   // 清除事件
   renderer?.domElement?.removeEventListener('click', onCanvasClick)
   renderer?.domElement?.removeEventListener('mousedown', onCanvasMouseDown)
+  renderer?.domElement?.removeEventListener('mousemove', onCanvasMouseMove)
   renderer?.domElement?.removeEventListener('mousemove', onDragMove)
   renderer?.domElement?.removeEventListener('mouseup', onDragEnd)
+
+  // 释放 HUD
+  if (hudObj) {
+    scene?.remove(hudObj)
+    hudObj = null
+    hudEl = null
+    hudDeviceId = null
+  }
 
   // 释放资源
   controls?.dispose()
@@ -5458,6 +5610,99 @@ onBeforeUnmount(() => {
 :deep(.device-label.maintenance) {
   background: rgba(255, 161, 22, 0.9);
   color: #fff;
+}
+
+/* ===== 悬浮 HUD 全息玻璃面板 ===== */
+:deep(.device-hud) {
+  position: relative;
+  min-width: 188px;
+  padding: 12px 14px 12px;
+  transform: translateY(-12px);
+  background: linear-gradient(160deg, rgba(8, 22, 36, 0.82), rgba(10, 30, 48, 0.66));
+  border: 1px solid rgba(34, 211, 238, 0.55);
+  border-radius: 10px;
+  box-shadow: 0 0 18px rgba(34, 211, 238, 0.35), inset 0 0 22px rgba(34, 211, 238, 0.08);
+  backdrop-filter: blur(8px) saturate(140%);
+  -webkit-backdrop-filter: blur(8px) saturate(140%);
+  color: #e6f6ff;
+  font-size: 11px;
+  line-height: 1.5;
+  pointer-events: none;
+  overflow: hidden;
+  animation: hudIn 0.18s ease-out;
+}
+/* 顶部高亮描边 */
+:deep(.device-hud::before) {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  padding: 1px;
+  background: linear-gradient(120deg, rgba(34, 211, 238, 0.8), rgba(34, 211, 238, 0) 40%, rgba(34, 211, 238, 0) 60%, rgba(34, 211, 238, 0.6));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+/* 扫描线 */
+:deep(.device-hud .hud-scan) {
+  position: absolute;
+  left: 0; right: 0;
+  height: 28px;
+  top: -28px;
+  background: linear-gradient(180deg, rgba(34, 211, 238, 0) 0%, rgba(34, 211, 238, 0.18) 50%, rgba(34, 211, 238, 0) 100%);
+  animation: hudScan 2.6s linear infinite;
+  pointer-events: none;
+}
+:deep(.device-hud .hud-head) {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+:deep(.device-hud .hud-name) {
+  color: #ffffff;
+  text-shadow: 0 0 8px rgba(34, 211, 238, 0.6);
+}
+:deep(.device-hud .hud-dot) {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  box-shadow: 0 0 8px currentColor;
+}
+:deep(.device-hud .hud-dot.online) { background: #22d3ee; color: #22d3ee; }
+:deep(.device-hud .hud-dot.offline) { background: #ff4d4f; color: #ff4d4f; animation: pulse 1s infinite; }
+:deep(.device-hud .hud-dot.unknown) { background: #94a3b8; color: #94a3b8; }
+:deep(.device-hud .hud-sub) {
+  margin: 2px 0 8px;
+  color: #8fd6ee;
+  font-size: 10px;
+  opacity: 0.85;
+}
+:deep(.device-hud .hud-grid) {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 12px;
+  border-top: 1px solid rgba(34, 211, 238, 0.2);
+  padding-top: 7px;
+}
+:deep(.device-hud .hud-k) { color: #7fa8bd; }
+:deep(.device-hud .hud-v) { color: #e6f6ff; text-align: right; font-variant-numeric: tabular-nums; }
+:deep(.device-hud .hud-v.online) { color: #22d3ee; }
+:deep(.device-hud .hud-v.offline) { color: #ff6b6d; }
+:deep(.device-hud .hud-v.maintenance) { color: #ffb454; }
+:deep(.device-hud .hud-v.unknown) { color: #94a3b8; }
+:deep(.device-hud .hud-time) { font-size: 10px; opacity: 0.9; }
+
+@keyframes hudIn {
+  from { opacity: 0; transform: translateY(-4px) scale(0.96); }
+  to   { opacity: 1; transform: translateY(-12px) scale(1); }
+}
+@keyframes hudScan {
+  0%   { top: -28px; }
+  100% { top: 100%; }
 }
 
 /* 拓扑标签样式（CSS2D）- cable_no 和 junction label */
