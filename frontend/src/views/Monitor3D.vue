@@ -260,6 +260,25 @@
           </button>
         </div>
 
+        <div class="impact-scope" v-if="commandSummary.impact_scope && commandSummary.impact_scope.level !== 'none'">
+          <div class="impact-head">
+            <span>影响范围</span>
+            <b :class="`sev-${commandSummary.impact_scope.level || 'minor'}`">{{ commandSummary.impact_scope.level }}</b>
+          </div>
+          <div class="impact-summary">{{ commandSummary.impact_scope.summary }}</div>
+          <div class="impact-devices" v-if="commandSummary.impact_scope.impacted_devices?.length">
+            <button
+              v-for="device in commandSummary.impact_scope.impacted_devices.slice(0, 5)"
+              :key="device.device_id"
+              class="impact-device"
+              @click="focusIncidentEvent(device)"
+            >
+              <span>{{ device.device_name || device.fault_no }}</span>
+              <b :class="`sev-${device.severity || 'minor'}`">{{ device.severity || '-' }}</b>
+            </button>
+          </div>
+        </div>
+
         <div class="timeline-head">
           <span>事件流</span>
           <div class="timeline-window">
@@ -6292,6 +6311,75 @@ onBeforeUnmount(() => {
   margin-top: 3px;
   color: #94a3b8;
   font-size: 10px;
+}
+
+.impact-scope {
+  margin-top: 10px;
+  padding: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.18);
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.1);
+}
+
+.impact-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.impact-head b {
+  text-transform: uppercase;
+}
+
+.impact-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 4px;
+  color: #fca5a5;
+  font-size: 10px;
+}
+
+.impact-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.impact-device {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(15, 23, 42, 0.42);
+  color: #e2e8f0;
+  cursor: pointer;
+  font-size: 10px;
+  padding: 5px 6px;
+  text-align: left;
+}
+
+.impact-device:hover {
+  background: rgba(8, 145, 178, 0.16);
+}
+
+.impact-device span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.impact-device b {
+  flex: none;
+  text-transform: uppercase;
 }
 
 .timeline-head {

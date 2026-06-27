@@ -81,3 +81,79 @@ def build_root_cause_candidates(active_faults: List[FaultRecord]) -> List[Dict]:
 
     candidates.sort(key=lambda item: item["confidence"], reverse=True)
     return candidates[:3]
+
+
+def build_impact_scope(active_faults: List[FaultRecord]) -> Dict:
+    """Build an MVP impact scope from active faults.
+
+    This version is intentionally signal-based and does not require live topology
+    validation. A later version can enrich it with shared path/edge analysis.
+    """
+    if not active_faults:
+        return {
+            "level": "none",
+            "summary": "暂无活跃影响",
+            "impacted_devices": [],
+            "severity_counts": {"critical": 0, "major": 0, "warning": 0, "minor": 0},
+            "primary_fault": None,
+        }
+
+    severity_counts = {"critical": 0, "major": 0, "warning": 0, "minor": 0}
+    devices = {}
+    for fault in active_faults:
+        severity = fault.severity or "minor"
+        if severity not in severity_counts:
+            severity = "minor"
+        severity_counts[severity] += 1
+
+        if not fault.device_id:
+            continue
+        current = devices.get(fault.device_id)
+        if not current or fault_signal_score(fault) > current["score"]:
+            devices[fault.device_id] = {
+                "device_id": fault.device_id,
+                "device_name": fault.device_name,
+                "severity": fault.severity,
+                "fault_id": fault.id,
+                "fault_no": fault.fault_no,
+                "incident_type": fault.incident_type,
+                "source_event": fault.source_event,
+                "if_name": fault.if_name,
+                "score": fault_signal_score(fault),
+            }
+
+    primary = max(active_faults, key=fault_signal_score)
+    impacted_devices = sorted(devices.values(), key=lambda item: item["score"], reverse=True)
+    for item in impacted_devices:
+        item.pop("score", None)
+
+    impacted_count = len(impacted_devices)
+    if severity_counts["critical"] > 0 or impacted_count >= 5:
+        level = "critical"
+    elif severity_counts["major"] > 0 or impacted_count >= 2:
+        level = "major"
+    elif severity_counts["warning"] > 0:
+        level = "warning"
+    else:
+        level = "minor"
+
+    if impacted_count == 1:
+        summary = f"{impacted_devices[0]['device_name'] or '1 台设备'} 受影响"
+    else:
+        summary = f"{impacted_count} 台设备受影响，{severity_counts['critical']} 个 critical，{severity_counts['major']} 个 major"
+
+    return {
+        "level": level,
+        "summary": summary,
+        "impacted_devices": impacted_devices[:10],
+        "severity_counts": severity_counts,
+        "primary_fault": {
+            "fault_id": primary.id,
+            "fault_no": primary.fault_no,
+            "device_id": primary.device_id,
+            "device_name": primary.device_name,
+            "severity": primary.severity,
+            "incident_type": primary.incident_type,
+            "source_event": primary.source_event,
+        },
+    }
