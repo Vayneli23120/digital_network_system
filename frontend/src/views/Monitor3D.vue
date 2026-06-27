@@ -678,8 +678,13 @@ const offlineDevices = computed(() => {
 
 const selectedActiveFault = computed(() => {
   if (!selectedDevice.value) return null
-  return activeFaults.value.find(f => f.device_id === selectedDevice.value.id) || null
+  return getActiveFaultForDevice(selectedDevice.value)
 })
+
+function getActiveFaultForDevice(device) {
+  if (!device) return null
+  return activeFaults.value.find(f => f.device_id === device.id) || null
+}
 
 // 筛选后的设备
 const filteredDevices = computed(() => {
@@ -4476,6 +4481,13 @@ function formatCheckTime(ts) {
   }
 }
 
+function getRecommendationSummary(text) {
+  if (!text) return '—'
+  const firstLine = String(text).split('\n').map(item => item.trim()).find(Boolean)
+  if (!firstLine) return '—'
+  return firstLine.length > 42 ? `${firstLine.slice(0, 42)}...` : firstLine
+}
+
 // 创建 HUD 面板（懒加载，挂到场景，默认隐藏）
 function ensureHudPanel() {
   if (hudObj) return
@@ -4563,6 +4575,7 @@ function updateHudContent(device) {
   const traffic = getUplinkTraffic(device)
   const trendSvg = getUplinkTrendSvg(device)
   const peer = getPeerInfo(device)
+  const activeFault = getActiveFaultForDevice(device)
 
   hudEl.innerHTML = `
     <div class="hud-scan"></div>
@@ -4595,6 +4608,17 @@ function updateHudContent(device) {
       <div class="hud-k">${t('hudCheck')}</div>
       <div class="hud-v hud-time">${formatCheckTime(device.last_reachability_check)}</div>
     </div>
+    ${activeFault ? `
+    <div class="hud-incident">
+      <div class="hud-incident-head">
+        <span>${activeFault.fault_no || 'INC'}</span>
+        <b class="sev-${activeFault.severity || 'minor'}">${activeFault.severity || '-'}</b>
+      </div>
+      <div class="hud-incident-row">状态：${activeFault.status_label || activeFault.status || '-'}</div>
+      <div class="hud-incident-row">负责人：${activeFault.assigned_to || '-'}</div>
+      <div class="hud-incident-row">建议：${getRecommendationSummary(activeFault.recommendation)}</div>
+    </div>
+    ` : ''}
   `
 }
 
@@ -6316,6 +6340,35 @@ onBeforeUnmount(() => {
 .incident-meta {
   margin-top: 4px;
   color: #fca5a5;
+
+.hud-incident {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid rgba(248, 113, 113, 0.28);
+}
+
+.hud-incident-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.hud-incident-head b {
+  text-transform: uppercase;
+}
+
+.hud-incident-row {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 3px;
+  color: #fca5a5;
+  font-size: 10px;
+}
   font-size: 10px;
   line-height: 1.35;
 }
