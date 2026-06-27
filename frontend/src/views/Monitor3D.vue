@@ -197,6 +197,52 @@
         </div>
       </div>
 
+      <div class="command-panel">
+        <div class="command-head">
+          <h4>故障指挥</h4>
+          <button class="panel-mini-btn" @click="loadCommandSummary">刷新</button>
+        </div>
+        <div class="command-grid">
+          <div class="command-card danger">
+            <span>P1</span>
+            <b>{{ commandSummary.p1_count || 0 }}</b>
+          </div>
+          <div class="command-card warning">
+            <span>P2</span>
+            <b>{{ commandSummary.p2_count || 0 }}</b>
+          </div>
+          <div class="command-card">
+            <span>未确认</span>
+            <b>{{ commandSummary.unacknowledged || 0 }}</b>
+          </div>
+          <div class="command-card">
+            <span>处理中</span>
+            <b>{{ commandSummary.in_progress || 0 }}</b>
+          </div>
+        </div>
+        <div class="command-substats">
+          <span>转维修 {{ commandSummary.transferred || 0 }}</span>
+          <span>影响设备 {{ commandSummary.impacted_devices || 0 }}</span>
+        </div>
+        <div class="command-events" v-if="commandSummary.recent_events?.length">
+          <button
+            v-for="event in commandSummary.recent_events"
+            :key="event.id"
+            class="command-event"
+            @click="focusIncidentEvent(event)"
+          >
+            <span class="event-main">
+              <b :class="`sev-${event.severity || 'minor'}`">{{ event.severity || '-' }}</b>
+              {{ event.device_name || event.fault_no }}
+            </span>
+            <span class="event-sub">
+              {{ event.source_event || event.incident_type || event.status }}<span v-if="event.if_name"> · {{ event.if_name }}</span>
+            </span>
+          </button>
+        </div>
+        <div class="command-empty" v-else>暂无活跃故障</div>
+      </div>
+
       <!-- 标签页：拓扑/链路/底图 -->
       <el-tabs v-model="sidebarTab" type="border-card" size="small">
         <!-- 拓扑标签页 -->
@@ -519,6 +565,7 @@ const fiberBranchLinks = ref([])  // 分支光缆（旧数据，面板备用）
 const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
 const discoveringNeighbors = ref(false)  // 邻居发现进行中
 const activeFaults = ref([])  // 监控自动创建的活跃故障
+const commandSummary = ref({ recent_events: [] })
 const faultActionLoading = ref(false)
 const floorPlans = ref([])
 const currentPlan = ref(null)
@@ -4977,6 +5024,23 @@ async function loadActiveFaults() {
   }
 }
 
+async function loadCommandSummary() {
+  try {
+    const res = await axios.get('/api/monitor3d/command-summary')
+    commandSummary.value = res.data || { recent_events: [] }
+  } catch (e) {
+    console.warn('加载故障指挥汇总失败:', e)
+  }
+}
+
+function focusIncidentEvent(event) {
+  if (!event?.device_id) return
+  const device = devices.value.find(d => d.id === event.device_id)
+  if (!device) return
+  focusDevice(device)
+  selectedDevice.value = device
+}
+
 async function reviewSelectedFault(falsePositive = false) {
   if (!selectedActiveFault.value) return
   faultActionLoading.value = true
@@ -5144,6 +5208,7 @@ async function loadData() {
     const devicesRes = await axios.get('/api/devices')
     devices.value = devicesRes.data.items || devicesRes.data || []
     await loadActiveFaults()
+    await loadCommandSummary()
 
     // 加载节点
     if (currentPlan.value) {
@@ -5304,6 +5369,7 @@ function handleInterfaceStatusChange(msg) {
     ElMessage.success({ message: `${uplinkTag}${ifName} 恢复：${dName}`, duration: 4000 })
   }
   loadActiveFaults()
+  loadCommandSummary()
 }
 
 function handleDeviceStatusChange(msg) {
@@ -5331,6 +5397,7 @@ function handleDeviceStatusChange(msg) {
     scheduleAutoFocusOffline()
   }
   loadActiveFaults()
+  loadCommandSummary()
 }
 
 function connectDeviceStatusWs() {
@@ -5952,6 +6019,137 @@ onBeforeUnmount(() => {
   margin: 2px 0;
   font-size: 11px;
 }
+
+.command-panel {
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.46);
+}
+
+.command-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.command-head h4 {
+  margin: 0;
+  color: #a5f3fc;
+  font-size: 12px;
+}
+
+.panel-mini-btn {
+  border: 1px solid rgba(34, 211, 238, 0.28);
+  border-radius: 4px;
+  background: rgba(8, 145, 178, 0.14);
+  color: #67e8f9;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 20px;
+  padding: 0 8px;
+}
+
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.command-card {
+  min-width: 0;
+  padding: 6px 4px;
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.7);
+  text-align: center;
+}
+
+.command-card span {
+  display: block;
+  color: #94a3b8;
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.command-card b {
+  color: #e2e8f0;
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.command-card.danger b {
+  color: #fb7185;
+}
+
+.command-card.warning b {
+  color: #fbbf24;
+}
+
+.command-substats {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.command-events {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.command-event {
+  width: 100%;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 5px;
+  background: rgba(15, 23, 42, 0.58);
+  cursor: pointer;
+  padding: 6px;
+  text-align: left;
+}
+
+.command-event:hover {
+  border-color: rgba(34, 211, 238, 0.45);
+  background: rgba(8, 145, 178, 0.14);
+}
+
+.event-main,
+.event-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.event-main {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.event-main b {
+  margin-right: 5px;
+  text-transform: uppercase;
+}
+
+.event-sub,
+.command-empty {
+  color: #94a3b8;
+  font-size: 10px;
+}
+
+.command-empty {
+  margin-top: 8px;
+}
+
+.sev-critical { color: #fb7185; }
+.sev-major { color: #fbbf24; }
+.sev-warning { color: #fde68a; }
+.sev-minor { color: #94a3b8; }
 
 .incident-panel {
   margin-top: 8px;

@@ -5,6 +5,7 @@ Monitor Screen Router - 系统监控大屏 API
 """
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
 from pathlib import Path
@@ -14,6 +15,7 @@ from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.config import get_config
+from app.shared.models import Device, FaultRecord
 from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
@@ -345,6 +347,57 @@ async def get_global_summary_endpoint(db: Session = Depends(get_db)):
     聚合所有平面图数据，返回全厂整体健康状态。
     """
     return get_global_summary(db)
+
+
+@router.get("/monitor3d/command-summary")
+async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
+    """获取 3D 大屏故障指挥面板汇总"""
+    active_statuses = ["open", "assigned", "accepted", "diagnosing", "resolving", "transferred"]
+    active_query = db.query(FaultRecord).filter(FaultRecord.status.in_(active_statuses))
+
+    p1_count = active_query.filter(FaultRecord.severity == "critical").count()
+    p2_count = active_query.filter(FaultRecord.severity == "major").count()
+    unacknowledged = active_query.filter(FaultRecord.review_required == True).count()
+    in_progress = active_query.filter(FaultRecord.status.in_(["accepted", "diagnosing", "resolving"])).count()
+    transferred = active_query.filter(FaultRecord.status == "transferred").count()
+    impacted_devices = active_query.filter(FaultRecord.device_id.isnot(None)).with_entities(
+        func.count(func.distinct(FaultRecord.device_id))
+    ).scalar() or 0
+
+    recent_faults = active_query.order_by(
+        FaultRecord.last_event_at.desc().nullslast(),
+        FaultRecord.created_at.desc(),
+    ).limit(5).all()
+
+    return {
+        "p1_count": p1_count,
+        "p2_count": p2_count,
+        "unacknowledged": unacknowledged,
+        "in_progress": in_progress,
+        "transferred": transferred,
+        "impacted_devices": impacted_devices,
+        "recent_events": [
+            {
+                "id": fault.id,
+                "fault_no": fault.fault_no,
+                "device_id": fault.device_id,
+                "device_name": fault.device_name,
+                "severity": fault.severity,
+                "status": fault.status,
+                "source_type": fault.source_type,
+                "source_event": fault.source_event,
+                "incident_type": fault.incident_type,
+                "if_name": fault.if_name,
+                "review_required": bool(fault.review_required) if fault.review_required is not None else False,
+                "event_count": fault.event_count or 1,
+                "last_event_at": fault.last_event_at.isoformat() if fault.last_event_at else None,
+                "created_at": fault.created_at.isoformat() if fault.created_at else None,
+            }
+            for fault in recent_faults
+        ],
+        "root_cause_candidates": [],
+        "hot_links": [],
+    }
 
 
 # ============ 图模型拓扑 API（新设计） ============
