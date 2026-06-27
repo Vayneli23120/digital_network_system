@@ -4,13 +4,13 @@ Monitor Screen Router - 系统监控大屏 API
 提供平面图管理、设备节点管理、设备详情、离线告警等 API。
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
 from pathlib import Path
 import shutil
-from datetime import datetime
+from datetime import datetime, timedelta
 from pydantic import BaseModel
 
 from app.shared.database import get_db
@@ -398,6 +398,79 @@ async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
         "root_cause_candidates": [],
         "hot_links": [],
     }
+
+
+def _monitor_event_item(fault: FaultRecord, event_type: str, event_time: datetime, title: str) -> Dict:
+    return {
+        "id": f"fault:{fault.id}:{event_type}:{event_time.isoformat()}",
+        "fault_id": fault.id,
+        "fault_no": fault.fault_no,
+        "device_id": fault.device_id,
+        "device_name": fault.device_name,
+        "severity": fault.severity,
+        "status": fault.status,
+        "event_type": event_type,
+        "title": title,
+        "source_type": fault.source_type,
+        "source_event": fault.source_event,
+        "incident_type": fault.incident_type,
+        "if_name": fault.if_name,
+        "review_required": bool(fault.review_required) if fault.review_required is not None else False,
+        "event_count": fault.event_count or 1,
+        "occurred_at": event_time.isoformat(),
+    }
+
+
+@router.get("/monitor3d/events")
+async def get_monitor3d_events(
+    window: str = Query("1h", pattern="^(10m|1h|24h)$"),
+    severity: Optional[str] = None,
+    limit: int = Query(100, ge=1, le=300),
+    db: Session = Depends(get_db),
+):
+    """获取 3D 大屏故障事件时间线（MVP：由 FaultRecord 生命周期派生）"""
+    window_delta = {
+        "10m": timedelta(minutes=10),
+        "1h": timedelta(hours=1),
+        "24h": timedelta(hours=24),
+    }[window]
+    since = datetime.utcnow() - window_delta
+
+    query = db.query(FaultRecord).filter(
+        (FaultRecord.created_at >= since)
+        | (FaultRecord.last_event_at >= since)
+        | (FaultRecord.reviewed_at >= since)
+        | (FaultRecord.transferred_at >= since)
+        | (FaultRecord.resolved_at >= since)
+        | (FaultRecord.closed_at >= since)
+    )
+    if severity:
+        severities = [item.strip() for item in severity.split(",") if item.strip()]
+        query = query.filter(FaultRecord.severity.in_(severities))
+
+    faults = query.order_by(
+        FaultRecord.updated_at.desc().nullslast(),
+        FaultRecord.created_at.desc(),
+    ).limit(limit * 2).all()
+
+    events = []
+    for fault in faults:
+        if fault.created_at and fault.created_at >= since:
+            events.append(_monitor_event_item(fault, "fault_created", fault.created_at, "故障创建"))
+        if fault.last_event_at and fault.last_event_at >= since and fault.last_event_at != fault.created_at:
+            events.append(_monitor_event_item(fault, fault.source_event or "monitor_event", fault.last_event_at, "监控事件"))
+        if fault.reviewed_at and fault.reviewed_at >= since:
+            title = "标记误报" if fault.false_positive else "管理员复核"
+            events.append(_monitor_event_item(fault, "fault_reviewed", fault.reviewed_at, title))
+        if fault.transferred_at and fault.transferred_at >= since:
+            events.append(_monitor_event_item(fault, "maintenance_transferred", fault.transferred_at, "转维修"))
+        if fault.resolved_at and fault.resolved_at >= since:
+            events.append(_monitor_event_item(fault, "fault_resolved", fault.resolved_at, "故障恢复"))
+        if fault.closed_at and fault.closed_at >= since:
+            events.append(_monitor_event_item(fault, "fault_closed", fault.closed_at, "故障关闭"))
+
+    events.sort(key=lambda item: item["occurred_at"], reverse=True)
+    return {"items": events[:limit], "window": window, "since": since.isoformat()}
 
 
 # ============ 图模型拓扑 API（新设计） ============
