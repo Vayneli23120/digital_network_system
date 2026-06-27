@@ -15,8 +15,9 @@ from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.config import get_config
-from app.shared.models import Device, FaultRecord
+from app.shared.models import Device, DeviceNode, FaultRecord
 from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates, build_shared_path_edges
+from app.services.monitor3d_traffic_heat import build_traffic_heat_items
 from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
@@ -500,6 +501,32 @@ async def get_monitor3d_events(
 
     events.sort(key=lambda item: item["occurred_at"], reverse=True)
     return {"items": events[:limit], "window": window, "since": since.isoformat()}
+
+
+@router.get("/monitor3d/traffic-heat")
+async def get_monitor3d_traffic_heat(plan_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """获取 3D 大屏流量热力层数据（基于接口最新采样）。"""
+    plan_device_ids = None
+    if plan_id:
+        plan_device_ids = [
+            row[0]
+            for row in db.query(DeviceNode.device_id).filter(DeviceNode.floor_plan_id == plan_id).all()
+        ]
+
+    items = build_traffic_heat_items(db, plan_device_ids)
+    summary = {
+        "critical": 0,
+        "high": 0,
+        "normal": 0,
+        "low": 0,
+        "down": 0,
+        "stale": 0,
+    }
+    for item in items:
+        if item["level"] in summary:
+            summary[item["level"]] += 1
+
+    return {"items": items, "summary": summary, "plan_id": plan_id}
 
 
 # ============ 图模型拓扑 API（新设计） ============
