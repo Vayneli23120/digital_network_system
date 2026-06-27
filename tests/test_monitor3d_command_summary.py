@@ -2,7 +2,7 @@
 Tests for Monitor3D incident command summary helpers.
 """
 
-from app.services.incident_insights import build_impact_scope, build_root_cause_candidates
+from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates
 from app.shared.models import FaultRecord
 
 
@@ -96,3 +96,33 @@ def test_impact_scope_multiple_devices_counts_severity():
     assert scope["severity_counts"]["critical"] == 1
     assert scope["severity_counts"]["major"] == 1
     assert scope["primary_fault"]["device_id"] == 1
+
+
+def test_hot_links_returns_ranked_link_faults_only():
+    links = build_hot_links([
+        _fault(id=1, device_id=1, device_name="Access-01", incident_type="device_down"),
+        _fault(
+            id=2,
+            device_id=2,
+            device_name="Core-01",
+            severity="critical",
+            incident_type="uplink_down",
+            source_event="link_down",
+            if_index=48,
+            if_name="Gi1/0/48",
+            event_count=3,
+        ),
+        _fault(
+            id=3,
+            device_id=3,
+            device_name="Access-03",
+            severity="warning",
+            incident_type="access_port_down",
+            source_event="link_down",
+            if_name="Gi1/0/10",
+        ),
+    ])
+
+    assert [item["fault_id"] for item in links] == [2, 3]
+    assert links[0]["if_name"] == "Gi1/0/48"
+    assert links[0]["score"] > links[1]["score"]

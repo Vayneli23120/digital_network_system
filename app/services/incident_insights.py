@@ -157,3 +157,32 @@ def build_impact_scope(active_faults: List[FaultRecord]) -> Dict:
             "source_event": primary.source_event,
         },
     }
+
+
+def build_hot_links(active_faults: List[FaultRecord], limit: int = 5) -> List[Dict]:
+    """Return active link-related faults ranked for the Monitor3D command panel."""
+    link_faults = [
+        fault for fault in active_faults
+        if fault.incident_type in ("uplink_down", "access_port_down") or fault.source_event == "link_down"
+    ]
+    ranked = sorted(link_faults, key=fault_signal_score, reverse=True)
+
+    return [
+        {
+            "fault_id": fault.id,
+            "fault_no": fault.fault_no,
+            "device_id": fault.device_id,
+            "device_name": fault.device_name,
+            "if_index": fault.if_index,
+            "if_name": fault.if_name,
+            "peer_device_id": fault.peer_device_id,
+            "peer_if_name": fault.peer_if_name,
+            "severity": fault.severity,
+            "status": fault.status,
+            "incident_type": fault.incident_type,
+            "source_event": fault.source_event,
+            "event_count": fault.event_count or 1,
+            "score": round(fault_signal_score(fault), 2),
+        }
+        for fault in ranked[:limit]
+    ]

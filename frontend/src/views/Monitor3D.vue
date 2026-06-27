@@ -279,6 +279,24 @@
           </div>
         </div>
 
+        <div class="hot-links" v-if="commandSummary.hot_links?.length">
+          <div class="hot-links-title">故障链路 Top 5</div>
+          <button
+            v-for="link in commandSummary.hot_links"
+            :key="link.fault_id"
+            class="hot-link-item"
+            @click="focusIncidentEvent(link)"
+          >
+            <span class="hot-link-main">
+              <b :class="`sev-${link.severity || 'minor'}`">{{ link.severity || '-' }}</b>
+              {{ link.device_name || link.fault_no }}<span v-if="link.if_name"> · {{ link.if_name }}</span>
+            </span>
+            <span class="hot-link-sub">
+              {{ link.incident_type || link.source_event }} · {{ link.event_count || 1 }} 次<span v-if="link.peer_if_name"> · 对端 {{ link.peer_if_name }}</span>
+            </span>
+          </button>
+        </div>
+
         <div class="timeline-head">
           <span>事件流</span>
           <div class="timeline-window">
@@ -6463,6 +6481,60 @@ onBeforeUnmount(() => {
 .impact-device b {
   flex: none;
   text-transform: uppercase;
+}
+
+.hot-links {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(251, 191, 36, 0.16);
+}
+
+.hot-links-title {
+  color: #fde68a;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.hot-link-item {
+  display: block;
+  width: 100%;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  border-radius: 5px;
+  background: rgba(120, 53, 15, 0.12);
+  cursor: pointer;
+  margin-top: 5px;
+  padding: 6px;
+  text-align: left;
+}
+
+.hot-link-item:hover {
+  border-color: rgba(251, 191, 36, 0.48);
+  background: rgba(120, 53, 15, 0.2);
+}
+
+.hot-link-main,
+.hot-link-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.hot-link-main {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.hot-link-main b {
+  margin-right: 6px;
+  text-transform: uppercase;
+}
+
+.hot-link-sub {
+  margin-top: 3px;
+  color: #fbbf24;
+  font-size: 10px;
 }
 
 .timeline-head {
