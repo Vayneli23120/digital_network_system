@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from app.shared.database import get_db
 from app.shared.config import get_config
 from app.shared.models import Device, FaultRecord
-from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates
+from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates, build_shared_path_edges
 from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
@@ -351,7 +351,7 @@ async def get_global_summary_endpoint(db: Session = Depends(get_db)):
 
 
 @router.get("/monitor3d/command-summary")
-async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
+async def get_monitor3d_command_summary(plan_id: Optional[int] = None, db: Session = Depends(get_db)):
     """获取 3D 大屏故障指挥面板汇总"""
     active_statuses = ["open", "assigned", "accepted", "diagnosing", "resolving", "transferred"]
     active_query = db.query(FaultRecord).filter(FaultRecord.status.in_(active_statuses))
@@ -374,6 +374,28 @@ async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
         FaultRecord.last_event_at.desc().nullslast(),
         FaultRecord.created_at.desc(),
     ).limit(200).all()
+    device_paths = None
+    if plan_id:
+        try:
+            from .graph_path_service import calculate_all_device_paths
+            device_paths = calculate_all_device_paths(db, plan_id)
+        except Exception:
+            device_paths = None
+
+    root_cause_candidates = build_root_cause_candidates(active_faults)
+    shared_path_edges = build_shared_path_edges(active_faults, device_paths)
+    if shared_path_edges:
+        top_edge = shared_path_edges[0]
+        root_cause_candidates.insert(0, {
+            "candidate": f"共同路径 {top_edge['cable_name']} 疑似上游链路异常",
+            "confidence": min(0.92, 0.52 + top_edge["affected_devices"] * 0.1),
+            "impacted_devices": top_edge["affected_devices"],
+            "fault_id": None,
+            "device_id": top_edge["device_ids"][0] if top_edge["device_ids"] else None,
+            "severity": "major",
+            "evidence": ["shared path edge", top_edge["cable_name"], f"{top_edge['affected_devices']} affected devices"],
+        })
+        root_cause_candidates = root_cause_candidates[:3]
 
     return {
         "p1_count": p1_count,
@@ -401,8 +423,8 @@ async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
             }
             for fault in recent_faults
         ],
-        "root_cause_candidates": build_root_cause_candidates(active_faults),
-        "impact_scope": build_impact_scope(active_faults),
+        "root_cause_candidates": root_cause_candidates,
+        "impact_scope": build_impact_scope(active_faults, device_paths),
         "hot_links": build_hot_links(active_faults),
     }
 

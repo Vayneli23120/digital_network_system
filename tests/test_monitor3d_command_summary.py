@@ -2,7 +2,12 @@
 Tests for Monitor3D incident command summary helpers.
 """
 
-from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates
+from app.services.incident_insights import (
+    build_hot_links,
+    build_impact_scope,
+    build_root_cause_candidates,
+    build_shared_path_edges,
+)
 from app.shared.models import FaultRecord
 
 
@@ -96,6 +101,45 @@ def test_impact_scope_multiple_devices_counts_severity():
     assert scope["severity_counts"]["critical"] == 1
     assert scope["severity_counts"]["major"] == 1
     assert scope["primary_fault"]["device_id"] == 1
+
+
+def test_shared_path_edges_find_common_topology_edge():
+    faults = [
+        _fault(id=1, device_id=1, device_name="Access-01"),
+        _fault(id=2, device_id=2, device_name="Access-02"),
+        _fault(id=3, device_id=3, device_name="AP-03"),
+    ]
+    device_paths = {
+        "paths": {
+            1: {"reachable": True, "edges": [{"id": 10, "cable_name": "TRUNK-A"}, {"id": 20, "cable_name": "BR-1"}]},
+            2: {"reachable": True, "edges": [{"id": 10, "cable_name": "TRUNK-A"}, {"id": 30, "cable_name": "BR-2"}]},
+            3: {"reachable": True, "edges": [{"id": 10, "cable_name": "TRUNK-A"}, {"id": 40, "cable_name": "BR-3"}]},
+        }
+    }
+
+    shared = build_shared_path_edges(faults, device_paths)
+
+    assert shared[0]["edge_id"] == 10
+    assert shared[0]["cable_name"] == "TRUNK-A"
+    assert shared[0]["affected_devices"] == 3
+
+
+def test_impact_scope_includes_shared_path_edges_in_summary():
+    faults = [
+        _fault(id=1, device_id=1, device_name="Access-01"),
+        _fault(id=2, device_id=2, device_name="Access-02"),
+    ]
+    device_paths = {
+        "paths": {
+            1: {"reachable": True, "edges": [{"id": 10, "cable_name": "TRUNK-A"}]},
+            2: {"reachable": True, "edges": [{"id": 10, "cable_name": "TRUNK-A"}]},
+        }
+    }
+
+    scope = build_impact_scope(faults, device_paths)
+
+    assert scope["shared_path_edges"][0]["edge_id"] == 10
+    assert "TRUNK-A" in scope["summary"]
 
 
 def test_hot_links_returns_ranked_link_faults_only():

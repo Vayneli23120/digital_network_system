@@ -1,6 +1,7 @@
 """Incident insight helpers for Monitor3D command views."""
 
-from typing import Dict, List
+from collections import defaultdict
+from typing import Dict, List, Optional
 
 from app.shared.models import FaultRecord
 
@@ -83,7 +84,54 @@ def build_root_cause_candidates(active_faults: List[FaultRecord]) -> List[Dict]:
     return candidates[:3]
 
 
-def build_impact_scope(active_faults: List[FaultRecord]) -> Dict:
+def build_shared_path_edges(active_faults: List[FaultRecord], device_paths: Optional[Dict]) -> List[Dict]:
+    """Find shared topology path edges among active device-down faults."""
+    if not device_paths:
+        return []
+
+    paths = device_paths.get("paths", device_paths)
+    if not isinstance(paths, dict):
+        return []
+
+    device_down_ids = {
+        fault.device_id
+        for fault in active_faults
+        if fault.device_id and fault.incident_type == "device_down"
+    }
+    if len(device_down_ids) < 2:
+        return []
+
+    edge_hits = defaultdict(lambda: {"devices": set(), "edge": None})
+    for device_id in device_down_ids:
+        path = paths.get(device_id) or paths.get(str(device_id))
+        if not path or not path.get("reachable"):
+            continue
+        for edge in path.get("edges") or []:
+            edge_id = edge.get("id")
+            if edge_id is None:
+                continue
+            edge_hits[edge_id]["devices"].add(device_id)
+            edge_hits[edge_id]["edge"] = edge
+
+    shared = []
+    for edge_id, data in edge_hits.items():
+        if len(data["devices"]) < 2:
+            continue
+        edge = data["edge"] or {}
+        shared.append({
+            "edge_id": edge_id,
+            "cable_id": edge.get("cable_id"),
+            "cable_name": edge.get("cable_name") or f"Edge-{edge_id}",
+            "cable_type": edge.get("cable_type"),
+            "affected_devices": len(data["devices"]),
+            "device_ids": sorted(data["devices"]),
+        })
+
+    shared.sort(key=lambda item: item["affected_devices"], reverse=True)
+    return shared[:5]
+
+
+def build_impact_scope(active_faults: List[FaultRecord], device_paths: Optional[Dict] = None) -> Dict:
     """Build an MVP impact scope from active faults.
 
     This version is intentionally signal-based and does not require live topology
@@ -96,6 +144,7 @@ def build_impact_scope(active_faults: List[FaultRecord]) -> Dict:
             "impacted_devices": [],
             "severity_counts": {"critical": 0, "major": 0, "warning": 0, "minor": 0},
             "primary_fault": None,
+            "shared_path_edges": [],
         }
 
     severity_counts = {"critical": 0, "major": 0, "warning": 0, "minor": 0}
@@ -142,11 +191,17 @@ def build_impact_scope(active_faults: List[FaultRecord]) -> Dict:
     else:
         summary = f"{impacted_count} 台设备受影响，{severity_counts['critical']} 个 critical，{severity_counts['major']} 个 major"
 
+    shared_path_edges = build_shared_path_edges(active_faults, device_paths)
+    if shared_path_edges:
+        top_edge = shared_path_edges[0]
+        summary = f"{impacted_count} 台设备受影响，共同经过 {top_edge['cable_name']}"
+
     return {
         "level": level,
         "summary": summary,
         "impacted_devices": impacted_devices[:10],
         "severity_counts": severity_counts,
+        "shared_path_edges": shared_path_edges,
         "primary_fault": {
             "fault_id": primary.id,
             "fault_no": primary.fault_no,

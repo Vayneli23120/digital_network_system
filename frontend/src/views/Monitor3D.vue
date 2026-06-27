@@ -277,6 +277,16 @@
               <b :class="`sev-${device.severity || 'minor'}`">{{ device.severity || '-' }}</b>
             </button>
           </div>
+          <div class="shared-paths" v-if="commandSummary.impact_scope.shared_path_edges?.length">
+            <div
+              v-for="edge in commandSummary.impact_scope.shared_path_edges.slice(0, 3)"
+              :key="edge.edge_id"
+              class="shared-path-item"
+            >
+              <span>{{ edge.cable_name || ('Edge-' + edge.edge_id) }}</span>
+              <b>{{ edge.affected_devices }} 台</b>
+            </div>
+          </div>
         </div>
 
         <div class="hot-links" v-if="commandSummary.hot_links?.length">
@@ -5213,7 +5223,9 @@ async function loadActiveFaults() {
 
 async function loadCommandSummary() {
   try {
-    const res = await axios.get('/api/monitor3d/command-summary')
+    const res = await axios.get('/api/monitor3d/command-summary', {
+      params: currentPlanId.value ? { plan_id: currentPlanId.value } : {},
+    })
     commandSummary.value = res.data || { recent_events: [] }
   } catch (e) {
     console.warn('加载故障指挥汇总失败:', e)
@@ -6481,6 +6493,35 @@ onBeforeUnmount(() => {
 .impact-device b {
   flex: none;
   text-transform: uppercase;
+}
+
+.shared-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 7px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(251, 191, 36, 0.16);
+}
+
+.shared-path-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fde68a;
+  font-size: 10px;
+}
+
+.shared-path-item span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.shared-path-item b {
+  flex: none;
+  color: #fbbf24;
 }
 
 .hot-links {

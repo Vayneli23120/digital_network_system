@@ -435,6 +435,18 @@ def calculate_all_device_paths(db: Session, plan_id: int) -> Dict[str, Any]:
             device_paths[device_id] = {
                 "reachable": True,
                 "polyline": polyline,
+                "edges": [
+                    {
+                        "id": edge.id,
+                        "reversed": reversed_edge,
+                        "cable_type": edge.cable_type,
+                        "cable_name": edge.cable_name,
+                        "cable_id": edge.cable_id,
+                        "a_node_id": edge.a_node_id,
+                        "b_node_id": edge.b_node_id,
+                    }
+                    for edge, reversed_edge in best_path
+                ],
                 "total_length": best_dist,
             }
         else:
