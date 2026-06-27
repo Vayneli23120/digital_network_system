@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.shared.database import get_db
 from app.shared.config import get_config
 from app.shared.models import Device, FaultRecord
+from app.services.incident_insights import build_root_cause_candidates
 from .monitor_service import (
     get_floor_plans, get_floor_plan, create_floor_plan, update_floor_plan, delete_floor_plan,
     get_floor_plan_nodes, create_device_node, update_device_node, delete_device_node,
@@ -368,6 +369,11 @@ async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
         FaultRecord.last_event_at.desc().nullslast(),
         FaultRecord.created_at.desc(),
     ).limit(5).all()
+    active_faults = active_query.order_by(
+        FaultRecord.severity.desc(),
+        FaultRecord.last_event_at.desc().nullslast(),
+        FaultRecord.created_at.desc(),
+    ).limit(200).all()
 
     return {
         "p1_count": p1_count,
@@ -395,7 +401,7 @@ async def get_monitor3d_command_summary(db: Session = Depends(get_db)):
             }
             for fault in recent_faults
         ],
-        "root_cause_candidates": [],
+        "root_cause_candidates": build_root_cause_candidates(active_faults),
         "hot_links": [],
     }
 

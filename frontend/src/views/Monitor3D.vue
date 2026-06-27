@@ -242,6 +242,24 @@
         </div>
         <div class="command-empty" v-else>暂无活跃故障</div>
 
+        <div class="root-cause-block" v-if="commandSummary.root_cause_candidates?.length">
+          <div class="root-cause-title">疑似根因 Top 3</div>
+          <button
+            v-for="candidate in commandSummary.root_cause_candidates"
+            :key="candidate.candidate"
+            class="root-cause-item"
+            @click="focusIncidentEvent(candidate)"
+          >
+            <span class="root-main">
+              <b :class="`sev-${candidate.severity || 'minor'}`">{{ Math.round((candidate.confidence || 0) * 100) }}%</b>
+              {{ candidate.candidate }}
+            </span>
+            <span class="root-sub">
+              影响 {{ candidate.impacted_devices || 0 }} 台 · {{ (candidate.evidence || []).slice(0, 2).join(' / ') }}
+            </span>
+          </button>
+        </div>
+
         <div class="timeline-head">
           <span>事件流</span>
           <div class="timeline-window">
@@ -6221,6 +6239,59 @@ onBeforeUnmount(() => {
 
 .command-empty {
   margin-top: 8px;
+}
+
+.root-cause-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(34, 211, 238, 0.14);
+}
+
+.root-cause-title {
+  color: #a5f3fc;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.root-cause-item {
+  display: block;
+  width: 100%;
+  border: 1px solid rgba(34, 211, 238, 0.18);
+  border-radius: 5px;
+  background: rgba(8, 145, 178, 0.1);
+  cursor: pointer;
+  margin-top: 5px;
+  padding: 6px;
+  text-align: left;
+}
+
+.root-cause-item:hover {
+  border-color: rgba(34, 211, 238, 0.48);
+  background: rgba(8, 145, 178, 0.18);
+}
+
+.root-main,
+.root-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.root-main {
+  color: #e2e8f0;
+  font-size: 11px;
+}
+
+.root-main b {
+  margin-right: 6px;
+}
+
+.root-sub {
+  margin-top: 3px;
+  color: #94a3b8;
+  font-size: 10px;
 }
 
 .timeline-head {
