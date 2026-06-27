@@ -177,6 +177,23 @@ class FaultRecord(Base):
     incident_type = Column(String(20))  # 故障类型：hardware/software/config/network
     auto_created_maintenance = Column(Boolean, default=False)  # 是否自动创建了维修单
 
+    # ===== 监控事件自动化字段 =====
+    source_type = Column(String(30), index=True)       # trap / snmp_poll / reachability / topology / threshold / manual
+    source_key = Column(String(200), index=True)       # 去重键，如 device:9:if:10148:link_down
+    source_event = Column(String(50), index=True)      # link_down / device_unreachable / neighbor_changed
+    if_index = Column(Integer)                         # 关联接口 ifIndex
+    if_name = Column(String(100))                      # 关联接口名
+    peer_device_id = Column(Integer)                   # 对端设备
+    peer_if_name = Column(String(100))                 # 对端接口名
+    event_count = Column(Integer, default=1)           # 同一故障累计事件次数
+    last_event_at = Column(DateTime)                   # 最近一次事件时间
+    recommendation = Column(Text)                      # 系统建议处理方案
+    assigned_email = Column(String(200))               # 指派人邮箱
+    review_required = Column(Boolean, default=True)    # 是否需要管理员复核
+    reviewed_at = Column(DateTime)
+    reviewed_by = Column(String(100))
+    false_positive = Column(Boolean, default=False)
+
     # 关系
     device = relationship("Device", back_populates="faults")
     maintenance = relationship("MaintenanceRecord", foreign_keys=[maintenance_id])

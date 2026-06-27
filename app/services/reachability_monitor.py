@@ -385,6 +385,8 @@ class ReachabilityMonitor:
 
     def _trigger_state_change_alert(self, device: Device, old_state: str, new_state: str):
         """状态变化触发告警"""
+        self._upsert_incident_from_reachability(device, old_state, new_state)
+
         try:
             from app.services.notification_service import get_notification_service
             notification_service = get_notification_service()
@@ -422,6 +424,34 @@ class ReachabilityMonitor:
             })
         except Exception as e:
             logger.error(f"Failed to push device status to WebSocket: {e}")
+
+    def _upsert_incident_from_reachability(self, device: Device, old_state: str, new_state: str):
+        """把设备可达性变化写入故障工单闭环"""
+        if new_state not in ("unreachable", "reachable"):
+            return
+        if new_state == "reachable" and old_state != "unreachable":
+            return
+
+        db = next(get_db())
+        try:
+            from app.services.incident_automation import MonitorEvent, upsert_fault_from_monitor_event
+            upsert_fault_from_monitor_event(db, MonitorEvent(
+                source_type="reachability",
+                event_type="device_recovered" if new_state == "reachable" else "device_unreachable",
+                device_id=device.id,
+                device_name=device.name,
+                ip=device.ip,
+                raw={
+                    "old_state": old_state,
+                    "new_state": new_state,
+                    "latency_ms": device.reachability_latency_ms,
+                    "monitor_tier": device.monitor_tier,
+                },
+            ))
+        except Exception as e:
+            logger.warning(f"设备可达性自动故障工单处理失败: {e}")
+        finally:
+            db.close()
 
     def _estimate_downtime(self, device: Device) -> Optional[int]:
         """估算设备离线时间（分钟）"""

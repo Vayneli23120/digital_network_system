@@ -276,6 +276,7 @@ class TrapReceiver:
                 iface.oper_status = new_oper
                 iface.last_check = datetime.utcnow()
                 db.commit()
+            self._upsert_incident(db, device, if_index, iface, event)
             self.applied += 1
             # 秒级推送（即使接口未发现也推送，让大屏即时感知）
             if old_oper != new_oper:
@@ -286,6 +287,25 @@ class TrapReceiver:
             logger.error(f"应用 Trap 链路事件失败: {e}")
         finally:
             db.close()
+
+    def _upsert_incident(self, db, device, if_index: int, iface, event: str):
+        try:
+            from app.services.incident_automation import MonitorEvent, upsert_fault_from_monitor_event
+            upsert_fault_from_monitor_event(db, MonitorEvent(
+                source_type="trap",
+                event_type="link_up" if event == "up" else "link_down",
+                device_id=device.id,
+                device_name=device.name,
+                ip=device.ip,
+                if_index=if_index,
+                if_name=(iface.if_name if iface else None),
+                peer_device_id=(iface.peer_device_id if iface else None),
+                peer_device_name=(iface.peer_device_name if iface else None),
+                peer_if_name=(iface.peer_if_name if iface else None),
+                raw={"is_uplink": bool(iface.is_uplink) if iface else False},
+            ))
+        except Exception as e:
+            logger.warning(f"Trap 自动故障工单处理失败: {e}")
 
     def _broadcast(self, device, if_index, iface, old_oper, new_oper):
         try:

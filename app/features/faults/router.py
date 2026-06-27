@@ -32,6 +32,7 @@ router = APIRouter(prefix="/api/faults", tags=["faults"])
 FAULT_VALID_TRANSITIONS = {
     'open': ['assigned', 'closed'],
     'assigned': ['diagnosing', 'reassigned', 'closed'],  # 直接开始诊断
+    'accepted': ['diagnosing', 'reassigned', 'closed'],  # 兼容接收确认后的下一步
     'diagnosing': ['resolving', 'transferred', 'resolved', 'reassigned'],  # 支持转单，禁止直接关闭
     'resolving': ['resolved', 'closed'],
     'transferred': ['resolved', 'closed'],  # 维修完成需人工确认
@@ -42,6 +43,7 @@ FAULT_VALID_TRANSITIONS = {
 FAULT_STATUS_LABELS = {
     'open': '待处理',
     'assigned': '已指派',
+    'accepted': '已确认',
     'diagnosing': '诊断中',
     'resolving': '技术处理',
     'transferred': '已转维修',
@@ -54,6 +56,7 @@ FAULT_STATUS_LABELS = {
 FAULT_STATUS_COLORS = {
     'open': 'warning',
     'assigned': 'info',
+    'accepted': 'primary',
     'diagnosing': 'warning',
     'resolving': 'primary',
     'transferred': 'success',
@@ -134,6 +137,13 @@ class UpdateFaultRequest(BaseModel):
 class AnalyzeFaultRequest(BaseModel):
     """AI分析故障请求"""
     auto_create_maintenance: bool = False  # 是否根据AI建议自动创建维修单
+
+
+class ReviewFaultRequest(BaseModel):
+    """管理员复核监控自动创建的故障"""
+    reviewed_by: str = "Admin"
+    false_positive: bool = False
+    notes: Optional[str] = None
 
 
 # ===== Basic CRUD =====
@@ -237,6 +247,21 @@ async def list_faults(
             "maintenance_cost": maintenance_cost,
             "sla_remaining": sla_remaining,
             "auto_created_maintenance": f.auto_created_maintenance or False,
+            "source_type": f.source_type,
+            "source_key": f.source_key,
+            "source_event": f.source_event,
+            "if_index": f.if_index,
+            "if_name": f.if_name,
+            "peer_device_id": f.peer_device_id,
+            "peer_if_name": f.peer_if_name,
+            "event_count": f.event_count or 1,
+            "last_event_at": f.last_event_at.isoformat() if f.last_event_at else None,
+            "recommendation": f.recommendation,
+            "assigned_email": f.assigned_email,
+            "review_required": bool(f.review_required) if f.review_required is not None else False,
+            "reviewed_at": f.reviewed_at.isoformat() if f.reviewed_at else None,
+            "reviewed_by": f.reviewed_by,
+            "false_positive": bool(f.false_positive) if f.false_positive is not None else False,
             "has_ai_analysis": f.ai_analysis_result is not None,
             "ai_recommendation": f.ai_recommendation,
             "ai_confidence": float(f.ai_confidence) if f.ai_confidence else None,
@@ -348,6 +373,21 @@ async def get_fault(fault_id: int, db: Session = Depends(get_db)):
         "maintenance_id": fault.maintenance_id,
         "maintenance": maintenance,
         "auto_created_maintenance": fault.auto_created_maintenance if hasattr(fault, 'auto_created_maintenance') else False,
+        "source_type": fault.source_type,
+        "source_key": fault.source_key,
+        "source_event": fault.source_event,
+        "if_index": fault.if_index,
+        "if_name": fault.if_name,
+        "peer_device_id": fault.peer_device_id,
+        "peer_if_name": fault.peer_if_name,
+        "event_count": fault.event_count or 1,
+        "last_event_at": fault.last_event_at.isoformat() if fault.last_event_at else None,
+        "recommendation": fault.recommendation,
+        "assigned_email": fault.assigned_email,
+        "review_required": bool(fault.review_required) if fault.review_required is not None else False,
+        "reviewed_at": fault.reviewed_at.isoformat() if fault.reviewed_at else None,
+        "reviewed_by": fault.reviewed_by,
+        "false_positive": bool(fault.false_positive) if fault.false_positive is not None else False,
         "ai_analysis_result": json.loads(fault.ai_analysis_result) if fault.ai_analysis_result else None,
         "ai_root_cause": fault.ai_root_cause,
         "ai_recommendation": fault.ai_recommendation,
@@ -1092,6 +1132,53 @@ async def accept_fault(
     }
 
 
+@router.post("/{fault_id}/review")
+async def review_fault(
+    fault_id: int,
+    request: ReviewFaultRequest,
+    db: Session = Depends(get_db)
+):
+    """管理员复核监控自动创建的故障（大屏/邮件复核入口）"""
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    fault.review_required = False
+    fault.reviewed_at = datetime.utcnow()
+    fault.reviewed_by = request.reviewed_by
+    fault.false_positive = request.false_positive
+    fault.updated_at = datetime.utcnow()
+
+    note = request.notes or ("标记为误报" if request.false_positive else "管理员已复核确认")
+    if fault.diagnosis_text:
+        fault.diagnosis_text += f"\n\n--- {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} ---\n{note}"
+    else:
+        fault.diagnosis_text = note
+
+    if request.false_positive:
+        fault.status = "closed"
+        fault.closed_at = datetime.utcnow()
+        fault.resolution = note
+    elif fault.status == "open":
+        fault.status = "assigned"
+        fault.assigned_to = fault.assigned_to or request.reviewed_by
+        fault.assigned_at = fault.assigned_at or datetime.utcnow()
+
+    db.commit()
+
+    return {
+        "id": fault_id,
+        "fault_no": fault.fault_no,
+        "status": fault.status,
+        "status_label": FAULT_STATUS_LABELS.get(fault.status, fault.status),
+        "review_required": bool(fault.review_required),
+        "reviewed_by": fault.reviewed_by,
+        "reviewed_at": fault.reviewed_at.isoformat() if fault.reviewed_at else None,
+        "false_positive": bool(fault.false_positive),
+        "message": "故障已标记为误报并关闭" if request.false_positive else "故障已复核确认",
+    }
+
+
 @router.post("/{fault_id}/diagnose")
 async def diagnose_fault(
     fault_id: int,
@@ -1192,8 +1279,8 @@ async def transfer_to_maintenance(
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    if fault.status not in ['diagnosing']:
-        raise HTTPException(status_code=400, detail="只有诊断中的故障才能转维修")
+    if fault.status not in ['assigned', 'accepted', 'diagnosing']:
+        raise HTTPException(status_code=400, detail="只有已指派/已确认/诊断中的故障才能转维修")
 
     # 确定维修负责人：默认继承诊断负责人，如果指定了 maintenance_owner 则覆盖
     maintenance_owner = request.maintenance_owner or fault.assigned_to

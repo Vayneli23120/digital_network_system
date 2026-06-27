@@ -791,6 +791,10 @@ export function acceptFault(faultId) {
   return api.post(`/faults/${faultId}/accept`, { accepted: true })
 }
 
+export function reviewFault(faultId, data) {
+  return api.post(`/faults/${faultId}/review`, data)
+}
+
 export function diagnoseFault(faultId, data) {
   return api.post(`/faults/${faultId}/diagnose`, data)
 }

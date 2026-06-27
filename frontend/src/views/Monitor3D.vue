@@ -322,6 +322,25 @@
                 {{ getStatusLabel(deviceStatus(selectedDevice)) }}
               </el-tag>
             </p>
+            <div class="incident-panel" v-if="selectedActiveFault">
+              <div class="incident-title">
+                <span>{{ selectedActiveFault.fault_no }}</span>
+                <el-tag :type="faultSeverityTag(selectedActiveFault.severity)" size="small">
+                  {{ selectedActiveFault.severity }}
+                </el-tag>
+              </div>
+              <div class="incident-meta">
+                {{ selectedActiveFault.status_label || selectedActiveFault.status }} · {{ selectedActiveFault.source_event || selectedActiveFault.incident_type || '-' }}
+              </div>
+              <div class="incident-meta" v-if="selectedActiveFault.if_name">
+                {{ selectedActiveFault.if_name }}<span v-if="selectedActiveFault.event_count"> · {{ selectedActiveFault.event_count }}次</span>
+              </div>
+              <div class="incident-actions">
+                <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">确认</el-button>
+                <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">误报</el-button>
+                <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">转维修</el-button>
+              </div>
+            </div>
             <!-- 设备缩放调节 -->
             <div class="scale-control" v-if="selectedNode">
               <span>{{ t('deviceScale') }}:</span>
@@ -440,6 +459,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
 import axios from 'axios'
+import { reviewFault, transferFaultToMaintenance } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
@@ -498,6 +518,8 @@ const fiberBranchPoints = ref([])  // 分支点（旧数据，面板备用）
 const fiberBranchLinks = ref([])  // 分支光缆（旧数据，面板备用）
 const devicePaths = ref({})  // 设备路径（沿着光纤拓扑）
 const discoveringNeighbors = ref(false)  // 邻居发现进行中
+const activeFaults = ref([])  // 监控自动创建的活跃故障
+const faultActionLoading = ref(false)
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
@@ -581,6 +603,11 @@ const offlineDevices = computed(() => {
   return devices.value.filter(isDeviceOffline).slice(0, 10)
 })
 
+const selectedActiveFault = computed(() => {
+  if (!selectedDevice.value) return null
+  return activeFaults.value.find(f => f.device_id === selectedDevice.value.id) || null
+})
+
 // 筛选后的设备
 const filteredDevices = computed(() => {
   let result = devices.value
@@ -625,6 +652,13 @@ function getDeviceTypeLabel(type) {
 
 function getStatusLabel(status) {
   return statusMap[status] || status
+}
+
+function faultSeverityTag(severity) {
+  if (severity === 'critical') return 'danger'
+  if (severity === 'major') return 'warning'
+  if (severity === 'warning') return 'warning'
+  return 'info'
 }
 
 // i18n 版本：随语言切换显示状态/设备类型（用于 HUD 等动态渲染）
@@ -4929,6 +4963,59 @@ function goToDeviceDetail(deviceId) {
   router.push(`/devices/${deviceId}`)
 }
 
+async function loadActiveFaults() {
+  try {
+    const res = await axios.get('/api/faults', {
+      params: {
+        status: 'open,assigned,accepted,diagnosing,resolving,transferred',
+        limit: 200,
+      },
+    })
+    activeFaults.value = res.data.items || []
+  } catch (e) {
+    console.warn('加载活跃故障失败:', e)
+  }
+}
+
+async function reviewSelectedFault(falsePositive = false) {
+  if (!selectedActiveFault.value) return
+  faultActionLoading.value = true
+  try {
+    await reviewFault(selectedActiveFault.value.id, {
+      reviewed_by: 'Monitor3D',
+      false_positive: falsePositive,
+      notes: falsePositive ? '大屏确认：误报' : '大屏确认：故障已复核',
+    })
+    ElMessage.success(falsePositive ? '已标记为误报并关闭' : '故障已确认')
+    await loadActiveFaults()
+  } catch (e) {
+    console.error('故障复核失败:', e)
+    ElMessage.error('故障复核失败')
+  } finally {
+    faultActionLoading.value = false
+  }
+}
+
+async function transferSelectedFaultToMaintenance() {
+  if (!selectedActiveFault.value) return
+  faultActionLoading.value = true
+  try {
+    await transferFaultToMaintenance(selectedActiveFault.value.id, {
+      maintenance_type: selectedActiveFault.value.severity === 'critical' ? 'emergency' : 'corrective',
+      priority: selectedActiveFault.value.severity === 'critical' ? 'P1' : 'P2',
+      description: selectedActiveFault.value.recommendation || selectedActiveFault.value.description || '监控大屏转维修',
+      maintenance_owner: selectedActiveFault.value.assigned_to || 'Field Engineer',
+    })
+    ElMessage.success('已转维修单')
+    await loadActiveFaults()
+  } catch (e) {
+    console.error('转维修失败:', e)
+    ElMessage.error('转维修失败')
+  } finally {
+    faultActionLoading.value = false
+  }
+}
+
 // 切换平面图
 async function switchPlan(planId) {
   if (!planId) return
@@ -5056,6 +5143,7 @@ async function loadData() {
     // 加载设备
     const devicesRes = await axios.get('/api/devices')
     devices.value = devicesRes.data.items || devicesRes.data || []
+    await loadActiveFaults()
 
     // 加载节点
     if (currentPlan.value) {
@@ -5215,6 +5303,7 @@ function handleInterfaceStatusChange(msg) {
   } else if (msg.new_status === 'up' && msg.old_status === 'down') {
     ElMessage.success({ message: `${uplinkTag}${ifName} 恢复：${dName}`, duration: 4000 })
   }
+  loadActiveFaults()
 }
 
 function handleDeviceStatusChange(msg) {
@@ -5241,6 +5330,7 @@ function handleDeviceStatusChange(msg) {
     // 逐台恢复时重新框定剩余离线区域；全部恢复则视角复位
     scheduleAutoFocusOffline()
   }
+  loadActiveFaults()
 }
 
 function connectDeviceStatusWs() {
@@ -5861,6 +5951,38 @@ onBeforeUnmount(() => {
 .selected-box p {
   margin: 2px 0;
   font-size: 11px;
+}
+
+.incident-panel {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(248, 113, 113, 0.35);
+  border-radius: 6px;
+  background: rgba(127, 29, 29, 0.16);
+}
+
+.incident-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: #fecaca;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.incident-meta {
+  margin-top: 4px;
+  color: #fca5a5;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.incident-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
 }
 
 .hint {
