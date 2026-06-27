@@ -657,6 +657,9 @@ const activeFaults = ref([])  // 监控自动创建的活跃故障
 const commandSummary = ref({ recent_events: [] })
 const monitorEvents = ref([])
 const eventWindow = ref('1h')
+const trafficHeatItems = ref([])
+const trafficHeatByDevice = ref(new Map())
+const trafficHeatSummary = ref({})
 const faultActionLoading = ref(false)
 const floorPlans = ref([])
 const currentPlan = ref(null)
@@ -1085,6 +1088,7 @@ async function loadFiberData() {
       ElMessage.warning('数据链路加载失败，请检查网络连接或服务状态')
       devicePaths.value = {}
     }
+    await loadTrafficHeat()
 
     // 重建光纤渲染（优先使用新 topo 数据）
     disposeGroup('fiber-trunks')
@@ -2806,11 +2810,17 @@ function buildDataLinkPaths() {
     const deviceId = pathData?.device_id || parseInt(pathKey)
     const device = devices.value.find(d => d.id === deviceId)
     const isNeighborPath = pathData?.path_source === 'neighbor'
+    const heat = getTrafficHeatForPath(deviceId, pathData)
     let statusColor = device && isDeviceOffline(device) ? 0xff4d4f : 0x22c55e  // 红色/绿色
+    let heatRadius = pathRadius
     if (isNeighborPath) {
       statusColor = pathData.oper_status === 'down'
         ? 0xff4d4f
         : (pathData.neighbor_source === 'lldp' ? 0x38bdf8 : 0x22c55e)
+    }
+    if (heat && !(device && isDeviceOffline(device)) && !(isNeighborPath && pathData.oper_status === 'down')) {
+      statusColor = new THREE.Color(heat.color || '#22c55e').getHex()
+      heatRadius = pathRadius * Math.max(1, Math.min(3, (heat.width || 2) / 2))
     }
 
     // 直接使用 polyline 的 x_percent, y_percent（后端已去重）
@@ -2829,7 +2839,7 @@ function buildDataLinkPaths() {
     const mat = new THREE.MeshBasicMaterial({
       color: statusColor,
       transparent: true,
-      opacity: 0.7,
+      opacity: heat?.level === 'stale' ? 0.45 : 0.7,
     })
 
     for (let i = 0; i < points.length - 1; i++) {
@@ -2844,7 +2854,7 @@ function buildDataLinkPaths() {
 
       const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
 
-      const cylinderGeo = new THREE.CylinderGeometry(pathRadius, pathRadius, length, 8)
+      const cylinderGeo = new THREE.CylinderGeometry(heatRadius, heatRadius, length, 8)
       const cylinder = new THREE.Mesh(cylinderGeo, mat)
       cylinder.position.copy(midPoint)
 
@@ -2861,6 +2871,7 @@ function buildDataLinkPaths() {
         peerDeviceId: pathData?.peer_device_id,
         source: pathData?.path_source || 'core',
         neighborSource: pathData?.neighbor_source,
+        trafficHeat: heat || null,
         segmentIndex: i,
       }
       cylinder.name = `data-path-${pathKey}-seg-${i}`
@@ -2887,6 +2898,7 @@ async function discoverNeighbors() {
         ...(topoPathsRes.data?.paths || {}),
         ...(topoPathsRes.data?.neighbor_paths || {}),
       }
+      await loadTrafficHeat()
       disposeGroup('data-link-paths')
       buildDataLinkPaths()
     }
@@ -5248,6 +5260,35 @@ async function loadCommandPanelData() {
   if (ctx.value.scene && nodes.value.length > 0) buildImpactGlow()
 }
 
+async function loadTrafficHeat() {
+  try {
+    const res = await axios.get('/api/monitor3d/traffic-heat', {
+      params: currentPlanId.value ? { plan_id: currentPlanId.value } : {},
+    })
+    const items = res.data?.items || []
+    const byDevice = new Map()
+    items.forEach(item => {
+      if (!byDevice.has(item.device_id)) byDevice.set(item.device_id, item)
+    })
+    trafficHeatItems.value = items
+    trafficHeatByDevice.value = byDevice
+    trafficHeatSummary.value = res.data?.summary || {}
+  } catch (e) {
+    console.warn('加载流量热力层失败:', e)
+    trafficHeatItems.value = []
+    trafficHeatByDevice.value = new Map()
+    trafficHeatSummary.value = {}
+  }
+}
+
+function getTrafficHeatForPath(deviceId, pathData = {}) {
+  if (trafficHeatByDevice.value.has(deviceId)) return trafficHeatByDevice.value.get(deviceId)
+  if (pathData.peer_device_id && trafficHeatByDevice.value.has(pathData.peer_device_id)) {
+    return trafficHeatByDevice.value.get(pathData.peer_device_id)
+  }
+  return null
+}
+
 function setEventWindow(windowValue) {
   eventWindow.value = windowValue
   loadMonitorEvents()
@@ -5342,6 +5383,7 @@ async function switchPlan(planId) {
       console.warn('加载 device-paths 失败:', e)
       devicePaths.value = {}
     }
+    await loadTrafficHeat()
 
     // 重建场景
     loadFloorPlanTexture()
@@ -5456,6 +5498,7 @@ async function loadData() {
         // 加载设备图寻路路径（Gen3）
         const topoPathsRes = await axios.get(`/api/floor-plans/${currentPlan.value.id}/device-paths`)
         devicePaths.value = topoPathsRes.data?.paths || {}
+        await loadTrafficHeat()
       } catch (e) {
         console.warn('加载 topo-nodes/edges/device-paths 失败:', e)
         devicePaths.value = {}
