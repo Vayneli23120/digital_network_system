@@ -2342,6 +2342,9 @@ function initScene() {
     // 离线设备地面红色光晕呼吸
     updateOfflineGlow()
 
+    // 受影响设备琥珀色范围光晕呼吸
+    updateImpactGlow()
+
     // 离线/故障链路红色呼吸闪烁
     pulseOfflineLinks()
 
@@ -2566,12 +2569,14 @@ function rebuildScene() {
   disposeGroup('branch-points')
   disposeGroup('branch-links')
   disposeGroup('data-link-paths')
+  disposeGroup('impact-glow')
   buildDeviceModels()
   buildLinks()
   buildTopoEdges()
   buildDataLinkPaths()
   buildLabels()
   buildOfflineGlow()
+  buildImpactGlow()
 }
 
 // 构建链路（支持 waypoints 正交折线）
@@ -3212,7 +3217,9 @@ function pulseOfflineDevices() {
 
 // ===== 离线设备红色径向渐变光晕（以设备为中心向外渐变浅红，不覆盖整图）=====
 const OFFLINE_GLOW_RADIUS_FACTOR = 7   // 光晕半径 = 设备基准尺寸 × 系数
+const IMPACT_GLOW_RADIUS_FACTOR = 5.5
 let offlineGlowTexture = null
+let impactGlowTexture = null
 
 function createRadialGlowTexture() {
   const size = 256
@@ -3230,6 +3237,30 @@ function createRadialGlowTexture() {
   const tex = new THREE.CanvasTexture(canvas)
   tex.colorSpace = THREE.SRGBColorSpace
   return tex
+}
+
+function createImpactGlowTexture() {
+  const size = 256
+  const canvas = document.createElement('canvas')
+  canvas.width = canvas.height = size
+  const c = canvas.getContext('2d')
+  const grad = c.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2)
+  grad.addColorStop(0.0, 'rgba(251, 191, 36, 0.45)')
+  grad.addColorStop(0.38, 'rgba(245, 158, 11, 0.26)')
+  grad.addColorStop(0.72, 'rgba(217, 119, 6, 0.10)')
+  grad.addColorStop(1.0, 'rgba(217, 119, 6, 0)')
+  c.fillStyle = grad
+  c.fillRect(0, 0, size, size)
+  const tex = new THREE.CanvasTexture(canvas)
+  tex.colorSpace = THREE.SRGBColorSpace
+  return tex
+}
+
+function getImpactDevices() {
+  const impacted = commandSummary.value?.impact_scope?.impacted_devices || []
+  if (!Array.isArray(impacted) || impacted.length === 0) return []
+  const impactedIds = new Set(impacted.map(d => d.device_id).filter(Boolean))
+  return filteredDevices.value.filter(d => impactedIds.has(d.id) && !isDeviceOffline(d))
 }
 
 // 构建离线设备地面光晕（独立 Group，便于单独清理/重建）
@@ -3281,6 +3312,57 @@ function updateOfflineGlow() {
   group.children.forEach(mesh => {
     if (mesh.material) mesh.material.opacity = 0.9 * breath
     const s = 0.92 + (breath - 0.82) * 0.6
+    mesh.scale.setScalar(s)
+  })
+}
+
+function buildImpactGlow() {
+  disposeGroup('impact-glow')
+  const { scene } = ctx.value
+  if (!scene) return
+
+  const impacted = getImpactDevices()
+  if (impacted.length === 0) return
+
+  if (!impactGlowTexture) impactGlowTexture = createImpactGlowTexture()
+
+  const group = new THREE.Group()
+  group.name = 'impact-glow'
+
+  impacted.forEach(d => {
+    const node = nodes.value.find(n => n.device_id === d.id)
+    if (!node) return
+    const w = percentToWorld(node.x_percent, node.y_percent, 0)
+    const radius = getDeviceBaseSize(d.device_type) * IMPACT_GLOW_RADIUS_FACTOR
+    const geo = new THREE.PlaneGeometry(radius * 2, radius * 2)
+    const mat = new THREE.MeshBasicMaterial({
+      map: impactGlowTexture,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      blending: THREE.NormalBlending,
+    })
+    const mesh = new THREE.Mesh(geo, mat)
+    mesh.rotation.x = -Math.PI / 2
+    mesh.position.set(w.x, 0.25, w.z)
+    mesh.renderOrder = 3
+    mesh.userData = { deviceId: d.id }
+    group.add(mesh)
+  })
+
+  scene.add(group)
+}
+
+function updateImpactGlow() {
+  const { scene } = ctx.value
+  if (!scene) return
+  const group = scene.getObjectByName('impact-glow')
+  if (!group || group.children.length === 0) return
+
+  const breath = Math.sin(pulseTime * 1.35) * 0.16 + 0.84
+  group.children.forEach(mesh => {
+    if (mesh.material) mesh.material.opacity = 0.72 * breath
+    const s = 0.94 + (breath - 0.84) * 0.7
     mesh.scale.setScalar(s)
   })
 }
@@ -5133,6 +5215,7 @@ async function loadMonitorEvents() {
 
 async function loadCommandPanelData() {
   await Promise.all([loadCommandSummary(), loadMonitorEvents()])
+  if (ctx.value.scene && nodes.value.length > 0) buildImpactGlow()
 }
 
 function setEventWindow(windowValue) {
