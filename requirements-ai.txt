@@ -1,0 +1,14 @@
+# Network Automation System - AI 模块依赖
+# 注意：AI 依赖版本敏感，会和主项目产生一些冲突。
+# 建议先安装 requirements.txt，再安装本文件，出现冲突时以 AI 依赖要求为准。
+
+# AI Framework - Google ADK
+google-adk==1.36.0
+litellm==1.60.0
+
+# AI/RAG (Phase 3)
+pgvector==0.3.2
+langchain==0.2.16
+langchain-openai==0.1.23
+langchain-community==0.2.16
+openai==1.56.0

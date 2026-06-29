@@ -19,9 +19,15 @@ from app.shared.database import get_db
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
 from app.services.workflow.executor import WorkflowExecutor
 
-# ADK 导入
-from app.services.adk.runner import adk_runner
-from app.services.adk.agents import fault_analysis_agent
+# ADK 导入（可选：AI 依赖未安装时降级）
+try:
+    from app.services.adk.runner import adk_runner
+    from app.services.adk.agents import fault_analysis_agent
+    ADK_AVAILABLE = True
+except Exception:
+    adk_runner = None
+    fault_analysis_agent = None
+    ADK_AVAILABLE = False
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
 
@@ -550,6 +556,9 @@ async def analyze_fault(
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
     device_name = fault.device.name if fault.device else fault.device_name or "Unknown"
+
+    if not ADK_AVAILABLE:
+        raise HTTPException(status_code=503, detail="AI 分析服务未启用，请先安装 AI 依赖（pip install -r requirements-ai.txt）")
 
     # 使用 ADK Agent 执行分析
     result = await adk_runner.run_agent(

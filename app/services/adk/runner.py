@@ -9,7 +9,13 @@ import asyncio
 from typing import Dict, Optional, Any
 from loguru import logger
 
-from google.genai import types
+try:
+    from google.genai import types
+    ADK_AVAILABLE = True
+except Exception:
+    ADK_AVAILABLE = False
+    types = None
+    logger.warning("google.genai 未安装，ADK 功能不可用。如需 AI 功能请安装 requirements-ai.txt")
 
 from app.services.adk.config import adk_config
 from app.services.adk.audit import AIAuditTracker
