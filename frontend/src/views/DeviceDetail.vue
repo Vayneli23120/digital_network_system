@@ -1163,7 +1163,16 @@ const runSnmpDiagnose = async () => {
     const data = await diagnoseDeviceSnmp(route.params.id)
     snmpDiagResult.value = data
   } catch (error) {
-    ElMessage.error('SNMP 诊断失败（请求超时或服务异常）')
+    const status = error.response?.status
+    const detail = error.response?.data?.detail
+    if (status === 404) {
+      ElMessage.error('诊断接口不存在（后端可能未更新部署，请重启后端服务）')
+    } else if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
+      ElMessage.error('SNMP 诊断请求超时（设备长时间无响应，UDP/161 可能不通）')
+    } else {
+      ElMessage.error(`SNMP 诊断失败：${detail || error.message || '服务异常'}`)
+    }
+    snmpDiagResult.value = null
   } finally {
     snmpDiagLoading.value = false
   }

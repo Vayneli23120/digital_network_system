@@ -590,44 +590,65 @@ async def diagnose_device_snmp(device_id: int, db: Session = Depends(get_db)):
     OID_IF_HC_IN = "1.3.6.1.2.1.31.1.1.1.6"   # ifHCInOctets (64-bit)
     OID_IF_IN = "1.3.6.1.2.1.2.2.1.10"         # ifInOctets (32-bit)
 
-    try:
-        sys_descr = await asyncio.wait_for(
-            service.snmp_get_async(device.ip, community, OID_SYS_DESCR, timeout=3), timeout=5
-        )
-        add_check("系统描述 sysDescr", OID_SYS_DESCR, sys_descr is not None,
-                  value=(str(sys_descr)[:160] if sys_descr is not None else None),
-                  detail="可达且社区串正确" if sys_descr is not None else "无响应：不可达 / 社区串错误 / UDP161 被阻断")
+    async def _probe_get(name, oid, detail_ok=None, detail_fail=None):
+        try:
+            val = await asyncio.wait_for(
+                service.snmp_get_async(device.ip, community, oid, timeout=2), timeout=4
+            )
+            ok = val is not None
+            add_check(name, oid, ok,
+                      value=(str(val)[:160] if val is not None else None),
+                      detail=detail_ok if ok else detail_fail)
+            return val
+        except asyncio.TimeoutError:
+            add_check(name, oid, False, detail="探测超时（无响应）")
+            return None
+        except Exception as e:
+            add_check(name, oid, False, detail=f"异常：{e}")
+            return None
 
-        sys_uptime = await asyncio.wait_for(
-            service.snmp_get_async(device.ip, community, OID_SYS_UPTIME, timeout=3), timeout=5
-        )
-        add_check("运行时长 sysUpTime", OID_SYS_UPTIME, sys_uptime is not None,
-                  value=sys_uptime if sys_uptime is not None else None)
+    async def _probe_walk(name, oid, detail_ok=None, detail_fail=None):
+        try:
+            res = await asyncio.wait_for(
+                service.snmp_walk_async(device.ip, community, oid, timeout=4), timeout=6
+            )
+            ok = bool(res)
+            add_check(name, oid, ok,
+                      value=(f"{len(res)} 个接口" if res else "0"),
+                      detail=detail_ok if ok else detail_fail)
+            return res
+        except asyncio.TimeoutError:
+            add_check(name, oid, False, detail="探测超时（无响应）")
+            return {}
+        except Exception as e:
+            add_check(name, oid, False, detail=f"异常：{e}")
+            return {}
 
-        if_number = await asyncio.wait_for(
-            service.snmp_get_async(device.ip, community, OID_IF_NUMBER, timeout=3), timeout=5
-        )
-        add_check("接口数量 ifNumber", OID_IF_NUMBER, if_number is not None,
-                  value=if_number if if_number is not None else None)
+    # 第一步：基础可达性（社区串/网络）。不通则直接短路，避免长时间空等。
+    sys_descr = await _probe_get(
+        "系统描述 sysDescr", OID_SYS_DESCR,
+        detail_ok="可达且社区串正确",
+        detail_fail="无响应：不可达 / 社区串错误 / UDP161 被阻断",
+    )
 
-        hc_in = await asyncio.wait_for(
-            service.snmp_walk_async(device.ip, community, OID_IF_HC_IN, timeout=4), timeout=6
+    if sys_descr is None:
+        add_check("运行时长 sysUpTime", OID_SYS_UPTIME, False, detail="已跳过（基础探测未通过）")
+        add_check("接口数量 ifNumber", OID_IF_NUMBER, False, detail="已跳过（基础探测未通过）")
+        add_check("64位计数器 ifHCInOctets", OID_IF_HC_IN, False, detail="已跳过（基础探测未通过）")
+        add_check("32位计数器 ifInOctets", OID_IF_IN, False, detail="已跳过（基础探测未通过）")
+    else:
+        await _probe_get("运行时长 sysUpTime", OID_SYS_UPTIME)
+        await _probe_get("接口数量 ifNumber", OID_IF_NUMBER)
+        await _probe_walk(
+            "64位计数器 ifHCInOctets", OID_IF_HC_IN,
+            detail_ok="支持高速计数器（推荐）",
+            detail_fail="镜像不支持 64 位计数器，将回退 32 位",
         )
-        add_check("64位计数器 ifHCInOctets", OID_IF_HC_IN, bool(hc_in),
-                  value=f"{len(hc_in)} 个接口" if hc_in else "0",
-                  detail="支持高速计数器（推荐）" if hc_in else "镜像不支持 64 位计数器，将回退 32 位")
-
-        in_octets = await asyncio.wait_for(
-            service.snmp_walk_async(device.ip, community, OID_IF_IN, timeout=4), timeout=6
+        await _probe_walk(
+            "32位计数器 ifInOctets", OID_IF_IN,
+            detail_ok="基础流量计数可用",
+            detail_fail="无接口计数器，无法计算流量",
         )
-        add_check("32位计数器 ifInOctets", OID_IF_IN, bool(in_octets),
-                  value=f"{len(in_octets)} 个接口" if in_octets else "0",
-                  detail="基础流量计数可用" if in_octets else "无接口计数器，无法计算流量")
-
-    except asyncio.TimeoutError:
-        add_check("SNMP 探测", "-", False, detail="探测超时：设备可能不可达或 UDP/161 被阻断")
-    except Exception as e:
-        add_check("SNMP 探测", "-", False, detail=f"异常：{e}")
 
     reachable = any(c["ok"] for c in checks if c["oid"] == OID_SYS_DESCR)
     has_hc = any(c["ok"] for c in checks if c["oid"] == OID_IF_HC_IN)
