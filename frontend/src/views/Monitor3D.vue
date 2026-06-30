@@ -5,6 +5,23 @@
          @dragover.prevent="onCanvasDragOver"
          @drop.prevent="onCanvasDrop"></div>
 
+    <!-- 流量热力图例（画布左下角） -->
+    <div class="heat-legend" :class="{ collapsed: !showHeatLegend, dark: isDark }">
+      <div class="heat-legend-head" @click="showHeatLegend = !showHeatLegend">
+        <span class="heat-legend-title">{{ t('heatLegendTitle') || '链路流量热力' }}</span>
+        <el-icon class="heat-legend-toggle"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
+      </div>
+      <div v-show="showHeatLegend" class="heat-legend-body">
+        <div class="heat-legend-row" v-for="lv in heatLegendLevels" :key="lv.level">
+          <span class="heat-swatch" :style="{ background: lv.color }"></span>
+          <span class="heat-name">{{ lv.label }}</span>
+          <span class="heat-range">{{ lv.range }}</span>
+          <span class="heat-count">{{ trafficHeatSummary[lv.level] || 0 }}</span>
+        </div>
+        <div class="heat-legend-foot">{{ t('heatLegendHint') || '颜色与粗细随上行口实时利用率变化，数字为当前接口数' }}</div>
+      </div>
+    </div>
+
     <!-- 画布右下角操作按钮 -->
     <div class="canvas-tools">
       <!-- 编辑模式状态提示 -->
@@ -592,7 +609,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { reviewFault, transferFaultToMaintenance } from '@/api'
 import { useI18n } from '@/composables/useI18n'
@@ -660,6 +677,15 @@ const eventWindow = ref('1h')
 const trafficHeatItems = ref([])
 const trafficHeatByDevice = ref(new Map())
 const trafficHeatSummary = ref({})
+const showHeatLegend = ref(true)
+const heatLegendLevels = [
+  { level: 'critical', color: '#f97316', label: '拥塞', range: '≥80%' },
+  { level: 'high', color: '#facc15', label: '偏高', range: '60-80%' },
+  { level: 'normal', color: '#22d3ee', label: '正常', range: '20-60%' },
+  { level: 'low', color: '#22c55e', label: '空闲', range: '<20%' },
+  { level: 'down', color: '#ef4444', label: '中断', range: 'link down' },
+  { level: 'stale', color: '#f59e0b', label: '数据过期', range: '>5min' },
+]
 const faultActionLoading = ref(false)
 const floorPlans = ref([])
 const currentPlan = ref(null)
@@ -6056,6 +6082,78 @@ onBeforeUnmount(() => {
 
 .monitor3d.panel-hidden .canvas-tools {
   right: 16px;
+}
+
+/* 流量热力图例 */
+.heat-legend {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  z-index: 6;
+  width: 188px;
+  background: rgba(15, 23, 42, 0.82);
+  border: 1px solid rgba(34, 211, 238, 0.25);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.heat-legend.collapsed {
+  width: 188px;
+}
+.heat-legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.heat-legend-title {
+  font-weight: 600;
+  color: #22d3ee;
+  letter-spacing: 0.5px;
+}
+.heat-legend-toggle {
+  font-size: 13px;
+  opacity: 0.8;
+}
+.heat-legend-body {
+  padding: 4px 10px 8px;
+}
+.heat-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 0;
+}
+.heat-swatch {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.heat-name {
+  width: 48px;
+}
+.heat-range {
+  flex: 1;
+  color: #94a3b8;
+  font-size: 11px;
+}
+.heat-count {
+  min-width: 18px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: #e2e8f0;
+}
+.heat-legend-foot {
+  margin-top: 6px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: #64748b;
 }
 
 .panel-header h3 {

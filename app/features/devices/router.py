@@ -536,6 +536,133 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
         }
 
 
+@router.get("/{device_id}/snmp-diagnose")
+async def diagnose_device_snmp(device_id: int, db: Session = Depends(get_db)):
+    """SNMP 连通性诊断
+
+    逐项探测：sysDescr / sysUpTime / ifNumber / ifHCInOctets(64位计数器) /
+    ifInOctets(32位计数器)，用于判断设备 SNMP 是否可用、社区串是否正确、
+    虚拟镜像是否支持接口高速计数器。
+    """
+    import asyncio
+    from .snmp_service import get_snmp_service
+
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+    if not device.ip:
+        raise HTTPException(status_code=400, detail="设备未配置 IP 地址")
+
+    community = device.snmp_community or "public"
+    checks = []
+
+    def add_check(name, oid, ok, value=None, detail=None):
+        checks.append({"name": name, "oid": oid, "ok": ok, "value": value, "detail": detail})
+
+    service = get_snmp_service()
+    if not service.is_available():
+        return {
+            "device_id": device.id,
+            "device_ip": device.ip,
+            "snmp_enabled": bool(device.snmp_enabled),
+            "community_set": bool(device.snmp_community),
+            "available": False,
+            "checks": [],
+            "conclusion": "服务器未安装 SNMP 依赖（pysnmp），无法诊断",
+            "suggestion": "在后端环境安装 pysnmp 相关依赖后重试",
+        }
+
+    if not device.snmp_enabled:
+        return {
+            "device_id": device.id,
+            "device_ip": device.ip,
+            "snmp_enabled": False,
+            "community_set": bool(device.snmp_community),
+            "available": False,
+            "checks": [],
+            "conclusion": "设备未启用 SNMP",
+            "suggestion": "在设备配置中开启 SNMP 并填写正确的社区串",
+        }
+
+    OID_SYS_DESCR = "1.3.6.1.2.1.1.1.0"
+    OID_SYS_UPTIME = "1.3.6.1.2.1.1.3.0"
+    OID_IF_NUMBER = "1.3.6.1.2.1.2.1.0"
+    OID_IF_HC_IN = "1.3.6.1.2.1.31.1.1.1.6"   # ifHCInOctets (64-bit)
+    OID_IF_IN = "1.3.6.1.2.1.2.2.1.10"         # ifInOctets (32-bit)
+
+    try:
+        sys_descr = await asyncio.wait_for(
+            service.snmp_get_async(device.ip, community, OID_SYS_DESCR, timeout=3), timeout=5
+        )
+        add_check("系统描述 sysDescr", OID_SYS_DESCR, sys_descr is not None,
+                  value=(str(sys_descr)[:160] if sys_descr is not None else None),
+                  detail="可达且社区串正确" if sys_descr is not None else "无响应：不可达 / 社区串错误 / UDP161 被阻断")
+
+        sys_uptime = await asyncio.wait_for(
+            service.snmp_get_async(device.ip, community, OID_SYS_UPTIME, timeout=3), timeout=5
+        )
+        add_check("运行时长 sysUpTime", OID_SYS_UPTIME, sys_uptime is not None,
+                  value=sys_uptime if sys_uptime is not None else None)
+
+        if_number = await asyncio.wait_for(
+            service.snmp_get_async(device.ip, community, OID_IF_NUMBER, timeout=3), timeout=5
+        )
+        add_check("接口数量 ifNumber", OID_IF_NUMBER, if_number is not None,
+                  value=if_number if if_number is not None else None)
+
+        hc_in = await asyncio.wait_for(
+            service.snmp_walk_async(device.ip, community, OID_IF_HC_IN, timeout=4), timeout=6
+        )
+        add_check("64位计数器 ifHCInOctets", OID_IF_HC_IN, bool(hc_in),
+                  value=f"{len(hc_in)} 个接口" if hc_in else "0",
+                  detail="支持高速计数器（推荐）" if hc_in else "镜像不支持 64 位计数器，将回退 32 位")
+
+        in_octets = await asyncio.wait_for(
+            service.snmp_walk_async(device.ip, community, OID_IF_IN, timeout=4), timeout=6
+        )
+        add_check("32位计数器 ifInOctets", OID_IF_IN, bool(in_octets),
+                  value=f"{len(in_octets)} 个接口" if in_octets else "0",
+                  detail="基础流量计数可用" if in_octets else "无接口计数器，无法计算流量")
+
+    except asyncio.TimeoutError:
+        add_check("SNMP 探测", "-", False, detail="探测超时：设备可能不可达或 UDP/161 被阻断")
+    except Exception as e:
+        add_check("SNMP 探测", "-", False, detail=f"异常：{e}")
+
+    reachable = any(c["ok"] for c in checks if c["oid"] == OID_SYS_DESCR)
+    has_hc = any(c["ok"] for c in checks if c["oid"] == OID_IF_HC_IN)
+    has_basic = any(c["ok"] for c in checks if c["oid"] == OID_IF_IN)
+
+    if not reachable:
+        conclusion = "无法获取任何 SNMP 数据"
+        suggestion = ("逐项排查：1) 设备是否配置 snmp-server community（与系统社区串一致，大小写敏感）；"
+                      "2) 后端到设备 UDP/161 是否放通（NAT/隔离网段）；3) ACL 是否放行后端 IP")
+    elif not (has_hc or has_basic):
+        conclusion = "SNMP 可达，但读不到接口流量计数器"
+        suggestion = "该虚拟镜像（如 vIOS-L2）可能不支持 IF-MIB 计数器，建议改用支持计数器的镜像或仅用于状态监控"
+    elif not has_hc and has_basic:
+        conclusion = "SNMP 可用（仅 32 位计数器），流量监控可用但高负载下可能回绕"
+        suggestion = "可正常采集流量；如需更精确可换支持 64 位计数器的镜像"
+    else:
+        conclusion = "SNMP 完全可用，接口流量监控正常"
+        suggestion = "无需处理；确保接口已标记 is_uplink + monitored 即可在大屏/HUD 看到曲线"
+
+    return {
+        "device_id": device.id,
+        "device_ip": device.ip,
+        "snmp_enabled": bool(device.snmp_enabled),
+        "community_set": bool(device.snmp_community),
+        "vendor": device.vendor,
+        "available": True,
+        "reachable": reachable,
+        "has_hc_counters": has_hc,
+        "has_basic_counters": has_basic,
+        "checks": checks,
+        "conclusion": conclusion,
+        "suggestion": suggestion,
+    }
+
+
 @router.get("/{device_id}")
 async def get_device(device_id: int, db: Session = Depends(get_db)):
     """获取设备详情"""

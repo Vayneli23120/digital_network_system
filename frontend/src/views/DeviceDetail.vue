@@ -163,6 +163,7 @@
             <el-button type="primary" size="small" :icon="Connection" @click="discoverInterfaces" :loading="ifaceDiscovering">发现接口</el-button>
             <el-button size="small" :icon="Tools" @click="discoverNeighbors" :loading="ifaceNeighborLoading">发现邻居</el-button>
             <el-button size="small" :icon="Refresh" @click="loadInterfaces(true)" :loading="ifacesLoading">刷新</el-button>
+            <el-button size="small" :icon="Warning" @click="runSnmpDiagnose" :loading="snmpDiagLoading">诊断 SNMP</el-button>
             <el-checkbox v-model="ifaceMonitoredOnly" @change="loadInterfaces(true)" style="margin-left: 10px">仅看监控接口</el-checkbox>
             <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">自动刷新(30s)</el-checkbox>
             <span v-if="interfaces.length" style="margin-left: auto; font-size: 12px; color: #909399">共 {{ interfaces.length }} 口 · 在线 {{ ifaceUpCount }} · 上行 {{ ifaceUplinkCount }} · 监控 {{ ifaceMonitoredCount }}</span>
@@ -633,6 +634,41 @@
       :showReturnParts="true"
       @success="handleMaintSuccess"
     />
+
+    <!-- SNMP 诊断结果对话框 -->
+    <el-dialog v-model="showSnmpDiag" title="SNMP 连通性诊断" width="640px" append-to-body draggable align-center>
+      <div v-if="snmpDiagResult">
+        <el-alert
+          :title="snmpDiagResult.conclusion"
+          :type="snmpDiagResult.reachable ? (snmpDiagResult.has_hc_counters || snmpDiagResult.has_basic_counters ? 'success' : 'warning') : 'error'"
+          :description="snmpDiagResult.suggestion"
+          :closable="false"
+          show-icon
+          style="margin-bottom: 12px"
+        />
+        <el-descriptions :column="2" size="small" border style="margin-bottom: 12px">
+          <el-descriptions-item label="设备 IP">{{ snmpDiagResult.device_ip }}</el-descriptions-item>
+          <el-descriptions-item label="厂商">{{ snmpDiagResult.vendor || '--' }}</el-descriptions-item>
+          <el-descriptions-item label="SNMP 启用">{{ snmpDiagResult.snmp_enabled ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item label="社区串已配置">{{ snmpDiagResult.community_set ? '是' : '否' }}</el-descriptions-item>
+        </el-descriptions>
+        <el-table :data="snmpDiagResult.checks" size="small" border>
+          <el-table-column label="检查项" prop="name" min-width="160" />
+          <el-table-column label="结果" width="70" align="center">
+            <template #default="{ row }">
+              <el-tag :type="row.ok ? 'success' : 'danger'" size="small" effect="dark">{{ row.ok ? 'OK' : 'FAIL' }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="值" prop="value" min-width="120" show-overflow-tooltip />
+          <el-table-column label="说明" prop="detail" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </div>
+      <el-empty v-else description="暂无诊断结果" />
+      <template #footer>
+        <el-button @click="showSnmpDiag = false">关闭</el-button>
+        <el-button type="primary" :loading="snmpDiagLoading" @click="runSnmpDiagnose">重新诊断</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -641,7 +677,7 @@ import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close, Warning, Document, Refresh, Timer, WarningFilled, Promotion } from '@element-plus/icons-vue'
-import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics, listDeviceInterfaces, updateDeviceInterface, getInterfaceTraffic, discoverDeviceInterfaces, discoverDeviceNeighbors } from '@/api'
+import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics, listDeviceInterfaces, updateDeviceInterface, getInterfaceTraffic, discoverDeviceInterfaces, discoverDeviceNeighbors, diagnoseDeviceSnmp } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
@@ -701,6 +737,10 @@ const ifaceAutoRefresh = ref(false)
 const trafficData = ref({})
 const trafficLoading = ref({})
 let autoRefreshTimer = null
+
+const showSnmpDiag = ref(false)
+const snmpDiagLoading = ref(false)
+const snmpDiagResult = ref(null)
 
 const ifaceUpCount = computed(() => interfaces.value.filter(i => i.oper_status === 'up').length)
 const ifaceUplinkCount = computed(() => interfaces.value.filter(i => i.is_uplink).length)
@@ -1114,6 +1154,19 @@ const formatBps = (bps) => {
   if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps'
   if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps'
   return bps + ' bps'
+}
+
+const runSnmpDiagnose = async () => {
+  snmpDiagLoading.value = true
+  showSnmpDiag.value = true
+  try {
+    const data = await diagnoseDeviceSnmp(route.params.id)
+    snmpDiagResult.value = data
+  } catch (error) {
+    ElMessage.error('SNMP 诊断失败（请求超时或服务异常）')
+  } finally {
+    snmpDiagLoading.value = false
+  }
 }
 
 const setMonitorTier = async (tier) => {

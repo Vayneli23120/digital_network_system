@@ -107,6 +107,10 @@ export function discoverDeviceNeighbors(deviceId) {
   return api.post(`/devices/${deviceId}/interfaces/discover-neighbors`, {}, { timeout: 60000 })
 }
 
+export function diagnoseDeviceSnmp(deviceId) {
+  return api.get(`/devices/${deviceId}/snmp-diagnose`, { timeout: 40000 })
+}
+
 // 备份相关
 export function backupDevice(deviceId, operator) {
   return api.post(`/backups/backup/${deviceId}`, null, {
