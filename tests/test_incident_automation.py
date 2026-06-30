@@ -103,3 +103,57 @@ def test_recovered_without_open_fault_returns_none(db_session, monkeypatch):
 
     assert fault is None
     assert db_session.query(FaultRecord).count() == 0
+
+
+def test_interface_poll_uplink_down_creates_fault(db_session, monkeypatch):
+    """接口轮询检测到上行口 down 也应自动建单（修复：之前只广播不建单）。"""
+    monkeypatch.setattr("app.services.incident_automation.notify_incident", lambda *args, **kwargs: None)
+    device = _add_device(db_session)
+
+    fault = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="interface_poll",
+        event_type="link_down",
+        device_id=device.id,
+        device_name=device.name,
+        ip=device.ip,
+        if_index=10,
+        if_name="GigabitEthernet0/1",
+        raw={"is_uplink": True},
+    ))
+
+    assert fault is not None
+    assert fault.status == "assigned"
+    assert fault.severity == "critical"  # 上行口 + 核心交换机
+    assert fault.incident_type == "uplink_down"
+    assert fault.source_type == "interface_poll"
+    assert fault.source_key == f"device:{device.id}:if:10:link_down"
+    assert fault.if_index == 10
+
+
+def test_interface_poll_link_up_resolves_existing_fault(db_session, monkeypatch):
+    """同一上行口先 down（Trap 或轮询）后 up（轮询）应恢复同一张工单，不重复建单。"""
+    monkeypatch.setattr("app.services.incident_automation.notify_incident", lambda *args, **kwargs: None)
+    device = _add_device(db_session)
+
+    down_fault = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="trap",
+        event_type="link_down",
+        device_id=device.id,
+        if_index=10,
+        if_name="GigabitEthernet0/1",
+        raw={"is_uplink": True},
+    ))
+    up_fault = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="interface_poll",
+        event_type="link_up",
+        device_id=device.id,
+        if_index=10,
+        if_name="GigabitEthernet0/1",
+        raw={"is_uplink": True},
+        occurred_at=datetime.utcnow() + timedelta(minutes=2),
+    ))
+
+    assert up_fault is not None
+    assert up_fault.id == down_fault.id
+    assert up_fault.status == "resolved"
+    assert db_session.query(FaultRecord).count() == 1

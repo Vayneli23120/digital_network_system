@@ -273,6 +273,7 @@ class InterfaceMonitor:
         try:
             device = db.query(Device).filter(Device.id == device_id).first()
             changes = []
+            incident_events = []
             for idx, r in readings.items():
                 iface = db.query(DeviceInterface).filter(
                     DeviceInterface.device_id == device_id,
@@ -332,12 +333,25 @@ class InterfaceMonitor:
 
                 if old_oper and old_oper != new_oper and new_oper in ("up", "down"):
                     changes.append((iface.if_index, iface.if_name, bool(iface.is_uplink), old_oper, new_oper))
+                    incident_events.append({
+                        "if_index": iface.if_index,
+                        "if_name": iface.if_name,
+                        "is_uplink": bool(iface.is_uplink),
+                        "new_oper": new_oper,
+                        "peer_device_id": iface.peer_device_id,
+                        "peer_device_name": iface.peer_device_name,
+                        "peer_if_name": iface.peer_if_name,
+                    })
 
             db.commit()
 
             # 提交成功后推送 oper_status 变化（上行口掉线立即上大屏）
             for if_index, if_name, is_uplink, old_oper, new_oper in changes:
                 self._broadcast_interface_change(device, device_id, if_index, if_name, is_uplink, old_oper, new_oper)
+
+            # 接口 up/down 变化进入故障工单闭环（与 Trap 路径一致）
+            if incident_events and device:
+                self._upsert_interface_incidents(db, device, incident_events)
         except Exception as e:
             logger.error(f"Persist interface readings failed (device {device_id}): {e}")
             db.rollback()
@@ -360,6 +374,27 @@ class InterfaceMonitor:
             })
         except Exception as e:
             logger.error(f"Failed to push interface status: {e}")
+
+    def _upsert_interface_incidents(self, db, device, incident_events: List[Dict]):
+        """接口 oper_status 变化进入故障工单闭环（轮询路径，与 Trap 一致）"""
+        try:
+            from app.services.incident_automation import MonitorEvent, upsert_fault_from_monitor_event
+            for ev in incident_events:
+                upsert_fault_from_monitor_event(db, MonitorEvent(
+                    source_type="interface_poll",
+                    event_type="link_up" if ev["new_oper"] == "up" else "link_down",
+                    device_id=device.id,
+                    device_name=device.name,
+                    ip=device.ip,
+                    if_index=ev["if_index"],
+                    if_name=ev["if_name"],
+                    peer_device_id=ev["peer_device_id"],
+                    peer_device_name=ev["peer_device_name"],
+                    peer_if_name=ev["peer_if_name"],
+                    raw={"is_uplink": ev["is_uplink"]},
+                ))
+        except Exception as e:
+            logger.warning(f"接口轮询自动故障工单处理失败: {e}")
 
     # ===== 接口发现（API 触发）=====
     def discover_interfaces(self, device_id: int) -> Dict:
