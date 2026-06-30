@@ -3,7 +3,7 @@
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional, List, Literal
 from pathlib import Path
 import shutil
 from datetime import datetime
@@ -47,6 +47,8 @@ class DeviceCreate(BaseModel):
     vendor: Optional[str] = None
     purchase_cost: float = 0
     credential_group: str = "default"
+    # 监控分级：critical(10s/3周期) / normal(30s/2周期) / low(120s/2周期)
+    monitor_tier: Literal["critical", "normal", "low"] = "normal"
     modules: Optional[List[dict]] = None  # [{"type": "main", "serial_number": "SN001"}]
 
 
@@ -64,6 +66,7 @@ class DeviceUpdate(BaseModel):
     purchase_cost: Optional[float] = None
     credential_group: Optional[str] = None
     name: Optional[str] = None
+    monitor_tier: Optional[Literal["critical", "normal", "low"]] = None
     modules: Optional[List[dict]] = None
 
 

@@ -182,6 +182,7 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
                 "role": d.role,
                 # 新字段
                 "deployment_status": d.deployment_status,
+                "monitor_tier": d.monitor_tier or "normal",
                 "reachability": d.reachability,
                 "last_reachability_check": d.last_reachability_check.isoformat() if d.last_reachability_check else None,
                 "reachability_latency_ms": d.reachability_latency_ms,
@@ -257,6 +258,7 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
         "role": device.role,
         # 新字段
         "deployment_status": device.deployment_status,
+        "monitor_tier": device.monitor_tier or "normal",
         "reachability": device.reachability,
         # 兼容旧字段
         "status": device.status,
@@ -295,6 +297,7 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         "role": device.role,
         # 新字段
         "deployment_status": device.deployment_status,
+        "monitor_tier": device.monitor_tier or "normal",
         "reachability": device.reachability,
         "last_reachability_check": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
         "reachability_latency_ms": device.reachability_latency_ms,
@@ -334,7 +337,7 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         "device_type", "role", "purchase_date", "vendor", "purchase_cost",
         "photo_dir", "credential_group", "name",
         # 新字段
-        "deployment_status",
+        "deployment_status", "monitor_tier",
         # 兼容旧字段（status 将被映射到 deployment_status）
         "status",
     ]
@@ -381,6 +384,7 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         "role": device.role,
         # 新字段
         "deployment_status": device.deployment_status,
+        "monitor_tier": device.monitor_tier or "normal",
         "reachability": device.reachability,
         # 兼容旧字段
         "status": device.status,

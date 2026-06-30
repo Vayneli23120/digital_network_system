@@ -86,6 +86,27 @@ export function getDeviceMetrics(deviceId) {
   return api.get(`/devices/${deviceId}/metrics`, { timeout: 15000 })
 }
 
+// 接口监控（SNMP）
+export function listDeviceInterfaces(deviceId, monitoredOnly = false) {
+  return api.get(`/devices/${deviceId}/interfaces`, { params: { monitored_only: monitoredOnly } })
+}
+
+export function updateDeviceInterface(deviceId, ifIndex, data) {
+  return api.put(`/devices/${deviceId}/interfaces/${ifIndex}`, data)
+}
+
+export function getInterfaceTraffic(deviceId, ifIndex, limit = 60) {
+  return api.get(`/devices/${deviceId}/interfaces/${ifIndex}/traffic`, { params: { limit } })
+}
+
+export function discoverDeviceInterfaces(deviceId) {
+  return api.post(`/devices/${deviceId}/interfaces/discover`, {}, { timeout: 60000 })
+}
+
+export function discoverDeviceNeighbors(deviceId) {
+  return api.post(`/devices/${deviceId}/interfaces/discover-neighbors`, {}, { timeout: 60000 })
+}
+
 // 备份相关
 export function backupDevice(deviceId, operator) {
   return api.post(`/backups/backup/${deviceId}`, null, {

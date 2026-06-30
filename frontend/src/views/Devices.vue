@@ -399,6 +399,13 @@
                 <el-option :label="t('statusRetired')" value="retired" />
               </el-select>
             </el-form-item>
+            <el-form-item label="监控分级">
+              <el-select v-model="newDevice.monitor_tier" placeholder="选择监控分级">
+                <el-option label="核心 critical（10s / 3周期）" value="critical" />
+                <el-option label="普通 normal（30s / 2周期）" value="normal" />
+                <el-option label="低优先 low（120s / 2周期）" value="low" />
+              </el-select>
+            </el-form-item>
             <el-form-item :label="t('deviceCredentialGroup')">
               <div class="input-with-btn">
                 <el-select v-model="newDevice.credential_group" :placeholder="t('deviceSelectCredential')">
@@ -557,6 +564,7 @@ const newDevice = ref({
   device_type: 'other',
   role: 'access',
   deployment_status: 'un-used',  // 新字段
+  monitor_tier: 'normal',  // 监控分级
   vendor: 'cisco',
   credential_group: 'default',
   modules: [{ type: 'main', pid: '', serial_number: '' }] // 默认一个主机模块
@@ -647,6 +655,7 @@ const resetNewDevice = () => {
     device_type: 'other',
     role: 'access',
     deployment_status: 'un-used',  // 新字段
+    monitor_tier: 'normal',  // 监控分级
     vendor: 'cisco',
     credential_group: 'default',
     modules: [{ type: 'main', pid: '', serial_number: '' }]
@@ -943,6 +952,7 @@ const updateDevice = async () => {
       location: newDevice.value.location,
       role: newDevice.value.role,
       deployment_status: newDevice.value.deployment_status,  // 新字段
+      monitor_tier: newDevice.value.monitor_tier,  // 监控分级
       credential_group: newDevice.value.credential_group,
       modules: newDevice.value.modules
     }

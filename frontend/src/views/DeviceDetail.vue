@@ -7,6 +7,11 @@
         <el-tag v-if="device" :type="getStatusType(device.status)" size="large">
           {{ getStatusText(device.status) }}
         </el-tag>
+        <el-select v-if="device" :model-value="device.monitor_tier || 'normal'" @change="setMonitorTier" size="small" style="width: 132px; margin-left: 8px" placeholder="监控分级">
+          <el-option label="核心 critical" value="critical" />
+          <el-option label="普通 normal" value="normal" />
+          <el-option label="低优先 low" value="low" />
+        </el-select>
       </div>
       <div class="page-actions">
         <el-button type="primary" @click="showEditDialog = true">
@@ -153,6 +158,91 @@
     <!-- Tabs 区域 -->
     <div class="tabs-wrapper">
       <el-tabs v-model="activeTab">
+        <el-tab-pane label="接口监控" name="interfaces">
+          <div class="iface-toolbar">
+            <el-button type="primary" size="small" :icon="Connection" @click="discoverInterfaces" :loading="ifaceDiscovering">发现接口</el-button>
+            <el-button size="small" :icon="Tools" @click="discoverNeighbors" :loading="ifaceNeighborLoading">发现邻居</el-button>
+            <el-button size="small" :icon="Refresh" @click="loadInterfaces(true)" :loading="ifacesLoading">刷新</el-button>
+            <el-checkbox v-model="ifaceMonitoredOnly" @change="loadInterfaces(true)" style="margin-left: 10px">仅看监控接口</el-checkbox>
+            <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">自动刷新(30s)</el-checkbox>
+            <span v-if="interfaces.length" style="margin-left: auto; font-size: 12px; color: #909399">共 {{ interfaces.length }} 口 · 在线 {{ ifaceUpCount }} · 上行 {{ ifaceUplinkCount }} · 监控 {{ ifaceMonitoredCount }}</span>
+          </div>
+          <el-table :data="interfaces" v-loading="ifacesLoading" size="small" border stripe row-key="if_index" @expand-change="onIfaceExpand" style="margin-top: 8px">
+            <el-table-column type="expand">
+              <template #default="{ row }">
+                <div class="iface-traffic-panel">
+                  <div v-if="trafficLoading[row.if_index]" style="color: #909399; padding: 8px">加载流量中…</div>
+                  <div v-else-if="(trafficData[row.if_index] || []).length" class="spark-wrap">
+                    <div class="spark-line">
+                      <span class="spark-tag in">入向</span>
+                      <svg :viewBox="`0 0 240 40`" preserveAspectRatio="none" class="spark-svg">
+                        <polyline :points="sparkPoints(trafficData[row.if_index], 'in_bps')" fill="none" stroke="#409eff" stroke-width="1.5" />
+                      </svg>
+                      <span class="spark-val">{{ formatBps(row.last_in_bps) }} <em>{{ row.last_in_util != null ? row.last_in_util + '%' : '' }}</em></span>
+                    </div>
+                    <div class="spark-line">
+                      <span class="spark-tag out">出向</span>
+                      <svg :viewBox="`0 0 240 40`" preserveAspectRatio="none" class="spark-svg">
+                        <polyline :points="sparkPoints(trafficData[row.if_index], 'out_bps')" fill="none" stroke="#67c23a" stroke-width="1.5" />
+                      </svg>
+                      <span class="spark-val">{{ formatBps(row.last_out_bps) }} <em>{{ row.last_out_util != null ? row.last_out_util + '%' : '' }}</em></span>
+                    </div>
+                    <div class="spark-meta">最近 {{ (trafficData[row.if_index] || []).length }} 个采样 · 更新于 {{ row.last_sample_at ? formatDateTime(row.last_sample_at) : '--' }}</div>
+                  </div>
+                  <el-empty v-else description="暂无流量样本（需开启监控并等待下一次轮询）" :image-size="50" />
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="接口" min-width="150">
+              <template #default="{ row }">
+                <span style="font-weight: 600">{{ row.if_name || row.if_descr || ('if' + row.if_index) }}</span>
+                <el-tag v-if="row.is_uplink" type="warning" size="small" effect="plain" style="margin-left: 4px">上行</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="88" align="center">
+              <template #default="{ row }">
+                <el-tag :type="row.oper_status === 'up' ? 'success' : (row.oper_status === 'down' ? 'danger' : 'info')" size="small" effect="dark">{{ row.oper_status || 'unknown' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="速率" width="72" align="center">
+              <template #default="{ row }">{{ row.speed_mbps ? row.speed_mbps + 'M' : '--' }}</template>
+            </el-table-column>
+            <el-table-column label="入向" width="160">
+              <template #default="{ row }">
+                <div class="util-cell">
+                  <div class="util-bar-bg"><div class="util-bar-fill" :style="{ width: Math.min(row.last_in_util || 0, 100) + '%', background: getUtilizationColor(row.last_in_util) }"></div></div>
+                  <span class="util-text">{{ formatBps(row.last_in_bps) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="出向" width="160">
+              <template #default="{ row }">
+                <div class="util-cell">
+                  <div class="util-bar-bg"><div class="util-bar-fill" :style="{ width: Math.min(row.last_out_util || 0, 100) + '%', background: getUtilizationColor(row.last_out_util) }"></div></div>
+                  <span class="util-text">{{ formatBps(row.last_out_bps) }}</span>
+                </div>
+              </template>
+            </el-table-column>
+            <el-table-column label="错误" width="80" align="center">
+              <template #default="{ row }">
+                <span :style="{ color: ((row.last_in_errors || 0) + (row.last_out_errors || 0)) > 0 ? '#f56c6c' : '#67c23a' }">{{ (row.last_in_errors || 0) + (row.last_out_errors || 0) }}</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="对端" min-width="160">
+              <template #default="{ row }">
+                <span v-if="row.peer_device_name">{{ row.peer_device_name }}<span v-if="row.peer_if_name" style="color: #909399"> / {{ row.peer_if_name }}</span></span>
+                <span v-else style="color: #c0c4cc">--</span>
+              </template>
+            </el-table-column>
+            <el-table-column label="上行口" width="68" align="center">
+              <template #default="{ row }"><el-switch :model-value="row.is_uplink" @change="v => toggleUplink(row, v)" size="small" /></template>
+            </el-table-column>
+            <el-table-column label="监控" width="60" align="center">
+              <template #default="{ row }"><el-switch :model-value="row.monitored" @change="v => toggleMonitored(row, v)" size="small" /></template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!interfaces.length && !ifacesLoading" description="尚未发现接口，点击「发现接口」进行 SNMP 扫描" :image-size="60" />
+        </el-tab-pane>
         <el-tab-pane :label="t('tabBackupRecords')" name="backups">
           <el-table :data="device?.recent_backups || []" style="width: 100%">
             <el-table-column prop="backup_time" :label="t('backupTime')" width="180">
@@ -547,11 +637,11 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close, Warning, Document, Refresh, Timer, WarningFilled, Promotion } from '@element-plus/icons-vue'
-import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics } from '@/api'
+import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics, listDeviceInterfaces, updateDeviceInterface, getInterfaceTraffic, discoverDeviceInterfaces, discoverDeviceNeighbors } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
@@ -600,6 +690,21 @@ const metricsData = ref({
   timestamp: null,
   snmp_available: false
 })
+
+// 接口监控状态（SNMP）
+const interfaces = ref([])
+const ifacesLoading = ref(false)
+const ifaceDiscovering = ref(false)
+const ifaceNeighborLoading = ref(false)
+const ifaceMonitoredOnly = ref(false)
+const ifaceAutoRefresh = ref(false)
+const trafficData = ref({})
+const trafficLoading = ref({})
+let autoRefreshTimer = null
+
+const ifaceUpCount = computed(() => interfaces.value.filter(i => i.oper_status === 'up').length)
+const ifaceUplinkCount = computed(() => interfaces.value.filter(i => i.is_uplink).length)
+const ifaceMonitoredCount = computed(() => interfaces.value.filter(i => i.monitored).length)
 
 // 设备整体健康状态计算
 const healthStatusClass = computed(() => {
@@ -905,7 +1010,134 @@ const loadDeviceInventory = debounce(async (force = false) => {
   }
 }, 300)
 
-watch(activeTab, (newTab) => { if (newTab === 'inventory') loadDeviceInventory() })
+watch(activeTab, (newTab) => {
+  if (newTab === 'inventory') loadDeviceInventory()
+  if (newTab === 'interfaces') loadInterfaces()
+})
+
+// ===== 接口监控（SNMP）=====
+const loadInterfaces = async (force = false) => {
+  if (!route.params.id) return
+  ifacesLoading.value = true
+  try {
+    const data = await listDeviceInterfaces(route.params.id, ifaceMonitoredOnly.value)
+    interfaces.value = data.items || []
+  } catch (error) {
+    ElMessage.error('接口列表加载失败')
+  } finally {
+    ifacesLoading.value = false
+  }
+}
+
+const discoverInterfaces = async () => {
+  ifaceDiscovering.value = true
+  try {
+    const res = await discoverDeviceInterfaces(route.params.id)
+    if (res && res.ok === false) {
+      ElMessage.warning(res.error || '发现失败')
+    } else {
+      ElMessage.success(`发现完成，共 ${res.count != null ? res.count : ''} 个接口`)
+      await loadInterfaces(true)
+    }
+  } catch (error) {
+    ElMessage.error('发现接口失败（检查 SNMP 是否开启）')
+  } finally {
+    ifaceDiscovering.value = false
+  }
+}
+
+const discoverNeighbors = async () => {
+  ifaceNeighborLoading.value = true
+  try {
+    await discoverDeviceNeighbors(route.params.id)
+    ElMessage.success('邻居发现完成')
+    await loadInterfaces(true)
+  } catch (error) {
+    ElMessage.error('发现邻居失败')
+  } finally {
+    ifaceNeighborLoading.value = false
+  }
+}
+
+const toggleUplink = async (row, val) => {
+  try {
+    await updateDeviceInterface(route.params.id, row.if_index, { is_uplink: val })
+    row.is_uplink = val
+    ElMessage.success('已更新')
+  } catch (error) {
+    ElMessage.error('更新失败')
+  }
+}
+
+const toggleMonitored = async (row, val) => {
+  try {
+    await updateDeviceInterface(route.params.id, row.if_index, { monitored: val })
+    row.monitored = val
+    ElMessage.success('已更新')
+  } catch (error) {
+    ElMessage.error('更新失败')
+  }
+}
+
+const onIfaceExpand = async (row, expandedRows) => {
+  const isExpanded = Array.isArray(expandedRows) && expandedRows.some(r => r.if_index === row.if_index)
+  if (isExpanded) await loadTraffic(row.if_index)
+}
+
+const loadTraffic = async (ifIndex) => {
+  trafficLoading.value = { ...trafficLoading.value, [ifIndex]: true }
+  try {
+    const data = await getInterfaceTraffic(route.params.id, ifIndex, 60)
+    trafficData.value = { ...trafficData.value, [ifIndex]: data.samples || [] }
+  } catch (error) {
+    trafficData.value = { ...trafficData.value, [ifIndex]: [] }
+  } finally {
+    trafficLoading.value = { ...trafficLoading.value, [ifIndex]: false }
+  }
+}
+
+const sparkPoints = (samples, key, width = 240, height = 40) => {
+  if (!samples || !samples.length) return ''
+  const vals = samples.map(s => s[key] || 0)
+  const max = Math.max(...vals, 1)
+  const n = vals.length
+  return vals.map((v, i) => {
+    const x = n === 1 ? width : (i / (n - 1)) * width
+    const y = height - (v / max) * (height - 2) - 1
+    return `${x.toFixed(1)},${y.toFixed(1)}`
+  }).join(' ')
+}
+
+const formatBps = (bps) => {
+  if (bps == null) return '--'
+  if (bps >= 1e9) return (bps / 1e9).toFixed(2) + ' Gbps'
+  if (bps >= 1e6) return (bps / 1e6).toFixed(2) + ' Mbps'
+  if (bps >= 1e3) return (bps / 1e3).toFixed(1) + ' Kbps'
+  return bps + ' bps'
+}
+
+const setMonitorTier = async (tier) => {
+  try {
+    await updateDeviceApi(route.params.id, { monitor_tier: tier })
+    if (device.value) device.value.monitor_tier = tier
+    clearCache('device_detail')
+    ElMessage.success('监控分级已更新为 ' + tier)
+  } catch (error) {
+    ElMessage.error('更新监控分级失败')
+  }
+}
+
+const startAutoRefresh = () => {
+  stopAutoRefresh()
+  autoRefreshTimer = setInterval(() => {
+    refreshMetrics()
+    if (activeTab.value === 'interfaces') loadInterfaces(true)
+  }, 30000)
+}
+const stopAutoRefresh = () => {
+  if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null }
+}
+watch(ifaceAutoRefresh, (on) => { on ? startAutoRefresh() : stopAutoRefresh() })
 
 // 刷新设备性能指标
 const refreshMetrics = async () => {
@@ -1087,6 +1319,7 @@ const deleteMaintInDetail = async (maintId) => {
 }
 
 onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics() })
+onUnmounted(() => { stopAutoRefresh() })
 </script>
 
 <style scoped>
@@ -1969,5 +2202,81 @@ onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers
   .quick-actions-bar .el-button {
     width: 100%;
   }
+}
+
+/* ===== 接口监控 Tab ===== */
+.iface-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+.util-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.util-bar-bg {
+  flex: 1;
+  height: 6px;
+  background: #ebeef5;
+  border-radius: 3px;
+  overflow: hidden;
+  min-width: 40px;
+}
+.util-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.util-text {
+  font-size: 11px;
+  color: #606266;
+  white-space: nowrap;
+  min-width: 64px;
+  text-align: right;
+}
+.iface-traffic-panel {
+  padding: 8px 16px;
+  background: #fafafa;
+}
+.spark-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.spark-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.spark-tag {
+  font-size: 11px;
+  color: #fff;
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.spark-tag.in { background: #409eff; }
+.spark-tag.out { background: #67c23a; }
+.spark-svg {
+  width: 240px;
+  height: 40px;
+  background: #fff;
+  border: 1px solid #ebeef5;
+  border-radius: 4px;
+}
+.spark-val {
+  font-size: 12px;
+  color: #303133;
+}
+.spark-val em {
+  color: #909399;
+  font-style: normal;
+}
+.spark-meta {
+  font-size: 11px;
+  color: #c0c4cc;
+  margin-top: 2px;
 }
 </style>
