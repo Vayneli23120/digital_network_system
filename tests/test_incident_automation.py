@@ -157,3 +157,62 @@ def test_interface_poll_link_up_resolves_existing_fault(db_session, monkeypatch)
     assert up_fault.id == down_fault.id
     assert up_fault.status == "resolved"
     assert db_session.query(FaultRecord).count() == 1
+
+
+def test_quick_recovery_is_marked_flap_false_positive(db_session, monkeypatch):
+    """故障在抑制窗口内自动恢复 -> 标记 false_positive 且不发送恢复通知。"""
+    notes = []
+    monkeypatch.setattr(
+        "app.services.incident_automation.notify_incident",
+        lambda *args, **kwargs: notes.append(kwargs.get("recovered")),
+    )
+    device = _add_device(db_session)
+
+    created = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="reachability",
+        event_type="device_unreachable",
+        device_id=device.id,
+        occurred_at=datetime.utcnow(),
+    ))
+    recovered = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="reachability",
+        event_type="device_recovered",
+        device_id=device.id,
+        occurred_at=datetime.utcnow() + timedelta(seconds=30),  # < 90s 抑制窗口
+    ))
+
+    assert recovered.id == created.id
+    assert recovered.status == "resolved"
+    assert recovered.false_positive is True
+    assert recovered.review_required is False
+    assert "抖动抑制" in (recovered.resolution or "")
+    # 只在建单时通知一次（recovered=False），恢复通知被抑制
+    assert notes == [False]
+
+
+def test_sustained_outage_recovery_is_not_flap(db_session, monkeypatch):
+    """故障存续超过抑制窗口 -> 正常恢复并发送恢复通知，不标记 false_positive。"""
+    notes = []
+    monkeypatch.setattr(
+        "app.services.incident_automation.notify_incident",
+        lambda *args, **kwargs: notes.append(kwargs.get("recovered")),
+    )
+    device = _add_device(db_session)
+
+    created = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="reachability",
+        event_type="device_unreachable",
+        device_id=device.id,
+        occurred_at=datetime.utcnow(),
+    ))
+    recovered = upsert_fault_from_monitor_event(db_session, MonitorEvent(
+        source_type="reachability",
+        event_type="device_recovered",
+        device_id=device.id,
+        occurred_at=datetime.utcnow() + timedelta(minutes=10),  # > 90s
+    ))
+
+    assert recovered.id == created.id
+    assert recovered.status == "resolved"
+    assert recovered.false_positive is False
+    assert notes == [False, True]

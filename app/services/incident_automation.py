@@ -25,6 +25,10 @@ from app.shared.models import Device, DeviceInterface, FaultRecord
 OPEN_STATUSES = ["open", "assigned", "diagnosing", "resolving", "transferred"]
 SEVERITY_RANK = {"minor": 1, "warning": 2, "major": 3, "critical": 4}
 
+# 抖动抑制：故障在该秒数内自动恢复，判定为瞬时抖动误报（如链路重收敛丢包），
+# 标记 false_positive 且不发送告警通知。设为 0 可关闭抑制。
+FLAP_SUPPRESS_SECONDS = int(os.getenv("INCIDENT_FLAP_SUPPRESS_SECONDS", "90"))
+
 
 @dataclass
 class MonitorEvent:
@@ -230,6 +234,33 @@ def _append_note(existing: Optional[str], note: str) -> str:
     return f"{existing}\n\n--- {datetime.utcnow().strftime('%Y-%m-%d %H:%M')} ---\n{note}"
 
 
+def _is_flap_recovery(fault: FaultRecord, event: MonitorEvent) -> bool:
+    """判断本次恢复是否属于瞬时抖动（故障存续时间短于抑制阈值）。"""
+    if FLAP_SUPPRESS_SECONDS <= 0:
+        return False
+    start = fault.fault_time or fault.created_at
+    if not start:
+        return False
+    duration = (event.occurred_at - start).total_seconds()
+    return 0 <= duration < FLAP_SUPPRESS_SECONDS
+
+
+def _mark_flap_suppressed(db: Session, fault: FaultRecord, event: MonitorEvent) -> None:
+    """标记抖动误报：置 false_positive、取消复核、跳过恢复通知。"""
+    start = fault.fault_time or fault.created_at
+    duration = int((event.occurred_at - start).total_seconds()) if start else 0
+    fault.false_positive = True
+    fault.review_required = False
+    fault.resolution = _append_note(
+        fault.resolution,
+        f"抖动抑制：故障在 {duration}s 内自动恢复（阈值 {FLAP_SUPPRESS_SECONDS}s），"
+        "判定为瞬时抖动误报（如链路重收敛丢包），未发送告警通知。"
+    )
+    fault.updated_at = datetime.utcnow()
+    db.commit()
+    logger.info(f"抖动抑制 fault={fault.fault_no} 存续 {duration}s，标记 false_positive")
+
+
 def _resolve_existing_fault(db: Session, decision: IncidentDecision, event: MonitorEvent) -> Optional[FaultRecord]:
     fault = db.query(FaultRecord).filter(
         FaultRecord.source_key == decision.source_key,
@@ -258,7 +289,10 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
     if event.event_type in ("link_up", "device_recovered"):
         fault = _resolve_existing_fault(db, decision, event)
         if fault:
-            notify_incident(db, fault, decision, recovered=True)
+            if _is_flap_recovery(fault, event):
+                _mark_flap_suppressed(db, fault, event)
+            else:
+                notify_incident(db, fault, decision, recovered=True)
         return fault
 
     fault = db.query(FaultRecord).filter(
