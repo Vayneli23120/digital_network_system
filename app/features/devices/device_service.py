@@ -298,6 +298,10 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         # 新字段
         "deployment_status": device.deployment_status,
         "monitor_tier": device.monitor_tier or "normal",
+        "snmp_enabled": bool(device.snmp_enabled),
+        "snmp_version": device.snmp_version,
+        "snmp_community": device.snmp_community,
+        "snmp_port": device.snmp_port,
         "reachability": device.reachability,
         "last_reachability_check": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
         "reachability_latency_ms": device.reachability_latency_ms,
@@ -338,6 +342,8 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         "photo_dir", "credential_group", "name",
         # 新字段
         "deployment_status", "monitor_tier",
+        # SNMP 监控配置
+        "snmp_enabled", "snmp_version", "snmp_community", "snmp_port",
         # 兼容旧字段（status 将被映射到 deployment_status）
         "status",
     ]

@@ -539,6 +539,33 @@
             </el-form-item>
           </el-form>
         </div>
+
+        <!-- SNMP 监控 Section -->
+        <div class="form-section">
+          <div class="form-section-title">
+            <el-icon><Connection /></el-icon>
+            SNMP 监控
+          </div>
+          <el-form :model="editForm" label-width="100px">
+            <el-form-item label="启用 SNMP">
+              <el-switch v-model="editForm.snmp_enabled" />
+              <span style="margin-left: 10px; font-size: 12px; color: #909399">开启后系统才会轮询接口流量/状态</span>
+            </el-form-item>
+            <el-form-item label="社区串">
+              <el-input v-model="editForm.snmp_community" placeholder="只读社区串，需与设备 snmp-server community 一致（大小写敏感）" />
+            </el-form-item>
+            <el-form-item label="版本">
+              <el-select v-model="editForm.snmp_version" style="width: 120px">
+                <el-option label="v2c" value="2c" />
+                <el-option label="v1" value="1" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="端口">
+              <el-input-number v-model="editForm.snmp_port" :min="1" :max="65535" controls-position="right" style="width: 130px" />
+              <span style="margin-left: 10px; font-size: 12px; color: #909399">默认 161</span>
+            </el-form-item>
+          </el-form>
+        </div>
       </div>
       <template #footer>
         <el-button @click="showEditDialog = false">{{ t('actionCancel') }}</el-button>
@@ -907,6 +934,10 @@ const loadDevice = debounce(async (force = false) => {
     }))
     editForm.value = {
       ...data,
+      snmp_enabled: !!data.snmp_enabled,
+      snmp_version: data.snmp_version || '2c',
+      snmp_community: data.snmp_community || '',
+      snmp_port: data.snmp_port || 161,
       modules: Array.isArray(normalizedModules) && normalizedModules.length > 0 ? normalizedModules : [{ type: 'main', pid: '', serial_number: '' }]
     }
   } catch (error) {

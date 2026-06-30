@@ -67,6 +67,11 @@ class DeviceUpdate(BaseModel):
     credential_group: Optional[str] = None
     name: Optional[str] = None
     monitor_tier: Optional[Literal["critical", "normal", "low"]] = None
+    # SNMP 监控配置
+    snmp_enabled: Optional[bool] = None
+    snmp_version: Optional[str] = None
+    snmp_community: Optional[str] = None
+    snmp_port: Optional[int] = None
     modules: Optional[List[dict]] = None
 
 
