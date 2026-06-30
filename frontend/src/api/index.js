@@ -83,7 +83,7 @@ export function getDeviceInventory(deviceId) {
 
 // 设备性能指标（SNMP）
 export function getDeviceMetrics(deviceId) {
-  return api.get(`/devices/${deviceId}/metrics`, { timeout: 15000 })
+  return api.get(`/devices/${deviceId}/metrics`, { timeout: 20000 })
 }
 
 // 接口监控（SNMP）

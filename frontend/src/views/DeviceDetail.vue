@@ -1146,8 +1146,17 @@ const refreshMetrics = async () => {
   try {
     const data = await getDeviceMetrics(route.params.id)
     metricsData.value = data
+    if (data && data.snmp_available === false) {
+      ElMessage.warning(data.error || '设备未启用 SNMP，无法获取性能指标')
+    } else if (data && data.error) {
+      ElMessage.warning(data.error)
+    }
   } catch (error) {
-    ElMessage.error(t('msgMetricsLoadFailed') || '性能指标获取失败')
+    if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
+      ElMessage.error('性能指标请求超时，设备 SNMP 可能未配置或网络不可达')
+    } else {
+      ElMessage.error(t('msgMetricsLoadFailed') || '性能指标获取失败')
+    }
   } finally {
     metricsLoading.value = false
   }

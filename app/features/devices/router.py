@@ -464,8 +464,23 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
     if not device.ip:
         raise HTTPException(status_code=400, detail="设备未配置 IP 地址")
 
-    community = "public"
+    community = device.snmp_community or "public"
     vendor = device.vendor or "cisco"
+
+    # 未启用 SNMP 或未配置社区串时直接返回，避免无谓的超时等待
+    if not device.snmp_enabled or not device.snmp_community:
+        return {
+            "cpu": {"value": None, "status": "unknown", "message": "未启用 SNMP 或未配置社区串"},
+            "memory": {"value": None, "status": "unknown"},
+            "temperature": {"value": None, "status": "unknown"},
+            "interfaces": {"up": None, "down": None, "total": None},
+            "errors": {"total_errors": None, "has_errors": False},
+            "uplinks": [],
+            "uptime": {"uptime_days": None, "human": None},
+            "snmp_available": False,
+            "device_ip": device.ip,
+            "error": "设备未启用 SNMP 或未配置社区串，请在设备配置中填写"
+        }
 
     service = get_snmp_service()
 
@@ -486,7 +501,7 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
         # 直接调用异步方法
         metrics = await asyncio.wait_for(
             service.get_device_metrics_async(device.ip, community, vendor),
-            timeout=15.0
+            timeout=12.0
         )
         metrics["snmp_available"] = True
         metrics["device_ip"] = device.ip
