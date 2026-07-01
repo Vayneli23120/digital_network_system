@@ -570,6 +570,8 @@ class InterfaceMonitor:
             for si in stale_ifaces:
                 if si.if_index in seen_ifaces:
                     continue
+                old_peer_id = si.peer_device_id
+                old_local_if = si.if_name
                 si.peer_device_id = None
                 si.peer_device_name = None
                 si.peer_ip = None
@@ -577,6 +579,24 @@ class InterfaceMonitor:
                 si.neighbor_source = None
                 si.neighbor_updated_at = datetime.utcnow()
                 cleared += 1
+
+                # 同时清理对端设备上回指本机该端口的那条接口，
+                # 否则邻居数据链路是按“任一端仍持有对端”生成的，单向清理不彻底，
+                # 旧的对端设备再没被重新发现时红线不会消失。
+                if old_peer_id and old_local_if:
+                    reciprocal = db.query(DeviceInterface).filter(
+                        DeviceInterface.device_id == old_peer_id,
+                        DeviceInterface.peer_device_id == device_id,
+                        DeviceInterface.peer_if_name == old_local_if,
+                    ).all()
+                    for ri in reciprocal:
+                        ri.peer_device_id = None
+                        ri.peer_device_name = None
+                        ri.peer_ip = None
+                        ri.peer_if_name = None
+                        ri.neighbor_source = None
+                        ri.neighbor_updated_at = datetime.utcnow()
+                        cleared += 1
 
             db.commit()
             return {
