@@ -239,9 +239,14 @@ class InterfaceMonitor:
         community = dev["community"]
         monitored = set(dev["if_indexes"])
         svc = get_snmp_service()
+        oid_sem = asyncio.Semaphore(20)
 
         async def get(oid, idx):
-            return await svc.snmp_get_async(ip, community, f"{oid}.{idx}", timeout=self.snmp_timeout)
+            async with oid_sem:
+                return await svc.snmp_get_async(ip, community, f"{oid}.{idx}", timeout=self.snmp_timeout)
+
+        async def walk(oid):
+            return await svc.snmp_walk_async(ip, community, oid, timeout=self.snmp_timeout)
 
         async def poll_index(idx):
             # 只采集被监控接口的实例 OID，避免每 30s walk 整张接口表。
@@ -286,9 +291,67 @@ class InterfaceMonitor:
                 "out_errors": _to_int(out_err),
             }
 
+        async def poll_missing_with_walk(missing_indexes):
+            if not missing_indexes:
+                return {}
+
+            oper, admin, in_oct, out_oct, speed, speed_lo, in_err, out_err = await asyncio.gather(
+                walk(OID_IF_OPER_STATUS),
+                walk(OID_IF_ADMIN_STATUS),
+                walk(OID_IF_HC_IN_OCTETS),
+                walk(OID_IF_HC_OUT_OCTETS),
+                walk(OID_IF_HIGH_SPEED),
+                walk(OID_IF_SPEED),
+                walk(OID_IF_IN_ERRORS),
+                walk(OID_IF_OUT_ERRORS),
+            )
+
+            fallback_in = fallback_out = None
+            if not in_oct or not out_oct:
+                fallback_in, fallback_out = await asyncio.gather(
+                    walk(OID_IF_IN_OCTETS) if not in_oct else asyncio.sleep(0, result=None),
+                    walk(OID_IF_OUT_OCTETS) if not out_oct else asyncio.sleep(0, result=None),
+                )
+            if not in_oct and fallback_in:
+                in_oct = fallback_in
+            if not out_oct and fallback_out:
+                out_oct = fallback_out
+
+            fallback_readings = {}
+            for idx in missing_indexes:
+                key = str(idx)
+                spd_mbps = _to_int(speed.get(key))
+                if not spd_mbps:
+                    spd_bps = _to_int(speed_lo.get(key))
+                    spd_mbps = int(spd_bps / 1_000_000) if spd_bps else None
+                reading = {
+                    "oper": oper_status_text(oper.get(key, "")),
+                    "admin": oper_status_text(admin.get(key, "")),
+                    "in_octets": _to_int(in_oct.get(key)),
+                    "out_octets": _to_int(out_oct.get(key)),
+                    "speed_mbps": spd_mbps,
+                    "in_errors": _to_int(in_err.get(key)),
+                    "out_errors": _to_int(out_err.get(key)),
+                }
+                if reading["oper"] != "unknown" or reading["in_octets"] is not None or reading["out_octets"] is not None:
+                    fallback_readings[idx] = reading
+            return fallback_readings
+
         now = datetime.utcnow()
         results = await asyncio.gather(*[poll_index(idx) for idx in monitored])
         readings = {idx: reading for idx, reading in results if reading is not None}
+
+        missing_indexes = [
+            idx for idx in monitored
+            if idx not in readings
+            or readings[idx].get("in_octets") is None
+            or readings[idx].get("out_octets") is None
+        ]
+        if missing_indexes:
+            fallback_readings = await poll_missing_with_walk(missing_indexes)
+            readings.update(fallback_readings)
+            if fallback_readings:
+                logger.debug(f"SNMP {ip} walk fallback filled {len(fallback_readings)}/{len(missing_indexes)} monitored interfaces")
 
         if not readings:
             logger.debug(f"SNMP {ip} monitored interfaces no response, skip")
