@@ -137,8 +137,9 @@ def get_node_positions(db: Session, nodes: List[TopoNode]) -> Dict[int, Tuple[fl
                     # 设备坐标 + 端口锚点偏移
                     base_x = float(device_node.x_percent)
                     base_y = float(device_node.y_percent)
-                    # 锚点偏移（假设设备图标大小约 3% 平面）
-                    icon_size = 3.0
+                    # 锚点偏移需跟随设备模型缩放，否则模型缩放后数据链路仍连到缩放前位置、产生分叉
+                    node_scale = float(device_node.scale) if device_node.scale is not None else 1.0
+                    icon_size = 3.0 * node_scale
                     offset_x = (port.anchor_x - 0.5) * icon_size
                     offset_y = (port.anchor_y - 0.5) * icon_size
                     positions[node.id] = (base_x + offset_x, base_y + offset_y)

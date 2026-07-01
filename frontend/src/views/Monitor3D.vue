@@ -1733,6 +1733,24 @@ async function saveTopoEdgeWaypoints() {
   }
 }
 
+// 计算拓扑节点的渲染坐标：port 节点需叠加「随缩放」的锚点偏移，
+// 与端口锚点球、后端数据链路寻路使用同一公式，避免分支光缆/数据链路在设备端分叉
+function getTopoNodeRenderPos(node) {
+  if (node && node.node_kind === 'port' && node.port_id) {
+    const port = devicePorts.value.find(p => p.id === node.port_id)
+    const devNode = nodes.value.find(n => n.device_id === (node.device_id || (port && port.device_id)))
+    if (port && devNode) {
+      const scale = Number(devNode.scale) || 1
+      const iconSize = 3.0 * scale
+      return {
+        x: parseFloat(devNode.x_percent) + (port.anchor_x - 0.5) * iconSize,
+        y: parseFloat(devNode.y_percent) + (port.anchor_y - 0.5) * iconSize,
+      }
+    }
+  }
+  return { x: parseFloat(node.x_percent), y: parseFloat(node.y_percent) }
+}
+
 // 构建 TopoEdge 渲染
 function buildTopoEdges() {
   const { scene } = ctx.value
@@ -1754,10 +1772,13 @@ function buildTopoEdges() {
     const bNode = topoNodes.value.find(n => n.id === edge.b_node_id)
     if (!aNode || !bNode) return
 
-    const startX = parseFloat(aNode.x_percent)
-    const startY = parseFloat(aNode.y_percent)
-    const endX = parseFloat(bNode.x_percent)
-    const endY = parseFloat(bNode.y_percent)
+    // port 端点叠加随缩放的锚点偏移，使分支光缆终点与锚点球/数据链路一致
+    const aPos = getTopoNodeRenderPos(aNode)
+    const bPos = getTopoNodeRenderPos(bNode)
+    const startX = aPos.x
+    const startY = aPos.y
+    const endX = bPos.x
+    const endY = bPos.y
 
     // 解析拐点
     let waypoints = []
@@ -2276,6 +2297,20 @@ async function updateDeviceScale(newScale) {
     // 重建端口锚点，使其偏移跟随新缩放（避免锚点脱离模型）
     if (isEditMode.value) {
       buildPortAnchors()
+    }
+
+    // 分支光缆终点与数据链路寻路都依赖锚点偏移（随缩放变化），一并刷新避免分叉
+    buildTopoEdges()
+    try {
+      const res = await axios.get(`/api/floor-plans/${currentPlanId.value}/device-paths`)
+      devicePaths.value = {
+        ...(res.data?.paths || {}),
+        ...(res.data?.neighbor_paths || {}),
+      }
+      disposeGroup('data-link-paths')
+      buildDataLinkPaths()
+    } catch (e) {
+      // 数据链路刷新失败不阻断缩放操作
     }
   } catch (e) {
     ElMessage.error(t('msgUpdateFailed'))
