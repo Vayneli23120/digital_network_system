@@ -5366,6 +5366,7 @@ async function loadTrafficHeat() {
     const items = res.data?.items || []
     const byDevice = new Map()
     items.forEach(item => {
+      if (!item.is_uplink) return
       if (!byDevice.has(item.device_id)) byDevice.set(item.device_id, item)
     })
     trafficHeatItems.value = items
@@ -5399,6 +5400,16 @@ function stopTrafficHeatPoll() {
 }
 
 function getTrafficHeatForPath(deviceId, pathData = {}) {
+  const pathDeviceId = Number(pathData?.device_id || deviceId)
+  const pathIfIndex = pathData?.if_index != null ? Number(pathData.if_index) : null
+
+  if (pathIfIndex != null) {
+    const exact = trafficHeatItems.value.find(item =>
+      Number(item.device_id) === pathDeviceId && Number(item.if_index) === pathIfIndex
+    )
+    if (exact) return exact
+  }
+
   if (trafficHeatByDevice.value.has(deviceId)) return trafficHeatByDevice.value.get(deviceId)
   if (pathData.peer_device_id && trafficHeatByDevice.value.has(pathData.peer_device_id)) {
     return trafficHeatByDevice.value.get(pathData.peer_device_id)
