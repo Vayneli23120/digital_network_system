@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.config import get_config
-from app.shared.models import Device, DeviceNode, FaultRecord
+from app.shared.models import Device, DeviceInterface, DeviceNode, FaultRecord
 from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates, build_shared_path_edges
 from app.services.monitor3d_traffic_heat import build_traffic_heat_items
 from .monitor_service import (
@@ -527,6 +527,67 @@ async def get_monitor3d_traffic_heat(plan_id: Optional[int] = None, db: Session 
             summary[item["level"]] += 1
 
     return {"items": items, "summary": summary, "plan_id": plan_id}
+
+
+@router.get("/monitor3d/snmp-health")
+async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session = Depends(get_db)):
+    """获取 3D 大屏 SNMP 采集健康状态（仅 monitored 接口）。"""
+    plan_device_ids = None
+    if plan_id:
+        plan_device_ids = [
+            row[0]
+            for row in db.query(DeviceNode.device_id).filter(DeviceNode.floor_plan_id == plan_id).all()
+        ]
+
+    query = db.query(DeviceInterface, Device).join(Device, Device.id == DeviceInterface.device_id).filter(
+        DeviceInterface.monitored == True,  # noqa: E712
+    )
+    if plan_device_ids is not None:
+        if not plan_device_ids:
+            return {"items": [], "summary": {}, "plan_id": plan_id}
+        query = query.filter(DeviceInterface.device_id.in_(plan_device_ids))
+
+    now = datetime.utcnow()
+    summary = {"fresh": 0, "lagging": 0, "stale": 0, "missing": 0, "down": 0, "total": 0}
+    items = []
+    for iface, device in query.all():
+        if iface.oper_status == "down":
+            status = "down"
+        elif iface.last_sample_at is None:
+            status = "missing"
+        else:
+            age_seconds = int((now - iface.last_sample_at).total_seconds())
+            if age_seconds > 600:
+                status = "stale"
+            elif age_seconds > 90:
+                status = "lagging"
+            else:
+                status = "fresh"
+
+        age_seconds = int((now - iface.last_sample_at).total_seconds()) if iface.last_sample_at else None
+        summary[status] += 1
+        summary["total"] += 1
+        items.append({
+            "device_id": iface.device_id,
+            "device_name": device.name,
+            "device_ip": device.ip,
+            "if_index": iface.if_index,
+            "if_name": iface.if_name,
+            "is_uplink": bool(iface.is_uplink),
+            "oper_status": iface.oper_status,
+            "admin_status": iface.admin_status,
+            "last_sample_at": iface.last_sample_at.isoformat() if iface.last_sample_at else None,
+            "age_seconds": age_seconds,
+            "status": status,
+            "in_util": iface.last_in_util,
+            "out_util": iface.last_out_util,
+            "peer_device_name": iface.peer_device_name,
+            "peer_if_name": iface.peer_if_name,
+        })
+
+    status_order = {"stale": 0, "missing": 1, "lagging": 2, "down": 3, "fresh": 4}
+    items.sort(key=lambda item: (status_order.get(item["status"], 9), -(item["age_seconds"] or 0)))
+    return {"items": items, "summary": summary, "plan_id": plan_id, "now": now.isoformat()}
 
 
 # ============ 图模型拓扑 API（新设计） ============

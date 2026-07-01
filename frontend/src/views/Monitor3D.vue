@@ -22,6 +22,44 @@
       </div>
     </div>
 
+    <!-- SNMP 采集健康（画布左下角，热力图例上方） -->
+    <div class="snmp-health-panel" :class="{ collapsed: !showSnmpHealth, dark: isDark }">
+      <div class="snmp-health-head" @click="showSnmpHealth = !showSnmpHealth">
+        <span class="snmp-health-title">SNMP 采集健康</span>
+        <span class="snmp-health-summary">
+          {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} 正常
+        </span>
+        <el-icon class="snmp-health-toggle"><ArrowDown v-if="showSnmpHealth" /><ArrowUp v-else /></el-icon>
+      </div>
+      <div v-show="showSnmpHealth" class="snmp-health-body">
+        <div class="snmp-health-kpis">
+          <span class="fresh">正常 {{ snmpHealthSummary.fresh || 0 }}</span>
+          <span class="lagging">延迟 {{ snmpHealthSummary.lagging || 0 }}</span>
+          <span class="stale">过期 {{ snmpHealthSummary.stale || 0 }}</span>
+          <span class="missing">无样本 {{ snmpHealthSummary.missing || 0 }}</span>
+        </div>
+        <div v-if="snmpHealthItems.length" class="snmp-health-list">
+          <div
+            v-for="item in snmpHealthItems.slice(0, 6)"
+            :key="`${item.device_id}-${item.if_index}`"
+            class="snmp-health-row"
+            :class="item.status"
+          >
+            <div class="snmp-health-main">
+              <span class="snmp-health-device">{{ item.device_name }}</span>
+              <span class="snmp-health-if">{{ item.if_name || ('ifIndex ' + item.if_index) }}</span>
+            </div>
+            <div class="snmp-health-meta">
+              <span>{{ snmpHealthStatusLabel(item.status) }}</span>
+              <span>{{ formatSnmpAge(item.age_seconds) }}</span>
+            </div>
+          </div>
+        </div>
+        <div v-else class="snmp-health-empty">暂无被监控接口</div>
+        <button class="snmp-health-refresh" @click.stop="refreshTrafficHeatLayer">刷新采集状态</button>
+      </div>
+    </div>
+
     <!-- 画布右下角操作按钮 -->
     <div class="canvas-tools">
       <!-- 编辑模式状态提示 -->
@@ -679,6 +717,9 @@ const trafficHeatByDevice = ref(new Map())
 const trafficHeatSummary = ref({})
 let trafficHeatPollTimer = null
 const showHeatLegend = ref(true)
+const showSnmpHealth = ref(true)
+const snmpHealthItems = ref([])
+const snmpHealthSummary = ref({})
 const heatLegendLevels = [
   { level: 'critical', color: '#f97316', label: '拥塞', range: '≥80%' },
   { level: 'high', color: '#facc15', label: '偏高', range: '60-80%' },
@@ -5381,8 +5422,22 @@ async function loadTrafficHeat() {
   }
 }
 
+async function loadSnmpHealth() {
+  try {
+    const res = await axios.get('/api/monitor3d/snmp-health', {
+      params: currentPlanId.value ? { plan_id: currentPlanId.value } : {},
+    })
+    snmpHealthItems.value = res.data?.items || []
+    snmpHealthSummary.value = res.data?.summary || {}
+  } catch (e) {
+    console.warn('加载 SNMP 采集健康失败:', e)
+    snmpHealthItems.value = []
+    snmpHealthSummary.value = {}
+  }
+}
+
 async function refreshTrafficHeatLayer() {
-  await loadTrafficHeat()
+  await Promise.all([loadTrafficHeat(), loadSnmpHealth()])
   if (!ctx.value.scene || !devicePaths.value || Object.keys(devicePaths.value).length === 0) return
   disposeGroup('data-link-paths')
   buildDataLinkPaths()
@@ -5416,6 +5471,24 @@ function getTrafficHeatForPath(deviceId, pathData = {}) {
     return trafficHeatByDevice.value.get(pathData.peer_device_id)
   }
   return null
+}
+
+function snmpHealthStatusLabel(status) {
+  return {
+    fresh: '正常',
+    lagging: '延迟',
+    stale: '过期',
+    missing: '无样本',
+    down: '接口中断',
+  }[status] || '未知'
+}
+
+function formatSnmpAge(seconds) {
+  if (seconds == null) return '-'
+  if (seconds < 60) return `${seconds}s`
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes}min`
+  return `${Math.floor(minutes / 60)}h${minutes % 60}m`
 }
 
 function setEventWindow(windowValue) {
@@ -5906,6 +5979,7 @@ onMounted(async () => {
   // 使用新 topo 数据渲染光纤拓扑
   buildTopoEdges()
   buildDataLinkPaths()
+  loadSnmpHealth()
 
   // 离线设备红色光晕
   buildOfflineGlow()
@@ -6263,6 +6337,125 @@ onBeforeUnmount(() => {
   font-size: 10px;
   line-height: 1.4;
   color: #64748b;
+}
+
+.snmp-health-panel {
+  position: absolute;
+  left: 16px;
+  bottom: 186px;
+  z-index: 6;
+  width: 260px;
+  background: rgba(15, 23, 42, 0.86);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 8px;
+  color: #e2e8f0;
+  font-size: 12px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+}
+.snmp-health-panel.collapsed {
+  width: 260px;
+}
+.snmp-health-head {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  cursor: pointer;
+  user-select: none;
+}
+.snmp-health-title {
+  font-weight: 600;
+  color: #93c5fd;
+}
+.snmp-health-summary {
+  color: #cbd5e1;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.snmp-health-toggle {
+  font-size: 13px;
+  opacity: 0.8;
+}
+.snmp-health-body {
+  padding: 4px 10px 10px;
+}
+.snmp-health-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+  margin-bottom: 8px;
+}
+.snmp-health-kpis span {
+  border-radius: 4px;
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 10px;
+  background: rgba(30, 41, 59, 0.72);
+  white-space: nowrap;
+}
+.snmp-health-kpis .fresh { color: #86efac; }
+.snmp-health-kpis .lagging { color: #fde68a; }
+.snmp-health-kpis .stale { color: #fdba74; }
+.snmp-health-kpis .missing { color: #c4b5fd; }
+.snmp-health-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 176px;
+  overflow: auto;
+}
+.snmp-health-row {
+  border-left: 3px solid #64748b;
+  background: rgba(30, 41, 59, 0.62);
+  border-radius: 5px;
+  padding: 5px 6px;
+}
+.snmp-health-row.fresh { border-left-color: #22c55e; }
+.snmp-health-row.lagging { border-left-color: #facc15; }
+.snmp-health-row.stale { border-left-color: #f97316; }
+.snmp-health-row.missing { border-left-color: #8b5cf6; }
+.snmp-health-row.down { border-left-color: #ef4444; }
+.snmp-health-main,
+.snmp-health-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+.snmp-health-device {
+  max-width: 132px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #e2e8f0;
+}
+.snmp-health-if,
+.snmp-health-meta {
+  color: #94a3b8;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.snmp-health-empty {
+  color: #94a3b8;
+  font-size: 11px;
+  padding: 8px 0;
+  text-align: center;
+}
+.snmp-health-refresh {
+  width: 100%;
+  margin-top: 8px;
+  border: 1px solid rgba(147, 197, 253, 0.28);
+  border-radius: 5px;
+  background: rgba(30, 41, 59, 0.76);
+  color: #bfdbfe;
+  font-size: 11px;
+  padding: 5px 8px;
+  cursor: pointer;
+}
+.snmp-health-refresh:hover {
+  background: rgba(37, 99, 235, 0.24);
 }
 
 .panel-header h3 {
