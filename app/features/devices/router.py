@@ -1068,6 +1068,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
 
     results = []
     total_found = total_matched = total_uplinks = 0
+    total_cleared = 0
     for dev in devices:
         res = await asyncio.to_thread(monitor.discover_neighbors, dev.id)
         results.append({
@@ -1077,12 +1078,14 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
             "found": res.get("found", 0),
             "matched": res.get("matched", 0),
             "uplinks_marked": res.get("uplinks_marked", 0),
+            "cleared": res.get("cleared", 0),
             "error": res.get("error"),
         })
         if res.get("ok"):
             total_found += res.get("found", 0)
             total_matched += res.get("matched", 0)
             total_uplinks += res.get("uplinks_marked", 0)
+            total_cleared += res.get("cleared", 0)
 
     return {
         "ok": True,
@@ -1090,6 +1093,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
         "total_found": total_found,
         "total_matched": total_matched,
         "total_uplinks_marked": total_uplinks,
+        "total_cleared": total_cleared,
         "results": results,
     }
 

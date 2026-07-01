@@ -558,6 +558,26 @@ class InterfaceMonitor:
                     "is_uplink": is_uplink,
                 })
 
+            # 清理陈旧对端：线缆被拔掉/改接后，旧邻居不再出现在 CDP/LLDP 结果里，
+            # 但接口上原先写入的 peer_* 不会自动消失，会导致数据链路仍按旧拓扑
+            # 画到旧对端（并误判为断开、显示红色）。这里把本次未再发现邻居、
+            # 但之前由 CDP/LLDP 写入过对端的接口清空。
+            cleared = 0
+            stale_ifaces = db.query(DeviceInterface).filter(
+                DeviceInterface.device_id == device_id,
+                DeviceInterface.neighbor_source.isnot(None),
+            ).all()
+            for si in stale_ifaces:
+                if si.if_index in seen_ifaces:
+                    continue
+                si.peer_device_id = None
+                si.peer_device_name = None
+                si.peer_ip = None
+                si.peer_if_name = None
+                si.neighbor_source = None
+                si.neighbor_updated_at = datetime.utcnow()
+                cleared += 1
+
             db.commit()
             return {
                 "ok": True,
@@ -565,6 +585,7 @@ class InterfaceMonitor:
                 "found": len(neighbors),
                 "matched": matched,
                 "uplinks_marked": uplinks_marked,
+                "cleared": cleared,
             }
         except Exception as e:
             db.rollback()
