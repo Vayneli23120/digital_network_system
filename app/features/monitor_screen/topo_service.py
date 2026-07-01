@@ -541,11 +541,46 @@ def create_branch_cable(db: Session, plan_id: int, data) -> Dict[str, Any]:
         raise ValueError("分支点不存在")
 
     # 找设备的 port TopoNode
-    device_port_node = db.query(TopoNode).join(DevicePort).filter(
-        TopoNode.floor_plan_id == plan_id,
-        TopoNode.node_kind == "port",
-        DevicePort.device_id == data.to_device_id
-    ).first()
+    to_port_id = getattr(data, "to_port_id", None)
+    device_port_node = None
+
+    if to_port_id is not None:
+        # 指定了具体端口锚点：优先复用该端口的 port node，避免链路与光缆连到不同锚点而分叉
+        port = db.query(DevicePort).filter(
+            DevicePort.id == to_port_id,
+            DevicePort.device_id == data.to_device_id,
+        ).first()
+        if not port:
+            raise ValueError("指定的端口不存在")
+
+        device_port_node = db.query(TopoNode).filter(
+            TopoNode.floor_plan_id == plan_id,
+            TopoNode.node_kind == "port",
+            TopoNode.port_id == port.id,
+        ).first()
+
+        if not device_port_node:
+            device_node = db.query(DeviceNode).filter(
+                DeviceNode.device_id == data.to_device_id,
+                DeviceNode.floor_plan_id == plan_id
+            ).first()
+            if not device_node:
+                raise ValueError("设备节点不存在")
+            device_port_node = TopoNode(
+                floor_plan_id=plan_id,
+                node_kind="port",
+                port_id=port.id,
+                x_percent=device_node.x_percent,
+                y_percent=device_node.y_percent,
+            )
+            db.add(device_port_node)
+            db.flush()
+    else:
+        device_port_node = db.query(TopoNode).join(DevicePort).filter(
+            TopoNode.floor_plan_id == plan_id,
+            TopoNode.node_kind == "port",
+            DevicePort.device_id == data.to_device_id
+        ).first()
 
     if not device_port_node:
         # 如果设备没有 port node，创建一个

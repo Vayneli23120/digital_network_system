@@ -1011,18 +1011,23 @@ function getBranchLinksForTopoNode(nodeId) {
 function startConnectFromTopoBranch(bp) {
   connectFromBranchMode.value = true
   selectedTopoBranchPoint.value = bp
-  ElMessage.info(t('clickDeviceToConnect'))
+  ElMessage.info(t('clickAnchorToConnect'))
 }
 
 // 从 topo 分支点连接设备
-async function connectDeviceFromTopoBranch(deviceId) {
+async function connectDeviceFromTopoBranch(deviceId, portId = null) {
   if (!selectedTopoBranchPoint.value) return
 
   try {
-    await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/branch-cable`, {
+    const payload = {
       branch_point_id: selectedTopoBranchPoint.value.id,
       to_device_id: deviceId,
-    })
+    }
+    // 端口锚点 id 可能是字符串占位符（auto-*），仅传递真实数字端口 id
+    if (typeof portId === 'number') {
+      payload.to_port_id = portId
+    }
+    await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/branch-cable`, payload)
     ElMessage.success(t('msgSaveSuccess'))
     await loadFiberData()
 
@@ -3583,6 +3588,16 @@ function onCanvasMouseDown(e) {
 
   // 处理从分支点连接设备模式
   if (connectFromBranchMode.value) {
+    // 优先检测是否点中了端口锚点 → 连到该具体锚点，避免链路与光缆分叉
+    if (selectedTopoBranchPoint.value && ctx.value.portAnchors) {
+      const anchorHits = raycaster.intersectObjects(ctx.value.portAnchors.children, false)
+      if (anchorHits.length > 0 && anchorHits[0].object.userData.portAnchor) {
+        const anchor = anchorHits[0].object.userData.portAnchor
+        connectDeviceFromTopoBranch(anchor.deviceId, anchor.portId)
+        return
+      }
+    }
+
     const hits = raycaster.intersectObjects(deviceGroup?.children || [], true)
     if (hits.length > 0) {
       let model = hits[0].object

@@ -563,6 +563,7 @@ class BranchCableCreate(BaseModel):
     """创建分支光缆"""
     branch_point_id: int
     to_device_id: int
+    to_port_id: Optional[int] = None  # 指定连接的端口锚点，避免链路与光缆分叉
     name: Optional[str] = None
     cable_no: Optional[str] = None
     waypoints: Optional[List[Dict[str, float]]] = None
