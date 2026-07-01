@@ -871,6 +871,7 @@ function isDeviceOnline(d) {
 // 标签页和编辑模式
 const sidebarTab = ref('topology')
 const isEditMode = ref(false)
+const selectedTopoEdgeId = ref(null)  // 当前选中的拓扑线（仅其拐点手柄可见）
 const isDark = ref(document.documentElement.classList.contains('dark'))
 
 // 光纤主干交互状态
@@ -913,6 +914,7 @@ const newLinkType = ref('fiber')
 // 编辑模式切换
 function toggleEditMode() {
   isEditMode.value = !isEditMode.value
+  selectedTopoEdgeId.value = null  // 切换模式时清除拓扑线选中
   if (isEditMode.value) {
     ElMessage.info(t('monitorEditMode') + ' - ' + t('clickDeviceHint'))
     // 进入编辑模式时加载拓扑数据并显示端口锚点
@@ -1783,10 +1785,14 @@ function buildTopoEdges() {
     if (edge.cable_type === 'trunk_segment') color = 0x8b5cf6  // 主干段紫色
     if (edge.status === 'down') color = 0xff4d4f  // 断开红色
 
+    // 选中的线：保留类型颜色，但加粗 + 不透明，便于识别
+    const isSelectedEdge = isEditMode.value && selectedTopoEdgeId.value === edge.id
+    const thisEdgeRadius = isSelectedEdge ? edgeRadius * 1.8 : edgeRadius
+
     const mat = new THREE.MeshBasicMaterial({
       color,
       transparent: true,
-      opacity: 0.8,
+      opacity: isSelectedEdge ? 1.0 : 0.8,
     })
 
     // 绘制每段
@@ -1804,7 +1810,7 @@ function buildTopoEdges() {
 
       const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5)
 
-      const cylinderGeo = new THREE.CylinderGeometry(edgeRadius, edgeRadius, length, 8)
+      const cylinderGeo = new THREE.CylinderGeometry(thisEdgeRadius, thisEdgeRadius, length, 8)
       const cylinder = new THREE.Mesh(cylinderGeo, mat)
       cylinder.position.copy(midPoint)
 
@@ -1829,8 +1835,8 @@ function buildTopoEdges() {
       edgeGroup.add(cylinder)
     }
 
-    // 添加拐点球（白色，可拖拽）
-    if (waypoints.length > 0 && isEditMode.value) {
+    // 添加拐点球（白色，可拖拽）—— 仅当该线被选中时显示，避免多线重叠时手柄难以操控
+    if (waypoints.length > 0 && isEditMode.value && selectedTopoEdgeId.value === edge.id) {
       waypoints.forEach((wp, idx) => {
         const wpWorld = percentToWorld(wp.x, wp.y, edgeHeight)
         const sphereGeo = new THREE.SphereGeometry(wpRadius, 16, 16)
@@ -3733,11 +3739,15 @@ function onCanvasMouseDown(e) {
         const edgeData = cylinder.userData.topoEdge
         const edge = topoEdges.value.find(e => e.id === edgeData.id)
         if (edge) {
-          // 双击打开拐点编辑对话框
-          if (isEditMode.value) {
-            openTopoEdgeWaypointDialog(edge)
+          // 第一次点击：选中该线，仅显示其拐点手柄（避免多线重叠误操作）
+          if (selectedTopoEdgeId.value !== edge.id) {
+            selectedTopoEdgeId.value = edge.id
+            buildTopoEdges()
             return
           }
+          // 再次点击已选中的线：打开拐点编辑对话框
+          openTopoEdgeWaypointDialog(edge)
+          return
         }
       }
     }
@@ -3865,6 +3875,10 @@ function onCanvasMouseDown(e) {
       renderer.domElement.addEventListener('mousemove', onDragMove)
       renderer.domElement.addEventListener('mouseup', onDragEnd)
     }
+  } else if (selectedTopoEdgeId.value != null) {
+    // 点击空白处：取消选中拓扑线，隐藏拐点手柄
+    selectedTopoEdgeId.value = null
+    buildTopoEdges()
   }
 }
 
