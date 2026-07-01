@@ -119,11 +119,13 @@ class SNMPService:
         try:
             wrapper = await self._create_wrapper(ip, community)
 
-            # 收集 walk 结果，限制最多收集 100 个结果避免无限循环
+            # 收集 walk 结果，限制最多收集 500 个结果避免无限循环。
+            # 接口表超过 100 行时，旧上限会漏掉高 ifIndex 接口，导致监控样本长期不刷新。
             count = 0
-            max_items = 100
+            max_items = 500
 
-            try:
+            async def collect():
+                nonlocal count
                 async for item in wrapper.walk(oid):
                     if count >= max_items:
                         break
@@ -143,6 +145,9 @@ class SNMPService:
                             except (TypeError, ValueError):
                                 result[suffix] = str(value)
                         count += 1
+
+            try:
+                await asyncio.wait_for(collect(), timeout=timeout)
             except asyncio.TimeoutError:
                 logger.debug(f"SNMP walk timeout {ip}/{oid} after {timeout}s")
                 # 返回已收集的部分结果

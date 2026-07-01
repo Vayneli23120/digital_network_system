@@ -243,20 +243,30 @@ class InterfaceMonitor:
         async def walk(oid):
             return await svc.snmp_walk_async(ip, community, oid, timeout=self.snmp_timeout)
 
-        oper = await walk(OID_IF_OPER_STATUS)
-        admin = await walk(OID_IF_ADMIN_STATUS)
-        in_oct = await walk(OID_IF_HC_IN_OCTETS)
-        out_oct = await walk(OID_IF_HC_OUT_OCTETS)
-        speed = await walk(OID_IF_HIGH_SPEED)
-        in_err = await walk(OID_IF_IN_ERRORS)
-        out_err = await walk(OID_IF_OUT_ERRORS)
+        # 独立表并行 walk：慢设备单个 OID 超时时，不再把 7~10 个 OID 的超时串起来。
+        # 这能显著降低一轮采样耗时，避免 last_sample_at 因轮询积压而过期。
+        oper, admin, in_oct, out_oct, speed, speed_lo, in_err, out_err = await asyncio.gather(
+            walk(OID_IF_OPER_STATUS),
+            walk(OID_IF_ADMIN_STATUS),
+            walk(OID_IF_HC_IN_OCTETS),
+            walk(OID_IF_HC_OUT_OCTETS),
+            walk(OID_IF_HIGH_SPEED),
+            walk(OID_IF_SPEED),
+            walk(OID_IF_IN_ERRORS),
+            walk(OID_IF_OUT_ERRORS),
+        )
 
         # 虚拟设备/老镜像常无 64 位计数器或 ifHighSpeed，按需回退到 32 位
-        if not in_oct:
-            in_oct = await walk(OID_IF_IN_OCTETS)
-        if not out_oct:
-            out_oct = await walk(OID_IF_OUT_OCTETS)
-        speed_lo = await walk(OID_IF_SPEED)
+        fallback_in = fallback_out = None
+        if not in_oct or not out_oct:
+            fallback_in, fallback_out = await asyncio.gather(
+                walk(OID_IF_IN_OCTETS) if not in_oct else asyncio.sleep(0, result=None),
+                walk(OID_IF_OUT_OCTETS) if not out_oct else asyncio.sleep(0, result=None),
+            )
+        if not in_oct and fallback_in:
+            in_oct = fallback_in
+        if not out_oct and fallback_out:
+            out_oct = fallback_out
 
         if not oper and not in_oct:
             logger.debug(f"SNMP {ip} 无响应，跳过")

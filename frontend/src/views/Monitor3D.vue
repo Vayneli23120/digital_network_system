@@ -677,6 +677,7 @@ const eventWindow = ref('1h')
 const trafficHeatItems = ref([])
 const trafficHeatByDevice = ref(new Map())
 const trafficHeatSummary = ref({})
+let trafficHeatPollTimer = null
 const showHeatLegend = ref(true)
 const heatLegendLevels = [
   { level: 'critical', color: '#f97316', label: '拥塞', range: '≥80%' },
@@ -5378,6 +5379,25 @@ async function loadTrafficHeat() {
   }
 }
 
+async function refreshTrafficHeatLayer() {
+  await loadTrafficHeat()
+  if (!ctx.value.scene || !devicePaths.value || Object.keys(devicePaths.value).length === 0) return
+  disposeGroup('data-link-paths')
+  buildDataLinkPaths()
+}
+
+function startTrafficHeatPoll() {
+  stopTrafficHeatPoll()
+  trafficHeatPollTimer = setInterval(refreshTrafficHeatLayer, 60_000)
+}
+
+function stopTrafficHeatPoll() {
+  if (trafficHeatPollTimer) {
+    clearInterval(trafficHeatPollTimer)
+    trafficHeatPollTimer = null
+  }
+}
+
 function getTrafficHeatForPath(deviceId, pathData = {}) {
   if (trafficHeatByDevice.value.has(deviceId)) return trafficHeatByDevice.value.get(deviceId)
   if (pathData.peer_device_id && trafficHeatByDevice.value.has(pathData.peer_device_id)) {
@@ -5887,6 +5907,9 @@ onMounted(async () => {
   // 启动对账轮询（WS 安全网，自愈）
   startReachabilityPoll()
 
+  // 定时刷新流量热力图，避免画布保留旧的高负载颜色/线宽
+  startTrafficHeatPoll()
+
   // 全屏事件监听
   document.addEventListener('fullscreenchange', onFullscreenChange)
   document.addEventListener('webkitfullscreenchange', onFullscreenChange)
@@ -5903,6 +5926,9 @@ onBeforeUnmount(() => {
 
   // 停止对账轮询
   stopReachabilityPoll()
+
+  // 停止流量热力图刷新
+  stopTrafficHeatPoll()
 
   // 断开设备状态 WebSocket
   disconnectDeviceStatusWs()
