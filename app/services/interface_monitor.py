@@ -151,7 +151,7 @@ class InterfaceMonitor:
         self._running = False
         self.poll_interval = 60          # 轮询周期（秒）
         self.max_concurrency = 20        # 并发设备数
-        self.snmp_timeout = 3
+        self.snmp_timeout = 8
         self._db_lock = threading.Lock()
 
     # ===== 生命周期 =====
