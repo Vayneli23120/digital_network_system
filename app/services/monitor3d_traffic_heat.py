@@ -6,6 +6,7 @@ from typing import Iterable, Optional
 from sqlalchemy.orm import Session
 
 from app.shared.models import Device, DeviceInterface
+from app.shared.time_utils import utc_iso
 
 
 STALE_AFTER = timedelta(minutes=10)
@@ -117,7 +118,7 @@ def build_traffic_heat_items(db: Session, plan_device_ids: Optional[Iterable[int
             "peer_if_name": iface.peer_if_name,
             "is_uplink": bool(iface.is_uplink),
             "oper_status": iface.oper_status,
-            "last_sample_at": iface.last_sample_at.isoformat() if iface.last_sample_at else None,
+            "last_sample_at": utc_iso(iface.last_sample_at),
             "in_bps": iface.last_in_bps,
             "out_bps": iface.last_out_bps,
             "in_util": iface.last_in_util,

@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.shared.database import get_db
 from app.shared.config import get_config
 from app.shared.models import Device, DeviceInterface, DeviceNode, FaultRecord
+from app.shared.time_utils import utc_iso
 from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates, build_shared_path_edges
 from app.services.monitor3d_traffic_heat import build_traffic_heat_items
 from .monitor_service import (
@@ -576,7 +577,7 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
             "is_uplink": bool(iface.is_uplink),
             "oper_status": iface.oper_status,
             "admin_status": iface.admin_status,
-            "last_sample_at": iface.last_sample_at.isoformat() if iface.last_sample_at else None,
+            "last_sample_at": utc_iso(iface.last_sample_at),
             "age_seconds": age_seconds,
             "status": status,
             "in_util": iface.last_in_util,
@@ -587,7 +588,7 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
 
     status_order = {"stale": 0, "missing": 1, "lagging": 2, "down": 3, "fresh": 4}
     items.sort(key=lambda item: (status_order.get(item["status"], 9), -(item["age_seconds"] or 0)))
-    return {"items": items, "summary": summary, "plan_id": plan_id, "now": now.isoformat()}
+    return {"items": items, "summary": summary, "plan_id": plan_id, "now": utc_iso(now)}
 
 
 # ============ 图模型拓扑 API（新设计） ============

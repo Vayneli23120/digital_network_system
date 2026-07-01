@@ -10,6 +10,7 @@ import time
 
 from app.shared.database import get_db
 from app.shared.models import BackupRecord, Device, CredentialGroup, LogEntry
+from app.shared.time_utils import utc_iso
 from .netmiko_service import backup_device_config
 from app.features.credentials.credential_service import decrypt_password
 
@@ -243,7 +244,7 @@ async def get_backup_content(backup_id: int):
     return {
         "backup_id": backup_id,
         "device_name": backup.device_name,
-        "backup_time": backup.backup_time.isoformat(),
+        "backup_time": utc_iso(backup.backup_time),
         "content": content
     }
 

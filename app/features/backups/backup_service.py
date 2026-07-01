@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.shared.models import BackupRecord
 from app.shared.exceptions import ResourceNotFoundException
+from app.shared.time_utils import utc_iso
 
 
 def list_backups(db: Session, device_id: Optional[int] = None, skip: int = 0, limit: int = 50) -> Dict[str, Any]:
@@ -41,7 +42,7 @@ def list_backups(db: Session, device_id: Optional[int] = None, skip: int = 0, li
                 "file_size": b.file_size,
                 "md5_hash": b.md5_hash,
                 "has_change": b.has_change,
-                "backup_time": b.backup_time.isoformat() if b.backup_time else None,
+                "backup_time": utc_iso(b.backup_time),
                 "operator": b.operator,
             }
             for b in backups

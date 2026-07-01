@@ -56,6 +56,7 @@
           </div>
         </div>
         <div v-else class="snmp-health-empty">暂无被监控接口</div>
+        <div class="snmp-health-server-time">服务端时间 {{ formatSnmpServerTime(snmpHealthNow) }}</div>
         <button class="snmp-health-refresh" @click.stop="refreshTrafficHeatLayer">刷新采集状态</button>
       </div>
     </div>
@@ -720,6 +721,7 @@ const showHeatLegend = ref(true)
 const showSnmpHealth = ref(true)
 const snmpHealthItems = ref([])
 const snmpHealthSummary = ref({})
+const snmpHealthNow = ref(null)
 const heatLegendLevels = [
   { level: 'critical', color: '#f97316', label: '拥塞', range: '≥80%' },
   { level: 'high', color: '#facc15', label: '偏高', range: '60-80%' },
@@ -5429,10 +5431,12 @@ async function loadSnmpHealth() {
     })
     snmpHealthItems.value = res.data?.items || []
     snmpHealthSummary.value = res.data?.summary || {}
+    snmpHealthNow.value = res.data?.now || null
   } catch (e) {
     console.warn('加载 SNMP 采集健康失败:', e)
     snmpHealthItems.value = []
     snmpHealthSummary.value = {}
+    snmpHealthNow.value = null
   }
 }
 
@@ -5489,6 +5493,13 @@ function formatSnmpAge(seconds) {
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes}min`
   return `${Math.floor(minutes / 60)}h${minutes % 60}m`
+}
+
+function formatSnmpServerTime(value) {
+  if (!value) return '-'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleString('zh-CN', { hour12: false })
 }
 
 function setEventWindow(windowValue) {
@@ -6441,6 +6452,13 @@ onBeforeUnmount(() => {
   color: #94a3b8;
   font-size: 11px;
   padding: 8px 0;
+  text-align: center;
+}
+.snmp-health-server-time {
+  margin-top: 8px;
+  color: #94a3b8;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
   text-align: center;
 }
 .snmp-health-refresh {
