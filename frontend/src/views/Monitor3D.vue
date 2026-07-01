@@ -684,7 +684,7 @@ const heatLegendLevels = [
   { level: 'normal', color: '#22d3ee', label: '正常', range: '20-60%' },
   { level: 'low', color: '#22c55e', label: '空闲', range: '<20%' },
   { level: 'down', color: '#ef4444', label: '中断', range: 'link down' },
-  { level: 'stale', color: '#f59e0b', label: '数据过期', range: '>5min' },
+  { level: 'stale', color: '#64748b', label: '数据过期', range: '>10min' },
 ]
 const faultActionLoading = ref(false)
 const floorPlans = ref([])

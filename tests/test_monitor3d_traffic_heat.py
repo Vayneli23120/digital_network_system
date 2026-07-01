@@ -35,7 +35,7 @@ def test_classify_traffic_heat_down_overrides_utilization():
 
 def test_classify_traffic_heat_marks_stale_samples():
     now = datetime.utcnow()
-    heat = classify_traffic_heat(90, 5, "up", now - timedelta(minutes=6), now)
+    heat = classify_traffic_heat(90, 5, "up", now - timedelta(minutes=11), now)
 
     assert heat["level"] == "stale"
     assert heat["utilization"] == 0.0

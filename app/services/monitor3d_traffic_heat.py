@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.shared.models import Device, DeviceInterface
 
 
-STALE_AFTER = timedelta(minutes=5)
+STALE_AFTER = timedelta(minutes=10)
 
 
 def classify_traffic_heat(
