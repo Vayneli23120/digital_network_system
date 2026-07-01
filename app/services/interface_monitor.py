@@ -59,7 +59,8 @@ OID_LLDP_LOC_PORT_DESC = "1.0.8802.1.1.2.1.3.7.1.4"   # lldpLocPortDesc
 
 COUNTER64_MAX = 2 ** 64
 
-# 设备层级排名：数值越大越靠核心；对端排名 > 本端排名 → 该接口判为上行口
+# 设备层级排名：数值越大越靠核心；对端排名 >= 本端排名 → 该接口判为上行口。
+# 等级相同也算上行候选，用于接入交换机下挂第三级接入交换机的场景。
 DEVICE_TIER_RANK = {
     "firewall": 100,
     "router": 95,
@@ -540,7 +541,7 @@ class InterfaceMonitor:
                     matched += 1
                     iface.peer_device_id = peer.id
                     peer_rank = _tier_rank(getattr(peer, "device_type", None))
-                    if peer_rank > self_rank:
+                    if peer_rank >= self_rank:
                         is_uplink = True
                         if not iface.is_uplink:
                             uplinks_marked += 1
@@ -577,6 +578,8 @@ class InterfaceMonitor:
                 si.peer_if_name = None
                 si.neighbor_source = None
                 si.neighbor_updated_at = datetime.utcnow()
+                si.is_uplink = False
+                si.monitored = False
                 cleared += 1
 
                 # 同时清理对端设备上回指本机的接口。
@@ -595,6 +598,8 @@ class InterfaceMonitor:
                         ri.peer_if_name = None
                         ri.neighbor_source = None
                         ri.neighbor_updated_at = datetime.utcnow()
+                        ri.is_uplink = False
+                        ri.monitored = False
                         cleared += 1
 
             db.commit()

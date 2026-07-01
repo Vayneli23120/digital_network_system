@@ -36,10 +36,10 @@ def classify_traffic_heat(
     if stale:
         return {
             "level": "stale",
-            "utilization": utilization,
-            "color": "#f59e0b",
-            "width": 2,
-            "particle_speed": 0.2,
+            "utilization": 0.0,
+            "color": "#64748b",
+            "width": 1,
+            "particle_speed": 0,
             "stale": True,
         }
     if utilization >= 80:

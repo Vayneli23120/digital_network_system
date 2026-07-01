@@ -38,6 +38,10 @@ def test_classify_traffic_heat_marks_stale_samples():
     heat = classify_traffic_heat(90, 5, "up", now - timedelta(minutes=6), now)
 
     assert heat["level"] == "stale"
+    assert heat["utilization"] == 0.0
+    assert heat["color"] == "#64748b"
+    assert heat["width"] == 1
+    assert heat["particle_speed"] == 0
     assert heat["stale"] is True
 
 
