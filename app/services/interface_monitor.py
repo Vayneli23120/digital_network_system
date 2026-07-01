@@ -37,6 +37,9 @@ OID_IF_NAME = "1.3.6.1.2.1.31.1.1.1.1"
 OID_IF_HC_IN_OCTETS = "1.3.6.1.2.1.31.1.1.1.6"
 OID_IF_HC_OUT_OCTETS = "1.3.6.1.2.1.31.1.1.1.10"
 OID_IF_HIGH_SPEED = "1.3.6.1.2.1.31.1.1.1.15"   # Mbps
+OID_IF_SPEED = "1.3.6.1.2.1.2.2.1.5"            # bits/s（32位，ifHighSpeed 为 0 时回退）
+OID_IF_IN_OCTETS = "1.3.6.1.2.1.2.2.1.10"       # 32位入向字节（无 HC 计数器时回退）
+OID_IF_OUT_OCTETS = "1.3.6.1.2.1.2.2.1.16"      # 32位出向字节（无 HC 计数器时回退）
 
 # ===== CISCO-CDP-MIB cdpCacheTable（索引 = ifIndex.deviceIndex）=====
 OID_CDP_ADDRESS = "1.3.6.1.4.1.9.9.23.1.2.1.1.4"     # cdpCacheAddress（对端 IP）
@@ -247,6 +250,13 @@ class InterfaceMonitor:
         in_err = await walk(OID_IF_IN_ERRORS)
         out_err = await walk(OID_IF_OUT_ERRORS)
 
+        # 虚拟设备/老镜像常无 64 位计数器或 ifHighSpeed，按需回退到 32 位
+        if not in_oct:
+            in_oct = await walk(OID_IF_IN_OCTETS)
+        if not out_oct:
+            out_oct = await walk(OID_IF_OUT_OCTETS)
+        speed_lo = await walk(OID_IF_SPEED)
+
         if not oper and not in_oct:
             logger.debug(f"SNMP {ip} 无响应，跳过")
             return
@@ -255,12 +265,17 @@ class InterfaceMonitor:
         readings = {}
         for idx in monitored:
             key = str(idx)
+            # 速率：优先 ifHighSpeed(Mbps)，为 0/空时回退 ifSpeed(bps)
+            spd_mbps = _to_int(speed.get(key))
+            if not spd_mbps:
+                spd_bps = _to_int(speed_lo.get(key))
+                spd_mbps = int(spd_bps / 1_000_000) if spd_bps else None
             readings[idx] = {
                 "oper": oper_status_text(oper.get(key, "")),
                 "admin": oper_status_text(admin.get(key, "")),
                 "in_octets": _to_int(in_oct.get(key)),
                 "out_octets": _to_int(out_oct.get(key)),
-                "speed_mbps": _to_int(speed.get(key)),
+                "speed_mbps": spd_mbps,
                 "in_errors": _to_int(in_err.get(key)),
                 "out_errors": _to_int(out_err.get(key)),
             }
@@ -293,11 +308,15 @@ class InterfaceMonitor:
                         out_delta = _counter_delta(iface.last_out_octets, r["out_octets"])
                         in_bps = int(in_delta * 8 / dt)
                         out_bps = int(out_delta * 8 / dt)
-                        spd = r["speed_mbps"] or iface.speed_mbps
-                        if spd and spd > 0:
-                            cap = spd * 1_000_000
-                            in_util = round(min(in_bps / cap * 100, 100), 2)
-                            out_util = round(min(out_bps / cap * 100, 100), 2)
+                        # 计数器翻转/重置保护：超过 400Gbps 视为异常，丢弃本次样本
+                        if in_bps > 400_000_000_000 or out_bps > 400_000_000_000:
+                            in_bps = out_bps = None
+                        else:
+                            spd = r["speed_mbps"] or iface.speed_mbps
+                            if spd and spd > 0:
+                                cap = spd * 1_000_000
+                                in_util = round(min(in_bps / cap * 100, 100), 2)
+                                out_util = round(min(out_bps / cap * 100, 100), 2)
 
                 old_oper = iface.oper_status
                 new_oper = r["oper"]
