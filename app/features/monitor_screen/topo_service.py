@@ -672,8 +672,32 @@ def delete_topo_edge(db: Session, plan_id: int, edge_id: int) -> bool:
     return True
 
 
+def _oriented_waypoints_far_to_bp(edge, bp_id) -> list:
+    """返回该边从『远端节点』指向分支点方向的拐点列表。
+
+    边的拐点顺序固定为 a_node -> b_node。
+    """
+    wps = []
+    if edge.waypoints:
+        try:
+            wps = json.loads(edge.waypoints) or []
+        except Exception:
+            wps = []
+    if edge.a_node_id == bp_id:
+        # a 是分支点：a->b 即 bp->far，反转得到 far->bp
+        return list(reversed(wps))
+    # b 是分支点：a->b 即 far->bp，保持原顺序
+    return list(wps)
+
+
 def delete_topo_node(db: Session, plan_id: int, node_id: int) -> bool:
-    """删除拓扑节点（连同关联的边）"""
+    """删除拓扑节点。
+
+    - 普通节点：删除节点及其所有关联边。
+    - 分支点(branch_point)：删除挂在其上的分支光缆(fiber)，并把被它切断的两段主干
+      重新合并成一条连续主干（保留主干 cable_id / 编号 / 名称，拐点串接并经过原分支点
+      位置），避免删除分支点导致整条主干光缆消失、只剩孤立的主干端点。
+    """
     node = db.query(TopoNode).filter(
         TopoNode.id == node_id,
         TopoNode.floor_plan_id == plan_id
@@ -682,12 +706,69 @@ def delete_topo_node(db: Session, plan_id: int, node_id: int) -> bool:
     if not node:
         return False
 
-    # 删除连接到该节点的所有边
     edges = db.query(TopoEdge).filter(
         TopoEdge.floor_plan_id == plan_id,
         (TopoEdge.a_node_id == node_id) | (TopoEdge.b_node_id == node_id)
     ).all()
 
+    is_branch_point = node.node_kind == "junction" and node.junction_type == "branch_point"
+
+    if is_branch_point:
+        trunk_edges = [e for e in edges if e.cable_type in ("trunk", "trunk_segment")]
+        other_edges = [e for e in edges if e.cable_type not in ("trunk", "trunk_segment")]
+
+        # 删除挂在分支点上的分支光缆
+        for e in other_edges:
+            db.delete(e)
+
+        if len(trunk_edges) == 2:
+            e1, e2 = trunk_edges
+            far1 = e1.a_node_id if e1.b_node_id == node_id else e1.b_node_id
+            far2 = e2.a_node_id if e2.b_node_id == node_id else e2.b_node_id
+
+            # far1 -> bp 的拐点 + 分支点坐标 + bp -> far2 的拐点
+            wps1 = _oriented_waypoints_far_to_bp(e1, node_id)                 # far1 -> bp
+            wps2 = list(reversed(_oriented_waypoints_far_to_bp(e2, node_id)))  # bp -> far2
+            merged = list(wps1) + [{"x": node.x_percent, "y": node.y_percent}] + list(wps2)
+
+            # 还原主干名称（去掉 “-段N” 后缀）
+            base_name = e1.cable_name or e2.cable_name or ""
+            if "-段" in base_name:
+                base_name = base_name.rsplit("-段", 1)[0]
+
+            # 若两端都是主干端点，则恢复为整条 trunk；否则仍是分段
+            far1_node = db.query(TopoNode).filter(TopoNode.id == far1).first()
+            far2_node = db.query(TopoNode).filter(TopoNode.id == far2).first()
+            both_endpoints = (
+                far1_node and far2_node
+                and far1_node.junction_type == "trunk_endpoint"
+                and far2_node.junction_type == "trunk_endpoint"
+            )
+
+            merged_edge = TopoEdge(
+                floor_plan_id=plan_id,
+                a_node_id=far1,
+                b_node_id=far2,
+                cable_type="trunk" if both_endpoints else "trunk_segment",
+                cable_id=e1.cable_id,
+                cable_no=e1.cable_no,
+                cable_name=base_name or e1.cable_name,
+                waypoints=json.dumps(merged) if merged else None,
+                status="up",
+            )
+            db.add(merged_edge)
+            db.delete(e1)
+            db.delete(e2)
+        else:
+            # 非预期结构（分支点未正好切断两段主干），退化为直接删除避免悬挂边
+            for e in trunk_edges:
+                db.delete(e)
+
+        db.delete(node)
+        db.commit()
+        return True
+
+    # 普通节点：删除节点及其所有关联边
     for edge in edges:
         db.delete(edge)
 
