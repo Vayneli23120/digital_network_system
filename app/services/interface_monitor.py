@@ -571,7 +571,6 @@ class InterfaceMonitor:
                 if si.if_index in seen_ifaces:
                     continue
                 old_peer_id = si.peer_device_id
-                old_local_if = si.if_name
                 si.peer_device_id = None
                 si.peer_device_name = None
                 si.peer_ip = None
@@ -580,14 +579,14 @@ class InterfaceMonitor:
                 si.neighbor_updated_at = datetime.utcnow()
                 cleared += 1
 
-                # 同时清理对端设备上回指本机该端口的那条接口，
-                # 否则邻居数据链路是按“任一端仍持有对端”生成的，单向清理不彻底，
-                # 旧的对端设备再没被重新发现时红线不会消失。
-                if old_peer_id and old_local_if:
+                # 同时清理对端设备上回指本机的接口。
+                # 注意：不能依赖 peer_if_name/if_name 做字符串匹配，因为 Cisco 设备
+                # 的 SNMP ifName 返回短格式（Gi0/2）而 CDP 返回长格式（GigabitEthernet0/2），
+                # 导致端口名无法直接比较。改用 device_id + peer_device_id 配对定位。
+                if old_peer_id:
                     reciprocal = db.query(DeviceInterface).filter(
                         DeviceInterface.device_id == old_peer_id,
                         DeviceInterface.peer_device_id == device_id,
-                        DeviceInterface.peer_if_name == old_local_if,
                     ).all()
                     for ri in reciprocal:
                         ri.peer_device_id = None
