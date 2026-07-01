@@ -5390,7 +5390,7 @@ async function refreshTrafficHeatLayer() {
 
 function startTrafficHeatPoll() {
   stopTrafficHeatPoll()
-  trafficHeatPollTimer = setInterval(refreshTrafficHeatLayer, 60_000)
+  trafficHeatPollTimer = setInterval(refreshTrafficHeatLayer, 30_000)
 }
 
 function stopTrafficHeatPoll() {

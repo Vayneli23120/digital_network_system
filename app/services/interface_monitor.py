@@ -150,7 +150,7 @@ class InterfaceMonitor:
     def __init__(self):
         self.scheduler = BackgroundScheduler()
         self._running = False
-        self.poll_interval = 60          # 轮询周期（秒）
+        self.poll_interval = 30          # 轮询周期（秒）；只采集 monitored ifIndex，30s 可控
         self.max_concurrency = 20        # 并发设备数
         self.snmp_timeout = 8
         self._db_lock = threading.Lock()
@@ -240,56 +240,59 @@ class InterfaceMonitor:
         monitored = set(dev["if_indexes"])
         svc = get_snmp_service()
 
-        async def walk(oid):
-            return await svc.snmp_walk_async(ip, community, oid, timeout=self.snmp_timeout)
+        async def get(oid, idx):
+            return await svc.snmp_get_async(ip, community, f"{oid}.{idx}", timeout=self.snmp_timeout)
 
-        # 独立表并行 walk：慢设备单个 OID 超时时，不再把 7~10 个 OID 的超时串起来。
-        # 这能显著降低一轮采样耗时，避免 last_sample_at 因轮询积压而过期。
-        oper, admin, in_oct, out_oct, speed, speed_lo, in_err, out_err = await asyncio.gather(
-            walk(OID_IF_OPER_STATUS),
-            walk(OID_IF_ADMIN_STATUS),
-            walk(OID_IF_HC_IN_OCTETS),
-            walk(OID_IF_HC_OUT_OCTETS),
-            walk(OID_IF_HIGH_SPEED),
-            walk(OID_IF_SPEED),
-            walk(OID_IF_IN_ERRORS),
-            walk(OID_IF_OUT_ERRORS),
-        )
-
-        # 虚拟设备/老镜像常无 64 位计数器或 ifHighSpeed，按需回退到 32 位
-        fallback_in = fallback_out = None
-        if not in_oct or not out_oct:
-            fallback_in, fallback_out = await asyncio.gather(
-                walk(OID_IF_IN_OCTETS) if not in_oct else asyncio.sleep(0, result=None),
-                walk(OID_IF_OUT_OCTETS) if not out_oct else asyncio.sleep(0, result=None),
+        async def poll_index(idx):
+            # 只采集被监控接口的实例 OID，避免每 30s walk 整张接口表。
+            values = await asyncio.gather(
+                get(OID_IF_OPER_STATUS, idx),
+                get(OID_IF_ADMIN_STATUS, idx),
+                get(OID_IF_HC_IN_OCTETS, idx),
+                get(OID_IF_HC_OUT_OCTETS, idx),
+                get(OID_IF_IN_OCTETS, idx),
+                get(OID_IF_OUT_OCTETS, idx),
+                get(OID_IF_HIGH_SPEED, idx),
+                get(OID_IF_SPEED, idx),
+                get(OID_IF_IN_ERRORS, idx),
+                get(OID_IF_OUT_ERRORS, idx),
+                return_exceptions=True,
             )
-        if not in_oct and fallback_in:
-            in_oct = fallback_in
-        if not out_oct and fallback_out:
-            out_oct = fallback_out
+            values = [None if isinstance(value, Exception) else value for value in values]
+            oper, admin, hc_in, hc_out, in32, out32, high_speed, speed_bps, in_err, out_err = values
 
-        if not oper and not in_oct:
-            logger.debug(f"SNMP {ip} 无响应，跳过")
-            return
+            in_octets = _to_int(hc_in)
+            out_octets = _to_int(hc_out)
+            if in_octets is None:
+                in_octets = _to_int(in32)
+            if out_octets is None:
+                out_octets = _to_int(out32)
+
+            if oper is None and in_octets is None and out_octets is None:
+                return idx, None
+
+            spd_mbps = _to_int(high_speed)
+            if not spd_mbps:
+                raw_speed_bps = _to_int(speed_bps)
+                spd_mbps = int(raw_speed_bps / 1_000_000) if raw_speed_bps else None
+
+            return idx, {
+                "oper": oper_status_text(oper),
+                "admin": oper_status_text(admin),
+                "in_octets": in_octets,
+                "out_octets": out_octets,
+                "speed_mbps": spd_mbps,
+                "in_errors": _to_int(in_err),
+                "out_errors": _to_int(out_err),
+            }
 
         now = datetime.utcnow()
-        readings = {}
-        for idx in monitored:
-            key = str(idx)
-            # 速率：优先 ifHighSpeed(Mbps)，为 0/空时回退 ifSpeed(bps)
-            spd_mbps = _to_int(speed.get(key))
-            if not spd_mbps:
-                spd_bps = _to_int(speed_lo.get(key))
-                spd_mbps = int(spd_bps / 1_000_000) if spd_bps else None
-            readings[idx] = {
-                "oper": oper_status_text(oper.get(key, "")),
-                "admin": oper_status_text(admin.get(key, "")),
-                "in_octets": _to_int(in_oct.get(key)),
-                "out_octets": _to_int(out_oct.get(key)),
-                "speed_mbps": spd_mbps,
-                "in_errors": _to_int(in_err.get(key)),
-                "out_errors": _to_int(out_err.get(key)),
-            }
+        results = await asyncio.gather(*[poll_index(idx) for idx in monitored])
+        readings = {idx: reading for idx, reading in results if reading is not None}
+
+        if not readings:
+            logger.debug(f"SNMP {ip} monitored interfaces no response, skip")
+            return
 
         with self._db_lock:
             await asyncio.to_thread(self._persist_readings, dev["id"], readings, now)
