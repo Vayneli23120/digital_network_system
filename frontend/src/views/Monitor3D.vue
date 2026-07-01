@@ -2272,6 +2272,11 @@ async function updateDeviceScale(newScale) {
     if (selectedModel) {
       selectedModel.scale.setScalar(newScale)
     }
+
+    // 重建端口锚点，使其偏移跟随新缩放（避免锚点脱离模型）
+    if (isEditMode.value) {
+      buildPortAnchors()
+    }
   } catch (e) {
     ElMessage.error(t('msgUpdateFailed'))
   }
@@ -3027,7 +3032,9 @@ function buildPortAnchors() {
       // 计算锚点位置（设备坐标 + 锚点偏移）
       const baseX = parseFloat(node.x_percent)
       const baseY = parseFloat(node.y_percent)
-      const iconSize = 3.0  // 设备图标大小约 3%
+      // 锚点偏移需跟随模型缩放，否则模型缩小后锚点会越离越远，连线产生分叉
+      const nodeScale = Number(node.scale) || 1
+      const iconSize = 3.0 * nodeScale  // 设备图标实际占地（随缩放变化）
       const offsetX = (port.anchor_x - 0.5) * iconSize
       const offsetY = (port.anchor_y - 0.5) * iconSize
 
