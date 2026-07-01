@@ -2889,6 +2889,7 @@ function buildDataLinkPaths() {
     const device = devices.value.find(d => d.id === deviceId)
     const isNeighborPath = pathData?.path_source === 'neighbor'
     const heat = getTrafficHeatForPath(deviceId, pathData)
+    const activeHeat = heat?.level === 'stale' ? null : heat
     let statusColor = device && isDeviceOffline(device) ? 0xff4d4f : 0x22c55e  // 红色/绿色
     let heatRadius = pathRadius
     if (isNeighborPath) {
@@ -2896,9 +2897,9 @@ function buildDataLinkPaths() {
         ? 0xff4d4f
         : (pathData.neighbor_source === 'lldp' ? 0x38bdf8 : 0x22c55e)
     }
-    if (heat && !(device && isDeviceOffline(device)) && !(isNeighborPath && pathData.oper_status === 'down')) {
-      statusColor = new THREE.Color(heat.color || '#22c55e').getHex()
-      heatRadius = pathRadius * Math.max(1, Math.min(3, (heat.width || 2) / 2))
+    if (activeHeat && !(device && isDeviceOffline(device)) && !(isNeighborPath && pathData.oper_status === 'down')) {
+      statusColor = new THREE.Color(activeHeat.color || '#22c55e').getHex()
+      heatRadius = pathRadius * Math.max(1, Math.min(3, (activeHeat.width || 2) / 2))
     }
 
     // 直接使用 polyline 的 x_percent, y_percent（后端已去重）
@@ -2917,7 +2918,7 @@ function buildDataLinkPaths() {
     const mat = new THREE.MeshBasicMaterial({
       color: statusColor,
       transparent: true,
-      opacity: heat?.level === 'stale' ? 0.45 : 0.7,
+      opacity: 0.7,
     })
 
     for (let i = 0; i < points.length - 1; i++) {
