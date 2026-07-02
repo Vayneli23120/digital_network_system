@@ -552,20 +552,20 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
     summary = {"fresh": 0, "lagging": 0, "stale": 0, "missing": 0, "down": 0, "total": 0}
     items = []
     for iface, device in query.all():
+        check_age_seconds = int((now - iface.last_check).total_seconds()) if iface.last_check else None
+        sample_age_seconds = int((now - iface.last_sample_at).total_seconds()) if iface.last_sample_at else None
         if iface.oper_status == "down":
             status = "down"
-        elif iface.last_sample_at is None:
+        elif iface.last_check is None:
             status = "missing"
         else:
-            age_seconds = int((now - iface.last_sample_at).total_seconds())
-            if age_seconds > 600:
+            if check_age_seconds > 600:
                 status = "stale"
-            elif age_seconds > 90:
+            elif check_age_seconds > 90:
                 status = "lagging"
             else:
                 status = "fresh"
 
-        age_seconds = int((now - iface.last_sample_at).total_seconds()) if iface.last_sample_at else None
         summary[status] += 1
         summary["total"] += 1
         items.append({
@@ -578,7 +578,11 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
             "oper_status": iface.oper_status,
             "admin_status": iface.admin_status,
             "last_sample_at": utc_iso(iface.last_sample_at),
-            "age_seconds": age_seconds,
+            "last_check": utc_iso(iface.last_check),
+            "age_seconds": check_age_seconds,
+            "check_age_seconds": check_age_seconds,
+            "sample_age_seconds": sample_age_seconds,
+            "has_counter_sample": iface.last_in_octets is not None and iface.last_out_octets is not None,
             "status": status,
             "in_util": iface.last_in_util,
             "out_util": iface.last_out_util,

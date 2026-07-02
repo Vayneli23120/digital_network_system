@@ -51,7 +51,8 @@
             </div>
             <div class="snmp-health-meta">
               <span>{{ snmpHealthStatusLabel(item.status) }}</span>
-              <span>{{ formatSnmpAge(item.age_seconds) }}</span>
+              <span>检查 {{ formatSnmpAge(item.check_age_seconds ?? item.age_seconds) }}</span>
+              <span>流量 {{ formatSnmpAge(item.sample_age_seconds) }}</span>
             </div>
           </div>
         </div>

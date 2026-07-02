@@ -417,34 +417,72 @@ class InterfaceMonitor:
     async def _poll_device(self, dev: Dict):
         ip = dev["ip"]
         community = dev["community"]
-        monitored = set(dev["if_indexes"])
+        monitored = {int(idx) for idx in dev["if_indexes"] if idx is not None}
+        if not monitored:
+            return False
         svc = get_snmp_service()
-        oid_sem = asyncio.Semaphore(20)
+        get_sem = asyncio.Semaphore(6)
 
-        async def get(oid, idx):
-            async with oid_sem:
-                return await svc.snmp_get_async(ip, community, f"{oid}.{idx}", timeout=self.snmp_timeout)
+        async def safe_get(oid, idx):
+            async with get_sem:
+                try:
+                    return await svc.snmp_get_async(ip, community, f"{oid}.{idx}", timeout=self.snmp_timeout)
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    return None
 
-        async def walk(oid):
-            return await svc.snmp_walk_async(ip, community, oid, timeout=self.snmp_timeout)
+        async def safe_walk(oid):
+            try:
+                return await svc.snmp_walk_async(ip, community, oid, timeout=self.snmp_timeout)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                return {}
 
-        async def poll_index(idx):
-            # 只采集被监控接口的实例 OID，避免每 30s walk 整张接口表。
+        def build_table_reading(idx, tables):
+            key = str(idx)
+            in_octets = _to_int(tables["hc_in"].get(key))
+            out_octets = _to_int(tables["hc_out"].get(key))
+            if in_octets is None:
+                in_octets = _to_int(tables["in32"].get(key))
+            if out_octets is None:
+                out_octets = _to_int(tables["out32"].get(key))
+
+            oper = tables["oper"].get(key)
+            admin = tables["admin"].get(key)
+            if oper is None and admin is None and in_octets is None and out_octets is None:
+                return None
+
+            speed_mbps = _to_int(tables["high_speed"].get(key))
+            if not speed_mbps:
+                raw_speed_bps = _to_int(tables["speed_bps"].get(key))
+                speed_mbps = int(raw_speed_bps / 1_000_000) if raw_speed_bps else None
+
+            return {
+                "oper": oper_status_text(oper),
+                "admin": oper_status_text(admin),
+                "in_octets": in_octets,
+                "out_octets": out_octets,
+                "speed_mbps": speed_mbps,
+                "in_errors": _to_int(tables["in_err"].get(key)),
+                "out_errors": _to_int(tables["out_err"].get(key)),
+            }
+
+        async def poll_index_by_get(idx):
             values = await asyncio.gather(
-                get(OID_IF_OPER_STATUS, idx),
-                get(OID_IF_ADMIN_STATUS, idx),
-                get(OID_IF_HC_IN_OCTETS, idx),
-                get(OID_IF_HC_OUT_OCTETS, idx),
-                get(OID_IF_IN_OCTETS, idx),
-                get(OID_IF_OUT_OCTETS, idx),
-                get(OID_IF_HIGH_SPEED, idx),
-                get(OID_IF_SPEED, idx),
-                get(OID_IF_IN_ERRORS, idx),
-                get(OID_IF_OUT_ERRORS, idx),
+                safe_get(OID_IF_OPER_STATUS, idx),
+                safe_get(OID_IF_ADMIN_STATUS, idx),
+                safe_get(OID_IF_HC_IN_OCTETS, idx),
+                safe_get(OID_IF_HC_OUT_OCTETS, idx),
+                safe_get(OID_IF_IN_OCTETS, idx),
+                safe_get(OID_IF_OUT_OCTETS, idx),
+                safe_get(OID_IF_HIGH_SPEED, idx),
+                safe_get(OID_IF_SPEED, idx),
+                safe_get(OID_IF_IN_ERRORS, idx),
+                safe_get(OID_IF_OUT_ERRORS, idx),
                 return_exceptions=True,
             )
-            # CancelledError 是 BaseException，不会被 return_exceptions 吞掉，
-            # 但仍可能出现在结果列表中（Python 3.12+）。发现后立即传播。
             if any(isinstance(v, BaseException) and not isinstance(v, Exception) for v in values):
                 raise asyncio.CancelledError()
             values = [None if isinstance(value, Exception) else value for value in values]
@@ -475,72 +513,79 @@ class InterfaceMonitor:
                 "out_errors": _to_int(out_err),
             }
 
-        async def poll_missing_with_walk(missing_indexes):
-            if not missing_indexes:
-                return {}
-
-            oper, admin, in_oct, out_oct, speed, speed_lo, in_err, out_err = await asyncio.gather(
-                walk(OID_IF_OPER_STATUS),
-                walk(OID_IF_ADMIN_STATUS),
-                walk(OID_IF_HC_IN_OCTETS),
-                walk(OID_IF_HC_OUT_OCTETS),
-                walk(OID_IF_HIGH_SPEED),
-                walk(OID_IF_SPEED),
-                walk(OID_IF_IN_ERRORS),
-                walk(OID_IF_OUT_ERRORS),
+        async def poll_by_table_snapshot():
+            oper, admin, hc_in, hc_out, high_speed, in_err, out_err = await asyncio.gather(
+                safe_walk(OID_IF_OPER_STATUS),
+                safe_walk(OID_IF_ADMIN_STATUS),
+                safe_walk(OID_IF_HC_IN_OCTETS),
+                safe_walk(OID_IF_HC_OUT_OCTETS),
+                safe_walk(OID_IF_HIGH_SPEED),
+                safe_walk(OID_IF_IN_ERRORS),
+                safe_walk(OID_IF_OUT_ERRORS),
             )
 
-            fallback_in = fallback_out = None
-            if not in_oct or not out_oct:
-                fallback_in, fallback_out = await asyncio.gather(
-                    walk(OID_IF_IN_OCTETS) if not in_oct else asyncio.sleep(0, result=None),
-                    walk(OID_IF_OUT_OCTETS) if not out_oct else asyncio.sleep(0, result=None),
+            missing_counter_indexes = [
+                idx for idx in monitored
+                if _to_int(hc_in.get(str(idx))) is None or _to_int(hc_out.get(str(idx))) is None
+            ]
+            in32 = out32 = speed_bps = {}
+            if missing_counter_indexes:
+                in32, out32, speed_bps = await asyncio.gather(
+                    safe_walk(OID_IF_IN_OCTETS),
+                    safe_walk(OID_IF_OUT_OCTETS),
+                    safe_walk(OID_IF_SPEED),
                 )
-            if not in_oct and fallback_in:
-                in_oct = fallback_in
-            if not out_oct and fallback_out:
-                out_oct = fallback_out
 
-            fallback_readings = {}
-            for idx in missing_indexes:
-                key = str(idx)
-                spd_mbps = _to_int(speed.get(key))
-                if not spd_mbps:
-                    spd_bps = _to_int(speed_lo.get(key))
-                    spd_mbps = int(spd_bps / 1_000_000) if spd_bps else None
-                reading = {
-                    "oper": oper_status_text(oper.get(key, "")),
-                    "admin": oper_status_text(admin.get(key, "")),
-                    "in_octets": _to_int(in_oct.get(key)),
-                    "out_octets": _to_int(out_oct.get(key)),
-                    "speed_mbps": spd_mbps,
-                    "in_errors": _to_int(in_err.get(key)),
-                    "out_errors": _to_int(out_err.get(key)),
-                }
-                if reading["oper"] != "unknown" or reading["in_octets"] is not None or reading["out_octets"] is not None:
-                    fallback_readings[idx] = reading
-            return fallback_readings
+            tables = {
+                "oper": oper,
+                "admin": admin,
+                "hc_in": hc_in,
+                "hc_out": hc_out,
+                "in32": in32,
+                "out32": out32,
+                "high_speed": high_speed,
+                "speed_bps": speed_bps,
+                "in_err": in_err,
+                "out_err": out_err,
+            }
+            return {
+                idx: reading
+                for idx in monitored
+                if (reading := build_table_reading(idx, tables)) is not None
+            }
 
-        now = datetime.utcnow()
-        results = await asyncio.gather(*[poll_index(idx) for idx in monitored])
-        readings = {idx: reading for idx, reading in results if reading is not None}
-
-        missing_indexes = [
+        readings = await poll_by_table_snapshot()
+        get_fallback_indexes = [
             idx for idx in monitored
             if idx not in readings
             or readings[idx].get("in_octets") is None
             or readings[idx].get("out_octets") is None
         ]
-        if missing_indexes:
-            fallback_readings = await poll_missing_with_walk(missing_indexes)
-            readings.update(fallback_readings)
-            if fallback_readings:
-                logger.debug(f"SNMP {ip} walk fallback filled {len(fallback_readings)}/{len(missing_indexes)} monitored interfaces")
+        if get_fallback_indexes:
+            results = await asyncio.gather(
+                *[poll_index_by_get(idx) for idx in get_fallback_indexes],
+                return_exceptions=True,
+            )
+            filled = 0
+            for result in results:
+                if isinstance(result, BaseException):
+                    if not isinstance(result, Exception):
+                        raise asyncio.CancelledError()
+                    continue
+                idx, reading = result
+                if reading is not None:
+                    previous = readings.get(idx)
+                    readings[idx] = reading
+                    if previous is None or reading.get("in_octets") is not None or reading.get("out_octets") is not None:
+                        filled += 1
+            if filled:
+                logger.debug(f"SNMP {ip} targeted GET fallback filled {filled}/{len(get_fallback_indexes)} monitored interfaces")
 
         if not readings:
             logger.debug(f"SNMP {ip} monitored interfaces no response, skip")
             return False
 
+        now = datetime.utcnow()
         with self._db_lock:
             await asyncio.to_thread(self._persist_readings, dev["id"], readings, now)
         return True
@@ -588,12 +633,14 @@ class InterfaceMonitor:
                 iface.admin_status = r["admin"]
                 if r["speed_mbps"]:
                     iface.speed_mbps = r["speed_mbps"]
-                iface.last_in_octets = r["in_octets"]
-                iface.last_out_octets = r["out_octets"]
-                iface.last_sample_at = now
                 iface.last_check = now
                 iface.last_in_errors = r["in_errors"]
                 iface.last_out_errors = r["out_errors"]
+                has_counter_pair = r["in_octets"] is not None and r["out_octets"] is not None
+                if has_counter_pair:
+                    iface.last_in_octets = r["in_octets"]
+                    iface.last_out_octets = r["out_octets"]
+                    iface.last_sample_at = now
                 if in_bps is not None:
                     iface.last_in_bps = in_bps
                     iface.last_out_bps = out_bps
