@@ -550,8 +550,15 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
 
     now = datetime.utcnow()
     summary = {"fresh": 0, "lagging": 0, "stale": 0, "missing": 0, "down": 0, "total": 0}
+    collector_state = {}
+    try:
+        from app.services.interface_monitor import get_interface_monitor
+        collector_state = get_interface_monitor().get_poll_state_snapshot()
+    except Exception:
+        collector_state = {}
     items = []
     for iface, device in query.all():
+        collector = collector_state.get(iface.device_id, {})
         check_age_seconds = int((now - iface.last_check).total_seconds()) if iface.last_check else None
         sample_age_seconds = int((now - iface.last_sample_at).total_seconds()) if iface.last_sample_at else None
         if iface.oper_status == "down":
@@ -583,6 +590,17 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
             "check_age_seconds": check_age_seconds,
             "sample_age_seconds": sample_age_seconds,
             "has_counter_sample": iface.last_in_octets is not None and iface.last_out_octets is not None,
+            "collector_status": collector.get("status"),
+            "collector_ok": collector.get("ok"),
+            "collector_duration_ms": collector.get("duration_ms"),
+            "collector_poll_mode": collector.get("poll_mode"),
+            "collector_readings_count": collector.get("readings_count"),
+            "collector_monitored_count": collector.get("monitored_count"),
+            "collector_missing_counter_count": collector.get("missing_counter_count"),
+            "collector_fallback_count": collector.get("fallback_count"),
+            "collector_next_poll_in_seconds": collector.get("next_poll_in_seconds"),
+            "collector_inflight_seconds": collector.get("inflight_seconds"),
+            "collector_error": collector.get("last_error"),
             "status": status,
             "in_util": iface.last_in_util,
             "out_util": iface.last_out_util,

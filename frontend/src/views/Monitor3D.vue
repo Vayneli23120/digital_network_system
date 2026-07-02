@@ -53,6 +53,9 @@
               <span>{{ snmpHealthStatusLabel(item.status) }}</span>
               <span>检查 {{ formatSnmpAge(item.check_age_seconds ?? item.age_seconds) }}</span>
               <span>流量 {{ formatSnmpAge(item.sample_age_seconds) }}</span>
+              <span>采集 {{ collectorStatusLabel(item.collector_status) }}</span>
+              <span v-if="item.collector_duration_ms != null">{{ formatDurationMs(item.collector_duration_ms) }}</span>
+              <span v-if="item.collector_next_poll_in_seconds != null">下次 {{ formatSnmpAge(item.collector_next_poll_in_seconds) }}</span>
             </div>
           </div>
         </div>
@@ -5488,12 +5491,32 @@ function snmpHealthStatusLabel(status) {
   }[status] || '未知'
 }
 
+function collectorStatusLabel(status) {
+  return {
+    running: '采集中',
+    ok: '完成',
+    partial: '部分',
+    timeout: '超时',
+    failed: '失败',
+    cancelled: '取消',
+    stuck: '卡住',
+    no_response: '无响应',
+    no_interfaces: '无接口',
+  }[status] || '-'
+}
+
 function formatSnmpAge(seconds) {
   if (seconds == null) return '-'
   if (seconds < 60) return `${seconds}s`
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes}min`
   return `${Math.floor(minutes / 60)}h${minutes % 60}m`
+}
+
+function formatDurationMs(ms) {
+  if (ms == null) return '-'
+  if (ms < 1000) return `${ms}ms`
+  return `${(ms / 1000).toFixed(1)}s`
 }
 
 function formatSnmpServerTime(value) {

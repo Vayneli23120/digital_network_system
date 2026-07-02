@@ -160,6 +160,7 @@ class InterfaceMonitor:
         # 分级采集调度表：每台设备独立周期，到期才 poll，不再一次 poll 全部
         self._schedule: Dict[int, float] = {}           # device_id → next_poll_at (time.time)
         self._inflight: Dict[int, float] = {}           # device_id → poll_started_at
+        self._poll_state: Dict[int, Dict] = {}          # device_id → 最近一次采集器状态
         self._schedule_lock = threading.Lock()
         # 看门狗：防止 asyncio 超时因同步 IO 阻塞而失效
         # 改用计数器 + 上限，避免 FD 泄漏的同时不导致采集停滞
@@ -292,14 +293,68 @@ class InterfaceMonitor:
             selected = due[:self.max_concurrency]
             for target in selected:
                 self._inflight[target["id"]] = now
+                self._poll_state[target["id"]] = {
+                    **self._poll_state.get(target["id"], {}),
+                    "device_id": target["id"],
+                    "device_name": target.get("name", ""),
+                    "device_ip": target.get("ip", ""),
+                    "device_type": target.get("device_type", ""),
+                    "status": "running",
+                    "ok": None,
+                    "started_at": datetime.utcnow().isoformat() + "Z",
+                    "duration_ms": None,
+                    "poll_mode": None,
+                    "monitored_count": len(target.get("if_indexes") or []),
+                    "readings_count": None,
+                    "missing_counter_count": None,
+                    "fallback_count": None,
+                    "last_error": None,
+                }
             return selected
 
-    def _finish_target_poll(self, target: Dict, success: bool, keep_inflight: bool = False):
-        interval = self._get_device_interval(target.get("device_type", "")) if success else self.retry_interval
+    def _finish_target_poll(self, target: Dict, success: bool, keep_inflight: bool = False, poll_result: Optional[Dict] = None):
+        result = poll_result or {}
+        ok = bool(result.get("ok", success))
+        interval = self._get_device_interval(target.get("device_type", "")) if ok else self.retry_interval
+        status = result.get("status") or ("ok" if ok else "failed")
+        if keep_inflight:
+            status = "stuck"
         with self._schedule_lock:
             self._schedule[target["id"]] = time.time() + interval
+            self._poll_state[target["id"]] = {
+                **self._poll_state.get(target["id"], {}),
+                "device_id": target["id"],
+                "device_name": target.get("name", ""),
+                "device_ip": target.get("ip", ""),
+                "device_type": target.get("device_type", ""),
+                "status": status,
+                "ok": ok,
+                "finished_at": datetime.utcnow().isoformat() + "Z",
+                "duration_ms": result.get("duration_ms"),
+                "poll_mode": result.get("poll_mode"),
+                "monitored_count": result.get("monitored_count", len(target.get("if_indexes") or [])),
+                "readings_count": result.get("readings_count"),
+                "missing_counter_count": result.get("missing_counter_count"),
+                "fallback_count": result.get("fallback_count"),
+                "last_error": result.get("last_error"),
+                "next_poll_interval": interval,
+            }
             if not keep_inflight:
                 self._inflight.pop(target["id"], None)
+
+    def get_poll_state_snapshot(self) -> Dict[int, Dict]:
+        """返回采集器内存状态，供健康面板区分调度慢、设备慢、计数器缺失。"""
+        now = time.time()
+        with self._schedule_lock:
+            snapshot = {}
+            for device_id, state in self._poll_state.items():
+                item = dict(state)
+                next_at = self._schedule.get(device_id)
+                started_at = self._inflight.get(device_id)
+                item["next_poll_in_seconds"] = max(0, int(next_at - now)) if next_at else None
+                item["inflight_seconds"] = max(0, int(now - started_at)) if started_at else None
+                snapshot[device_id] = item
+            return snapshot
 
     async def _tick(self):
         """分级采集调度心跳。
@@ -321,17 +376,32 @@ class InterfaceMonitor:
             return
 
         async def poll_one(target):
+            started_at = time.time()
             try:
-                return await asyncio.wait_for(
+                result = await asyncio.wait_for(
                     self._poll_device(target),
                     timeout=self.device_timeout,
                 )
+                if not isinstance(result, dict):
+                    result = {"ok": bool(result), "status": "ok" if result else "failed"}
+                result["duration_ms"] = int((time.time() - started_at) * 1000)
+                return result
             except asyncio.TimeoutError:
                 logger.warning(f"Device {target['name']} ({target['ip']}) poll timed out after {self.device_timeout}s")
-                return False
+                return {
+                    "ok": False,
+                    "status": "timeout",
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                    "last_error": f"poll timed out after {self.device_timeout}s",
+                }
             except Exception as e:
                 logger.error(f"Poll device {target['name']} failed: {e}")
-                return False
+                return {
+                    "ok": False,
+                    "status": "failed",
+                    "duration_ms": int((time.time() - started_at) * 1000),
+                    "last_error": str(e),
+                }
 
         # 用 asyncio.wait 替代 gather，确保超时后不会因 CancelledError
         # 被内层 return_exceptions=True 吞掉而卡死。
@@ -353,21 +423,34 @@ class InterfaceMonitor:
         # 收集异常（仅 done 的任务需要检查）
         for t in done:
             success = False
+            result = {"ok": False, "status": "failed"}
             try:
-                success = bool(t.result())
+                result = t.result()
+                if not isinstance(result, dict):
+                    result = {"ok": bool(result), "status": "ok" if result else "failed"}
+                success = bool(result.get("ok"))
             except (asyncio.CancelledError, asyncio.TimeoutError):
-                pass
+                result = {"ok": False, "status": "cancelled", "last_error": "poll task cancelled"}
             except Exception as e:
                 logger.error(f"Device poll raised: {e}")
+                result = {"ok": False, "status": "failed", "last_error": str(e)}
             if success:
                 success_count += 1
-            self._finish_target_poll(task_map[t], success)
+            self._finish_target_poll(task_map[t], success, poll_result=result)
 
         for t in cancelled_done:
-            self._finish_target_poll(task_map[t], False)
+            self._finish_target_poll(task_map[t], False, poll_result={
+                "ok": False,
+                "status": "cancelled",
+                "last_error": "poll task cancelled after timeout",
+            })
 
         for t in still_pending:
-            self._finish_target_poll(task_map[t], False, keep_inflight=True)
+            self._finish_target_poll(task_map[t], False, keep_inflight=True, poll_result={
+                "ok": False,
+                "status": "stuck",
+                "last_error": "poll task did not stop after cancellation",
+            })
 
         logger.info(
             f"Interface tick: {len(due)} due / {len(targets)} tracked, "
@@ -419,7 +502,7 @@ class InterfaceMonitor:
         community = dev["community"]
         monitored = {int(idx) for idx in dev["if_indexes"] if idx is not None}
         if not monitored:
-            return False
+            return {"ok": False, "status": "no_interfaces", "monitored_count": 0}
         svc = get_snmp_service()
         get_sem = asyncio.Semaphore(6)
 
@@ -561,12 +644,12 @@ class InterfaceMonitor:
             or readings[idx].get("in_octets") is None
             or readings[idx].get("out_octets") is None
         ]
+        fallback_count = 0
         if get_fallback_indexes:
             results = await asyncio.gather(
                 *[poll_index_by_get(idx) for idx in get_fallback_indexes],
                 return_exceptions=True,
             )
-            filled = 0
             for result in results:
                 if isinstance(result, BaseException):
                     if not isinstance(result, Exception):
@@ -577,18 +660,41 @@ class InterfaceMonitor:
                     previous = readings.get(idx)
                     readings[idx] = reading
                     if previous is None or reading.get("in_octets") is not None or reading.get("out_octets") is not None:
-                        filled += 1
-            if filled:
-                logger.debug(f"SNMP {ip} targeted GET fallback filled {filled}/{len(get_fallback_indexes)} monitored interfaces")
+                        fallback_count += 1
+            if fallback_count:
+                logger.debug(f"SNMP {ip} targeted GET fallback filled {fallback_count}/{len(get_fallback_indexes)} monitored interfaces")
 
         if not readings:
             logger.debug(f"SNMP {ip} monitored interfaces no response, skip")
-            return False
+            return {
+                "ok": False,
+                "status": "no_response",
+                "poll_mode": "table_snapshot",
+                "monitored_count": len(monitored),
+                "readings_count": 0,
+                "missing_counter_count": len(monitored),
+                "fallback_count": fallback_count,
+            }
+
+        missing_counter_count = sum(
+            1 for idx in monitored
+            if idx not in readings
+            or readings[idx].get("in_octets") is None
+            or readings[idx].get("out_octets") is None
+        )
 
         now = datetime.utcnow()
         with self._db_lock:
             await asyncio.to_thread(self._persist_readings, dev["id"], readings, now)
-        return True
+        return {
+            "ok": True,
+            "status": "ok" if missing_counter_count == 0 else "partial",
+            "poll_mode": "table_snapshot+get" if get_fallback_indexes else "table_snapshot",
+            "monitored_count": len(monitored),
+            "readings_count": len(readings),
+            "missing_counter_count": missing_counter_count,
+            "fallback_count": fallback_count,
+        }
 
     def _persist_readings(self, device_id: int, readings: Dict[int, Dict], now: datetime):
         db = next(get_db())

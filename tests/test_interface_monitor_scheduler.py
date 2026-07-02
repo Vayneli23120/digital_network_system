@@ -40,6 +40,27 @@ def test_failed_poll_uses_fast_retry_interval():
     assert 0 < next_poll_in <= monitor.retry_interval + 1
 
 
+def test_finish_target_poll_records_collector_state():
+    monitor = InterfaceMonitor()
+
+    monitor._finish_target_poll(_target(1), success=True, poll_result={
+        "ok": True,
+        "status": "partial",
+        "duration_ms": 1234,
+        "poll_mode": "table_snapshot+get",
+        "monitored_count": 3,
+        "readings_count": 2,
+        "missing_counter_count": 1,
+        "fallback_count": 1,
+    })
+
+    state = monitor.get_poll_state_snapshot()[1]
+    assert state["status"] == "partial"
+    assert state["duration_ms"] == 1234
+    assert state["missing_counter_count"] == 1
+    assert state["next_poll_in_seconds"] is not None
+
+
 def test_claim_due_targets_limits_batch_and_skips_inflight_devices():
     monitor = InterfaceMonitor()
     monitor.max_concurrency = 1
