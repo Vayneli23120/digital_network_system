@@ -153,11 +153,13 @@ class InterfaceMonitor:
         self._running = False
         self.tick_interval = 15          # 调度心跳（秒），每 15s 检查一次到期设备
         self.device_timeout = 25         # 单台设备采集超时（秒）
+        self.retry_interval = 15         # 单台采集失败后快速重试，避免一次慢响应放大成数分钟延迟
         self.max_concurrency = 30        # 并发采集设备数
         self.snmp_timeout = 8
         self._db_lock = threading.Lock()
         # 分级采集调度表：每台设备独立周期，到期才 poll，不再一次 poll 全部
         self._schedule: Dict[int, float] = {}           # device_id → next_poll_at (time.time)
+        self._inflight: Dict[int, float] = {}           # device_id → poll_started_at
         self._schedule_lock = threading.Lock()
         # 看门狗：防止 asyncio 超时因同步 IO 阻塞而失效
         # 改用计数器 + 上限，避免 FD 泄漏的同时不导致采集停滞
@@ -263,18 +265,48 @@ class InterfaceMonitor:
         rank = DEVICE_TIER_RANK.get((device_type or "").lower(), 40)
         if rank >= 90:
             return 30     # 核心设备：firewall / router / core_switch
-        elif rank >= 60:
-            return 60     # 重要设备：server_switch / wlc
-        else:
-            return 120    # 边缘设备：office_switch / switch / uce / ap
+        return 60         # 其他 monitored 接口：保持 60s 内刷新，避免健康面板天然 lagging
+
+    def _claim_due_targets(self, targets: List[Dict]) -> List[Dict]:
+        """认领本轮要采集的设备，避免重叠 tick 重复采同一台设备。"""
+        now = time.time()
+        stale_started_before = now - max(self.device_timeout * 2, 60)
+        with self._schedule_lock:
+            target_ids = {target["id"] for target in targets}
+            for device_id in list(self._schedule.keys()):
+                if device_id not in target_ids:
+                    self._schedule.pop(device_id, None)
+            for device_id, started_at in list(self._inflight.items()):
+                if device_id not in target_ids or started_at < stale_started_before:
+                    self._inflight.pop(device_id, None)
+
+            due = []
+            for target in targets:
+                device_id = target["id"]
+                if device_id in self._inflight:
+                    continue
+                if self._schedule.get(device_id, 0) <= now:
+                    due.append(target)
+
+            due.sort(key=lambda target: (self._schedule.get(target["id"], 0), target["id"]))
+            selected = due[:self.max_concurrency]
+            for target in selected:
+                self._inflight[target["id"]] = now
+            return selected
+
+    def _finish_target_poll(self, target: Dict, success: bool, keep_inflight: bool = False):
+        interval = self._get_device_interval(target.get("device_type", "")) if success else self.retry_interval
+        with self._schedule_lock:
+            self._schedule[target["id"]] = time.time() + interval
+            if not keep_inflight:
+                self._inflight.pop(target["id"], None)
 
     async def _tick(self):
         """分级采集调度心跳。
 
         不一次 poll 全部设备，而是按角色分配独立采集频率：
         - critical (90+ 分) → 30s  防火墙/路由器/核心交换机
-        - normal   (60-89) → 60s  服务器交换机/WLC
-        - low      (<60)   → 120s 接入交换机/AP/UCE
+        - other monitored → 60s  其他被监控接口
 
         用 asyncio.wait 替代 wait_for，避免 CancelledError 被
         内层 return_exceptions=True gather 吞掉导致无法超时。
@@ -283,30 +315,23 @@ class InterfaceMonitor:
         if not targets:
             return
 
-        now = time.time()
-        due = []
-        for t in targets:
-            did = t["id"]
-            next_at = self._schedule.get(did, 0)
-            if next_at <= now:
-                due.append(t)
+        due = self._claim_due_targets(targets)
 
         if not due:
             return
 
-        sem = asyncio.Semaphore(self.max_concurrency)
-
         async def poll_one(target):
-            async with sem:
-                try:
-                    await asyncio.wait_for(
-                        self._poll_device(target),
-                        timeout=self.device_timeout,
-                    )
-                except asyncio.TimeoutError:
-                    logger.warning(f"Device {target['name']} ({target['ip']}) poll timed out after {self.device_timeout}s")
-                except Exception as e:
-                    logger.error(f"Poll device {target['name']} failed: {e}")
+            try:
+                return await asyncio.wait_for(
+                    self._poll_device(target),
+                    timeout=self.device_timeout,
+                )
+            except asyncio.TimeoutError:
+                logger.warning(f"Device {target['name']} ({target['ip']}) poll timed out after {self.device_timeout}s")
+                return False
+            except Exception as e:
+                logger.error(f"Poll device {target['name']} failed: {e}")
+                return False
 
         # 用 asyncio.wait 替代 gather，确保超时后不会因 CancelledError
         # 被内层 return_exceptions=True 吞掉而卡死。
@@ -315,26 +340,39 @@ class InterfaceMonitor:
         task_map = {asyncio.create_task(poll_one(t)): t for t in due}
         done, pending = await asyncio.wait(
             task_map.keys(),
-            timeout=self.tick_interval - 2,
+            timeout=self.device_timeout + 2,
         )
+        cancelled_done = set()
+        still_pending = set(pending)
         for t in pending:
             t.cancel()
-        # 无论成功/超时，都更新这些设备的调度表
-        for t in done | pending:
-            target = task_map[t]
-            interval = self._get_device_interval(target.get("device_type", ""))
-            with self._schedule_lock:
-                self._schedule[target["id"]] = time.time() + interval
+        if pending:
+            cancelled_done, still_pending = await asyncio.wait(pending, timeout=1)
+
+        success_count = 0
         # 收集异常（仅 done 的任务需要检查）
         for t in done:
+            success = False
             try:
-                t.result()
+                success = bool(t.result())
             except (asyncio.CancelledError, asyncio.TimeoutError):
                 pass
             except Exception as e:
                 logger.error(f"Device poll raised: {e}")
+            if success:
+                success_count += 1
+            self._finish_target_poll(task_map[t], success)
 
-        logger.info(f"Interface tick: {len(due)} due / {len(targets)} tracked, {len(pending)} timeout")
+        for t in cancelled_done:
+            self._finish_target_poll(task_map[t], False)
+
+        for t in still_pending:
+            self._finish_target_poll(task_map[t], False, keep_inflight=True)
+
+        logger.info(
+            f"Interface tick: {len(due)} due / {len(targets)} tracked, "
+            f"{success_count} ok, {len(still_pending)} timeout"
+        )
 
     def _load_targets(self) -> List[Dict]:
         """加载需要轮询的设备（N+1 优化版本，批量加载 monitored 接口）"""
@@ -501,10 +539,11 @@ class InterfaceMonitor:
 
         if not readings:
             logger.debug(f"SNMP {ip} monitored interfaces no response, skip")
-            return
+            return False
 
         with self._db_lock:
             await asyncio.to_thread(self._persist_readings, dev["id"], readings, now)
+        return True
 
     def _persist_readings(self, device_id: int, readings: Dict[int, Dict], now: datetime):
         db = next(get_db())
