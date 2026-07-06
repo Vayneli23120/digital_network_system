@@ -165,7 +165,7 @@
             <el-button size="small" :icon="Refresh" @click="loadInterfaces(true)" :loading="ifacesLoading">刷新</el-button>
             <el-button size="small" :icon="Warning" @click="runSnmpDiagnose" :loading="snmpDiagLoading">诊断 SNMP</el-button>
             <el-checkbox v-model="ifaceMonitoredOnly" @change="loadInterfaces(true)" style="margin-left: 10px">仅看监控接口</el-checkbox>
-            <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">自动刷新(30s)</el-checkbox>
+            <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">自动刷新(60s)</el-checkbox>
             <span v-if="interfaces.length" style="margin-left: auto; font-size: 12px; color: #909399">共 {{ interfaces.length }} 口 · 在线 {{ ifaceUpCount }} · 上行 {{ ifaceUplinkCount }} · 监控 {{ ifaceMonitoredCount }}</span>
           </div>
           <el-table :data="interfaces" v-loading="ifacesLoading" size="small" border stripe row-key="if_index" @expand-change="onIfaceExpand" style="margin-top: 8px">
@@ -760,7 +760,7 @@ const ifacesLoading = ref(false)
 const ifaceDiscovering = ref(false)
 const ifaceNeighborLoading = ref(false)
 const ifaceMonitoredOnly = ref(false)
-const ifaceAutoRefresh = ref(false)
+const ifaceAutoRefresh = ref(true)
 const trafficData = ref({})
 const trafficLoading = ref({})
 let autoRefreshTimer = null
@@ -1225,7 +1225,7 @@ const startAutoRefresh = () => {
   autoRefreshTimer = setInterval(() => {
     refreshMetrics()
     if (activeTab.value === 'interfaces') loadInterfaces(true)
-  }, 30000)
+  }, 60000)
 }
 const stopAutoRefresh = () => {
   if (autoRefreshTimer) { clearInterval(autoRefreshTimer); autoRefreshTimer = null }
@@ -1420,7 +1420,7 @@ const deleteMaintInDetail = async (maintId) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 
-onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics() })
+onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); if (ifaceAutoRefresh.value) startAutoRefresh() })
 onUnmounted(() => { stopAutoRefresh() })
 </script>
 

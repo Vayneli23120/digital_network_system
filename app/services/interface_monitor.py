@@ -469,11 +469,12 @@ class InterfaceMonitor:
             if not devices:
                 return []
 
-            # 一次查完所有 monitored 接口，避免每台设备单独查一次
+            # ServiceNow 式整机端口采集：轮询设备上所有已发现接口（不再只采手动勾选的
+            # monitored 接口）。整张接口表本来就在一次 walk 中取回，采集全部端口不增加
+            # SNMP 往返；时序样本仍只为 monitored 接口写入以控制存储增长。
             device_ids = [d.id for d in devices]
             all_ifaces = db.query(DeviceInterface).filter(
                 DeviceInterface.device_id.in_(device_ids),
-                DeviceInterface.monitored == True,  # noqa: E712
             ).all()
 
             ifaces_by_device: Dict[int, list] = {}
@@ -638,12 +639,14 @@ class InterfaceMonitor:
             }
 
         readings = await poll_by_table_snapshot()
+        # 只对 oper up 但缺流量计数器的端口做逐口 GET 兜底，避免对大量 down/空闲端口
+        # 发起 GET 风暴；单台设备最多兜底 40 口。
         get_fallback_indexes = [
             idx for idx in monitored
-            if idx not in readings
-            or readings[idx].get("in_octets") is None
-            or readings[idx].get("out_octets") is None
-        ]
+            if readings.get(idx, {}).get("oper") == "up"
+            and (readings.get(idx, {}).get("in_octets") is None
+                 or readings.get(idx, {}).get("out_octets") is None)
+        ][:40]
         fallback_count = 0
         if get_fallback_indexes:
             results = await asyncio.gather(
@@ -752,18 +755,21 @@ class InterfaceMonitor:
                     iface.last_out_bps = out_bps
                     iface.last_in_util = in_util
                     iface.last_out_util = out_util
-                    db.add(InterfaceTrafficSample(
-                        interface_id=iface.id,
-                        device_id=device_id,
-                        ts=now,
-                        in_bps=in_bps,
-                        out_bps=out_bps,
-                        in_util=in_util,
-                        out_util=out_util,
-                        in_errors=r["in_errors"],
-                        out_errors=r["out_errors"],
-                        oper_status=new_oper,
-                    ))
+                    # 整机端口的实时值(last_*)对所有端口更新，但时序样本仅为 monitored
+                    # 接口写入，避免所有端口每 60s 落库导致样本表快速膨胀。
+                    if iface.monitored:
+                        db.add(InterfaceTrafficSample(
+                            interface_id=iface.id,
+                            device_id=device_id,
+                            ts=now,
+                            in_bps=in_bps,
+                            out_bps=out_bps,
+                            in_util=in_util,
+                            out_util=out_util,
+                            in_errors=r["in_errors"],
+                            out_errors=r["out_errors"],
+                            oper_status=new_oper,
+                        ))
 
                 if old_oper and old_oper != new_oper and new_oper in ("up", "down"):
                     changes.append((iface.if_index, iface.if_name, bool(iface.is_uplink), old_oper, new_oper))
