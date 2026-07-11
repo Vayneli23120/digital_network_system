@@ -179,7 +179,7 @@ async def health_check():
 
 @app.get("/ready", tags=["health"])
 async def readiness_check():
-    """Readiness 探针 — 服务是否就绪（数据库可达 + Redis 可选）"""
+    """Readiness 探针 — 服务是否就绪（数据库 + Redis + Prometheus 连接器）"""
     from sqlalchemy import text
 
     checks = {}
@@ -200,6 +200,19 @@ async def readiness_check():
         checks["redis"] = {"status": "ok" if rc.available else "not_connected"}
     except Exception as e:
         checks["redis"] = {"status": "error", "detail": str(e)}
+
+    # Prometheus 连接器检查
+    try:
+        from app.services.prometheus_connector import get_connector
+        pc = get_connector()
+        checks["prometheus_connector"] = {
+            "status": "ok" if pc._running else "stopped",
+        }
+        if not pc._running:
+            overall_ok = False
+    except Exception as e:
+        checks["prometheus_connector"] = {"status": "error", "detail": str(e)}
+        overall_ok = False
 
     status_code = 200 if overall_ok else 503
     return {
@@ -238,6 +251,47 @@ async def cache_clear(prefix: str = None):
 
     count = cache.invalidate_prefix(prefix) if prefix else cache.clear()
     return {"cleared": count}
+
+
+@app.get("/api/system/diagnostics", tags=["health"])
+async def system_diagnostics():
+    """系统诊断 — 各后台服务运行状态"""
+    from datetime import datetime, timezone
+    from app.shared.database import get_db
+    from app.shared.models import DeviceInterface, InterfaceTrafficSample
+
+    diag = {"services": {}, "database": {}}
+    now = datetime.now(timezone.utc)
+
+    # Prometheus 连接器
+    try:
+        from app.services.prometheus_connector import get_connector
+        pc = get_connector()
+        diag["services"]["prometheus_connector"] = {
+            "running": pc._running,
+        }
+    except Exception as e:
+        diag["services"]["prometheus_connector"] = {"error": str(e)}
+
+    # 数据库状态（最近一次采样时间）
+    db = next(get_db())
+    try:
+        latest_check = db.query(DeviceInterface.last_check)\
+            .filter(DeviceInterface.monitored == True)\
+            .order_by(DeviceInterface.last_check.desc()).first()
+        if latest_check and latest_check[0]:
+            age = int((now - latest_check[0].replace(tzinfo=timezone.utc)).total_seconds())
+            diag["database"]["last_poll_seconds_ago"] = age
+            diag["database"]["last_poll_at"] = latest_check[0].isoformat()
+        else:
+            diag["database"]["last_poll"] = None
+
+        total_ifaces = db.query(DeviceInterface).filter(DeviceInterface.monitored == True).count()
+        diag["database"]["monitored_interfaces"] = total_ifaces
+    finally:
+        db.close()
+
+    return diag
 
 
 # ============ SPA Fallback ============
