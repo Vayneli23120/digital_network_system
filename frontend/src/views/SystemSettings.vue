@@ -3,17 +3,17 @@
     <el-card>
       <template #header>
         <div class="card-header">
-          <span>{{ $t('systemSettings') || '系统设置' }}</span>
-          <el-button type="primary" @click="saveSettings" :loading="saving">{{ $t('alertSaveSettings') || '保存' }}</el-button>
+          <span>{{ t('systemSettings') || '系统设置' }}</span>
+          <el-button type="primary" @click="saveSettings" :loading="saving">{{ t('alertSaveSettings') || '保存' }}</el-button>
         </div>
       </template>
 
       <el-form :model="form" label-width="140px" v-loading="loading">
         <!-- 时区设置 -->
         <div class="form-section">
-          <div class="section-header">{{ $t('systemTimeSettings') || '时间设置' }}</div>
+          <div class="section-header">{{ t('systemTimeSettings') || '时间设置' }}</div>
 
-          <el-form-item :label="$t('systemTimezone') || '系统时区'">
+          <el-form-item :label="t('systemTimezone') || '系统时区'">
             <el-select v-model="form.timezone" placeholder="选择时区" style="width: 300px">
               <el-option
                 v-for="tz in timezoneOptions"
@@ -22,7 +22,7 @@
                 :value="tz.value"
               />
             </el-select>
-            <span class="form-tip">{{ $t('systemTimezoneTip') || '系统全局时区，影响所有时间显示' }}</span>
+            <span class="form-tip">{{ t('systemTimezoneTip') || '系统全局时区，影响所有时间显示' }}</span>
           </el-form-item>
         </div>
       </el-form>
@@ -34,6 +34,9 @@
 import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
 import { ElMessage } from 'element-plus'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const loading = ref(false)
 const saving = ref(false)

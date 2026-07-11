@@ -8,10 +8,10 @@
     <!-- 流量热力图例（可拖拽） -->
     <div class="heat-legend" :class="{ collapsed: !showHeatLegend, dark: isDark }"
          :style="{ left: heatPos.x + 'px', bottom: heatPos.y + 'px' }">
-      <div class="heat-legend-head" @mousedown="e => startDrag(e, heatPos)" @click="toggleHeatLegend">
+      <div class="heat-legend-head" @mousedown="e => startDrag(e, heatPos, HEAT_PANEL_W)">
         <el-icon class="drag-handle"><Rank /></el-icon>
         <span class="heat-legend-title">{{ t('heatLegendTitle') || '链路流量热力' }}</span>
-        <el-icon class="heat-legend-toggle"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
+        <el-icon class="heat-legend-toggle" @click.stop="toggleHeatLegend"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
       </div>
       <div v-show="showHeatLegend" class="heat-legend-body">
         <div class="heat-legend-row" v-for="lv in heatLegendLevels" :key="lv.level">
@@ -27,13 +27,13 @@
     <!-- SNMP 采集健康（可拖拽） -->
     <div class="snmp-health-panel" :class="{ collapsed: !showSnmpHealth, dark: isDark }"
          :style="{ left: snmpPos.x + 'px', bottom: snmpPos.y + 'px' }">
-      <div class="snmp-health-head" @mousedown="e => startDrag(e, snmpPos)" @click="toggleSnmpHealth">
+      <div class="snmp-health-head" @mousedown="e => startDrag(e, snmpPos, SNMP_PANEL_W)">
         <el-icon class="drag-handle"><Rank /></el-icon>
         <span class="snmp-health-title">SNMP 采集健康</span>
         <span class="snmp-health-summary">
           {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} 正常
         </span>
-        <el-icon class="snmp-health-toggle"><ArrowDown v-if="showSnmpHealth" /><ArrowUp v-else /></el-icon>
+        <el-icon class="snmp-health-toggle" @click.stop="toggleSnmpHealth"><ArrowDown v-if="showSnmpHealth" /><ArrowUp v-else /></el-icon>
       </div>
       <div v-show="showSnmpHealth" class="snmp-health-body">
         <div class="snmp-health-kpis">
@@ -752,17 +752,59 @@ function loadPanelPos(key, defaultX, defaultY) {
 function savePanelPos(key, pos) {
   localStorage.setItem('monitor3d_panel_' + key, JSON.stringify({ x: pos.x, y: pos.y }))
 }
+const SNMP_PANEL_W = 260
+const HEAT_PANEL_W = 188
+const HEADER_H = 36  // 面板头部高度（含padding）
+const PANEL_MARGIN = 120  // 面板至少保留120px在视口内
+
+/** 将面板位置限制在视口范围内 */
+function clampPanelPos(pos, panelW) {
+  const ww = window.innerWidth
+  const wh = window.innerHeight
+  // X：至少保留 60px 可见
+  pos.x = Math.max(-(panelW - 60), Math.min(ww - 60, pos.x))
+  // Y（bottom）：不超出底部，且至少 PANEL_MARGIN 在视口内
+  pos.y = Math.max(0, Math.min(wh - PANEL_MARGIN, pos.y))
+}
+
+/** 若保存的位置已偏移到难以操作的范围，直接回退到默认值 */
+function resetPanelIfOob(pos, panelW, defaultX, defaultY) {
+  const ww = window.innerWidth
+  const wh = window.innerHeight
+  const maxY = wh - PANEL_MARGIN
+  const maxX = ww - 60
+  const minX = -(panelW - 60)
+  if (pos.y < 0 || pos.y > maxY || pos.x < minX || pos.x > maxX) {
+    pos.x = defaultX
+    pos.y = defaultY
+  }
+}
+
 const snmpPos = reactive(loadPanelPos('snmp', 16, 200))
 const heatPos = reactive(loadPanelPos('heat', 16, 16))
+// 支持 ?reset_panels=1 强制重置面板到底部
+if (window.location.search.includes('reset_panels=1')) {
+  localStorage.removeItem('monitor3d_panel_snmp')
+  localStorage.removeItem('monitor3d_panel_heat')
+  snmpPos.x = 16; snmpPos.y = 200
+  heatPos.x = 16; heatPos.y = 16
+  const url = new URL(window.location)
+  url.searchParams.delete('reset_panels')
+  window.history.replaceState({}, '', url)
+}
+// 加载后检查，如果位置超出可操作范围则重置
+resetPanelIfOob(snmpPos, SNMP_PANEL_W, 16, 200)
+resetPanelIfOob(heatPos, HEAT_PANEL_W, 16, 16)
+clampPanelPos(snmpPos, SNMP_PANEL_W)
+clampPanelPos(heatPos, HEAT_PANEL_W)
 
 let panelDragState = null
-let panelWasDragged = false
 
-function startDrag(e, pos) {
+function startDrag(e, pos, panelW) {
   e.preventDefault()
-  panelWasDragged = false
   panelDragState = {
     pos,
+    panelW,
     startX: e.clientX,
     startY: e.clientY,
     origX: pos.x,
@@ -774,10 +816,10 @@ function startDrag(e, pos) {
 
 function onPanelDragMove(e) {
   if (!panelDragState) return
-  const { pos, startX, startY, origX, origY } = panelDragState
+  const { pos, panelW, startX, startY, origX, origY } = panelDragState
   pos.x = origX + (e.clientX - startX)
   pos.y = origY - (e.clientY - startY)
-  panelWasDragged = Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3
+  clampPanelPos(pos, panelW)
 }
 
 function onPanelDragEnd() {
@@ -791,12 +833,12 @@ function onPanelDragEnd() {
 }
 
 function toggleSnmpHealth() {
-  if (panelWasDragged) return
   showSnmpHealth.value = !showSnmpHealth.value
+  clampPanelPos(snmpPos, SNMP_PANEL_W)
 }
 function toggleHeatLegend() {
-  if (panelWasDragged) return
   showHeatLegend.value = !showHeatLegend.value
+  clampPanelPos(heatPos, HEAT_PANEL_W)
 }
 // =====
 

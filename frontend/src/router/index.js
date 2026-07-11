@@ -266,7 +266,7 @@ const routes = [
   {
     path: '/system-settings',
     name: 'SystemSettingsLayout',
-    component: () => import('@/views/Layout.vue'),
+    component: Layout,
     children: [
       {
         path: '',
