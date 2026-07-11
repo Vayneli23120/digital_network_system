@@ -808,6 +808,32 @@ def delete_topo_node(db: Session, plan_id: int, node_id: int) -> bool:
         db.delete(edge)
 
     db.delete(node)
+
+    # 清理因本次删除而变成孤岛的远端 trunk_endpoint
+    # 当删除 trunk/trunk_segment 一端时，对端如果只剩 trunk_to_core 边则无意义
+    for edge in edges:
+        if edge.cable_type not in ("trunk", "trunk_segment"):
+            continue
+        far_id = edge.a_node_id if edge.b_node_id == node_id else edge.b_node_id
+        far_node = db.query(TopoNode).filter(TopoNode.id == far_id).first()
+        if not far_node or far_node.junction_type != "trunk_endpoint":
+            continue
+        # 检查远端是否还有 trunk/trunk_segment 边
+        remaining = db.query(TopoEdge).filter(
+            TopoEdge.floor_plan_id == plan_id,
+            (TopoEdge.a_node_id == far_id) | (TopoEdge.b_node_id == far_id),
+            TopoEdge.cable_type.in_(["trunk", "trunk_segment"]),
+        ).count()
+        if remaining == 0:
+            # 孤立 trunk_endpoint — 删除它及其残留边（如 trunk_to_core）
+            far_edges = db.query(TopoEdge).filter(
+                TopoEdge.floor_plan_id == plan_id,
+                (TopoEdge.a_node_id == far_id) | (TopoEdge.b_node_id == far_id),
+            ).all()
+            for fe in far_edges:
+                db.delete(fe)
+            db.delete(far_node)
+
     db.commit()
     return True
 

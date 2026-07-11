@@ -5,9 +5,11 @@
          @dragover.prevent="onCanvasDragOver"
          @drop.prevent="onCanvasDrop"></div>
 
-    <!-- 流量热力图例（画布左下角） -->
-    <div class="heat-legend" :class="{ collapsed: !showHeatLegend, dark: isDark }">
-      <div class="heat-legend-head" @click="showHeatLegend = !showHeatLegend">
+    <!-- 流量热力图例（可拖拽） -->
+    <div class="heat-legend" :class="{ collapsed: !showHeatLegend, dark: isDark }"
+         :style="{ left: heatPos.x + 'px', bottom: heatPos.y + 'px' }">
+      <div class="heat-legend-head" @mousedown="e => startDrag(e, heatPos)" @click="toggleHeatLegend">
+        <el-icon class="drag-handle"><Rank /></el-icon>
         <span class="heat-legend-title">{{ t('heatLegendTitle') || '链路流量热力' }}</span>
         <el-icon class="heat-legend-toggle"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
       </div>
@@ -22,9 +24,11 @@
       </div>
     </div>
 
-    <!-- SNMP 采集健康（画布左下角，热力图例上方） -->
-    <div class="snmp-health-panel" :class="{ collapsed: !showSnmpHealth, dark: isDark }">
-      <div class="snmp-health-head" @click="showSnmpHealth = !showSnmpHealth">
+    <!-- SNMP 采集健康（可拖拽） -->
+    <div class="snmp-health-panel" :class="{ collapsed: !showSnmpHealth, dark: isDark }"
+         :style="{ left: snmpPos.x + 'px', bottom: snmpPos.y + 'px' }">
+      <div class="snmp-health-head" @mousedown="e => startDrag(e, snmpPos)" @click="toggleSnmpHealth">
+        <el-icon class="drag-handle"><Rank /></el-icon>
         <span class="snmp-health-title">SNMP 采集健康</span>
         <span class="snmp-health-summary">
           {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} 正常
@@ -652,7 +656,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit, Rank } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { reviewFault, transferFaultToMaintenance } from '@/api'
 import { useI18n } from '@/composables/useI18n'
@@ -735,6 +739,66 @@ const heatLegendLevels = [
   { level: 'stale', color: '#64748b', label: '数据过期', range: '>10min' },
 ]
 const faultActionLoading = ref(false)
+
+// ===== 面板可拖拽位置 =====
+function loadPanelPos(key, defaultX, defaultY) {
+  try {
+    const saved = localStorage.getItem('monitor3d_panel_' + key)
+    if (saved) return JSON.parse(saved)
+  } catch {}
+  return { x: defaultX, y: defaultY }
+}
+function savePanelPos(key, pos) {
+  localStorage.setItem('monitor3d_panel_' + key, JSON.stringify({ x: pos.x, y: pos.y }))
+}
+const snmpPos = reactive(loadPanelPos('snmp', 16, 200))
+const heatPos = reactive(loadPanelPos('heat', 16, 16))
+
+let panelDragState = null
+let panelWasDragged = false
+
+function startDrag(e, pos) {
+  e.preventDefault()
+  panelWasDragged = false
+  panelDragState = {
+    pos,
+    startX: e.clientX,
+    startY: e.clientY,
+    origX: pos.x,
+    origY: pos.y,
+  }
+  document.addEventListener('mousemove', onPanelDragMove)
+  document.addEventListener('mouseup', onPanelDragEnd)
+}
+
+function onPanelDragMove(e) {
+  if (!panelDragState) return
+  const { pos, startX, startY, origX, origY } = panelDragState
+  pos.x = origX + (e.clientX - startX)
+  pos.y = origY - (e.clientY - startY)
+  panelWasDragged = Math.abs(e.clientX - startX) > 3 || Math.abs(e.clientY - startY) > 3
+}
+
+function onPanelDragEnd() {
+  document.removeEventListener('mousemove', onPanelDragMove)
+  document.removeEventListener('mouseup', onPanelDragEnd)
+  if (panelDragState) {
+    savePanelPos('snmp', snmpPos)
+    savePanelPos('heat', heatPos)
+    panelDragState = null
+  }
+}
+
+function toggleSnmpHealth() {
+  if (panelWasDragged) return
+  showSnmpHealth.value = !showSnmpHealth.value
+}
+function toggleHeatLegend() {
+  if (panelWasDragged) return
+  showHeatLegend.value = !showHeatLegend.value
+}
+// =====
+
 const floorPlans = ref([])
 const currentPlan = ref(null)
 const currentPlanId = ref(null)
@@ -6305,8 +6369,6 @@ onBeforeUnmount(() => {
 /* 流量热力图例 */
 .heat-legend {
   position: absolute;
-  left: 16px;
-  bottom: 16px;
   z-index: 6;
   width: 188px;
   background: rgba(15, 23, 42, 0.82);
@@ -6324,10 +6386,13 @@ onBeforeUnmount(() => {
 .heat-legend-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: 4px;
   padding: 7px 10px;
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
+}
+.heat-legend-head:active {
+  cursor: grabbing;
 }
 .heat-legend-title {
   font-weight: 600;
@@ -6376,8 +6441,6 @@ onBeforeUnmount(() => {
 
 .snmp-health-panel {
   position: absolute;
-  left: 16px;
-  bottom: 186px;
   z-index: 6;
   width: 260px;
   background: rgba(15, 23, 42, 0.86);
@@ -6394,12 +6457,15 @@ onBeforeUnmount(() => {
 }
 .snmp-health-head {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: auto 1fr auto auto;
   align-items: center;
-  gap: 8px;
+  gap: 4px;
   padding: 7px 10px;
-  cursor: pointer;
+  cursor: grab;
   user-select: none;
+}
+.snmp-health-head:active {
+  cursor: grabbing;
 }
 .snmp-health-title {
   font-weight: 600;
@@ -6413,6 +6479,22 @@ onBeforeUnmount(() => {
 .snmp-health-toggle {
   font-size: 13px;
   opacity: 0.8;
+}
+
+/* 拖拽手柄图标 */
+.drag-handle {
+  font-size: 13px;
+  opacity: 0.4;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.drag-handle:hover {
+  opacity: 0.8;
+}
+.heat-legend-head:hover .drag-handle,
+.snmp-health-head:hover .drag-handle {
+  opacity: 0.7;
 }
 .snmp-health-body {
   padding: 4px 10px 10px;

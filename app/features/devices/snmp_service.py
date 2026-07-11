@@ -15,10 +15,45 @@ try:
     from puresnmp.api.raw import Client
     from puresnmp.api.pythonic import PyWrapper
     from puresnmp import V2C
+    from puresnmp.transport import SNMPClientProtocol, Timeout as SNMPTimeout
     SNMP_AVAILABLE = True
 except ImportError:
     SNMP_AVAILABLE = False
     logger.warning("puresnmp 未安装，SNMP 查询功能不可用")
+
+
+async def _safe_udp_send(endpoint, packet, timeout=1, loop=None, retries=10):
+    """send_udp 替代实现：每次调用后确保关闭 UDP transport 防止 socket 泄漏。
+
+    puresnmp 原版 send_udp 丢弃了 create_datagram_endpoint 返回的 transport，
+    导致 UDP socket 在任务被取消时泄漏。此封装确保 transport 始终被关闭。
+    """
+    if loop is None:
+        loop = asyncio.get_event_loop()
+
+    for attempt in range(retries):
+        transport = protocol = None
+        try:
+            transport, protocol = await loop.create_datagram_endpoint(
+                lambda: SNMPClientProtocol(packet),
+                remote_addr=(str(endpoint.ip), endpoint.port),
+            )
+            response = await asyncio.wait_for(
+                protocol.get_data(timeout),
+                timeout=timeout + 2,
+            )
+            return response
+        except (asyncio.TimeoutError, SNMPTimeout):
+            if attempt >= retries - 1:
+                raise
+        finally:
+            if transport is not None:
+                try:
+                    transport.close()
+                except Exception:
+                    pass
+
+    raise SNMPTimeout(f"send failed after {retries} retries")
 
 
 class SNMPService:
@@ -79,8 +114,8 @@ class SNMPService:
         return self.CISCO_OID
 
     async def _create_wrapper(self, ip: str, community: str) -> PyWrapper:
-        """创建 SNMP wrapper"""
-        client = Client(ip, V2C(community))
+        """创建 SNMP wrapper（使用自定义 sender 防止 UDP socket 泄漏）"""
+        client = Client(ip, V2C(community), sender=_safe_udp_send)
         return PyWrapper(client)
 
     async def snmp_get_async(self, ip: str, community: str, oid: str, timeout: int = 2) -> Optional[Any]:
