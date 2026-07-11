@@ -11,6 +11,7 @@ from sqlalchemy import func, desc, case
 import json
 
 from app.shared.models import Device, FloorPlan, DeviceNode, BackupRecord, FaultRecord
+from app.shared.time_utils import utc_iso
 from .topo_service import ensure_device_topo_ports, sync_device_port_node_positions
 
 
@@ -22,8 +23,8 @@ def get_floor_plans(db: Session) -> List[Dict[str, Any]]:
             "id": p.id,
             "name": p.name,
             "image_path": p.image_path,
-            "created_at": p.created_at.isoformat() if p.created_at else None,
-            "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+            "created_at": utc_iso(p.created_at),
+            "updated_at": utc_iso(p.updated_at),
             "node_count": db.query(DeviceNode).filter(DeviceNode.floor_plan_id == p.id).count(),
         }
         for p in plans
@@ -39,8 +40,8 @@ def get_floor_plan(db: Session, plan_id: int) -> Optional[Dict[str, Any]]:
         "id": plan.id,
         "name": plan.name,
         "image_path": plan.image_path,
-        "created_at": plan.created_at.isoformat() if plan.created_at else None,
-        "updated_at": plan.updated_at.isoformat() if plan.updated_at else None,
+        "created_at": utc_iso(plan.created_at),
+        "updated_at": utc_iso(plan.updated_at),
     }
 
 
@@ -135,7 +136,7 @@ def get_floor_plan_nodes(db: Session, plan_id: int) -> List[Dict[str, Any]]:
                 "uptime_hours": round(uptime_hours, 1),
                 "lifespan_days": lifespan_days,
                 "active_fault_severity": active_fault.severity if active_fault else None,
-                "created_at": node.created_at.isoformat() if node.created_at else None,
+                "created_at": utc_iso(node.created_at),
             })
     return result
 
@@ -373,7 +374,7 @@ def get_offline_alerts(db: Session) -> List[Dict[str, Any]]:
             "device_type": device.device_type or "switch",
             "offline_hours": round(offline_hours, 1),
             "offline_str": offline_str,
-            "last_online": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
+            "last_online": utc_iso(device.last_reachability_check),
             "reachability": device.reachability,
         })
     return alerts
@@ -446,7 +447,7 @@ def get_plan_snapshot(db: Session, plan_id: int) -> Dict[str, Any]:
     return {
         "nodes": nodes,
         "stats": stats,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_iso(datetime.utcnow()),
     }
 
 
@@ -482,7 +483,7 @@ def get_plan_topology(db: Session, plan_id: int) -> Dict[str, Any]:
         "topo_edges": topo_edges,
         "cables": cables,
         "device_paths": device_paths,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_iso(datetime.utcnow()),
     }
 
 
@@ -543,5 +544,5 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         "degraded_links": 0,  # 暂时恒0，待 P2-3 接口级采集后启用
         "impacted_devices": impacted_devices,
         "active_alerts": active_alerts,
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": utc_iso(datetime.utcnow()),
     }

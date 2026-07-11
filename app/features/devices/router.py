@@ -25,6 +25,7 @@ from pydantic import BaseModel
 from app.shared.database import get_db
 from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart, DeviceInterface, InterfaceTrafficSample
 from app.shared.config import get_config
+from app.shared.time_utils import utc_iso
 
 config = get_config()
 
@@ -339,7 +340,7 @@ async def manual_check_reachability(device_id: int):
             "reachability": device.reachability,
             "latency_ms": device.reachability_latency_ms,
             "method": device.reachability_method,
-            "last_check": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
+            "last_check": utc_iso(device.last_reachability_check),
         }
     finally:
         db.close()
@@ -499,7 +500,8 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
             "uplinks": [],
             "uptime": {"uptime_days": None, "human": None},
             "snmp_available": False,
-            "device_ip": device.ip
+            "device_ip": device.ip,
+            "error": "SNMP 查询服务未安装（puresnmp 库缺失），不影响数据采集，性能指标不可用"
         }
 
     try:
@@ -703,10 +705,10 @@ async def get_device(device_id: int, db: Session = Depends(get_db)):
 
         return {
             **device,
-            "photos": [{"id": p.id, "photo_type": p.photo_type, "photo_path": p.photo_path, "upload_date": p.upload_date.isoformat()} for p in photos],
-            "recent_backups": [{"id": b.id, "backup_time": b.backup_time.isoformat(), "has_change": b.has_change} for b in backups],
-            "recent_faults": [{"id": f.id, "fault_no": f.fault_no, "severity": f.severity, "status": f.status, "description": f.description, "downtime_minutes": f.downtime_minutes, "impact": f.impact, "created_at": f.created_at.isoformat()} for f in faults],
-            "recent_maintenances": [{"id": m.id, "maint_no": m.maint_no, "maint_type": m.maint_type, "parts_replaced": m.parts_replaced, "parts_cost": float(m.parts_cost or 0), "labor_hours": float(m.labor_hours or 0), "labor_cost": float(m.labor_cost or 0), "vendor": m.vendor, "description": m.description, "maint_time": m.maint_time.isoformat() if m.maint_time else None, "created_at": m.created_at.isoformat()} for m in maintenances],
+            "photos": [{"id": p.id, "photo_type": p.photo_type, "photo_path": p.photo_path, "upload_date": utc_iso(p.upload_date)} for p in photos],
+            "recent_backups": [{"id": b.id, "backup_time": utc_iso(b.backup_time), "has_change": b.has_change} for b in backups],
+            "recent_faults": [{"id": f.id, "fault_no": f.fault_no, "severity": f.severity, "status": f.status, "description": f.description, "downtime_minutes": f.downtime_minutes, "impact": f.impact, "created_at": utc_iso(f.created_at)} for f in faults],
+            "recent_maintenances": [{"id": m.id, "maint_no": m.maint_no, "maint_type": m.maint_type, "parts_replaced": m.parts_replaced, "parts_cost": float(m.parts_cost or 0), "labor_hours": float(m.labor_hours or 0), "labor_cost": float(m.labor_cost or 0), "vendor": m.vendor, "description": m.description, "maint_time": utc_iso(m.maint_time), "created_at": utc_iso(m.created_at)} for m in maintenances],
         }
     except ResourceNotFoundException:
         raise HTTPException(status_code=404, detail="设备不存在")
@@ -808,7 +810,7 @@ async def get_device_photos(device_id: int):
                 "id": p.id,
                 "photo_type": p.photo_type,
                 "photo_path": p.photo_path,
-                "upload_date": p.upload_date.isoformat(),
+                "upload_date": utc_iso(p.upload_date),
                 "uploader": p.uploader
             }
             for p in photos
@@ -874,7 +876,7 @@ async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
                 "part_name": i.part.name if i.part else None,
                 "category": i.part.category if i.part else None,
                 "unit_price": float(i.unit_price) if i.unit_price else 0.0,
-                "installed_at": i.installed_at.isoformat() if i.installed_at else None,
+                "installed_at": utc_iso(i.installed_at),
                 "installed_by": i.installed_by,
                 "notes": i.notes,
             }
@@ -914,15 +916,15 @@ def _iface_to_dict(i: DeviceInterface) -> dict:
         "peer_ip": i.peer_ip,
         "peer_if_name": i.peer_if_name,
         "neighbor_source": i.neighbor_source,
-        "neighbor_updated_at": i.neighbor_updated_at.isoformat() if i.neighbor_updated_at else None,
+        "neighbor_updated_at": utc_iso(i.neighbor_updated_at),
         "last_in_bps": i.last_in_bps,
         "last_out_bps": i.last_out_bps,
         "last_in_util": i.last_in_util,
         "last_out_util": i.last_out_util,
         "last_in_errors": i.last_in_errors,
         "last_out_errors": i.last_out_errors,
-        "last_sample_at": i.last_sample_at.isoformat() if i.last_sample_at else None,
-        "last_check": i.last_check.isoformat() if i.last_check else None,
+        "last_sample_at": utc_iso(i.last_sample_at),
+        "last_check": utc_iso(i.last_check),
     }
 
 
@@ -1038,7 +1040,7 @@ async def get_interface_traffic(device_id: int, if_index: int, limit: int = 60, 
         "interface": _iface_to_dict(iface),
         "samples": [
             {
-                "ts": s.ts.isoformat() if s.ts else None,
+                "ts": utc_iso(s.ts),
                 "in_bps": s.in_bps,
                 "out_bps": s.out_bps,
                 "in_util": s.in_util,
@@ -1117,6 +1119,6 @@ async def list_neighbor_links(db: Session = Depends(get_db)):
             "peer_ip": i.peer_ip,
             "peer_if_name": i.peer_if_name,
             "source": i.neighbor_source,
-            "updated_at": i.neighbor_updated_at.isoformat() if i.neighbor_updated_at else None,
+            "updated_at": utc_iso(i.neighbor_updated_at),
         })
     return {"count": len(links), "links": links}

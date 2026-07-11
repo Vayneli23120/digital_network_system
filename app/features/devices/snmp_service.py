@@ -113,7 +113,7 @@ class SNMPService:
             return self.HUAWEI_OID
         return self.CISCO_OID
 
-    async def _create_wrapper(self, ip: str, community: str) -> PyWrapper:
+    async def _create_wrapper(self, ip: str, community: str) -> "PyWrapper":
         """创建 SNMP wrapper（使用自定义 sender 防止 UDP socket 泄漏）"""
         client = Client(ip, V2C(community), sender=_safe_udp_send)
         return PyWrapper(client)

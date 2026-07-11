@@ -263,6 +263,19 @@ const routes = [
       }
     ]
   },
+  {
+    path: '/system-settings',
+    name: 'SystemSettingsLayout',
+    component: () => import('@/views/Layout.vue'),
+    children: [
+      {
+        path: '',
+        name: 'SystemSettings',
+        component: () => import('@/views/SystemSettings.vue'),
+        meta: { title: '系统设置' }
+      }
+    ]
+  },
   // v1.3 新增路由
   {
     path: '/users',

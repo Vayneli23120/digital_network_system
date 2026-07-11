@@ -659,6 +659,7 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit, Rank } from '@element-plus/icons-vue'
 import axios from 'axios'
 import { reviewFault, transferFaultToMaintenance } from '@/api'
+import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 
 const router = useRouter()
@@ -4841,13 +4842,7 @@ function getDeviceAlarmCount(device) {
 
 function formatCheckTime(ts) {
   if (!ts) return '—'
-  try {
-    const d = new Date(ts)
-    if (isNaN(d.getTime())) return '—'
-    return d.toLocaleString()
-  } catch (e) {
-    return '—'
-  }
+  return formatDateTime(ts)
 }
 
 function getRecommendationSummary(text) {

@@ -1,0 +1,32 @@
+# Prometheus 配置 — 通过 snmp_exporter 采集网络设备
+global:
+  scrape_interval: 30s
+  evaluation_interval: 30s
+
+scrape_configs:
+  - job_name: 'snmp_cisco'
+    scrape_interval: 30s
+    scrape_timeout: 25s
+
+    metrics_path: /snmp
+    params:
+      module: [cisco_if]
+
+    # 动态目标列表（由 prometheus_connector 自动维护）
+    file_sd_configs:
+      - files:
+          - /etc/prometheus/targets/snmp_devices.yml
+        refresh_interval: 60s
+
+    relabel_configs:
+      # 设备 IP → snmp_exporter 的 target 参数
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__param_target]
+        target_label: instance
+      # SNMP 认证名从 target 标签获取
+      - source_labels: [auth]
+        target_label: __param_auth
+      # 实际请求地址改为 snmp_exporter
+      - target_label: __address__
+        replacement: snmp_exporter:9116

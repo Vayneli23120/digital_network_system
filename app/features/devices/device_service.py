@@ -11,6 +11,7 @@ from datetime import datetime
 
 from app.shared.models import Device, SparePart, SparePartInstance
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
+from app.shared.time_utils import utc_iso
 
 
 def _sync_modules_to_inventory(db: Session, device_id: int, modules: List[Dict[str, Any]]) -> None:
@@ -184,14 +185,14 @@ def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] 
                 "deployment_status": d.deployment_status,
                 "monitor_tier": d.monitor_tier or "normal",
                 "reachability": d.reachability,
-                "last_reachability_check": d.last_reachability_check.isoformat() if d.last_reachability_check else None,
+                "last_reachability_check": utc_iso(d.last_reachability_check),
                 "reachability_latency_ms": d.reachability_latency_ms,
                 "reachability_method": d.reachability_method,
                 # 兼容旧字段
                 "status": d.status,
                 "device_type": d.device_type,
                 "credential_group": d.credential_group,
-                "last_backup_time": d.last_backup_time.isoformat() if d.last_backup_time else None,
+                "last_backup_time": utc_iso(d.last_backup_time),
                 "active_fault_count": fault_counts.get(d.id, 0),
             }
             for d in devices
@@ -264,7 +265,7 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
-        "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
+        "purchase_date": utc_iso(device.purchase_date),
         "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
         "modules": device.get_modules_list(),
     }
@@ -303,15 +304,15 @@ def get_device(db: Session, device_id: int) -> Dict[str, Any]:
         "snmp_community": device.snmp_community,
         "snmp_port": device.snmp_port,
         "reachability": device.reachability,
-        "last_reachability_check": device.last_reachability_check.isoformat() if device.last_reachability_check else None,
+        "last_reachability_check": utc_iso(device.last_reachability_check),
         "reachability_latency_ms": device.reachability_latency_ms,
         "reachability_method": device.reachability_method,
         # 兼容旧字段
         "status": device.status,
         "credential_group": device.credential_group,
         "vendor": device.vendor,
-        "last_backup_time": device.last_backup_time.isoformat() if device.last_backup_time else None,
-        "purchase_date": device.purchase_date.isoformat() if device.purchase_date else None,
+        "last_backup_time": utc_iso(device.last_backup_time),
+        "purchase_date": utc_iso(device.purchase_date),
         "purchase_cost": float(device.purchase_cost) if device.purchase_cost else 0,
         "modules": device.get_modules_list(),
     }

@@ -420,8 +420,8 @@ async def get_monitor3d_command_summary(plan_id: Optional[int] = None, db: Sessi
                 "if_name": fault.if_name,
                 "review_required": bool(fault.review_required) if fault.review_required is not None else False,
                 "event_count": fault.event_count or 1,
-                "last_event_at": fault.last_event_at.isoformat() if fault.last_event_at else None,
-                "created_at": fault.created_at.isoformat() if fault.created_at else None,
+                "last_event_at": utc_iso(fault.last_event_at),
+                "created_at": utc_iso(fault.created_at),
             }
             for fault in recent_faults
         ],
@@ -433,7 +433,7 @@ async def get_monitor3d_command_summary(plan_id: Optional[int] = None, db: Sessi
 
 def _monitor_event_item(fault: FaultRecord, event_type: str, event_time: datetime, title: str) -> Dict:
     return {
-        "id": f"fault:{fault.id}:{event_type}:{event_time.isoformat()}",
+        "id": f"fault:{fault.id}:{event_type}:{utc_iso(event_time)}",
         "fault_id": fault.id,
         "fault_no": fault.fault_no,
         "device_id": fault.device_id,
@@ -448,7 +448,7 @@ def _monitor_event_item(fault: FaultRecord, event_type: str, event_time: datetim
         "if_name": fault.if_name,
         "review_required": bool(fault.review_required) if fault.review_required is not None else False,
         "event_count": fault.event_count or 1,
-        "occurred_at": event_time.isoformat(),
+        "occurred_at": utc_iso(event_time),
     }
 
 
@@ -501,7 +501,7 @@ async def get_monitor3d_events(
             events.append(_monitor_event_item(fault, "fault_closed", fault.closed_at, "故障关闭"))
 
     events.sort(key=lambda item: item["occurred_at"], reverse=True)
-    return {"items": events[:limit], "window": window, "since": since.isoformat()}
+    return {"items": events[:limit], "window": window, "since": utc_iso(since)}
 
 
 @router.get("/monitor3d/traffic-heat")

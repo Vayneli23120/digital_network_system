@@ -52,6 +52,7 @@ from .features.ai.router import router as ai_router
 from .features.workflows.router import router as workflow_router
 from .features.notifications.router import router as notifications_router
 from .features.jobs.router import router as jobs_router
+from .features.system_settings.router import router as system_settings_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
 
@@ -164,6 +165,7 @@ app.include_router(ai_router)          # AI分析路由
 app.include_router(workflow_router)    # 自动化工作流路由
 app.include_router(notifications_router)  # 系统通知路由
 app.include_router(jobs_router)        # 作业监控路由
+app.include_router(system_settings_router)  # 系统设置路由
 
 
 # ============ 健康检查 ============
@@ -284,13 +286,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"启动可达性监控服务失败: {e}")
 
-    # 启动 SNMP 接口监控服务（接口状态/流量）
+    # 启动 Prometheus 连接器（替代 SNMP 接口监控服务）
     try:
-        from .services.interface_monitor import start_interface_monitor
-        start_interface_monitor()
-        logger.info("SNMP 接口监控服务已启动")
+        from .services.prometheus_connector import start_connector
+        start_connector()
+        logger.info("Prometheus 连接器已启动")
     except Exception as e:
-        logger.warning(f"启动接口监控服务失败: {e}")
+        logger.warning(f"启动 Prometheus 连接器失败: {e}")
 
     # 启动 SNMP Trap 接收器（秒级 linkDown/linkUp）
     try:
@@ -316,13 +318,13 @@ def handle_shutdown(signum, frame):
     except Exception as e:
         logger.warning(f"停止可达性监控服务失败: {e}")
 
-    # 停止 SNMP 接口监控服务
+    # 停止 Prometheus 连接器
     try:
-        from .services.interface_monitor import stop_interface_monitor
-        stop_interface_monitor()
-        logger.info("SNMP 接口监控服务已停止")
+        from .services.prometheus_connector import stop_connector
+        stop_connector()
+        logger.info("Prometheus 连接器已停止")
     except Exception as e:
-        logger.warning(f"停止接口监控服务失败: {e}")
+        logger.warning(f"停止 Prometheus 连接器失败: {e}")
 
     # 停止 SNMP Trap 接收器
     try:
