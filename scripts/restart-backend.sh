@@ -19,6 +19,13 @@ VENV="$APP_DIR/.venv"
 LOG="$APP_DIR/logs/uvicorn.log"
 PORT=8000
 
+# 加载 .env（若存在），集中管理跨物理机/Docker 的配置（PROMETHEUS_URL 等）
+if [ -f "$APP_DIR/.env" ]; then
+    set -a
+    . "$APP_DIR/.env"
+    set +a
+fi
+
 echo "[restart] 停止所有 uvicorn 进程..."
 
 # 杀掉所有 uvicorn 相关进程

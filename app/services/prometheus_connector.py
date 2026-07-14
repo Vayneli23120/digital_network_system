@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 
 COUNTER64_MAX = 2**64
 
-# Prometheus 直连地址（Python 应用与 Prometheus 同机部署）
-PROMETHEUS_URL = "http://localhost:9090"
-POLL_INTERVAL = 60  # 秒，与 Prometheus scrape_interval 对齐
+# Prometheus 直连地址（Python 应用与 Prometheus 同机部署；Prometheus 在 Docker，端口发布到宓主机）
+PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
+POLL_INTERVAL = int(os.environ.get("PROMETHEUS_POLL_INTERVAL", "60"))  # 秒，与 Prometheus scrape_interval 对齐
 
 # Prometheus file_sd 目标文件：由本连接器根据数据库自动生成。
 # 可用环境变量 PROMETHEUS_TARGETS_FILE 覆盖（例如容器挂载路径）。
