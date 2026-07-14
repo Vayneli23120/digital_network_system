@@ -18,18 +18,18 @@ export const languages = {
     loginInvalidCredentials: '用户名或密码错误',
 
     // 顶部导航
-    navDashboard: '仪表板',
+    navDashboard: '运维监控',
     navDevices: '设备管理',
     navConfig: '配置管理',
     navSpare: '资产管理',
     navSystem: '系统设置',
 
     // 侧边栏分组
-    groupOverview: '总览',
-    groupDeviceManage: '设备管理',
-    groupConfigManage: '配置管理',
-    groupSpare: '资产管理',
-    groupSystem: '系统管理',
+    groupOverview: '监控与分析',
+    groupDeviceManage: '设备与运维',
+    groupConfigManage: '配置与部署',
+    groupSpare: '备品备件',
+    groupSystem: '系统与权限',
 
     // 侧边栏菜单
     menuDashboard: '仪表板',
@@ -52,7 +52,7 @@ export const languages = {
     menuScrapInventory: '报废库存',
     menuLogs: '系统日志',
     menuAlertSettings: '告警通知',
-    menuSystemSettings: '系统设置',
+    menuSystemSettings: '通用设置',
     menuUsers: '用户管理',
     menuNotifications: '通知中心',
     menuMonitor3D: '3D 数字孪生',
@@ -3137,18 +3137,18 @@ export const languages = {
     loginInvalidCredentials: 'Invalid username or password',
 
     // 顶部导航
-    navDashboard: 'Dashboard',
+    navDashboard: 'Monitoring',
     navDevices: 'Devices',
     navConfig: 'Configuration',
     navSpare: 'Asset Mgmt',
     navSystem: 'System',
 
     // 侧边栏分组
-    groupOverview: 'Overview',
-    groupDeviceManage: 'Device Management',
-    groupConfigManage: 'Configuration',
-    groupSpare: 'Asset Management',
-    groupSystem: 'System Management',
+    groupOverview: 'Monitoring & Analytics',
+    groupDeviceManage: 'Devices & Ops',
+    groupConfigManage: 'Config & Deploy',
+    groupSpare: 'Spare Parts',
+    groupSystem: 'System & Access',
 
     // 侧边栏菜单
     menuDashboard: 'Dashboard',
@@ -3171,7 +3171,7 @@ export const languages = {
     menuScrapInventory: 'Scrap Inventory',
     menuLogs: 'System Logs',
     menuAlertSettings: 'Alert Settings',
-    menuSystemSettings: 'System Settings',
+    menuSystemSettings: 'General Settings',
     menuUsers: 'User Management',
     menuNotifications: 'Notifications',
     menuMonitor3D: '3D Digital Twin',
