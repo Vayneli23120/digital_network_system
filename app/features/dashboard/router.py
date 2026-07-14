@@ -112,6 +112,19 @@ async def get_executive_summary(
     return result
 
 
+@router.get("/realtime-status")
+async def get_realtime_status(db: Session = Depends(get_db)):
+    """实时基础设施状态 - 当前在线率 + 进行中故障 + 按厂区聚合（短缓存）。"""
+    from .dashboard_service import get_realtime_status as svc_get_realtime_status
+    key = _cache_key("dashboard:realtime-status")
+    result = cache.get(key)
+    if result is not None:
+        return result
+    result = svc_get_realtime_status(db)
+    cache.set(key, result, ttl=15)
+    return result
+
+
 @router.get("/alerts")
 async def get_alerts(db: Session = Depends(get_db)):
     """获取实时告警列表（高危故障 + 备份超期 + 系统健康）"""

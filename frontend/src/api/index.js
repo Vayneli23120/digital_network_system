@@ -10,6 +10,11 @@ export function getExecutiveSummary(timeRange = '30d') {
   return api.get('/dashboard/executive-summary', { params: { time_range: timeRange } })
 }
 
+// 实时基础设施状态（在线率 + 进行中故障 + 按厂区）
+export function getRealtimeStatus() {
+  return api.get('/dashboard/realtime-status')
+}
+
 // 获取实时告警
 export function getAlerts() {
   return api.get('/dashboard/alerts')

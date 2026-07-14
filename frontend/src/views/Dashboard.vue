@@ -1,6 +1,54 @@
 <template>
   <div class="dashboard">
     <div class="dashboard-shell">
+      <!-- 实时基础设施状态（现在什么状态） -->
+      <section class="realtime-section" v-if="realtime">
+        <div class="realtime-strip" :class="realtime.overall_status">
+          <div class="rt-headline">
+            <span class="rt-dot" :class="realtime.overall_status"></span>
+            <span class="rt-title">{{ t('rtTitle') || '实时状态' }}</span>
+          </div>
+          <div class="rt-metrics">
+            <div class="rt-item">
+              <span class="rt-num">{{ realtime.online }}/{{ realtime.total }}</span>
+              <span class="rt-label">{{ t('rtOnline') || '在线设备' }}</span>
+            </div>
+            <div class="rt-item" :class="{ danger: realtime.offline > 0 }">
+              <span class="rt-num">{{ realtime.offline }}</span>
+              <span class="rt-label">{{ t('rtOffline') || '离线' }}</span>
+            </div>
+            <div class="rt-item">
+              <span class="rt-num">{{ realtime.online_pct }}%</span>
+              <span class="rt-label">{{ t('rtOnlineRate') || '当前在线率' }}</span>
+            </div>
+            <div class="rt-item" :class="{ warning: realtime.active_faults > 0, danger: realtime.active_critical > 0 }">
+              <span class="rt-num">{{ realtime.active_faults }}</span>
+              <span class="rt-label">
+                {{ t('rtActiveFaults') || '进行中故障' }}<span v-if="realtime.active_critical > 0">（{{ realtime.active_critical }} 严重）</span>
+              </span>
+            </div>
+          </div>
+          <router-link class="rt-link" to="/monitor-3d">{{ t('rtLiveScreen') || '实时大屏' }} →</router-link>
+        </div>
+
+        <!-- 各厂区/区域状态 -->
+        <div class="site-breakdown" v-if="realtime.sites && realtime.sites.length">
+          <div class="site-title">{{ t('rtSiteTitle') || '各厂区 / 区域状态' }}</div>
+          <div class="site-grid">
+            <div v-for="s in realtime.sites" :key="s.site" class="site-card" :class="s.status">
+              <div class="site-head">
+                <span class="site-dot" :class="s.status"></span>
+                <span class="site-name">{{ s.site }}</span>
+              </div>
+              <div class="site-avail">{{ s.availability_pct }}%</div>
+              <div class="site-meta">
+                {{ s.online }}/{{ s.total }} 在线<span v-if="s.offline > 0" class="off"> · {{ s.offline }} 离线</span><span v-if="s.active_faults > 0" class="flt"> · {{ s.active_faults }} 故障</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Executive Summary Section (管理层视角) -->
       <section class="executive-section" v-if="executiveSummary">
         <!-- Summary Bar -->
@@ -116,7 +164,7 @@
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { DataBoard } from '@element-plus/icons-vue'
-import { getExecutiveSummary } from '@/api'
+import { getExecutiveSummary, getRealtimeStatus } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -128,8 +176,10 @@ import ChangeCorrelation from '@/components/ui/ChangeCorrelation.vue'
 
 const { t } = useI18n()
 const executiveSummary = ref(null)
+const realtime = ref(null)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 let timerId = null
+let realtimeTimerId = null
 
 const summaryBarClass = computed(() => {
   const summary = executiveSummary.value?.summary_text
@@ -153,13 +203,24 @@ const loadExecutive = async (force = false) => {
   }
 }
 
+const loadRealtime = async () => {
+  try {
+    realtime.value = await getRealtimeStatus()
+  } catch (err) {
+    console.error('Failed to load realtime status:', err)
+  }
+}
+
 onMounted(() => {
   loadExecutive()
+  loadRealtime()
+  realtimeTimerId = window.setInterval(loadRealtime, 30000)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
 })
 
 onUnmounted(() => {
   if (timerId) window.clearInterval(timerId)
+  if (realtimeTimerId) window.clearInterval(realtimeTimerId)
 })
 </script>
 
@@ -182,6 +243,66 @@ onUnmounted(() => {
   margin: 0 auto;
   min-height: 100vh;
 }
+
+/* ===== Realtime Status Section ===== */
+.realtime-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.realtime-strip {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+  padding: 14px 18px;
+  border-radius: var(--radius-lg);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-left: 4px solid #22c55e;
+}
+.realtime-strip.yellow { border-left-color: #facc15; }
+.realtime-strip.red { border-left-color: #ef4444; }
+
+.rt-headline { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+.rt-title { font-size: 14px; color: var(--text-primary); }
+.rt-dot { width: 10px; height: 10px; border-radius: 50%; background: #22c55e; }
+.rt-dot.yellow { background: #facc15; }
+.rt-dot.red { background: #ef4444; animation: rt-pulse 1.4s infinite; }
+@keyframes rt-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.rt-metrics { display: flex; gap: 24px; flex-wrap: wrap; flex: 1; }
+.rt-item { display: flex; flex-direction: column; }
+.rt-num { font-size: 20px; font-weight: 700; color: var(--text-primary); line-height: 1.1; }
+.rt-label { font-size: 12px; color: var(--text-muted); }
+.rt-item.warning .rt-num { color: #d97706; }
+.rt-item.danger .rt-num { color: #ef4444; }
+
+.rt-link { font-size: 13px; font-weight: 600; color: var(--brand-primary, #0984e3); text-decoration: none; white-space: nowrap; }
+.rt-link:hover { text-decoration: underline; }
+
+.site-breakdown { display: flex; flex-direction: column; gap: 8px; }
+.site-title { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.site-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.site-card {
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-top: 3px solid #22c55e;
+}
+.site-card.yellow { border-top-color: #facc15; }
+.site-card.red { border-top-color: #ef4444; }
+.site-head { display: flex; align-items: center; gap: 6px; }
+.site-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; }
+.site-dot.yellow { background: #facc15; }
+.site-dot.red { background: #ef4444; }
+.site-name { font-size: 13px; font-weight: 600; color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-avail { font-size: 22px; font-weight: 700; color: var(--text-primary); margin: 2px 0; }
+.site-meta { font-size: 12px; color: var(--text-muted); }
+.site-meta .off { color: #ef4444; }
+.site-meta .flt { color: #d97706; }
 
 /* ===== Executive Summary Section ===== */
 .executive-section {

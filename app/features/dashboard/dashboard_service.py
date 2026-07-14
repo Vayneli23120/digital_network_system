@@ -1137,6 +1137,96 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     }
 
 
+def get_realtime_status(db: Session) -> Dict[str, Any]:
+    """实时基础设施状态 - 面向工厂 IT 管理层的"现在什么状态"。
+
+    返回当前在线率快照 + 进行中故障 + 按厂区/区域(location)聚合的状态，
+    与 30 天回顾 KPI 分开，供前端高频刷新（不缓存长 TTL）。
+    """
+    now = datetime.utcnow()
+    ACTIVE_STATUS = ('open', 'assigned', 'accepted', 'diagnosing', 'resolving', 'transferred')
+
+    # ===== 全局实时快照 =====
+    in_use = db.query(Device).filter(Device.deployment_status == "in-use")
+    total = in_use.count()
+    online = in_use.filter(Device.reachability == "reachable").count()
+    offline = in_use.filter(Device.reachability == "unreachable").count()
+    unknown = max(0, total - online - offline)
+    online_pct = round(online / total * 100, 1) if total > 0 else 0.0
+
+    active_faults = db.query(FaultRecord).filter(FaultRecord.status.in_(ACTIVE_STATUS)).count()
+    active_critical = db.query(FaultRecord).filter(
+        FaultRecord.status.in_(ACTIVE_STATUS),
+        FaultRecord.severity.in_(('critical', 'major')),
+    ).count()
+
+    if offline > 0 or active_critical > 0:
+        overall = "red"
+    elif unknown > 0 or active_faults > 0:
+        overall = "yellow"
+    else:
+        overall = "green"
+
+    # ===== 按厂区/区域聚合 =====
+    LOC_UNGROUPED = "未分组"
+    site_map: Dict[str, Dict[str, int]] = {}
+    for loc, reach in db.query(Device.location, Device.reachability).filter(
+        Device.deployment_status == "in-use"
+    ).all():
+        site = (loc or "").strip() or LOC_UNGROUPED
+        s = site_map.setdefault(site, {"total": 0, "online": 0, "offline": 0, "active_faults": 0})
+        s["total"] += 1
+        if reach == "reachable":
+            s["online"] += 1
+        elif reach == "unreachable":
+            s["offline"] += 1
+
+    # 各厂区进行中故障数（按设备 location 归集）
+    for loc, cnt in db.query(Device.location, func.count(FaultRecord.id)).join(
+        FaultRecord, FaultRecord.device_id == Device.id
+    ).filter(
+        Device.deployment_status == "in-use",
+        FaultRecord.status.in_(ACTIVE_STATUS),
+    ).group_by(Device.location).all():
+        site = (loc or "").strip() or LOC_UNGROUPED
+        if site in site_map:
+            site_map[site]["active_faults"] = cnt
+
+    sites = []
+    for site, s in site_map.items():
+        avail = round(s["online"] / s["total"] * 100, 1) if s["total"] > 0 else 0.0
+        if s["offline"] > 0:
+            status = "red"
+        elif s["active_faults"] > 0 or s["online"] < s["total"]:
+            status = "yellow"
+        else:
+            status = "green"
+        sites.append({
+            "site": site,
+            "total": s["total"],
+            "online": s["online"],
+            "offline": s["offline"],
+            "active_faults": s["active_faults"],
+            "availability_pct": avail,
+            "status": status,
+        })
+    # 有问题的厂区排前面（离线多 → 可用率低）
+    sites.sort(key=lambda x: (-x["offline"], -x["active_faults"], x["availability_pct"]))
+
+    return {
+        "generated_at": now.isoformat() + "Z",
+        "total": total,
+        "online": online,
+        "offline": offline,
+        "unknown": unknown,
+        "online_pct": online_pct,
+        "active_faults": active_faults,
+        "active_critical": active_critical,
+        "overall_status": overall,
+        "sites": sites,
+    }
+
+
 def _get_status(value: float, target: float, threshold: float, higher_is_good: bool = True) -> str:
     """根据目标值和红线判断状态
 

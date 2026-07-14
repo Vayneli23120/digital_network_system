@@ -12,6 +12,13 @@
           <span class="slo-status-dot" :class="slo.status"></span>
           <span>{{ sloServiceName(slo) }}</span>
           <span class="slo-target">SLO {{ slo.target }}%</span>
+          <span class="slo-verdict" :class="slo.status">{{ sloVerdict(slo) }}</span>
+        </div>
+
+        <!-- 白话结论：本月已停机 / 允许停机 -->
+        <div class="slo-plain">
+          {{ t('sloPlainDown') || '本月已停机' }} {{ slo.consumed_min.toFixed(0) }} {{ t('sloMinutes') }} /
+          {{ t('sloPlainBudget') || '允许' }} {{ slo.error_budget_min.toFixed(0) }} {{ t('sloMinutes') }}
         </div>
 
         <!-- 预算进度条 -->
@@ -107,6 +114,13 @@ const sloServiceName = (slo) => {
   }
   // 返回翻译或兜底使用原始 service 名称
   return i18nMap[serviceKey] || slo.service || serviceKey
+}
+
+// 白话结论：达标 / 紧张 / 超标
+const sloVerdict = (slo) => {
+  if (slo.status === 'red') return t('sloVerdictBreach') || '超标'
+  if (slo.status === 'yellow') return t('sloVerdictTight') || '紧张'
+  return t('sloVerdictOk') || '达标'
 }
 </script>
 
@@ -208,6 +222,23 @@ const sloServiceName = (slo) => {
   padding: 2px 6px;
   background: var(--bg-secondary);
   border-radius: var(--radius-sm);
+}
+
+.slo-verdict {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+}
+.slo-verdict.green { color: #16a34a; background: rgba(34, 197, 94, 0.12); }
+.slo-verdict.yellow { color: #d97706; background: rgba(250, 204, 21, 0.15); }
+.slo-verdict.red { color: #dc2626; background: rgba(239, 68, 68, 0.12); }
+
+.slo-plain {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 2px 0 4px;
 }
 
 .budget-progress {
