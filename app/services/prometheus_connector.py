@@ -10,6 +10,7 @@ Prometheus 连接器 — 替代自定义 SNMP 轮询
 
 import logging
 import os
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, Optional
@@ -63,48 +64,71 @@ class PrometheusConnector:
             raise RuntimeError(f"Prometheus query error: {body.get('error', 'unknown')}")
         return body["data"]["result"]
 
-    def _fetch_device_interfaces(self, instance: str) -> Dict[int, dict]:
-        """查询一台设备全部接口的 Prometheus 指标，按 ifIndex 索引。"""
-        ifaces: Dict[int, dict] = {}
+    def _fetch_all_interfaces(self) -> Dict[str, Dict[int, dict]]:
+        """一次性查询全部设备全部接口指标（每个指标一次全量 PromQL）。
+
+        旧实现是“每台设备 × 7 个查询”（1000 台 = 7000 次串行查询），
+        改为“每个指标一次全量”共 7 次查询，按 instance 标签在内存中聚合。
+
+        返回 {instance: {ifIndex: {metric: value, ifName: ...}}}。
+        """
         metrics = [
             "ifHCInOctets", "ifHCOutOctets", "ifOperStatus",
             "ifAdminStatus", "ifHighSpeed", "ifInErrors", "ifOutErrors",
         ]
+        by_instance: Dict[str, Dict[int, dict]] = {}
         for metric in metrics:
             try:
-                results = self._query(f'{metric}{{instance="{instance}"}}')
-                for item in results:
-                    if_idx = int(item["metric"]["ifIndex"])
-                    entry = ifaces.get(if_idx)
-                    if entry is None:
-                        entry = {
-                            "ifIndex": if_idx,
-                            "ifName": item["metric"].get("ifName", ""),
-                        }
-                        ifaces[if_idx] = entry
-                    # snmp_exporter 将所有指标真实值存储在标签中，Prometheus value 始终为 1
-                    entry[metric] = int(item["metric"].get(metric, item["value"][1]))
+                results = self._query(metric)
             except Exception as exc:
-                logger.warning("Prometheus query %s failed for %s: %s", metric, instance, exc)
-        return ifaces
+                logger.warning("Prometheus batch query %s failed: %s", metric, exc)
+                continue
+            for item in results:
+                m = item["metric"]
+                instance = m.get("instance")
+                if not instance or "ifIndex" not in m:
+                    continue
+                try:
+                    if_idx = int(m["ifIndex"])
+                except (ValueError, TypeError):
+                    continue
+                dev_map = by_instance.setdefault(instance, {})
+                entry = dev_map.get(if_idx)
+                if entry is None:
+                    entry = {"ifIndex": if_idx, "ifName": m.get("ifName", "")}
+                    dev_map[if_idx] = entry
+                elif not entry.get("ifName") and m.get("ifName"):
+                    entry["ifName"] = m.get("ifName")
+                # snmp_exporter 将指标真实值存在标签中，value 始终为 1；回退到 value
+                try:
+                    entry[metric] = int(m.get(metric, item["value"][1]))
+                except (ValueError, TypeError):
+                    pass
+        return by_instance
 
     # ── 持久化 ──
 
-    def _persist(self, db, device: Device, ifaces: Dict[int, dict], now: datetime):
-        """将 Prometheus 查询结果写入 device_interfaces / interface_traffic_samples。"""
+    def _persist_device(self, db, device: Device, ifaces: Dict[int, dict], now: datetime) -> int:
+        """写入单台设备接口数据；一次性批量加载该设备接口，消除 N+1。返回写入接口数。"""
+        if not ifaces:
+            return 0
+        rows = (
+            db.query(DeviceInterface)
+            .filter(
+                DeviceInterface.device_id == device.id,
+                DeviceInterface.if_index.in_(list(ifaces.keys())),
+            )
+            .all()
+        )
+        iface_by_idx = {r.if_index: r for r in rows}
         device_key = device.ip
+        written = 0
 
         for if_idx, data in ifaces.items():
-            iface: Optional[DeviceInterface] = (
-                db.query(DeviceInterface)
-                .filter(
-                    DeviceInterface.device_id == device.id,
-                    DeviceInterface.if_index == if_idx,
-                )
-                .first()
-            )
+            iface = iface_by_idx.get(if_idx)
             if iface is None:
                 continue
+            written += 1
 
             old_oper = iface.oper_status
             new_oper = "up" if data.get("ifOperStatus", 0) == 1 else "down"
@@ -176,6 +200,8 @@ class PrometheusConnector:
                     old_oper, new_oper,
                 )
 
+        return written
+
     # ── Prometheus 目标清单自动生成 ──
 
     def sync_targets(self, db) -> bool:
@@ -240,6 +266,7 @@ class PrometheusConnector:
 
     def poll_once(self):
         """单次轮询周期：同步目标清单 → 查询 Prometheus → 写入数据库。"""
+        started = time.monotonic()
         db = next(get_db())
         try:
             # 先同步目标文件，让新增/变更的 SNMP 设备自动进入采集
@@ -257,17 +284,38 @@ class PrometheusConnector:
             )
             if not devices:
                 return
+            devices_by_ip = {d.ip: d for d in devices}
 
             now = datetime.utcnow()
-            for device in devices:
+
+            # 一次性批量查询所有指标（7 次查询，而非每台设备 7 次）
+            q_started = time.monotonic()
+            by_instance = self._fetch_all_interfaces()
+            query_ms = int((time.monotonic() - q_started) * 1000)
+
+            persist_started = time.monotonic()
+            device_count = 0
+            iface_count = 0
+            for instance, ifaces in by_instance.items():
+                device = devices_by_ip.get(instance)
+                # 端口非 161 时 instance 形如 ip:port，回退按 IP 匹配
+                if device is None and ":" in instance:
+                    device = devices_by_ip.get(instance.rsplit(":", 1)[0])
+                if device is None:
+                    continue
                 try:
-                    ifaces = self._fetch_device_interfaces(device.ip)
-                    if ifaces:
-                        self._persist(db, device, ifaces, now)
+                    iface_count += self._persist_device(db, device, ifaces, now)
+                    device_count += 1
                 except Exception as exc:
-                    logger.error("Prometheus poll failed for %s: %s", device.ip, exc)
+                    logger.error("Persist failed for %s: %s", instance, exc)
 
             db.commit()
+            persist_ms = int((time.monotonic() - persist_started) * 1000)
+            total_ms = int((time.monotonic() - started) * 1000)
+            logger.info(
+                "Prometheus poll: %d devices, %d interfaces, query=%dms persist=%dms total=%dms",
+                device_count, iface_count, query_ms, persist_ms, total_ms,
+            )
         except Exception as exc:
             logger.error("Poll cycle failed: %s", exc)
             db.rollback()
