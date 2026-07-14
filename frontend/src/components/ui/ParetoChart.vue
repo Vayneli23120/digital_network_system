@@ -28,6 +28,8 @@ const props = defineProps({
 const { t, currentLang } = useI18n()
 const chartRef = ref(null)
 let chartInstance = null
+let resizeHandler = null
+let themeHandler = null
 
 // title 兜底：未传入时使用 i18n 默认值
 const displayTitle = computed(() => props.title || t('paretoChartTitle'))
@@ -143,8 +145,10 @@ const initChart = () => {
 
 onMounted(() => {
   initChart()
-  window.addEventListener('resize', () => chartInstance?.resize())
-  window.addEventListener('theme-change', initChart)
+  resizeHandler = () => { if (chartInstance && !chartInstance.isDisposed()) chartInstance.resize() }
+  themeHandler = initChart
+  window.addEventListener('resize', resizeHandler)
+  window.addEventListener('theme-change', themeHandler)
 })
 
 watch(() => props.data, initChart, { deep: true })
@@ -152,8 +156,9 @@ watch(currentLang, initChart)
 
 onUnmounted(() => {
   chartInstance?.dispose()
-  window.removeEventListener('resize', () => chartInstance?.resize())
-  window.removeEventListener('theme-change', initChart)
+  chartInstance = null
+  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  if (themeHandler) window.removeEventListener('theme-change', themeHandler)
 })
 </script>
 
