@@ -237,6 +237,15 @@ export const languages = {
     kpiEstimated: '估算',
     kpiThreshold: '红线',
 
+    // 实时状态
+    rtTitle: '实时状态',
+    rtOnline: '在线设备',
+    rtOffline: '离线',
+    rtOnlineRate: '当前在线率',
+    rtActiveFaults: '进行中故障',
+    rtSiteTitle: '各厂区 / 区域状态',
+    rtLiveScreen: '实时大屏',
+
     // 状态标签
     statusGood: '正常',
     statusWarn: '预警',
@@ -298,6 +307,11 @@ export const languages = {
     sloBurnAboveAvg: '高于平均消耗速率',
     sloFreezeChange: '建议冻结变更',
     sloNoConfigHint: '未配置 SLO 目标，请在系统设置中添加服务 SLO',
+    sloVerdictOk: '达标',
+    sloVerdictBreach: '超标',
+    sloVerdictTight: '紧张',
+    sloPlainDown: '本月已停机',
+    sloPlainBudget: '允许',
 
     // SLO 服务名称 i18n 映射
     sloServiceCore_network: '核心网络可达性',
@@ -3356,6 +3370,15 @@ export const languages = {
     kpiEstimated: 'Est.',
     kpiThreshold: 'Threshold',
 
+    // Realtime status
+    rtTitle: 'Realtime Status',
+    rtOnline: 'Online',
+    rtOffline: 'Offline',
+    rtOnlineRate: 'Online Rate',
+    rtActiveFaults: 'Active Faults',
+    rtSiteTitle: 'Sites / Zones',
+    rtLiveScreen: 'Live Screen',
+
     // Status labels
     statusGood: 'Good',
     statusWarn: 'Warning',
@@ -3417,6 +3440,11 @@ export const languages = {
     sloBurnAboveAvg: 'Above average burn rate',
     sloFreezeChange: 'Freeze changes recommended',
     sloNoConfigHint: 'No SLO configured, add service SLO in settings',
+    sloVerdictOk: 'Pass',
+    sloVerdictBreach: 'Breach',
+    sloVerdictTight: 'Tight',
+    sloPlainDown: 'Down this month',
+    sloPlainBudget: 'Allowed',
 
     // SLO Service Names i18n mapping
     sloServiceCore_network: 'Core Network Availability',

@@ -6,34 +6,34 @@
         <div class="realtime-strip" :class="realtime.overall_status">
           <div class="rt-headline">
             <span class="rt-dot" :class="realtime.overall_status"></span>
-            <span class="rt-title">{{ t('rtTitle') || '实时状态' }}</span>
+            <span class="rt-title">{{ t('rtTitle') }}</span>
           </div>
           <div class="rt-metrics">
             <div class="rt-item">
               <span class="rt-num">{{ realtime.online }}/{{ realtime.total }}</span>
-              <span class="rt-label">{{ t('rtOnline') || '在线设备' }}</span>
+              <span class="rt-label">{{ t('rtOnline') }}</span>
             </div>
             <div class="rt-item" :class="{ danger: realtime.offline > 0 }">
               <span class="rt-num">{{ realtime.offline }}</span>
-              <span class="rt-label">{{ t('rtOffline') || '离线' }}</span>
+              <span class="rt-label">{{ t('rtOffline') }}</span>
             </div>
             <div class="rt-item">
               <span class="rt-num">{{ realtime.online_pct }}%</span>
-              <span class="rt-label">{{ t('rtOnlineRate') || '当前在线率' }}</span>
+              <span class="rt-label">{{ t('rtOnlineRate') }}</span>
             </div>
             <div class="rt-item" :class="{ warning: realtime.active_faults > 0, danger: realtime.active_critical > 0 }">
               <span class="rt-num">{{ realtime.active_faults }}</span>
               <span class="rt-label">
-                {{ t('rtActiveFaults') || '进行中故障' }}<span v-if="realtime.active_critical > 0">（{{ realtime.active_critical }} 严重）</span>
+                {{ t('rtActiveFaults') }}<span v-if="realtime.active_critical > 0">（{{ realtime.active_critical }} 严重）</span>
               </span>
             </div>
           </div>
-          <router-link class="rt-link" to="/monitor-3d">{{ t('rtLiveScreen') || '实时大屏' }} →</router-link>
+          <router-link class="rt-link" to="/monitor-3d">{{ t('rtLiveScreen') }} →</router-link>
         </div>
 
         <!-- 各厂区/区域状态 -->
         <div class="site-breakdown" v-if="realtime.sites && realtime.sites.length">
-          <div class="site-title">{{ t('rtSiteTitle') || '各厂区 / 区域状态' }}</div>
+          <div class="site-title">{{ t('rtSiteTitle') }}</div>
           <div class="site-grid">
             <div v-for="s in realtime.sites" :key="s.site" class="site-card" :class="s.status">
               <div class="site-head">

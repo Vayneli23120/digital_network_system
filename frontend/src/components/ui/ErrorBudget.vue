@@ -17,8 +17,8 @@
 
         <!-- 白话结论：本月已停机 / 允许停机 -->
         <div class="slo-plain">
-          {{ t('sloPlainDown') || '本月已停机' }} {{ slo.consumed_min.toFixed(0) }} {{ t('sloMinutes') }} /
-          {{ t('sloPlainBudget') || '允许' }} {{ slo.error_budget_min.toFixed(0) }} {{ t('sloMinutes') }}
+          {{ t('sloPlainDown') }} {{ slo.consumed_min.toFixed(0) }} {{ t('sloMinutes') }} /
+          {{ t('sloPlainBudget') }} {{ slo.error_budget_min.toFixed(0) }} {{ t('sloMinutes') }}
         </div>
 
         <!-- 预算进度条 -->
@@ -118,9 +118,9 @@ const sloServiceName = (slo) => {
 
 // 白话结论：达标 / 紧张 / 超标
 const sloVerdict = (slo) => {
-  if (slo.status === 'red') return t('sloVerdictBreach') || '超标'
-  if (slo.status === 'yellow') return t('sloVerdictTight') || '紧张'
-  return t('sloVerdictOk') || '达标'
+  if (slo.status === 'red') return t('sloVerdictBreach')
+  if (slo.status === 'yellow') return t('sloVerdictTight')
+  return t('sloVerdictOk')
 }
 </script>
 
