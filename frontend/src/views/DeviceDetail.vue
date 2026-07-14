@@ -147,8 +147,8 @@
 
         <!-- 快捷操作 -->
         <div class="quick-actions-bar">
-          <el-button type="success" @click="backupNow" :icon="Download" round size="default">{{ t('deviceBackupNow') }}</el-button>
-          <el-button @click="viewLatestConfig" :icon="View" round size="default">{{ t('backupViewConfig') }}</el-button>
+          <el-button v-if="!isAp" type="success" @click="backupNow" :icon="Download" round size="default">{{ t('deviceBackupNow') }}</el-button>
+          <el-button v-if="!isAp" @click="viewLatestConfig" :icon="View" round size="default">{{ t('backupViewConfig') }}</el-button>
           <el-button type="warning" @click="openFaultDialog" :icon="Warning" round size="default">{{ t('faultAddRecord') }}</el-button>
           <el-button type="danger" @click="confirmDeleteDevice" :icon="Delete" round v-if="device">{{ t('deviceDelete') }}</el-button>
         </div>
@@ -157,8 +157,16 @@
 
     <!-- Tabs 区域 -->
     <div class="tabs-wrapper">
+      <el-alert
+        v-if="isAp"
+        type="info"
+        :closable="false"
+        show-icon
+        style="margin-bottom: 10px"
+        title="瘦 AP：由交换机 CDP 自动发现，在线状态取自所连交换机端口；不做备份 / 查看配置 / SSH / 接口采集。"
+      />
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="接口监控" name="interfaces">
+        <el-tab-pane label="接口监控" name="interfaces" v-if="!isAp">
           <div class="iface-toolbar">
             <el-button type="primary" size="small" :icon="Connection" @click="discoverInterfaces" :loading="ifaceDiscovering">发现接口</el-button>
             <el-button size="small" :icon="Tools" @click="discoverNeighbors" :loading="ifaceNeighborLoading">发现邻居</el-button>
@@ -244,7 +252,7 @@
           </el-table>
           <el-empty v-if="!interfaces.length && !ifacesLoading" description="尚未发现接口，点击「发现接口」进行 SNMP 扫描" :image-size="60" />
         </el-tab-pane>
-        <el-tab-pane :label="t('tabBackupRecords')" name="backups">
+        <el-tab-pane :label="t('tabBackupRecords')" name="backups" v-if="!isAp">
           <el-table :data="device?.recent_backups || []" style="width: 100%">
             <el-table-column prop="backup_time" :label="t('backupTime')" width="180">
               <template #default="{ row }">{{ formatDateTime(row.backup_time) }}</template>
@@ -541,7 +549,7 @@
         </div>
 
         <!-- SNMP 监控 Section -->
-        <div class="form-section">
+        <div class="form-section" v-if="editForm.device_type !== 'ap'">
           <div class="form-section-title">
             <el-icon><Connection /></el-icon>
             SNMP 监控
@@ -842,6 +850,14 @@ const sshDisabled = computed(() => {
   // AP设备不支持SSH
   return editForm.value.device_type === 'ap'
 })
+
+// 设备详情页：AP 走 CDP 发现，隐藏备份/配置/接口采集等无关功能
+const isAp = computed(() => device.value?.device_type === 'ap')
+watch(isAp, (v) => {
+  if (v && (activeTab.value === 'interfaces' || activeTab.value === 'backups')) {
+    activeTab.value = 'faults'
+  }
+}, { immediate: true })
 
 const sshSpecialPermission = computed(() => {
   // 防火墙需要GoVault权限
