@@ -20,6 +20,10 @@
             <el-icon><Plus /></el-icon>
             <span>{{ t('deviceAdd') }}</span>
           </button>
+          <button class="nav-action-btn" @click="discoverAps" :disabled="discoveringAps">
+            <el-icon><Connection /></el-icon>
+            <span>{{ discoveringAps ? '发现中…' : '发现 AP' }}</span>
+          </button>
           <el-dropdown class="nav-action-dropdown" trigger="click">
             <button class="nav-action-btn export">
               <el-icon><Upload /></el-icon>
@@ -379,6 +383,14 @@
                 </el-option-group>
               </el-select>
             </el-form-item>
+            <el-alert
+              v-if="isAp"
+              type="info"
+              :closable="false"
+              show-icon
+              style="margin: 0 0 12px"
+              title="AP 由交换机 CDP 自动发现，无需 SSH/凭证；在线状态由所连交换机端口判定，不做 Ping/SSH 探测。建议直接用顶部「发现 AP」自动录入。"
+            />
             <el-form-item :label="t('deviceVendor')">
               <el-select v-model="newDevice.vendor">
                 <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
@@ -479,10 +491,11 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose, Setting, WarningFilled, Refresh, Search, View, Edit, Delete, ArrowRight, ArrowDown, Connection, Location, Warning, Box, Close } from '@element-plus/icons-vue'
+import axios from 'axios'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import { debounce, throttle } from '@/utils/requestManager.js'
@@ -545,6 +558,34 @@ const sshDisabled = computed(() => {
   // AP设备不支持SSH
   return newDevice.value.device_type === 'ap'
 })
+
+// AP 设备：走 CDP 发现，不做 SSH/Ping/凭证
+const isAp = computed(() => newDevice.value.device_type === 'ap')
+
+// 切到 AP 时自动降为低频监控并清掉凭证依赖，避免污染监控
+watch(() => newDevice.value.device_type, (dt) => {
+  if (dt === 'ap') {
+    newDevice.value.monitor_tier = 'low'
+    newDevice.value.credential_group = 'default'
+  }
+})
+
+// 发现 AP：对所有启用 SNMP 的交换机跑 CDP/LLDP 邻居发现，自动录入/更新 AP
+const discoveringAps = ref(false)
+const discoverAps = async () => {
+  if (discoveringAps.value) return
+  discoveringAps.value = true
+  try {
+    const res = await axios.post('/api/devices/monitor/discover-neighbors-all')
+    const d = res.data || {}
+    ElMessage.success(`发现完成：新增/更新 AP ${d.total_aps_synced || 0} 台（共扫描 ${d.devices || 0} 台设备）`)
+    loadDevices(true)
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '发现 AP 失败')
+  } finally {
+    discoveringAps.value = false
+  }
+}
 
 const sshSpecialPermission = computed(() => {
   // 防火墙需要GoVault权限

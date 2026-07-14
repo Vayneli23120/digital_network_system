@@ -1079,6 +1079,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
             "found": res.get("found", 0),
             "matched": res.get("matched", 0),
             "uplinks_marked": res.get("uplinks_marked", 0),
+            "aps_synced": res.get("aps_synced", 0),
             "cleared": res.get("cleared", 0),
             "error": res.get("error"),
         })
@@ -1086,6 +1087,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
             total_found += res.get("found", 0)
             total_matched += res.get("matched", 0)
             total_uplinks += res.get("uplinks_marked", 0)
+            total_aps += res.get("aps_synced", 0)
             total_cleared += res.get("cleared", 0)
 
     return {
@@ -1094,6 +1096,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
         "total_found": total_found,
         "total_matched": total_matched,
         "total_uplinks_marked": total_uplinks,
+        "total_aps_synced": total_aps,
         "total_cleared": total_cleared,
         "results": results,
     }
