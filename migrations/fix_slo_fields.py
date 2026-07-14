@@ -42,10 +42,10 @@ def run_migration():
     # SQLite 不支持 ALTER COLUMN，需要重建表
     # 根据服务名称设置 device_types
     device_types_map = {
-        '核心网络可达性': 'core_switch,router',
+        '核心网络可达性': 'core_switch,router,firewall,server_switch',
         '数据中心网络': 'server_switch',
         'WiFi 无线网络': 'ap,wlc',
-        '园区接入网络': 'office_switch',
+        '园区接入网络': 'office_switch,switch,uce',
     }
 
     # 创建新表

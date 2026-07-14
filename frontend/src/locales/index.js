@@ -314,7 +314,7 @@ export const languages = {
     sloPlainBudget: '允许',
 
     // SLO 服务名称 i18n 映射
-    sloServiceCore_network: '核心网络可达性',
+    sloServiceCore_network: '核心机房网络',
     sloServiceDatacenter_network: '数据中心网络',
     sloServiceCampus_access: '园区接入网络',
     sloServiceWifi_network: 'WiFi 无线网络',
@@ -3447,7 +3447,7 @@ export const languages = {
     sloPlainBudget: 'Allowed',
 
     // SLO Service Names i18n mapping
-    sloServiceCore_network: 'Core Network Availability',
+    sloServiceCore_network: 'Core Room Network',
     sloServiceDatacenter_network: 'Datacenter Network',
     sloServiceCampus_access: 'Campus Access Network',
     sloServiceWifi_network: 'WiFi Network',

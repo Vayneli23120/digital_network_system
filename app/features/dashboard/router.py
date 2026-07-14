@@ -144,3 +144,96 @@ async def clear_dashboard_cache():
     """清除 Dashboard 缓存（在数据变更后调用）"""
     count = cache.invalidate_prefix("dashboard:")
     return {"cleared": count, "message": f"已清除 {count} 个 Dashboard 缓存项"}
+
+
+# ============ SLO 配置管理（无迁移，界面直接维护）============
+
+from fastapi import HTTPException
+from pydantic import BaseModel
+from app.shared.models import ServiceSlo
+
+
+class SloUpsert(BaseModel):
+    service_key: str
+    service_name: str
+    slo_target: float
+    device_types: Optional[str] = None   # 逗号分隔的设备类型；空=全局
+    window_days: int = 30
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+def _slo_to_dict(s: ServiceSlo) -> dict:
+    return {
+        "id": s.id,
+        "service_key": s.service_key,
+        "service_name": s.service_name,
+        "slo_target": float(s.slo_target) if s.slo_target is not None else None,
+        "device_types": s.device_types or "",
+        "window_days": s.window_days,
+        "description": s.description,
+        "is_active": bool(s.is_active),
+    }
+
+
+@router.get("/slo")
+async def list_slo(db: Session = Depends(get_db)):
+    """列出所有 SLO 配置"""
+    rows = db.query(ServiceSlo).order_by(ServiceSlo.is_active.desc(), ServiceSlo.id).all()
+    return {"items": [_slo_to_dict(s) for s in rows]}
+
+
+@router.post("/slo")
+async def create_slo(body: SloUpsert, db: Session = Depends(get_db)):
+    """新增 SLO 配置"""
+    if db.query(ServiceSlo).filter(ServiceSlo.service_key == body.service_key).first():
+        raise HTTPException(status_code=400, detail=f"service_key '{body.service_key}' 已存在")
+    slo = ServiceSlo(
+        service_key=body.service_key.strip(),
+        service_name=body.service_name.strip(),
+        slo_target=body.slo_target,
+        device_types=(body.device_types or "").strip() or None,
+        window_days=body.window_days,
+        description=body.description,
+        is_active=body.is_active,
+    )
+    db.add(slo)
+    db.commit()
+    db.refresh(slo)
+    cache.invalidate_prefix("dashboard:")
+    return _slo_to_dict(slo)
+
+
+@router.put("/slo/{slo_id}")
+async def update_slo(slo_id: int, body: SloUpsert, db: Session = Depends(get_db)):
+    """更新 SLO 配置"""
+    slo = db.query(ServiceSlo).filter(ServiceSlo.id == slo_id).first()
+    if not slo:
+        raise HTTPException(status_code=404, detail="SLO 不存在")
+    dup = db.query(ServiceSlo).filter(
+        ServiceSlo.service_key == body.service_key, ServiceSlo.id != slo_id
+    ).first()
+    if dup:
+        raise HTTPException(status_code=400, detail=f"service_key '{body.service_key}' 已被占用")
+    slo.service_key = body.service_key.strip()
+    slo.service_name = body.service_name.strip()
+    slo.slo_target = body.slo_target
+    slo.device_types = (body.device_types or "").strip() or None
+    slo.window_days = body.window_days
+    slo.description = body.description
+    slo.is_active = body.is_active
+    db.commit()
+    cache.invalidate_prefix("dashboard:")
+    return _slo_to_dict(slo)
+
+
+@router.delete("/slo/{slo_id}")
+async def delete_slo(slo_id: int, db: Session = Depends(get_db)):
+    """删除 SLO 配置"""
+    slo = db.query(ServiceSlo).filter(ServiceSlo.id == slo_id).first()
+    if not slo:
+        raise HTTPException(status_code=404, detail="SLO 不存在")
+    db.delete(slo)
+    db.commit()
+    cache.invalidate_prefix("dashboard:")
+    return {"ok": True}

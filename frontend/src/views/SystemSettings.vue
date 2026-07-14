@@ -27,13 +27,79 @@
         </div>
       </el-form>
     </el-card>
+
+    <!-- SLO 服务配置 -->
+    <el-card style="margin-top: 20px">
+      <template #header>
+        <div class="card-header">
+          <span>SLO 服务配置</span>
+          <el-button type="primary" size="small" @click="openSloDialog()">新增 SLO</el-button>
+        </div>
+      </template>
+      <div class="slo-hint">定义服务可用性目标（如核心机房 99.9%）。同一故障域的设备应归入同一个 SLO；停机按故障时长自动计入预算。</div>
+      <el-table :data="sloList" v-loading="sloLoading" size="small" style="margin-top: 8px">
+        <el-table-column label="服务名称" prop="service_name" min-width="130" />
+        <el-table-column label="标识 key" prop="service_key" width="140" />
+        <el-table-column label="目标" width="80">
+          <template #default="{ row }">{{ row.slo_target }}%</template>
+        </el-table-column>
+        <el-table-column label="设备类型" min-width="220">
+          <template #default="{ row }">{{ row.device_types || '全局' }}</template>
+        </el-table-column>
+        <el-table-column label="窗口" width="70">
+          <template #default="{ row }">{{ row.window_days }}d</template>
+        </el-table-column>
+        <el-table-column label="启用" width="64" align="center">
+          <template #default="{ row }"><el-switch :model-value="row.is_active" @change="v => toggleSlo(row, v)" size="small" /></template>
+        </el-table-column>
+        <el-table-column label="操作" width="110">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" @click="openSloDialog(row)">编辑</el-button>
+            <el-button link type="danger" size="small" @click="deleteSloRow(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <el-empty v-if="!sloList.length && !sloLoading" description="尚未配置 SLO，点「新增 SLO」添加" :image-size="56" />
+    </el-card>
+
+    <!-- SLO 编辑对话框 -->
+    <el-dialog v-model="sloDialog" :title="sloForm.id ? '编辑 SLO' : '新增 SLO'" width="560px">
+      <el-form :model="sloForm" label-width="100px">
+        <el-form-item label="服务名称" required>
+          <el-input v-model="sloForm.service_name" placeholder="如 核心机房网络" />
+        </el-form-item>
+        <el-form-item label="标识 key" required>
+          <el-input v-model="sloForm.service_key" placeholder="如 core_room（英文、唯一）" :disabled="!!sloForm.id" />
+        </el-form-item>
+        <el-form-item label="目标可用率">
+          <el-input-number v-model="sloForm.slo_target" :min="90" :max="100" :step="0.1" :precision="2" />
+          <span class="form-tip">%</span>
+        </el-form-item>
+        <el-form-item label="设备类型">
+          <el-select v-model="sloDeviceTypes" multiple placeholder="选择设备类型（空=全局）" style="width: 100%">
+            <el-option v-for="dt in deviceTypeOptions" :key="dt.value" :label="dt.label" :value="dt.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="统计窗口">
+          <el-input-number v-model="sloForm.window_days" :min="1" :max="365" />
+          <span class="form-tip">天</span>
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="sloForm.is_active" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="sloDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveSlo" :loading="sloSaving">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -97,12 +163,138 @@ async function saveSettings() {
 }
 
 onMounted(loadSettings)
+
+// ===== SLO 服务配置 =====
+const deviceTypeOptions = [
+  { value: 'core_switch', label: '核心交换机' },
+  { value: 'router', label: '路由器' },
+  { value: 'firewall', label: '防火墙' },
+  { value: 'server_switch', label: '服务器交换机' },
+  { value: 'office_switch', label: '办公交换机' },
+  { value: 'switch', label: '接入交换机' },
+  { value: 'uce', label: 'UCE' },
+  { value: 'wlc', label: '无线控制器' },
+  { value: 'ap', label: 'AP' },
+  { value: 'pa', label: 'PA 防火墙' },
+  { value: 'ftd', label: 'FTD' },
+  { value: 'other', label: '其他' },
+]
+
+const sloList = ref([])
+const sloLoading = ref(false)
+const sloDialog = ref(false)
+const sloSaving = ref(false)
+const sloDeviceTypes = ref([])
+const sloForm = reactive({
+  id: null,
+  service_key: '',
+  service_name: '',
+  slo_target: 99.9,
+  window_days: 30,
+  is_active: true,
+})
+
+async function loadSlo() {
+  sloLoading.value = true
+  try {
+    const res = await axios.get('/api/dashboard/slo')
+    sloList.value = res.data.items || []
+  } catch (e) {
+    ElMessage.error('加载 SLO 配置失败')
+  } finally {
+    sloLoading.value = false
+  }
+}
+
+function openSloDialog(row = null) {
+  if (row) {
+    sloForm.id = row.id
+    sloForm.service_key = row.service_key
+    sloForm.service_name = row.service_name
+    sloForm.slo_target = row.slo_target
+    sloForm.window_days = row.window_days
+    sloForm.is_active = row.is_active
+    sloDeviceTypes.value = (row.device_types || '').split(',').map(s => s.trim()).filter(Boolean)
+  } else {
+    sloForm.id = null
+    sloForm.service_key = ''
+    sloForm.service_name = ''
+    sloForm.slo_target = 99.9
+    sloForm.window_days = 30
+    sloForm.is_active = true
+    sloDeviceTypes.value = []
+  }
+  sloDialog.value = true
+}
+
+async function saveSlo() {
+  if (!sloForm.service_name.trim() || !sloForm.service_key.trim()) {
+    ElMessage.warning('服务名称和标识 key 不能为空')
+    return
+  }
+  sloSaving.value = true
+  const payload = {
+    service_key: sloForm.service_key.trim(),
+    service_name: sloForm.service_name.trim(),
+    slo_target: sloForm.slo_target,
+    device_types: sloDeviceTypes.value.join(','),
+    window_days: sloForm.window_days,
+    is_active: sloForm.is_active,
+  }
+  try {
+    if (sloForm.id) {
+      await axios.put(`/api/dashboard/slo/${sloForm.id}`, payload)
+    } else {
+      await axios.post('/api/dashboard/slo', payload)
+    }
+    ElMessage.success('已保存')
+    sloDialog.value = false
+    loadSlo()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '保存失败')
+  } finally {
+    sloSaving.value = false
+  }
+}
+
+async function toggleSlo(row, val) {
+  try {
+    await axios.put(`/api/dashboard/slo/${row.id}`, {
+      service_key: row.service_key,
+      service_name: row.service_name,
+      slo_target: row.slo_target,
+      device_types: row.device_types || '',
+      window_days: row.window_days,
+      is_active: val,
+    })
+    row.is_active = val
+  } catch (e) {
+    ElMessage.error('更新失败')
+  }
+}
+
+async function deleteSloRow(row) {
+  try {
+    await ElMessageBox.confirm(`确定删除 SLO「${row.service_name}」？`, '确认删除', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await axios.delete(`/api/dashboard/slo/${row.id}`)
+    ElMessage.success('已删除')
+    loadSlo()
+  } catch (e) {
+    ElMessage.error('删除失败')
+  }
+}
+
+onMounted(loadSlo)
 </script>
 
 <style scoped>
 .system-settings-page {
   padding: 20px;
-  max-width: 800px;
+  max-width: 1080px;
   margin: 0 auto;
 }
 
@@ -116,6 +308,12 @@ onMounted(loadSettings)
   margin-left: 10px;
   font-size: 12px;
   color: #999;
+}
+
+.slo-hint {
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.5;
 }
 
 .form-section {
