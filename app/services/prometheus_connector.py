@@ -9,10 +9,13 @@ Prometheus 连接器 — 替代自定义 SNMP 轮询
 """
 
 import logging
+import os
 from datetime import datetime
+from pathlib import Path
 from typing import Dict, Optional
 
 import httpx
+import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
@@ -26,6 +29,13 @@ COUNTER64_MAX = 2**64
 # Prometheus 直连地址（Python 应用与 Prometheus 同机部署）
 PROMETHEUS_URL = "http://localhost:9090"
 POLL_INTERVAL = 60  # 秒，与 Prometheus scrape_interval 对齐
+
+# Prometheus file_sd 目标文件：由本连接器根据数据库自动生成。
+# 可用环境变量 PROMETHEUS_TARGETS_FILE 覆盖（例如容器挂载路径）。
+_DEFAULT_TARGETS_FILE = str(
+    Path(__file__).resolve().parents[2] / "docker" / "prometheus" / "targets" / "snmp_devices.yml"
+)
+TARGETS_FILE = os.environ.get("PROMETHEUS_TARGETS_FILE", _DEFAULT_TARGETS_FILE)
 
 
 class PrometheusConnector:
@@ -166,12 +176,78 @@ class PrometheusConnector:
                     old_oper, new_oper,
                 )
 
+    # ── Prometheus 目标清单自动生成 ──
+
+    def sync_targets(self, db) -> bool:
+        """根据数据库中启用 SNMP 的设备生成 Prometheus file_sd 目标文件。
+
+        按 snmp_community 分组（对应 snmp_exporter 的 auth 名），仅在内容变化时写入，
+        避免无谓写盘。新增设备后下一个周期即可自动进入 Prometheus 采集。
+
+        返回 True 表示文件发生了变更。
+        """
+        devices = (
+            db.query(Device)
+            .filter(
+                Device.snmp_enabled == True,  # noqa: E712
+                Device.ip.isnot(None),
+                Device.snmp_community.isnot(None),
+            )
+            .order_by(Device.snmp_community, Device.ip)
+            .all()
+        )
+
+        # 按 auth（社区名）分组，可选端口不为 161 时附在目标后
+        groups: Dict[str, list] = {}
+        for dev in devices:
+            auth = dev.snmp_community
+            port = getattr(dev, "snmp_port", None)
+            target = dev.ip if not port or port == 161 else f"{dev.ip}:{port}"
+            groups.setdefault(auth, []).append(target)
+
+        target_groups = [
+            {
+                "targets": sorted(set(targets)),
+                "labels": {"job": "snmp_cisco", "auth": auth},
+            }
+            for auth, targets in sorted(groups.items())
+        ]
+
+        header = "# SNMP 设备目标列表 — 由 prometheus_connector.sync_targets() 自动生成，请勿手动编辑。\n"
+        body = yaml.safe_dump(target_groups, allow_unicode=True, sort_keys=False, default_flow_style=False)
+        content = header + (body if target_groups else "[]\n")
+
+        try:
+            existing = None
+            if os.path.exists(TARGETS_FILE):
+                with open(TARGETS_FILE, "r", encoding="utf-8") as fh:
+                    existing = fh.read()
+            if existing == content:
+                return False
+            os.makedirs(os.path.dirname(TARGETS_FILE), exist_ok=True)
+            with open(TARGETS_FILE, "w", encoding="utf-8") as fh:
+                fh.write(content)
+            logger.info(
+                "Prometheus targets synced: %d device(s), %d auth group(s) → %s",
+                len(devices), len(target_groups), TARGETS_FILE,
+            )
+            return True
+        except OSError as exc:
+            logger.warning("Failed to write Prometheus targets file %s: %s", TARGETS_FILE, exc)
+            return False
+
     # ── 轮询入口 ──
 
     def poll_once(self):
-        """单次轮询周期：查询 Prometheus → 写入数据库。"""
+        """单次轮询周期：同步目标清单 → 查询 Prometheus → 写入数据库。"""
         db = next(get_db())
         try:
+            # 先同步目标文件，让新增/变更的 SNMP 设备自动进入采集
+            try:
+                self.sync_targets(db)
+            except Exception as exc:
+                logger.warning("sync_targets failed: %s", exc)
+
             devices = (
                 db.query(Device)
                 .filter(

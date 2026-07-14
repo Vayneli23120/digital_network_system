@@ -960,9 +960,9 @@ async def discover_device_interfaces(device_id: int, db: Session = Depends(get_d
     if not device:
         raise HTTPException(status_code=404, detail="设备不存在")
 
-    from app.services.interface_monitor import get_interface_monitor
+    from app.services.snmp_discovery import discover_interfaces
     # discover 内部使用 asyncio.run，需在线程中执行以避免与当前事件循环冲突
-    result = await asyncio.to_thread(get_interface_monitor().discover_interfaces, device_id)
+    result = await asyncio.to_thread(discover_interfaces, device_id)
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "发现失败"))
     return result
@@ -975,8 +975,8 @@ async def discover_device_neighbors(device_id: int, db: Session = Depends(get_db
     if not device:
         raise HTTPException(status_code=404, detail="设备不存在")
 
-    from app.services.interface_monitor import get_interface_monitor
-    result = await asyncio.to_thread(get_interface_monitor().discover_neighbors, device_id)
+    from app.services.snmp_discovery import discover_neighbors
+    result = await asyncio.to_thread(discover_neighbors, device_id)
     if not result.get("ok"):
         raise HTTPException(status_code=400, detail=result.get("error", "邻居发现失败"))
     return result
@@ -1065,14 +1065,13 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
     if not devices:
         return {"ok": True, "devices": 0, "results": []}
 
-    from app.services.interface_monitor import get_interface_monitor
-    monitor = get_interface_monitor()
+    from app.services.snmp_discovery import discover_neighbors
 
     results = []
     total_found = total_matched = total_uplinks = 0
     total_cleared = 0
     for dev in devices:
-        res = await asyncio.to_thread(monitor.discover_neighbors, dev.id)
+        res = await asyncio.to_thread(discover_neighbors, dev.id)
         results.append({
             "device_id": dev.id,
             "device_name": dev.name,

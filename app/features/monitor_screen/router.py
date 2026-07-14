@@ -550,12 +550,9 @@ async def get_monitor3d_snmp_health(plan_id: Optional[int] = None, db: Session =
 
     now = datetime.utcnow()
     summary = {"fresh": 0, "lagging": 0, "stale": 0, "missing": 0, "down": 0, "total": 0}
+    # 采集器诊断字段：周期采集已迁移到 Prometheus 连接器，旧自研 poller 已移除。
+    # 保留字段占位为空以兼容前端；采集运行状态改看 /api/system/diagnostics。
     collector_state = {}
-    try:
-        from app.services.interface_monitor import get_interface_monitor
-        collector_state = get_interface_monitor().get_poll_state_snapshot()
-    except Exception:
-        collector_state = {}
     items = []
     for iface, device in query.all():
         collector = collector_state.get(iface.device_id, {})
