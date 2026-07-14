@@ -553,6 +553,28 @@ const probeResult = ref({
   connection: null
 })
 
+const newDevice = ref({
+  name: '',
+  ip: '',
+  model: '',
+  location: '',
+  device_type: 'other',
+  role: 'access',
+  deployment_status: 'un-used',
+  monitor_tier: 'normal',
+  vendor: 'cisco',
+  credential_group: 'default',
+  modules: [{ type: 'main', pid: '', serial_number: '' }]
+})
+
+const addModule = () => {
+  newDevice.value.modules.push({ type: 'other', pid: '', serial_number: '' })
+}
+
+const removeModule = (index) => {
+  newDevice.value.modules.splice(index, 1)
+}
+
 // SSH能力判断
 const sshDisabled = computed(() => {
   // AP设备不支持SSH
@@ -596,29 +618,6 @@ const sshSpecialPermission = computed(() => {
 const datacenterTypes = ['core_switch', 'server_switch', 'router', 'pa', 'ftd']
 const wifiTypes = ['ap', 'wlc']
 const accessTypes = ['uce', 'office_switch']
-
-const newDevice = ref({
-  name: '',
-  ip: '',
-  model: '',
-  location: '',
-  device_type: 'other',
-  role: 'access',
-  deployment_status: 'un-used',  // 新字段
-  monitor_tier: 'normal',  // 监控分级
-  vendor: 'cisco',
-  credential_group: 'default',
-  modules: [{ type: 'main', pid: '', serial_number: '' }] // 默认一个主机模块
-})
-
-// 模块管理
-const addModule = () => {
-  newDevice.value.modules.push({ type: 'other', pid: '', serial_number: '' })
-}
-
-const removeModule = (index) => {
-  newDevice.value.modules.splice(index, 1)
-}
 
 // 设备探测函数
 const testReachability = async () => {

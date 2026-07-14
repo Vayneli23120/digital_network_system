@@ -1,15 +1,15 @@
-# SNMP 设备目标列表 — 由 prometheus_connector 自动更新
+# SNMP 设备目标列表 — 由 prometheus_connector.sync_targets() 自动生成，请勿手动编辑。
 - targets:
-    - 192.168.4.1      # pnetlab-swr
-    - 10.121.2.1       # cn-pulandian1-swr
-    - 10.121.2.2       # cn-pulkeegenoffice-sw
-    - 10.121.2.3       # cn-puluce001-sw
-    - 10.121.2.254     # cn-ucebase-sw
+  - 10.121.2.1
+  - 10.121.2.2
+  - 10.121.2.254
+  - 10.121.2.3
+  - 192.168.4.1
   labels:
     job: snmp_cisco
     auth: gyread
 - targets:
-    - 10.121.1.1       # cn-pulandian1-rtr
+  - 10.121.1.1
   labels:
     job: snmp_cisco
     auth: public
