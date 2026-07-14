@@ -23,6 +23,7 @@ from sqlalchemy import func
 from app.shared.database import get_db
 from app.shared.models import Device, DeviceInterface
 from app.features.devices.snmp_service import get_snmp_service, SNMP_AVAILABLE
+from app.services.ap_discovery import is_ap_neighbor, upsert_ap_from_neighbor
 
 # 一次性发现操作的 SNMP 超时（秒）
 SNMP_TIMEOUT = 8
@@ -216,6 +217,7 @@ def discover_neighbors(device_id: int) -> Dict:
         neighbors = []
         matched = 0
         uplinks_marked = 0
+        aps_synced = 0
         seen_ifaces = set()   # 已处理的本地接口（按 if_index），CDP 先于 LLDP
 
         for n in raw_neighbors:
@@ -250,6 +252,17 @@ def discover_neighbors(device_id: int) -> Dict:
             iface.peer_if_name = remote_port or None
             iface.neighbor_source = n.get("source")
             iface.neighbor_updated_at = datetime.utcnow()
+
+            # 未匹配到系统内设备，但 CDP/LLDP 特征判定为 AP → 自动建 AP 记录。
+            # AP 在线状态后续由所连交换机端口 oper_status 推导（sync_ap_online_status）；
+            # 此刻能看到 CDP 邻居即说明端口 up，先置 reachable。
+            if peer is None and is_ap_neighbor(remote_platform, remote_host):
+                peer = upsert_ap_from_neighbor(db, n, device)
+                if peer is not None:
+                    peer.reachability = "reachable"
+                    peer.last_reachability_check = datetime.utcnow()
+                    peer.reachability_method = "cdp"
+                    aps_synced += 1
 
             is_uplink = False
             if peer is not None:
@@ -324,6 +337,7 @@ def discover_neighbors(device_id: int) -> Dict:
             "found": len(neighbors),
             "matched": matched,
             "uplinks_marked": uplinks_marked,
+            "aps_synced": aps_synced,
             "cleared": cleared,
         }
     except Exception as e:

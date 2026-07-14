@@ -250,7 +250,8 @@ class ReachabilityMonitor:
             devices = db.query(Device).filter(
                 Device.deployment_status == 'in-use',
                 Device.ip.isnot(None),
-                Device.monitor_tier == tier
+                Device.monitor_tier == tier,
+                Device.device_type != 'ap',   # AP 在线状态由所连交换机端口(CDP)判定，不做 ping/ssh 探测
             ).all()
 
             return [

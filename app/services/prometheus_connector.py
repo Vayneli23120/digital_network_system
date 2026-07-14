@@ -311,6 +311,16 @@ class PrometheusConnector:
 
             db.commit()
             persist_ms = int((time.monotonic() - persist_started) * 1000)
+
+            # 根据交换机端口 oper_status 刷新 AP 在线状态（AP 不 ping，靠 CDP + 端口）
+            try:
+                from app.services.ap_discovery import sync_ap_online_status
+                ap_updated = sync_ap_online_status(db)
+                if ap_updated:
+                    db.commit()
+            except Exception as exc:
+                logger.warning("sync_ap_online_status failed: %s", exc)
+
             total_ms = int((time.monotonic() - started) * 1000)
             logger.info(
                 "Prometheus poll: %d devices, %d interfaces, query=%dms persist=%dms total=%dms",
