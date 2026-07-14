@@ -574,9 +574,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     availability_value = (reachable_devices / total_deployed * 100) if total_deployed > 0 else 0
     availability_status = _get_status(availability_value, 99.5, 98, higher_is_good=True)
 
-    # 可用率趋势：与上一周期对比（百分点差）
-    # 注：可达性是实时状态，无法回溯历史，故 trend=0
-    availability_trend = 0
+    # 可用率趋势：可达性是实时状态，无法回溯历史 → 趋势未知（不显示箭头）
+    availability_trend = None
 
     # ===== 2. 活跃故障数 =====
     ACTIVE_STATUS = ('open', 'assigned', 'accepted', 'diagnosing', 'resolving', 'transferred')
@@ -590,7 +589,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         FaultRecord.created_at < range_start,
         FaultRecord.status.in_(ACTIVE_STATUS)
     ).count()
-    active_faults_trend = active_faults - prev_active_faults
+    # 活跃故障是“当前快照”，无法与历史快照可比 → 趋势未知（不显示箭头）
+    active_faults_trend = None
     active_faults_status = "green" if active_faults == 0 else ("yellow" if active_faults <= 5 else "red")
 
     # ===== 3. SLA 达标率 =====
@@ -753,9 +753,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                            if sp.quantity_in_stock <= (sp.min_quantity or 0) and (sp.min_quantity or 0) > 0])
     low_stock_status = "green" if low_stock_count == 0 else ("yellow" if low_stock_count < 3 else "red")
 
-    # 低库存趋势：当前与上月对比（数量差）
-    # 注：备件库存是实时状态，无法回溯历史，故 trend=0
-    low_stock_trend = 0
+    # 低库存是实时状态，无法回溯历史 → 趋势未知（不显示箭头）
+    low_stock_trend = None
 
     # ===== 10. 备件保障天数 =====
     consumption_start = now - timedelta(days=90)
@@ -782,9 +781,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     spare_days_cover_estimated = len(days_cover_values) == 0
     days_cover_status = _get_status(spare_days_cover, 30, 14, higher_is_good=True)
 
-    # 保障天数趋势：与上月对比
-    # 注：消耗数据计算周期长，趋势变化缓慢，暂设 trend=0
-    days_cover_trend = 0
+    # 保障天数趋势：消耗周期长、无历史快照 → 趋势未知（不显示箭头）
+    days_cover_trend = None
 
     # ===== 11. 根因分布 =====
     fault_types = Counter(f.fault_type or "other" for f in all_faults_30d)
@@ -901,29 +899,48 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             scope_devices = db.query(Device.id).filter(Device.device_type.in_(type_list)).all()
             scope_device_ids = [d.id for d in scope_devices]
 
-        # 已消耗：窗口内的停机分钟数（按设备范围过滤）
+        # 已消耗：窗口内故障造成的停机分钟数。
+        # 自动按故障时长推导（不再依赖手工 downtime_minutes，否则自动工单永远算 0）：
+        # - 优先使用手工填写的 downtime_minutes（>0）
+        # - 否则对 critical/major 故障按 时长(创建→解决；未关单则→现在) 计算
         window_start = now - timedelta(days=window_days)
-        consumed_q = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
-            FaultRecord.created_at >= window_start,
-            FaultRecord.status.in_(('resolved', 'closed'))
-        )
+        last_24h_start = now - timedelta(hours=24)
+        OUTAGE_SEVERITIES = ("critical", "major")
+
+        scope_fault_q = db.query(FaultRecord).filter(FaultRecord.created_at >= window_start)
         if type_list and scope_device_ids:
-            consumed_q = consumed_q.filter(FaultRecord.device_id.in_(scope_device_ids))
-        consumed_minutes = consumed_q.scalar() or 0
+            scope_fault_q = scope_fault_q.filter(FaultRecord.device_id.in_(scope_device_ids))
+        scope_faults = scope_fault_q.all()
+
+        def _auto_downtime(f, floor_start):
+            """故障停机分钟数（可选起点下限，用于 24h 窗口切分）"""
+            if (f.severity or "").lower() not in OUTAGE_SEVERITIES:
+                return 0.0
+            start = f.created_at
+            if not start:
+                return 0.0
+            end = f.resolved_at or f.closed_at
+            if end is None:
+                if f.status in ("resolved", "closed"):
+                    return 0.0
+                end = now  # 未关单：算到现在（反映进行中的停机）
+            if floor_start and start < floor_start:
+                start = floor_start
+            if end <= start:
+                return 0.0
+            return (end - start).total_seconds() / 60.0
+
+        consumed_minutes = 0.0
+        for f in scope_faults:
+            manual = float(f.downtime_minutes) if f.downtime_minutes else 0.0
+            consumed_minutes += manual if manual > 0 else _auto_downtime(f, None)
 
         # 剩余预算百分比
         remaining_minutes = error_budget_minutes - float(consumed_minutes)
         remaining_pct = (remaining_minutes / error_budget_minutes * 100) if error_budget_minutes > 0 else 100
 
-        # 燃尽率 burn_rate = 近24h消耗速率 / 允许平均速率（同样按范围过滤）
-        last_24h_start = now - timedelta(hours=24)
-        burn_q = db.query(func.sum(FaultRecord.downtime_minutes)).filter(
-            FaultRecord.created_at >= last_24h_start,
-            FaultRecord.status.in_(('resolved', 'closed'))
-        )
-        if type_list and scope_device_ids:
-            burn_q = burn_q.filter(FaultRecord.device_id.in_(scope_device_ids))
-        last_24h_consumed = burn_q.scalar() or 0
+        # 燃尽率 burn_rate = 近24h停机速率 / 允许平均速率（含进行中的故障）
+        last_24h_consumed = sum(_auto_downtime(f, last_24h_start) for f in scope_faults)
 
         allowed_avg_rate = error_budget_minutes / window_days  # 每天允许消耗
         actual_24h_rate = float(last_24h_consumed)  # 24小时实际消耗
@@ -1090,9 +1107,9 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         "kpis": {
             "availability": _make_kpi(availability_value, "%", 99.5, 98, availability_trend, availability_status),
             "active_faults": _make_kpi(active_faults, "", None, None, active_faults_trend, active_faults_status),
-            "sla_rate": _make_kpi(sla_rate_value, "%", 95, 90, sla_rate_trend, sla_rate_status),
-            "mttr_hours": _make_kpi(mttr_hours, "h", 4, 8, mttr_trend, mttr_status),
-            "mtbf_days": _make_kpi(mtbf_days, "d", None, None, mtbf_trend, mtbf_status),
+            "sla_rate": _make_kpi(sla_rate_value if sla_total > 0 else None, "%", 95, 90, sla_rate_trend if sla_total > 0 else None, sla_rate_status),
+            "mttr_hours": _make_kpi(mttr_hours if resolved_faults else None, "h", 4, 8, mttr_trend if resolved_faults else None, mttr_status),
+            "mtbf_days": _make_kpi(mtbf_days if total_faults_in_range > 0 else None, "d", None, None, mtbf_trend if total_faults_in_range > 0 else None, mtbf_status),
             "recurring_rate": _make_kpi(recurring_rate, "%", 15, 25, recurring_trend, recurring_status),
             "month_cost": _make_kpi(month_total_cost, "¥", budget_value, None, month_cost_trend, month_cost_status, is_estimated=False),
             "budget_variance": _make_kpi(
@@ -1101,7 +1118,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                 is_estimated=budget_value is None
             ),
             "spare_low_stock": _make_kpi(low_stock_count, "", 0, 3, low_stock_trend, low_stock_status),
-            "spare_days_cover": _make_kpi(spare_days_cover, "d", 30, 14, days_cover_trend, days_cover_status, is_estimated=spare_days_cover_estimated),
+            "spare_days_cover": _make_kpi(spare_days_cover if not spare_days_cover_estimated else None, "d", 30, 14, days_cover_trend, days_cover_status, is_estimated=spare_days_cover_estimated),
             "change_success_rate": _make_kpi(change_success_rate, "%", 95, 85, change_trend, change_status),
         },
         "summary_text": summary_text,

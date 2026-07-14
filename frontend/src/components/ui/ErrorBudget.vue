@@ -5,8 +5,8 @@
       <span class="budget-subtitle">{{ t('sloErrorBudget') }}</span>
     </div>
     <div class="budget-content">
-      <!-- SLO 服务列表 -->
-      <div v-for="slo in sloData" :key="slo.service_key || slo.service" class="slo-item" :class="slo.status">
+      <!-- SLO 服务列表（排除未配置占位） -->
+      <div v-for="slo in realSlos" :key="slo.service_key || slo.service" class="slo-item" :class="slo.status">
         <!-- 服务名称 -->
         <div class="slo-service-name">
           <span class="slo-status-dot" :class="slo.status"></span>
@@ -57,8 +57,8 @@
         </div>
       </div>
 
-      <!-- 无 SLO 配置时的默认提示 -->
-      <div v-if="sloData.length === 1 && (sloData[0].service_key === 'default' || sloData[0].service === 'default')" class="no-slo-config">
+      <!-- 未配置 SLO 时的引导提示 -->
+      <div v-if="isNoConfig" class="no-slo-config">
         <span class="no-config-icon">📊</span>
         <span class="no-config-text">{{ t('sloNoConfigHint') }}</span>
       </div>
@@ -85,6 +85,14 @@ const props = defineProps({
 const { t } = useI18n()
 
 const sloData = computed(() => props.data || [])
+
+// 排除“default”占位（未配置 SLO 时后端会回一个 default 占位）
+const realSlos = computed(() =>
+  sloData.value.filter((s) => (s.service_key || s.service) !== 'default')
+)
+const isNoConfig = computed(() =>
+  sloData.value.length > 0 && realSlos.value.length === 0
+)
 
 // SLO 服务名称 i18n 映射函数
 const sloServiceName = (slo) => {
