@@ -65,6 +65,10 @@ cd network-automation-system
 # 覆盖率：核心服务层 100% 覆盖
 ```
 
+远程 PostgreSQL 双连接并发验证请严格按照
+[远程测试机 PostgreSQL 并发测试手册](docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md)
+执行。测试必须使用独立数据库 `nas_concurrency_test`，禁止连接业务库。
+
 ---
 
 ## 测试数据
