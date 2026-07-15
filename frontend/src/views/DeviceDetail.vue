@@ -888,9 +888,9 @@ const loadGrafanaUrl = async () => {
 const showGrafanaTab = computed(() => !!grafanaBaseUrl.value && !isAp.value && !!device.value?.ip)
 const grafanaEmbedUrl = computed(() => {
   if (!showGrafanaTab.value) return ''
-  const base = grafanaBaseUrl.value.replace(/\/+$/, '')
+  // 使用后端反向代理 /grafana/* → http://localhost:3001/*，避免混合内容拦截
   const inst = encodeURIComponent(device.value.ip)
-  return `${base}/d/device-metrics/device-metrics?var-instance=${inst}&kiosk&theme=light&refresh=30s`
+  return `/grafana/d/device-metrics/device-metrics?var-instance=${inst}&kiosk&theme=light&refresh=30s`
 })
 
 const sshSpecialPermission = computed(() => {

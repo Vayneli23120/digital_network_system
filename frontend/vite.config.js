@@ -50,6 +50,10 @@ export default defineConfig(({ mode }) => {
               console.log('WebSocket proxy request:', req.url);
             });
           }
+        },
+        '/grafana': {
+          target: apiBaseUrl,
+          changeOrigin: true
         }
       }
     }

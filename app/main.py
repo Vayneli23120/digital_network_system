@@ -88,7 +88,7 @@ async def add_security_headers(request: Request, call_next):
     """安全头 + Request ID 中间件"""
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4())[:8])
@@ -292,6 +292,35 @@ async def system_diagnostics():
         db.close()
 
     return diag
+
+
+# ============ Grafana 反向代理 ============
+
+
+@app.api_route("/grafana/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+async def grafana_proxy(request: Request, path: str):
+    """代理 Grafana 请求，避免 HTTPS 页面嵌入 HTTP iframe 的混合内容拦截"""
+    from starlette.responses import StreamingResponse
+    from httpx import AsyncClient, URL as HttpxURL
+
+    # 去掉 Accept-Encoding，让 Grafana 返回未压缩内容，避免代理解压/编码不一致
+    async with AsyncClient(base_url="http://localhost:3001") as client:
+        url = HttpxURL(path=f"/grafana/{path}", query=request.url.query.encode())
+        headers = {k: v for k, v in request.headers.items()
+                   if k.lower() not in ("host", "referer", "accept-encoding")}
+        req = client.build_request(
+            request.method,
+            url,
+            headers=headers,
+            content=await request.body(),
+        )
+        resp = await client.send(req, stream=True)
+
+        return StreamingResponse(
+            resp.aiter_bytes(),
+            status_code=resp.status_code,
+            headers=dict(resp.headers),
+        )
 
 
 # ============ SPA Fallback ============

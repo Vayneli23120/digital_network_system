@@ -39,6 +39,9 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_SECURITY_COOKIE_SAMESITE=none
       - GF_USERS_DEFAULT_THEME=light
+      # 通过后端 /grafana 反向代理访问（子路径模式）
+      - GF_SERVER_ROOT_URL=http://192.168.4.37:8000/grafana
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro

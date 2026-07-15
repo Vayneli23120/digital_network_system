@@ -205,6 +205,7 @@ const loadRealtime = async () => {
 onMounted(() => {
   loadExecutive()
   loadRealtime()
+  loadGrafanaConfig()
   realtimeTimerId = window.setInterval(loadRealtime, 30000)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
 })
@@ -212,6 +213,23 @@ onMounted(() => {
 onUnmounted(() => {
   if (timerId) window.clearInterval(timerId)
   if (realtimeTimerId) window.clearInterval(realtimeTimerId)
+})
+
+// ===== Grafana 网络总览嵌入 =====
+const grafanaBaseUrl = ref('')
+const loadGrafanaConfig = async () => {
+  try {
+    const res = await axios.get('/api/system/config')
+    const item = (res.data.items || []).find(i => i.key === 'grafana_url')
+    grafanaBaseUrl.value = (item && item.value) || ''
+  } catch {
+    grafanaBaseUrl.value = ''
+  }
+}
+const grafanaOverviewUrl = computed(() => {
+  if (!grafanaBaseUrl.value) return ''
+  // 使用后端反向代理 /grafana/* → http://localhost:3001/*，避免混合内容拦截
+  return `/grafana/d/network-overview/network-overview?kiosk&theme=light&refresh=30s`
 })
 
 // ===== 模块化仪表板（P1：拖拽/缩放/增删 + localStorage 持久化）=====
