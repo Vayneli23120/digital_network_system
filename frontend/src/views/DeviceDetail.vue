@@ -252,6 +252,20 @@
           </el-table>
           <el-empty v-if="!interfaces.length && !ifacesLoading" description="尚未发现接口，点击「发现接口」进行 SNMP 扫描" :image-size="60" />
         </el-tab-pane>
+        <el-tab-pane v-if="showGrafanaTab" label="监控图表" name="grafana">
+          <div class="grafana-embed">
+            <iframe
+              v-if="grafanaEmbedUrl"
+              :src="grafanaEmbedUrl"
+              frameborder="0"
+              class="grafana-frame"
+            ></iframe>
+            <div class="grafana-hint">
+              图表由 Grafana 提供（基于 Prometheus 实时指标）。
+              <a :href="grafanaEmbedUrl.replace('&kiosk','')" target="_blank">在 Grafana 中打开 ↗</a>
+            </div>
+          </div>
+        </el-tab-pane>
         <el-tab-pane :label="t('tabBackupRecords')" name="backups" v-if="!isAp">
           <el-table :data="device?.recent_backups || []" style="width: 100%">
             <el-table-column prop="backup_time" :label="t('backupTime')" width="180">
@@ -709,6 +723,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
+import axios from 'axios'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close, Warning, Document, Refresh, Timer, WarningFilled, Promotion } from '@element-plus/icons-vue'
@@ -858,6 +873,25 @@ watch(isAp, (v) => {
     activeTab.value = 'faults'
   }
 }, { immediate: true })
+
+// Grafana 指标图表嵌入
+const grafanaBaseUrl = ref('')
+const loadGrafanaUrl = async () => {
+  try {
+    const res = await axios.get('/api/system/config')
+    const item = (res.data.items || []).find(i => i.key === 'grafana_url')
+    grafanaBaseUrl.value = (item && item.value) || ''
+  } catch {
+    grafanaBaseUrl.value = ''
+  }
+}
+const showGrafanaTab = computed(() => !!grafanaBaseUrl.value && !isAp.value && !!device.value?.ip)
+const grafanaEmbedUrl = computed(() => {
+  if (!showGrafanaTab.value) return ''
+  const base = grafanaBaseUrl.value.replace(/\/+$/, '')
+  const inst = encodeURIComponent(device.value.ip)
+  return `${base}/d/device-metrics/device-metrics?var-instance=${inst}&kiosk&theme=light&refresh=30s`
+})
 
 const sshSpecialPermission = computed(() => {
   // 防火墙需要GoVault权限
@@ -1436,11 +1470,33 @@ const deleteMaintInDetail = async (maintId) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 
-onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); if (ifaceAutoRefresh.value) startAutoRefresh() })
+onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); loadGrafanaUrl(); if (ifaceAutoRefresh.value) startAutoRefresh() })
 onUnmounted(() => { stopAutoRefresh() })
 </script>
 
 <style scoped>
+/* Grafana 指标图表嵌入 */
+.grafana-embed {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.grafana-frame {
+  width: 100%;
+  height: 640px;
+  border: 1px solid var(--border-default, #e5e7eb);
+  border-radius: 8px;
+  background: #fff;
+}
+.grafana-hint {
+  font-size: 12px;
+  color: #909399;
+}
+.grafana-hint a {
+  color: #409eff;
+  margin-left: 6px;
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════
    设备详情页 - 现代极简设计 (OpenAI/SpaceX风格)
    设计理念: 状态优先、数据驱动、简洁高效

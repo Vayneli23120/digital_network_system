@@ -42,6 +42,10 @@ DEFAULT_CONFIGS: Dict[str, dict] = {
         "default": "Asia/Shanghai",
         "description": "系统时区，如 Asia/Shanghai, UTC, America/New_York",
     },
+    "grafana_url": {
+        "default": "",
+        "description": "Grafana 基础地址（如 http://192.168.4.37:3001），用于设备详情页嵌入指标图表；为空则不显示",
+    },
 }
 
 

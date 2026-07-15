@@ -25,6 +25,15 @@
             <span class="form-tip">{{ t('systemTimezoneTip') || '系统全局时区，影响所有时间显示' }}</span>
           </el-form-item>
         </div>
+
+        <!-- Grafana 集成 -->
+        <div class="form-section">
+          <div class="section-header">Grafana 指标图表</div>
+          <el-form-item label="Grafana 地址">
+            <el-input v-model="form.grafana_url" placeholder="如 http://192.168.4.37:3001" style="width: 360px" />
+            <span class="form-tip">用于设备详情页嵌入指标图表；为空则不显示。指向你部署的 Grafana（docker 默认宿主机 3001）。</span>
+          </el-form-item>
+        </div>
       </el-form>
     </el-card>
 
@@ -109,6 +118,7 @@ const saving = ref(false)
 
 const form = reactive({
   timezone: 'Asia/Shanghai',
+  grafana_url: '',
 })
 
 const timezoneOptions = [
@@ -150,10 +160,8 @@ async function loadSettings() {
 async function saveSettings() {
   saving.value = true
   try {
-    await axios.put('/api/system/config', {
-      key: 'timezone',
-      value: form.timezone,
-    })
+    await axios.put('/api/system/config', { key: 'timezone', value: form.timezone })
+    await axios.put('/api/system/config', { key: 'grafana_url', value: form.grafana_url || '' })
     ElMessage.success('设置已保存')
   } catch (e) {
     ElMessage.error('保存设置失败')

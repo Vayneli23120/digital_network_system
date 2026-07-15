@@ -25,6 +25,29 @@ services:
     volumes:
       - ./snmp_exporter/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
 
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: netgrafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"          # 宿主机 3001 → 容器 3000（避开前端 3000）
+    environment:
+      # 允许被 iframe 嵌入到自研系统页面
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # 匿名只读（内网隔离环境，供嵌入展示；如需登录改这三项）
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_SECURITY_COOKIE_SAMESITE=none
+      - GF_USERS_DEFAULT_THEME=light
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+
 volumes:
   prometheus_data:
+    driver: local
+  grafana_data:
     driver: local

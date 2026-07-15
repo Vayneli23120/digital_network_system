@@ -1,0 +1,102 @@
+{
+  "uid": "device-metrics",
+  "title": "设备指标 Device Metrics",
+  "tags": ["network", "snmp"],
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-6h", "to": "now" },
+  "refresh": "30s",
+  "templating": {
+    "list": [
+      {
+        "name": "instance",
+        "label": "设备 IP",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "prometheus" },
+        "query": "label_values(ifHCInOctets, instance)",
+        "refresh": 2,
+        "includeAll": false,
+        "multi": false,
+        "sort": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "接口入向流量 (bps)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(ifHCInOctets{instance=\"$instance\"}[5m]) * 8",
+          "legendFormat": "{{ifName}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "接口出向流量 (bps)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "bps", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(ifHCOutOctets{instance=\"$instance\"}[5m]) * 8",
+          "legendFormat": "{{ifName}}"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "接口运行状态 (1=up 2=down)",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short", "min": 0, "max": 2, "custom": { "drawStyle": "line", "lineInterpolation": "stepAfter" } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "ifOperStatus{instance=\"$instance\"}",
+          "legendFormat": "{{ifName}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "接口错误计数速率",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 9 },
+      "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(ifInErrors{instance=\"$instance\"}[5m])",
+          "legendFormat": "{{ifName}} in-err"
+        },
+        {
+          "refId": "B",
+          "datasource": { "type": "prometheus", "uid": "prometheus" },
+          "expr": "rate(ifOutErrors{instance=\"$instance\"}[5m])",
+          "legendFormat": "{{ifName}} out-err"
+        }
+      ]
+    }
+  ]
+}
