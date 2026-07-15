@@ -5,10 +5,10 @@
       <div class="dash-toolbar">
         <span class="dash-title">{{ t('navDashboard') }}</span>
         <div class="dash-actions">
-          <el-button v-if="editMode" size="small" @click="paletteOpen = true">＋ {{ t('dashAddWidget') || '添加模块' }}</el-button>
-          <el-button v-if="editMode" size="small" @click="resetLayout">{{ t('dashResetLayout') || '重置布局' }}</el-button>
+          <el-button v-if="editMode" size="small" @click="paletteOpen = true">＋ {{ t('dashAddWidget') }}</el-button>
+          <el-button v-if="editMode" size="small" @click="resetLayout">{{ t('dashResetLayout') }}</el-button>
           <el-button size="small" :type="editMode ? 'warning' : 'primary'" @click="toggleEdit">
-            {{ editMode ? (t('dashDone') || '完成') : (t('dashCustomize') || '自定义') }}
+            {{ editMode ? t('dashDone') : t('dashCustomize') }}
           </el-button>
         </div>
       </div>
@@ -31,8 +31,8 @@
             <span class="wt-name"><el-icon><Rank /></el-icon>{{ widgetTitle(wg.type) }}</span>
             <div class="wt-controls">
               <button v-for="n in 4" :key="n" class="wt-btn" :class="{ active: wg.w === n }" @click="setWidth(wg, n)">{{ n }}</button>
-              <button class="wt-btn" @click="cycleHeight(wg)" :title="'高度 ' + wg.h">↕</button>
-              <button class="wt-btn danger" @click="removeWidget(wg.id)" title="移除">×</button>
+              <button class="wt-btn" @click="cycleHeight(wg)" :title="t('dashWidgetHeight') + ' ' + wg.h">↕</button>
+              <button class="wt-btn danger" @click="removeWidget(wg.id)" :title="t('dashRemoveWidget')">×</button>
             </div>
           </div>
 
@@ -59,7 +59,7 @@
                 <div class="rt-item" :class="{ warning: realtime.active_faults > 0, danger: realtime.active_critical > 0 }">
                   <span class="rt-num">{{ realtime.active_faults }}</span>
                   <span class="rt-label">
-                    {{ t('rtActiveFaults') }}<span v-if="realtime.active_critical > 0">（{{ realtime.active_critical }} 严重）</span>
+                    {{ t('rtActiveFaults') }}<span v-if="realtime.active_critical > 0">（{{ realtime.active_critical }} {{ t('rtCritical') }}）</span>
                   </span>
                 </div>
               </div>
@@ -77,11 +77,11 @@
                   </div>
                   <div class="site-avail">{{ s.availability_pct }}%</div>
                   <div class="site-meta">
-                    {{ s.online }}/{{ s.total }} 在线<span v-if="s.offline > 0" class="off"> · {{ s.offline }} 离线</span><span v-if="s.active_faults > 0" class="flt"> · {{ s.active_faults }} 故障</span>
+                    {{ s.online }}/{{ s.total }} {{ t('rtSiteOnline') }}<span v-if="s.offline > 0" class="off"> · {{ s.offline }} {{ t('rtSiteOffline') }}</span><span v-if="s.active_faults > 0" class="flt"> · {{ s.active_faults }} {{ t('rtSiteFault') }}</span>
                   </div>
                 </div>
               </div>
-              <div v-else class="widget-empty">暂无区域数据</div>
+              <div v-else class="widget-empty">{{ t('dashNoAreaData') }}</div>
             </div>
 
             <!-- 态势摘要条 -->
@@ -123,7 +123,7 @@
             <NetworkOverviewWidget v-else-if="wg.type === 'grafana'" />
 
             <!-- 数据未就绪占位 -->
-            <div v-else class="widget-empty">暂无数据</div>
+            <div v-else class="widget-empty">{{ t('dashNoData') }}</div>
           </div>
         </div>
       </div>
@@ -136,14 +136,14 @@
     </div>
 
     <!-- 添加模块面板 -->
-    <el-dialog v-model="paletteOpen" :title="t('dashAddWidget') || '添加模块'" width="460px">
+    <el-dialog v-model="paletteOpen" :title="t('dashAddWidget')" width="460px">
       <div class="palette-grid" v-if="availableToAdd.length">
         <div v-for="opt in availableToAdd" :key="opt.type" class="palette-item" @click="addWidget(opt.type)">
           <span class="pi-name">{{ opt.title }}</span>
           <span class="pi-add">＋</span>
         </div>
       </div>
-      <div v-else class="palette-empty">所有模块都已在仪表板上</div>
+      <div v-else class="palette-empty">{{ t('dashAllWidgetsAdded') }}</div>
     </el-dialog>
   </div>
 </template>
@@ -214,17 +214,17 @@ onUnmounted(() => {
 // ===== 模块化仪表板（P1：拖拽/缩放/增删 + localStorage 持久化）=====
 const LAYOUT_KEY = 'dashboard_layout_v1'
 
-// 可用模块定义（类型 + 默认尺寸 w=列跨(1-4) h=高度档(1-3)）
+// 可用模块定义（类型 + 默认尺寸 w=列跨(1-4) h=高度档(1-3)，titleKey 用于 i18n）
 const WIDGET_DEFS = {
-  realtime: { title: '实时状态条', w: 4, h: 1 },
-  sites: { title: '各厂区状态', w: 4, h: 1 },
-  summary: { title: '态势摘要', w: 4, h: 1 },
-  kpis: { title: 'KPI 概览', w: 4, h: 2 },
-  mttr: { title: 'MTTR 拆解', w: 2, h: 2 },
-  pareto: { title: '根因帕累托', w: 2, h: 2 },
-  slo: { title: 'SLO 错误预算', w: 4, h: 2 },
-  change: { title: '变更-故障关联', w: 4, h: 1 },
-  grafana: { title: '网络总览(实时)', w: 4, h: 3 },
+  realtime: { titleKey: 'widgetRealtime', w: 4, h: 1 },
+  sites: { titleKey: 'widgetSites', w: 4, h: 1 },
+  summary: { titleKey: 'widgetSummary', w: 4, h: 1 },
+  kpis: { titleKey: 'widgetKpis', w: 4, h: 2 },
+  mttr: { titleKey: 'widgetMttr', w: 2, h: 2 },
+  pareto: { titleKey: 'widgetPareto', w: 2, h: 2 },
+  slo: { titleKey: 'widgetSlo', w: 4, h: 2 },
+  change: { titleKey: 'widgetChange', w: 4, h: 1 },
+  grafana: { titleKey: 'widgetNetOverview', w: 4, h: 3 },
 }
 
 const DEFAULT_WIDGETS = [
@@ -245,13 +245,16 @@ const dragIndex = ref(null)
 const overIndex = ref(null)
 let widgetSeq = 0
 
-const widgetTitle = (type) => WIDGET_DEFS[type]?.title || type
+const widgetTitle = (type) => {
+  const def = WIDGET_DEFS[type]
+  return def ? t(def.titleKey) : type
+}
 
 const availableToAdd = computed(() => {
   const present = new Set(widgets.value.map(w => w.type))
   return Object.keys(WIDGET_DEFS)
     .filter(type => !present.has(type))
-    .map(type => ({ type, title: WIDGET_DEFS[type].title }))
+    .map(type => ({ type, title: t(WIDGET_DEFS[type].titleKey) }))
 })
 
 const loadLayout = () => {

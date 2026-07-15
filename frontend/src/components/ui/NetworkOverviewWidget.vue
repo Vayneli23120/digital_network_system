@@ -3,24 +3,24 @@
     <div class="no-stats">
       <div class="no-stat">
         <span class="no-num up">{{ data.iface_up ?? '—' }}</span>
-        <span class="no-label">在线接口</span>
+        <span class="no-label">{{ t('noIfaceUp') }}</span>
       </div>
       <div class="no-stat">
         <span class="no-num down">{{ data.iface_down ?? '—' }}</span>
-        <span class="no-label">离线接口</span>
+        <span class="no-label">{{ t('noIfaceDown') }}</span>
       </div>
       <div class="no-stat">
         <span class="no-num">{{ fmtBps(data.total_in_bps) }}</span>
-        <span class="no-label">全网入向</span>
+        <span class="no-label">{{ t('noTotalIn') }}</span>
       </div>
       <div class="no-stat">
         <span class="no-num">{{ fmtBps(data.total_out_bps) }}</span>
-        <span class="no-label">全网出向</span>
+        <span class="no-label">{{ t('noTotalOut') }}</span>
       </div>
     </div>
 
     <div class="no-top">
-      <div class="no-top-title">流量 Top 接口</div>
+      <div class="no-top-title">{{ t('noTopTitle') }}</div>
       <div v-if="(data.top || []).length" class="no-top-list">
         <div v-for="item in data.top" :key="item.device_id + '-' + item.if_name" class="no-top-row">
           <div class="no-top-name">
@@ -33,7 +33,7 @@
           <div class="no-top-val">↓{{ fmtBps(item.in_bps) }} ↑{{ fmtBps(item.out_bps) }}</div>
         </div>
       </div>
-      <div v-else class="no-top-empty">暂无流量数据（开启接口监控并等待采样）</div>
+      <div v-else class="no-top-empty">{{ t('noTopEmpty') }}</div>
     </div>
   </div>
 </template>
@@ -41,6 +41,9 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue'
 import axios from 'axios'
+import { useI18n } from '@/composables/useI18n'
+
+const { t } = useI18n()
 
 const data = ref({})
 let timer = null

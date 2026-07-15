@@ -245,6 +245,52 @@ export const languages = {
     rtActiveFaults: '进行中故障',
     rtSiteTitle: '各厂区 / 区域状态',
     rtLiveScreen: '实时大屏',
+    rtCritical: '严重',
+    rtSiteOnline: '在线',
+    rtSiteOffline: '离线',
+    rtSiteFault: '故障',
+
+    // 仪表板自定义 / 模块
+    dashCustomize: '自定义',
+    dashDone: '完成',
+    dashAddWidget: '添加模块',
+    dashResetLayout: '重置布局',
+    dashRemoveWidget: '移除',
+    dashWidgetHeight: '高度',
+    dashAllWidgetsAdded: '所有模块都已在仪表板上',
+    dashNoData: '暂无数据',
+    dashNoAreaData: '暂无区域数据',
+
+    // 模块名称
+    widgetRealtime: '实时状态条',
+    widgetSites: '各厂区 / 区域状态',
+    widgetSummary: '态势摘要条',
+    widgetKpis: 'KPI 概览',
+    widgetMttr: 'MTTR 拆解',
+    widgetPareto: '根因帕累托',
+    widgetSlo: 'SLO 错误预算',
+    widgetChange: '变更-故障关联',
+    widgetNetOverview: '网络总览(实时)',
+
+    // 设备流量图表
+    dtcSelectIface: '选择接口',
+    dtcLast30: '最近 30 点',
+    dtcLast60: '最近 60 点',
+    dtcLast120: '最近 120 点',
+    dtcRefresh: '刷新',
+    dtcHint: '数据来自本系统采集（Prometheus → 库），30s 周期',
+    dtcNoIface: '暂无被监控接口（在「接口监控」里开启监控并等待采样）',
+    dtcInbound: '入向',
+    dtcOutbound: '出向',
+    dtcUplinkTag: '上行',
+
+    // 网络总览小组件
+    noIfaceUp: '在线接口',
+    noIfaceDown: '离线接口',
+    noTotalIn: '全网入向',
+    noTotalOut: '全网出向',
+    noTopTitle: '流量 Top 接口',
+    noTopEmpty: '暂无流量数据（开启接口监控并等待采样）',
 
     // 状态标签
     statusGood: '正常',
@@ -3378,6 +3424,52 @@ export const languages = {
     rtActiveFaults: 'Active Faults',
     rtSiteTitle: 'Sites / Zones',
     rtLiveScreen: 'Live Screen',
+    rtCritical: 'critical',
+    rtSiteOnline: 'online',
+    rtSiteOffline: 'offline',
+    rtSiteFault: 'faults',
+
+    // Dashboard customization / widgets
+    dashCustomize: 'Customize',
+    dashDone: 'Done',
+    dashAddWidget: 'Add Widget',
+    dashResetLayout: 'Reset Layout',
+    dashRemoveWidget: 'Remove',
+    dashWidgetHeight: 'Height',
+    dashAllWidgetsAdded: 'All widgets are on the dashboard',
+    dashNoData: 'No data',
+    dashNoAreaData: 'No area data',
+
+    // Widget names
+    widgetRealtime: 'Realtime Status Bar',
+    widgetSites: 'Sites / Zones Status',
+    widgetSummary: 'Situation Summary',
+    widgetKpis: 'KPI Overview',
+    widgetMttr: 'MTTR Breakdown',
+    widgetPareto: 'Root Cause Pareto',
+    widgetSlo: 'SLO Error Budget',
+    widgetChange: 'Change-Fault Correlation',
+    widgetNetOverview: 'Network Overview (Live)',
+
+    // Device traffic chart
+    dtcSelectIface: 'Select interface',
+    dtcLast30: 'Last 30 points',
+    dtcLast60: 'Last 60 points',
+    dtcLast120: 'Last 120 points',
+    dtcRefresh: 'Refresh',
+    dtcHint: 'Data from system polling (Prometheus → DB), 30s interval',
+    dtcNoIface: 'No monitored interfaces (enable monitoring under Interface Monitoring and wait for samples)',
+    dtcInbound: 'Inbound',
+    dtcOutbound: 'Outbound',
+    dtcUplinkTag: 'Uplink',
+
+    // Network overview widget
+    noIfaceUp: 'Online Interfaces',
+    noIfaceDown: 'Offline Interfaces',
+    noTotalIn: 'Total Inbound',
+    noTotalOut: 'Total Outbound',
+    noTopTitle: 'Top Traffic Interfaces',
+    noTopEmpty: 'No traffic data (enable interface monitoring and wait for samples)',
 
     // Status labels
     statusGood: 'Good',
