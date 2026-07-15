@@ -252,19 +252,8 @@
           </el-table>
           <el-empty v-if="!interfaces.length && !ifacesLoading" description="尚未发现接口，点击「发现接口」进行 SNMP 扫描" :image-size="60" />
         </el-tab-pane>
-        <el-tab-pane v-if="showGrafanaTab" label="监控图表" name="grafana">
-          <div class="grafana-embed">
-            <iframe
-              v-if="grafanaEmbedUrl"
-              :src="grafanaEmbedUrl"
-              frameborder="0"
-              class="grafana-frame"
-            ></iframe>
-            <div class="grafana-hint">
-              图表由 Grafana 提供（基于 Prometheus 实时指标）。
-              <a :href="grafanaEmbedUrl.replace('&kiosk','')" target="_blank">在 Grafana 中打开 ↗</a>
-            </div>
-          </div>
+        <el-tab-pane v-if="showTrafficTab" label="监控图表" name="traffic">
+          <DeviceTrafficChart :device-id="route.params.id" />
         </el-tab-pane>
         <el-tab-pane :label="t('tabBackupRecords')" name="backups" v-if="!isAp">
           <el-table :data="device?.recent_backups || []" style="width: 100%">
@@ -733,6 +722,7 @@ import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
+import DeviceTrafficChart from '@/components/ui/DeviceTrafficChart.vue'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -874,24 +864,8 @@ watch(isAp, (v) => {
   }
 }, { immediate: true })
 
-// Grafana 指标图表嵌入
-const grafanaBaseUrl = ref('')
-const loadGrafanaUrl = async () => {
-  try {
-    const res = await axios.get('/api/system/config')
-    const item = (res.data.items || []).find(i => i.key === 'grafana_url')
-    grafanaBaseUrl.value = (item && item.value) || ''
-  } catch {
-    grafanaBaseUrl.value = ''
-  }
-}
-const showGrafanaTab = computed(() => !!grafanaBaseUrl.value && !isAp.value && !!device.value?.ip)
-const grafanaEmbedUrl = computed(() => {
-  if (!showGrafanaTab.value) return ''
-  // 使用后端反向代理 /grafana/* → http://localhost:3001/*，避免混合内容拦截
-  const inst = encodeURIComponent(device.value.ip)
-  return `/grafana/d/device-metrics/device-metrics?var-instance=${inst}&kiosk&theme=light&refresh=30s`
-})
+// 监控图表（原生 ECharts，数据走本系统采集库）
+const showTrafficTab = computed(() => !isAp.value && !!device.value?.ip)
 
 const sshSpecialPermission = computed(() => {
   // 防火墙需要GoVault权限
@@ -1470,33 +1444,11 @@ const deleteMaintInDetail = async (maintId) => {
   } catch (error) { if (error !== 'cancel') ElMessage.error(t('msgMaintDeleteFailed')) }
 }
 
-onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); loadGrafanaUrl(); if (ifaceAutoRefresh.value) startAutoRefresh() })
+onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); if (ifaceAutoRefresh.value) startAutoRefresh() })
 onUnmounted(() => { stopAutoRefresh() })
 </script>
 
 <style scoped>
-/* Grafana 指标图表嵌入 */
-.grafana-embed {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.grafana-frame {
-  width: 100%;
-  height: 640px;
-  border: 1px solid var(--border-default, #e5e7eb);
-  border-radius: 8px;
-  background: #fff;
-}
-.grafana-hint {
-  font-size: 12px;
-  color: #909399;
-}
-.grafana-hint a {
-  color: #409eff;
-  margin-left: 6px;
-}
-
 /* ═══════════════════════════════════════════════════════════════════════════
    设备详情页 - 现代极简设计 (OpenAI/SpaceX风格)
    设计理念: 状态优先、数据驱动、简洁高效

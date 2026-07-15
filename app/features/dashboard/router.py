@@ -146,6 +146,49 @@ async def clear_dashboard_cache():
     return {"cleared": count, "message": f"已清除 {count} 个 Dashboard 缓存项"}
 
 
+@router.get("/network-overview")
+async def network_overview(db: Session = Depends(get_db)):
+    """网络总览（原生）：全网收发总量 + 在线/离线接口 + 流量 Top 接口。数据源为本系统采集库。"""
+    from app.shared.models import Device, DeviceInterface
+    key = _cache_key("dashboard:network-overview")
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    rows = db.query(DeviceInterface, Device).join(
+        Device, Device.id == DeviceInterface.device_id
+    ).filter(DeviceInterface.monitored == True).all()  # noqa: E712
+
+    total_in = sum((i.last_in_bps or 0) for i, _ in rows)
+    total_out = sum((i.last_out_bps or 0) for i, _ in rows)
+    up = sum(1 for i, _ in rows if (i.oper_status or "") == "up")
+    down = sum(1 for i, _ in rows if (i.oper_status or "") == "down")
+
+    ranked = sorted(
+        rows,
+        key=lambda r: (r[0].last_in_bps or 0) + (r[0].last_out_bps or 0),
+        reverse=True,
+    )[:8]
+    top = [{
+        "device_id": i.device_id,
+        "device_name": d.name,
+        "if_name": i.if_name or f"if{i.if_index}",
+        "in_bps": i.last_in_bps or 0,
+        "out_bps": i.last_out_bps or 0,
+        "util": max(i.last_in_util or 0, i.last_out_util or 0),
+    } for i, d in ranked]
+
+    result = {
+        "total_in_bps": total_in,
+        "total_out_bps": total_out,
+        "iface_up": up,
+        "iface_down": down,
+        "top": top,
+    }
+    cache.set(key, result, ttl=15)
+    return result
+
+
 # ============ SLO 配置管理（无迁移，界面直接维护）============
 
 from fastapi import HTTPException

@@ -119,11 +119,8 @@
             <!-- 变更-故障关联 -->
             <ChangeCorrelation v-else-if="wg.type === 'change' && executiveSummary?.change_fault_correlation" :data="executiveSummary.change_fault_correlation" :title="t('changeCorrelationTitle')" />
 
-            <!-- Grafana 网络总览（实时指标） -->
-            <div v-else-if="wg.type === 'grafana'" class="grafana-widget">
-              <iframe v-if="grafanaOverviewUrl" :src="grafanaOverviewUrl" frameborder="0" class="grafana-frame"></iframe>
-              <div v-else class="widget-empty">未配置 Grafana 地址（系统设置 → Grafana 地址）</div>
-            </div>
+            <!-- 网络总览（原生，实时指标） -->
+            <NetworkOverviewWidget v-else-if="wg.type === 'grafana'" />
 
             <!-- 数据未就绪占位 -->
             <div v-else class="widget-empty">暂无数据</div>
@@ -155,7 +152,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { DataBoard, Rank } from '@element-plus/icons-vue'
 import { getExecutiveSummary, getRealtimeStatus } from '@/api'
-import axios from 'axios'
+import NetworkOverviewWidget from '@/components/ui/NetworkOverviewWidget.vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -205,7 +202,6 @@ const loadRealtime = async () => {
 onMounted(() => {
   loadExecutive()
   loadRealtime()
-  loadGrafanaConfig()
   realtimeTimerId = window.setInterval(loadRealtime, 30000)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
 })
@@ -213,23 +209,6 @@ onMounted(() => {
 onUnmounted(() => {
   if (timerId) window.clearInterval(timerId)
   if (realtimeTimerId) window.clearInterval(realtimeTimerId)
-})
-
-// ===== Grafana 网络总览嵌入 =====
-const grafanaBaseUrl = ref('')
-const loadGrafanaConfig = async () => {
-  try {
-    const res = await axios.get('/api/system/config')
-    const item = (res.data.items || []).find(i => i.key === 'grafana_url')
-    grafanaBaseUrl.value = (item && item.value) || ''
-  } catch {
-    grafanaBaseUrl.value = ''
-  }
-}
-const grafanaOverviewUrl = computed(() => {
-  if (!grafanaBaseUrl.value) return ''
-  // 使用后端反向代理 /grafana/* → http://localhost:3001/*，避免混合内容拦截
-  return `/grafana/d/network-overview/network-overview?kiosk&theme=light&refresh=30s`
 })
 
 // ===== 模块化仪表板（P1：拖拽/缩放/增删 + localStorage 持久化）=====
@@ -245,7 +224,7 @@ const WIDGET_DEFS = {
   pareto: { title: '根因帕累托', w: 2, h: 2 },
   slo: { title: 'SLO 错误预算', w: 4, h: 2 },
   change: { title: '变更-故障关联', w: 4, h: 1 },
-  grafana: { title: 'Grafana 网络总览', w: 4, h: 3 },
+  grafana: { title: '网络总览(实时)', w: 4, h: 3 },
 }
 
 const DEFAULT_WIDGETS = [
