@@ -1274,6 +1274,66 @@ export const languages = {
     filterAllStatus: '全部状态',
     monitorScreenPlanSwitched: '已切换到',
 
+    // 3D 大屏 - 故障指挥面板
+    monitorCommandPanel: '故障指挥',
+    monitorUnacknowledged: '未确认',
+    monitorInProgress: '处理中',
+    monitorTransferMaintenance: '转维修',
+    monitorImpactedDevices: '影响设备',
+    monitorNoActiveFaults: '暂无活跃故障',
+    monitorRootCauseTop3: '疑似根因 Top 3',
+    monitorImpactScope: '影响范围',
+    monitorImpactedCount: '影响 {count} 台',
+    monitorAffectedCount: '{count} 台',
+    monitorHotLinksTitle: '故障链路 Top 5',
+    monitorEventCount: '{count} 次',
+    monitorPeerPrefix: '对端',
+    monitorFaultConfirm: '确认',
+    monitorFaultFalseAlarm: '误报',
+    monitorFaultRefresh: '刷新',
+
+    // 3D 大屏 - 事件流
+    monitorEventStream: '事件流',
+    monitor10min: '10分钟',
+    monitor1hour: '1小时',
+    monitor24hours: '24小时',
+    monitorNoEvents: '暂无事件',
+
+    // 3D 大屏 - SNMP 采集健康
+    monitorSnmpHealth: 'SNMP 采集健康',
+    monitorCheck: '检查',
+    monitorTraffic: '流量',
+    monitorCollect: '采集',
+    monitorServerTime: '服务端时间',
+    monitorRefreshStatus: '刷新采集状态',
+    monitorSnmpEmpty: '暂无被监控接口',
+    monitorNextPoll: '下次',
+
+    // SNMP 状态标签
+    snmpStatusFresh: '正常',
+    snmpStatusLagging: '延迟',
+    snmpStatusStale: '过期',
+    snmpStatusMissing: '无样本',
+    snmpStatusDown: '接口中断',
+    snmpStatusUnknown: '未知',
+
+    // 采集器状态
+    collectorRunning: '采集中',
+    collectorOk: '完成',
+    collectorPartial: '部分',
+    collectorTimeout: '超时',
+    collectorFailed: '失败',
+    collectorCancelled: '取消',
+    collectorStuck: '卡住',
+
+    // 热力图等级
+    heatLevelCritical: '拥塞',
+    heatLevelHigh: '偏高',
+    heatLevelNormal: '正常',
+    heatLevelLow: '空闲',
+    heatLevelDown: '中断',
+    heatLevelStale: '数据过期',
+
     // 设备管理
     deviceList: '设备列表',
     deviceName: '设备名称',
@@ -4389,6 +4449,68 @@ export const languages = {
     monitorScreenFilterType: 'Device Type',
     monitorScreenLocateDevice: 'Locate Device',
     monitorScreenPlanSwitched: 'Switched to',
+
+    // 3D - Fault Command Panel
+    monitorCommandPanel: 'Command Center',
+    monitorUnacknowledged: 'Unacknowledged',
+    monitorInProgress: 'In Progress',
+    monitorTransferMaintenance: 'Transfer to Maintenance',
+    monitorImpactedDevices: 'Impacted Devices',
+    monitorNoActiveFaults: 'No Active Faults',
+    monitorRootCauseTop3: 'Suspected Root Cause Top 3',
+    monitorImpactScope: 'Impact Scope',
+    monitorImpactedCount: '{count} devices impacted',
+    monitorAffectedCount: '{count} devices',
+    monitorFaultRefresh: 'Refresh',
+
+    // 3D - Event Stream
+    monitorEventStream: 'Event Stream',
+    monitor10min: '10 min',
+    monitor1hour: '1 hour',
+    monitor24hours: '24 hours',
+    monitorNoEvents: 'No Events',
+
+    // 3D - SNMP Health
+    monitorSnmpHealth: 'SNMP Health',
+    monitorCheck: 'Check',
+    monitorTraffic: 'Traffic',
+    monitorCollect: 'Collect',
+    monitorServerTime: 'Server Time',
+    monitorRefreshStatus: 'Refresh Status',
+    monitorSnmpEmpty: 'No monitored interfaces',
+    monitorNextPoll: 'Next',
+
+    // SNMP Status Labels
+    snmpStatusFresh: 'Healthy',
+    snmpStatusLagging: 'Lagging',
+    snmpStatusStale: 'Stale',
+    snmpStatusMissing: 'No Sample',
+    snmpStatusDown: 'Interface Down',
+    snmpStatusUnknown: 'Unknown',
+
+    // Collector Status
+    collectorRunning: 'Collecting',
+    collectorOk: 'OK',
+    collectorPartial: 'Partial',
+    collectorTimeout: 'Timeout',
+    collectorFailed: 'Failed',
+    collectorCancelled: 'Cancelled',
+    collectorStuck: 'Stuck',
+
+    // Heat Legend Levels
+    heatLevelCritical: 'Congested',
+    heatLevelHigh: 'Elevated',
+    heatLevelNormal: 'Normal',
+    heatLevelLow: 'Idle',
+    heatLevelDown: 'Down',
+    heatLevelStale: 'Stale Data',
+
+    monitorHotLinksTitle: 'Fault Links Top 5',
+    monitorEventCount: '{count} times',
+    monitorPeerPrefix: 'Peer',
+    monitorFaultConfirm: 'Confirm',
+    monitorFaultFalseAlarm: 'False Alarm',
+
     monitorScreenTotalDevices: 'Total Devices',
     monitorScreenSwitches: 'Switches',
     monitorScreenAPs: 'APs',

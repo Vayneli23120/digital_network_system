@@ -10,7 +10,7 @@
          :style="{ left: heatPos.x + 'px', bottom: heatPos.y + 'px' }">
       <div class="heat-legend-head" @mousedown="e => startDrag(e, heatPos, HEAT_PANEL_W)">
         <el-icon class="drag-handle"><Rank /></el-icon>
-        <span class="heat-legend-title">{{ t('heatLegendTitle') || '链路流量热力' }}</span>
+        <span class="heat-legend-title">{{ t('heatLegendTitle') }}</span>
         <el-icon class="heat-legend-toggle" @click.stop="toggleHeatLegend"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
       </div>
       <div v-show="showHeatLegend" class="heat-legend-body">
@@ -20,7 +20,7 @@
           <span class="heat-range">{{ lv.range }}</span>
           <span class="heat-count">{{ trafficHeatSummary[lv.level] || 0 }}</span>
         </div>
-        <div class="heat-legend-foot">{{ t('heatLegendHint') || '颜色与粗细随上行口实时利用率变化，数字为当前接口数' }}</div>
+        <div class="heat-legend-foot">{{ t('heatLegendHint') }}</div>
       </div>
     </div>
 
@@ -29,18 +29,18 @@
          :style="{ left: snmpPos.x + 'px', bottom: snmpPos.y + 'px' }">
       <div class="snmp-health-head" @mousedown="e => startDrag(e, snmpPos, SNMP_PANEL_W)">
         <el-icon class="drag-handle"><Rank /></el-icon>
-        <span class="snmp-health-title">SNMP 采集健康</span>
+        <span class="snmp-health-title">{{ t('monitorSnmpHealth') }}</span>
         <span class="snmp-health-summary">
-          {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} 正常
+          {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} {{ t('snmpStatusFresh') }}
         </span>
         <el-icon class="snmp-health-toggle" @click.stop="toggleSnmpHealth"><ArrowDown v-if="showSnmpHealth" /><ArrowUp v-else /></el-icon>
       </div>
       <div v-show="showSnmpHealth" class="snmp-health-body">
         <div class="snmp-health-kpis">
-          <span class="fresh">正常 {{ snmpHealthSummary.fresh || 0 }}</span>
-          <span class="lagging">延迟 {{ snmpHealthSummary.lagging || 0 }}</span>
-          <span class="stale">过期 {{ snmpHealthSummary.stale || 0 }}</span>
-          <span class="missing">无样本 {{ snmpHealthSummary.missing || 0 }}</span>
+          <span class="fresh">{{ t('snmpStatusFresh') }} {{ snmpHealthSummary.fresh || 0 }}</span>
+          <span class="lagging">{{ t('snmpStatusLagging') }} {{ snmpHealthSummary.lagging || 0 }}</span>
+          <span class="stale">{{ t('snmpStatusStale') }} {{ snmpHealthSummary.stale || 0 }}</span>
+          <span class="missing">{{ t('snmpStatusMissing') }} {{ snmpHealthSummary.missing || 0 }}</span>
         </div>
         <div v-if="snmpHealthItems.length" class="snmp-health-list">
           <div
@@ -55,17 +55,17 @@
             </div>
             <div class="snmp-health-meta">
               <span>{{ snmpHealthStatusLabel(item.status) }}</span>
-              <span>检查 {{ formatSnmpAge(item.check_age_seconds ?? item.age_seconds) }}</span>
-              <span>流量 {{ formatSnmpAge(item.sample_age_seconds) }}</span>
-              <span>采集 {{ collectorStatusLabel(item.collector_status) }}</span>
+              <span>{{ t('monitorCheck') }} {{ formatSnmpAge(item.check_age_seconds ?? item.age_seconds) }}</span>
+              <span>{{ t('monitorTraffic') }} {{ formatSnmpAge(item.sample_age_seconds) }}</span>
+              <span>{{ t('monitorCollect') }} {{ collectorStatusLabel(item.collector_status) }}</span>
               <span v-if="item.collector_duration_ms != null">{{ formatDurationMs(item.collector_duration_ms) }}</span>
-              <span v-if="item.collector_next_poll_in_seconds != null">下次 {{ formatSnmpAge(item.collector_next_poll_in_seconds) }}</span>
+              <span v-if="item.collector_next_poll_in_seconds != null">{{ t('monitorNextPoll') }} {{ formatSnmpAge(item.collector_next_poll_in_seconds) }}</span>
             </div>
           </div>
         </div>
-        <div v-else class="snmp-health-empty">暂无被监控接口</div>
-        <div class="snmp-health-server-time">服务端时间 {{ formatSnmpServerTime(snmpHealthNow) }}</div>
-        <button class="snmp-health-refresh" @click.stop="refreshTrafficHeatLayer">刷新采集状态</button>
+        <div v-else class="snmp-health-empty">{{ t('monitorSnmpEmpty') }}</div>
+        <div class="snmp-health-server-time">{{ t('monitorServerTime') }} {{ formatSnmpServerTime(snmpHealthNow) }}</div>
+        <button class="snmp-health-refresh" @click.stop="refreshTrafficHeatLayer">{{ t('monitorRefreshStatus') }}</button>
       </div>
     </div>
 
@@ -263,8 +263,8 @@
 
       <div class="command-panel">
         <div class="command-head">
-          <h4>故障指挥</h4>
-          <button class="panel-mini-btn" @click="loadCommandPanelData">刷新</button>
+          <h4>{{ t('monitorCommandPanel') }}</h4>
+          <button class="panel-mini-btn" @click="loadCommandPanelData">{{ t('monitorFaultRefresh') }}</button>
         </div>
         <div class="command-grid">
           <div class="command-card danger">
@@ -276,17 +276,17 @@
             <b>{{ commandSummary.p2_count || 0 }}</b>
           </div>
           <div class="command-card">
-            <span>未确认</span>
+            <span>{{ t('monitorUnacknowledged') }}</span>
             <b>{{ commandSummary.unacknowledged || 0 }}</b>
           </div>
           <div class="command-card">
-            <span>处理中</span>
+            <span>{{ t('monitorInProgress') }}</span>
             <b>{{ commandSummary.in_progress || 0 }}</b>
           </div>
         </div>
         <div class="command-substats">
-          <span>转维修 {{ commandSummary.transferred || 0 }}</span>
-          <span>影响设备 {{ commandSummary.impacted_devices || 0 }}</span>
+          <span>{{ t('monitorTransferMaintenance') }} {{ commandSummary.transferred || 0 }}</span>
+          <span>{{ t('monitorImpactedDevices') }} {{ commandSummary.impacted_devices || 0 }}</span>
         </div>
         <div class="command-events" v-if="commandSummary.recent_events?.length">
           <button
@@ -304,10 +304,10 @@
             </span>
           </button>
         </div>
-        <div class="command-empty" v-else>暂无活跃故障</div>
+        <div class="command-empty" v-else>{{ t('monitorNoActiveFaults') }}</div>
 
         <div class="root-cause-block" v-if="commandSummary.root_cause_candidates?.length">
-          <div class="root-cause-title">疑似根因 Top 3</div>
+          <div class="root-cause-title">{{ t('monitorRootCauseTop3') }}</div>
           <button
             v-for="candidate in commandSummary.root_cause_candidates"
             :key="candidate.candidate"
@@ -319,14 +319,14 @@
               {{ candidate.candidate }}
             </span>
             <span class="root-sub">
-              影响 {{ candidate.impacted_devices || 0 }} 台 · {{ (candidate.evidence || []).slice(0, 2).join(' / ') }}
+              {{ t('monitorImpactedCount', { count: candidate.impacted_devices || 0 }) }} · {{ (candidate.evidence || []).slice(0, 2).join(' / ') }}
             </span>
           </button>
         </div>
 
         <div class="impact-scope" v-if="commandSummary.impact_scope && commandSummary.impact_scope.level !== 'none'">
           <div class="impact-head">
-            <span>影响范围</span>
+            <span>{{ t('monitorImpactScope') }}</span>
             <b :class="`sev-${commandSummary.impact_scope.level || 'minor'}`">{{ commandSummary.impact_scope.level }}</b>
           </div>
           <div class="impact-summary">{{ commandSummary.impact_scope.summary }}</div>
@@ -348,13 +348,13 @@
               class="shared-path-item"
             >
               <span>{{ edge.cable_name || ('Edge-' + edge.edge_id) }}</span>
-              <b>{{ edge.affected_devices }} 台</b>
+              <b>{{ t('monitorAffectedCount', { count: edge.affected_devices }) }}</b>
             </div>
           </div>
         </div>
 
         <div class="hot-links" v-if="commandSummary.hot_links?.length">
-          <div class="hot-links-title">故障链路 Top 5</div>
+          <div class="hot-links-title">{{ t('monitorHotLinksTitle') }}</div>
           <button
             v-for="link in commandSummary.hot_links"
             :key="link.fault_id"
@@ -366,17 +366,17 @@
               {{ link.device_name || link.fault_no }}<span v-if="link.if_name"> · {{ link.if_name }}</span>
             </span>
             <span class="hot-link-sub">
-              {{ link.incident_type || link.source_event }} · {{ link.event_count || 1 }} 次<span v-if="link.peer_if_name"> · 对端 {{ link.peer_if_name }}</span>
+              {{ link.incident_type || link.source_event }} · {{ t('monitorEventCount', { count: link.event_count || 1 }) }}<span v-if="link.peer_if_name"> · {{ t('monitorPeerPrefix') }} {{ link.peer_if_name }}</span>
             </span>
           </button>
         </div>
 
         <div class="timeline-head">
-          <span>事件流</span>
+          <span>{{ t('monitorEventStream') }}</span>
           <div class="timeline-window">
-            <button :class="{ active: eventWindow === '10m' }" @click="setEventWindow('10m')">10分钟</button>
-            <button :class="{ active: eventWindow === '1h' }" @click="setEventWindow('1h')">1小时</button>
-            <button :class="{ active: eventWindow === '24h' }" @click="setEventWindow('24h')">24小时</button>
+            <button :class="{ active: eventWindow === '10m' }" @click="setEventWindow('10m')">{{ t('monitor10min') }}</button>
+            <button :class="{ active: eventWindow === '1h' }" @click="setEventWindow('1h')">{{ t('monitor1hour') }}</button>
+            <button :class="{ active: eventWindow === '24h' }" @click="setEventWindow('24h')">{{ t('monitor24hours') }}</button>
           </div>
         </div>
         <div class="timeline-list" v-if="monitorEvents.length">
@@ -393,7 +393,7 @@
             </span>
           </button>
         </div>
-        <div class="command-empty" v-else>暂无事件</div>
+        <div class="command-empty" v-else>{{ t('monitorNoEvents') }}</div>
       </div>
 
       <!-- 标签页：拓扑/链路/底图 -->
@@ -515,10 +515,10 @@
           <div class="selected-box" v-if="selectedDevice">
             <h4>{{ selectedDevice.name }}</h4>
             <p><strong>IP:</strong> {{ selectedDevice.ip }}</p>
-            <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabel(selectedDevice.device_type) }}</p>
+            <p><strong>{{ t('deviceType') }}:</strong> {{ getDeviceTypeLabelI18n(selectedDevice.device_type) }}</p>
             <p><strong>{{ t('deviceStatus') }}:</strong>
               <el-tag :type="isDeviceOnline(selectedDevice) ? 'success' : (isDeviceOffline(selectedDevice) ? 'danger' : 'info')" size="small">
-                {{ getStatusLabel(deviceStatus(selectedDevice)) }}
+                {{ getStatusLabelI18n(deviceStatus(selectedDevice)) }}
               </el-tag>
             </p>
             <div class="incident-panel" v-if="selectedActiveFault">
@@ -532,12 +532,12 @@
                 {{ selectedActiveFault.status_label || selectedActiveFault.status }} · {{ selectedActiveFault.source_event || selectedActiveFault.incident_type || '-' }}
               </div>
               <div class="incident-meta" v-if="selectedActiveFault.if_name">
-                {{ selectedActiveFault.if_name }}<span v-if="selectedActiveFault.event_count"> · {{ selectedActiveFault.event_count }}次</span>
+                {{ selectedActiveFault.if_name }}<span v-if="selectedActiveFault.event_count"> · {{ t('monitorEventCount', { count: selectedActiveFault.event_count }) }}</span>
               </div>
               <div class="incident-actions">
-                <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">确认</el-button>
-                <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">误报</el-button>
-                <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">转维修</el-button>
+                <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">{{ t('monitorFaultConfirm') }}</el-button>
+                <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">{{ t('monitorFaultFalseAlarm') }}</el-button>
+                <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">{{ t('monitorTransferMaintenance') }}</el-button>
               </div>
             </div>
             <!-- 设备缩放调节 -->
@@ -731,14 +731,14 @@ const showSnmpHealth = ref(true)
 const snmpHealthItems = ref([])
 const snmpHealthSummary = ref({})
 const snmpHealthNow = ref(null)
-const heatLegendLevels = [
-  { level: 'critical', color: '#f97316', label: '拥塞', range: '≥80%' },
-  { level: 'high', color: '#facc15', label: '偏高', range: '60-80%' },
-  { level: 'normal', color: '#22d3ee', label: '正常', range: '20-60%' },
-  { level: 'low', color: '#22c55e', label: '空闲', range: '<20%' },
-  { level: 'down', color: '#ef4444', label: '中断', range: 'link down' },
-  { level: 'stale', color: '#64748b', label: '数据过期', range: '>10min' },
-]
+const heatLegendLevels = computed(() => [
+  { level: 'critical', color: '#f97316', label: t('heatLevelCritical'), range: '≥80%' },
+  { level: 'high', color: '#facc15', label: t('heatLevelHigh'), range: '60-80%' },
+  { level: 'normal', color: '#22d3ee', label: t('heatLevelNormal'), range: '20-60%' },
+  { level: 'low', color: '#22c55e', label: t('heatLevelLow'), range: '<20%' },
+  { level: 'down', color: '#ef4444', label: t('heatLevelDown'), range: 'link down' },
+  { level: 'stale', color: '#64748b', label: t('heatLevelStale'), range: '>10min' },
+])
 const faultActionLoading = ref(false)
 
 // ===== 面板可拖拽位置 =====
@@ -3140,7 +3140,7 @@ async function discoverNeighbors() {
       `${t('hudPeer')} ${d.total_found || 0} · ${t('hudUplink')} ${d.total_uplinks_marked || 0}`
     )
   } catch (e) {
-    ElMessage.error(e?.response?.data?.detail || t('discoverNeighbors') + ' 失败')
+    ElMessage.error(e?.response?.data?.detail || t('loadDataFailed'))
   } finally {
     discoveringNeighbors.value = false
   }
@@ -5584,25 +5584,23 @@ function getTrafficHeatForPath(deviceId, pathData = {}) {
 
 function snmpHealthStatusLabel(status) {
   return {
-    fresh: '正常',
-    lagging: '延迟',
-    stale: '过期',
-    missing: '无样本',
-    down: '接口中断',
-  }[status] || '未知'
+    fresh: t('snmpStatusFresh'),
+    lagging: t('snmpStatusLagging'),
+    stale: t('snmpStatusStale'),
+    missing: t('snmpStatusMissing'),
+    down: t('snmpStatusDown'),
+  }[status] || t('snmpStatusUnknown')
 }
 
 function collectorStatusLabel(status) {
   return {
-    running: '采集中',
-    ok: '完成',
-    partial: '部分',
-    timeout: '超时',
-    failed: '失败',
-    cancelled: '取消',
-    stuck: '卡住',
-    no_response: '无响应',
-    no_interfaces: '无接口',
+    running: t('collectorRunning'),
+    ok: t('collectorOk'),
+    partial: t('collectorPartial'),
+    timeout: t('collectorTimeout'),
+    failed: t('collectorFailed'),
+    cancelled: t('collectorCancelled'),
+    stuck: t('collectorStuck'),
   }[status] || '-'
 }
 
@@ -6456,7 +6454,8 @@ onBeforeUnmount(() => {
   flex-shrink: 0;
 }
 .heat-name {
-  width: 48px;
+  width: 64px;
+  flex-shrink: 0;
 }
 .heat-range {
   flex: 1;
@@ -6901,8 +6900,11 @@ onBeforeUnmount(() => {
 .command-card span {
   display: block;
   color: #94a3b8;
-  font-size: 10px;
-  line-height: 1.2;
+  font-size: 9px;
+  line-height: 1.3;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .command-card b {
