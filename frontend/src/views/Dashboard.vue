@@ -119,6 +119,12 @@
             <!-- 变更-故障关联 -->
             <ChangeCorrelation v-else-if="wg.type === 'change' && executiveSummary?.change_fault_correlation" :data="executiveSummary.change_fault_correlation" :title="t('changeCorrelationTitle')" />
 
+            <!-- Grafana 网络总览（实时指标） -->
+            <div v-else-if="wg.type === 'grafana'" class="grafana-widget">
+              <iframe v-if="grafanaOverviewUrl" :src="grafanaOverviewUrl" frameborder="0" class="grafana-frame"></iframe>
+              <div v-else class="widget-empty">未配置 Grafana 地址（系统设置 → Grafana 地址）</div>
+            </div>
+
             <!-- 数据未就绪占位 -->
             <div v-else class="widget-empty">暂无数据</div>
           </div>
@@ -149,6 +155,7 @@
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { DataBoard, Rank } from '@element-plus/icons-vue'
 import { getExecutiveSummary, getRealtimeStatus } from '@/api'
+import axios from 'axios'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -220,6 +227,7 @@ const WIDGET_DEFS = {
   pareto: { title: '根因帕累托', w: 2, h: 2 },
   slo: { title: 'SLO 错误预算', w: 4, h: 2 },
   change: { title: '变更-故障关联', w: 4, h: 1 },
+  grafana: { title: 'Grafana 网络总览', w: 4, h: 3 },
 }
 
 const DEFAULT_WIDGETS = [
@@ -396,6 +404,16 @@ loadLayout()
   color: var(--text-muted); font-size: 13px;
 }
 
+.grafana-widget { height: 100%; min-height: 320px; }
+.grafana-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: #fff;
+}
+
 .palette-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
 .palette-item {
   display: flex; align-items: center; justify-content: space-between;
@@ -407,6 +425,16 @@ loadLayout()
 .palette-item:hover { border-color: var(--brand-primary, #0984e3); background: var(--bg-tertiary, #eef2f7); }
 .pi-add { color: var(--brand-primary, #0984e3); font-weight: 700; }
 .palette-empty { text-align: center; color: var(--text-muted); padding: 20px; }
+
+.grafana-widget { height: 100%; min-height: 320px; }
+.grafana-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  border: none;
+  border-radius: var(--radius-md, 8px);
+  background: #fff;
+}
 
 /* ===== Realtime Status Section ===== */
 .realtime-section {
