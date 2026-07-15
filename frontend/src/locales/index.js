@@ -1159,8 +1159,6 @@ export const languages = {
     deviceTypeUce: 'UCE',
     deviceTypeAp: 'AP',
     deviceTypeSwitch: '交换机',
-    deviceTypeOfficeSwitch: '办公交换机',
-    deviceTypeCoreSwitch: '核心交换机',
     monitorModeEdit: '编辑模式',
     monitorModeView: '监控模式',
     monitorDrawLink: '连线',
@@ -1256,7 +1254,6 @@ export const languages = {
     hudUplinkNone: '无上行',
     heatLegendTitle: '链路流量热力',
     heatLegendHint: '颜色与粗细随上行口实时利用率变化，数字为当前接口数',
-    statusUnknown: '未知',
     loadDataFailed: '数据加载失败',
     selected: '已选中',
     filterDeviceType: '设备类型',
@@ -1325,6 +1322,8 @@ export const languages = {
     collectorFailed: '失败',
     collectorCancelled: '取消',
     collectorStuck: '卡住',
+    collectorNoResponse: '无响应',
+    collectorNoInterfaces: '无接口',
 
     // 热力图等级
     heatLevelCritical: '拥塞',
@@ -4496,6 +4495,8 @@ export const languages = {
     collectorFailed: 'Failed',
     collectorCancelled: 'Cancelled',
     collectorStuck: 'Stuck',
+    collectorNoResponse: 'No Response',
+    collectorNoInterfaces: 'No Interfaces',
 
     // Heat Legend Levels
     heatLevelCritical: 'Congested',
@@ -4559,8 +4560,6 @@ export const languages = {
     deviceTypeUce: 'UCE',
     deviceTypeAp: 'AP',
     deviceTypeSwitch: 'Switch',
-    deviceTypeOfficeSwitch: 'Office Switch',
-    deviceTypeCoreSwitch: 'Core Switch',
     monitorModeEdit: 'Edit Mode',
     monitorModeView: 'View Mode',
     monitorDrawLink: 'Draw Link',

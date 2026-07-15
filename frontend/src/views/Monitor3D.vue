@@ -5601,6 +5601,8 @@ function collectorStatusLabel(status) {
     failed: t('collectorFailed'),
     cancelled: t('collectorCancelled'),
     stuck: t('collectorStuck'),
+    no_response: t('collectorNoResponse'),
+    no_interfaces: t('collectorNoInterfaces'),
   }[status] || '-'
 }
 
