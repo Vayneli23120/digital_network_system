@@ -2,7 +2,7 @@ import api from './request'
 
 // 获取 Dashboard 摘要
 export function getDashboardSummary() {
-  return api.get('/dashboard/summary').then(r => r.data)
+  return api.get('/dashboard/summary')
 }
 
 // 获取管理层聚合 KPI
