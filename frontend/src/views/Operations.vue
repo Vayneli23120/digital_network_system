@@ -599,8 +599,8 @@ const realAlerts = ref([])
 
 const loadAlerts = async () => {
   try {
-    const res = await getAlerts()
-    realAlerts.value = res.data || []
+    const data = await getAlerts()
+    realAlerts.value = Array.isArray(data) ? data : (data?.items || [])
   } catch (e) {
     console.error('Failed to load alerts:', e)
     realAlerts.value = []
@@ -705,7 +705,7 @@ const navigateTo = (path) => router.push(path)
 
 const refreshData = async () => {
   loading.value = true
-  await loadDashboardData()
+  await Promise.all([loadDashboardData(true), loadAlerts()])
   loading.value = false
   ElMessage.success(t('dashDataRefreshed'))
 }
@@ -738,8 +738,6 @@ const loadDashboardData = async (force = false) => {
     }
     // Load top fault devices
     await loadFaultDeviceList(force)
-    // Load alerts
-    loadAlerts()
   } catch (error) {
     ElMessage.error(t('dashLoadFailed'))
   }
@@ -862,6 +860,7 @@ watch(currentLang, () => {
 
 onMounted(() => {
   loadDashboardData()
+  loadAlerts()
   window.addEventListener('resize', handleResize)
   window.addEventListener('theme-change', handleThemeChange)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
