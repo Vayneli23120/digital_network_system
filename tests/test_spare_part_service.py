@@ -179,6 +179,8 @@ class TestCreateMovement:
         with pytest.raises(ValueError) as exc_info:
             create_movement(db_session, 1, "out", 5)
         assert "库存不足" in str(exc_info.value)
+        assert get_part(db_session, 1)["quantity_in_stock"] == 2
+        assert db_session.query(SparePartMovement).count() == 0
 
     def test_movement_invalid_quantity(self, db_session):
         create_part(db_session, {"name": "SFP", "part_number": "SFP-001"})

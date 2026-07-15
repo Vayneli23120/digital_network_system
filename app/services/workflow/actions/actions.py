@@ -24,6 +24,10 @@ from app.shared.models import (
     Device, MaintenanceRecord, FaultRecord,
     MaintenanceTask
 )
+from app.services.fault_maintenance import (
+    FaultMaintenanceConflictError,
+    create_fault_maintenance_once,
+)
 
 
 class BaseAction(ABC):
@@ -86,6 +90,11 @@ class CreateMaintenanceAction(BaseAction):
         # 如果是故障触发的，关联故障记录
         fault_id = context.get('fault_id')
 
+        if fault_id:
+            fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+            if not fault:
+                return {'success': False, 'error': 'Fault not found'}
+
         # 生成维修单号
         maint_no = f"WF-MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
@@ -103,27 +112,37 @@ class CreateMaintenanceAction(BaseAction):
             auto_created=True
         )
 
-        db.add(maintenance)
-        db.commit()
-        db.refresh(maintenance)
-
-        # 更新故障记录的maintenance_id
+        created = True
         if fault_id:
-            fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
-            if fault:
-                fault.maintenance_id = maintenance.id
-                fault.auto_created_maintenance = True
-                db.commit()
+            try:
+                maintenance, created = create_fault_maintenance_once(
+                    db,
+                    fault,
+                    maintenance,
+                    fault_updates={
+                        FaultRecord.auto_created_maintenance: True,
+                    },
+                )
+            except FaultMaintenanceConflictError as exc:
+                return {'success': False, 'error': str(exc)}
+        else:
+            db.add(maintenance)
+            db.commit()
+            db.refresh(maintenance)
 
-        logger.info(f"Created maintenance record {maintenance.id} for device {device_id}")
+        logger.info(
+            f"{'Created' if created else 'Reused'} maintenance record "
+            f"{maintenance.id} for device {device_id}"
+        )
 
         return {
             'success': True,
             'action': 'create_maintenance',
             'maintenance_id': maintenance.id,
             'device_id': device_id,
-            'title': title,
-            'created_at': maintenance.created_at.isoformat()
+            'title': maintenance.title,
+            'created_at': maintenance.created_at.isoformat(),
+            'reused': not created
         }
 
 

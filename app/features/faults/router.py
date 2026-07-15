@@ -17,6 +17,11 @@ import json
 
 from app.shared.database import get_db
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
+from app.services.fault_maintenance import (
+    FaultMaintenanceConflictError,
+    create_fault_maintenance_once,
+    find_fault_maintenance,
+)
 from app.services.workflow.executor import WorkflowExecutor
 
 # ADK 导入（可选：AI 依赖未安装时降级）
@@ -586,31 +591,33 @@ async def analyze_fault(
         need_repair = analysis_result.get('need_repair')
 
         if need_repair == True or need_repair == 'repair':
-            # 检查是否已有维修单
-            if not fault.maintenance_id:
-                # 创建维修单
-                maintenance = MaintenanceRecord(
-                    maint_no=f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}",
-                    device_id=fault.device_id,
-                    device_name=fault.device_name,
-                    maint_type='corrective',
-                    title=f"AI推荐维修: {fault.description[:50]}",
-                    problem_description=fault.description,
-                    status='pending',
-                    fault_id=fault.id,
-                    auto_created=True,
-                    ai_recommended=True
+            maintenance = MaintenanceRecord(
+                maint_no=f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}",
+                device_id=fault.device_id,
+                device_name=fault.device_name,
+                maint_type='corrective',
+                title=f"AI推荐维修: {fault.description[:50]}",
+                problem_description=fault.description,
+                status='pending',
+                fault_id=fault.id,
+                auto_created=True,
+                ai_recommended=True
+            )
+            try:
+                maintenance, created = create_fault_maintenance_once(
+                    db,
+                    fault,
+                    maintenance,
+                    fault_updates={
+                        FaultRecord.auto_created_maintenance: True,
+                    },
                 )
+            except FaultMaintenanceConflictError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
 
-                db.add(maintenance)
-                fault.maintenance_id = maintenance.id
-                fault.auto_created_maintenance = True
-
-                db.commit()
-                db.refresh(maintenance)
-
-                result['created_maintenance_id'] = maintenance.id
-                result['created_maintenance_no'] = maintenance.maint_no
+            result['created_maintenance_id'] = maintenance.id
+            result['created_maintenance_no'] = maintenance.maint_no
+            result['maintenance_reused'] = not created
 
     return result
 
@@ -660,15 +667,10 @@ async def auto_create_maintenance(
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    # 检查是否已有维修单
-    if fault.maintenance_id:
-        raise HTTPException(
-            status_code=400,
-            detail="该故障已关联维修单"
-        )
+    existing_maintenance = find_fault_maintenance(db, fault)
 
     # 检查故障状态
-    if fault.status == "closed":
+    if not existing_maintenance and fault.status == "closed":
         raise HTTPException(
             status_code=400,
             detail="已关闭的故障不能创建维修单"
@@ -690,18 +692,24 @@ async def auto_create_maintenance(
         auto_created=True
     )
 
-    db.add(maintenance)
-    fault.maintenance_id = maintenance.id
-
-    db.commit()
-    db.refresh(maintenance)
+    try:
+        maintenance, created = create_fault_maintenance_once(
+            db,
+            fault,
+            maintenance,
+            fault_updates={
+                FaultRecord.auto_created_maintenance: True,
+            },
+        )
+    except FaultMaintenanceConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return {
         "success": True,
         "maintenance_id": maintenance.id,
-        "maint_no": maint_no,
+        "maint_no": maintenance.maint_no,
         "fault_id": fault_id,
-        "message": "维修单创建成功"
+        "message": "维修单创建成功" if created else "维修单已存在"
     }
 
 
@@ -817,10 +825,9 @@ async def convert_to_maintenance(fault_id: int, db: Session = Depends(get_db)):
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
-    if fault.maintenance_id:
-        raise HTTPException(status_code=400, detail="该故障已关联维修单")
+    existing_maintenance = find_fault_maintenance(db, fault)
 
-    if fault.status == "closed":
+    if not existing_maintenance and fault.status == "closed":
         raise HTTPException(status_code=400, detail="已关闭的故障不能转维修")
 
     maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
@@ -836,16 +843,19 @@ async def convert_to_maintenance(fault_id: int, db: Session = Depends(get_db)):
         status='pending'
     )
 
-    db.add(maintenance)
-    fault.maintenance_id = maintenance.id
-
-    db.commit()
-    db.refresh(maintenance)
+    try:
+        maintenance, created = create_fault_maintenance_once(
+            db,
+            fault,
+            maintenance,
+        )
+    except FaultMaintenanceConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     return {
         "maintenance_id": maintenance.id,
-        "maint_no": maint_no,
-        "message": "维修单创建成功"
+        "maint_no": maintenance.maint_no,
+        "message": "维修单创建成功" if created else "维修单已存在"
     }
 
 
@@ -1288,6 +1298,21 @@ async def transfer_to_maintenance(
     if not fault:
         raise HTTPException(status_code=404, detail="故障记录不存在")
 
+    existing_maintenance = find_fault_maintenance(db, fault)
+    if existing_maintenance:
+        if fault.maintenance_id != existing_maintenance.id:
+            fault.maintenance_id = existing_maintenance.id
+            db.commit()
+        return {
+            "id": fault_id,
+            "status": fault.status,
+            "status_label": FAULT_STATUS_LABELS.get(fault.status),
+            "maintenance_id": existing_maintenance.id,
+            "maint_no": existing_maintenance.maint_no,
+            "maintenance_owner": existing_maintenance.current_owner,
+            "message": f"维修单 {existing_maintenance.maint_no} 已存在"
+        }
+
     if fault.status not in ['assigned', 'accepted', 'diagnosing']:
         raise HTTPException(status_code=400, detail="只有已指派/已确认/诊断中的故障才能转维修")
 
@@ -1321,21 +1346,29 @@ async def transfer_to_maintenance(
     if fault.diagnosis_result:
         maintenance.diagnosis_result = fault.diagnosis_result
 
-    db.add(maintenance)
-    db.flush()  # 先 flush 获取 maintenance.id
-
-    # 更新故障状态
-    fault.status = "transferred"
-    fault.transferred_at = datetime.utcnow()
-    fault.maintenance_id = maintenance.id
-    fault.updated_at = datetime.utcnow()
-
-    db.commit()
-    db.refresh(maintenance)
-    db.refresh(fault)
+    transferred_at = datetime.utcnow()
+    try:
+        maintenance, created = create_fault_maintenance_once(
+            db,
+            fault,
+            maintenance,
+            fault_updates={
+                FaultRecord.status: "transferred",
+                FaultRecord.transferred_at: transferred_at,
+                FaultRecord.updated_at: transferred_at,
+            },
+            claim_filters=(
+                FaultRecord.status.in_(['assigned', 'accepted', 'diagnosing']),
+            ),
+        )
+    except FaultMaintenanceConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="故障状态已变化，请刷新后重试",
+        ) from exc
 
     # 发送通知给维修负责人
-    if maintenance_owner:
+    if created and maintenance_owner:
         background_tasks.add_task(
             send_maintenance_assigned_notification,
             maintenance.id,
@@ -1348,8 +1381,12 @@ async def transfer_to_maintenance(
         "status_label": FAULT_STATUS_LABELS.get(fault.status),
         "maintenance_id": maintenance.id,
         "maint_no": maintenance.maint_no,
-        "maintenance_owner": maintenance_owner,
-        "message": f"已创建维修单 {maint_no}，负责人: {maintenance_owner}"
+        "maintenance_owner": maintenance.current_owner,
+        "message": (
+            f"已创建维修单 {maintenance.maint_no}，负责人: {maintenance.current_owner}"
+            if created
+            else f"维修单 {maintenance.maint_no} 已存在"
+        )
     }
 
 

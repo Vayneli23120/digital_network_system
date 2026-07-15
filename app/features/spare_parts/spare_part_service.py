@@ -323,11 +323,19 @@ def create_movement(
         raise ValueError("数量必须大于 0")
 
     if movement_type == "out":
-        if part.quantity_in_stock < quantity:
+        updated = db.query(SparePart).filter(
+            SparePart.id == part_id,
+            SparePart.quantity_in_stock >= quantity,
+        ).update(
+            {SparePart.quantity_in_stock: SparePart.quantity_in_stock - quantity},
+            synchronize_session=False,
+        )
+        if updated != 1:
+            db.expire(part, ["quantity_in_stock"])
             raise ValueError(
                 f"库存不足：当前 {part.quantity_in_stock}，需要 {quantity}"
             )
-        part.quantity_in_stock -= quantity
+        db.expire(part, ["quantity_in_stock"])
 
         # 如果指定了目标设备，更新备件实例状态为在设备上使用
         if serial_number and target_device_id:
