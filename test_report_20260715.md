@@ -241,3 +241,52 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 - Prometheus 连接器日志：正常 ✅
 
 **结论**: Step 1.2 验证通过。修复后周期事实 `uptime_days` 与 Prometheus 原始值完全一致，与实时 SNMP 差值 0 天。代码已提交 (`36a4c60`)，聚焦测试 8/8 通过。
+
+---
+
+## Step 1.3：Prometheus 周期 CPU 事实验证（补充验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §17
+**Git 提交**: `0aacc30`
+**Alembic 版本**: `b8c9d0e1f2a3`（无变化）
+
+### 17.3 聚焦回归 + 配置检查
+
+| 项目 | 结果 |
+|---|---|
+| `test_device_metric_facts.py` + `test_prometheus_metric_facts.py` | **9 passed** |
+| snmp.yml `cpmCPUTotal5minRev` OID 检查 (`1.3.6.1.4.1.9.9.109.1.1.1.1.8`) | OK |
+
+### 17.4 snmp_exporter + Prometheus CPU series
+
+`cpmCPUTotal5minRev` 在 Prometheus 中返回 **1 series**，实例：`192.168.4.1`
+
+### 17.5 周期 CPU 事实对照
+
+| 设备 | 周期 CPU | Prometheus 解析值 | 匹配 |
+|---|---|---|---|
+| cn-pulandian1-rtr (10.121.1.1) | 0.0% | 0.0% | ✓ |
+| pnetlab-swr (192.168.4.1) | 37.0% | 37.0% | ✓ |
+
+**2 台设备全部匹配** ✓
+
+### 17.6 周期 vs 实时 SNMP CPU
+
+| 设备 | 周期 CPU | 实时 CPU | 差值 |
+|---|---|---|---|
+| pnetlab-swr (192.168.4.1) | 37.0% | 37.0% | 0.0 |
+
+差值 0.0（允许 20 个百分点） ✓
+
+### 17.7 事实完整度、服务、日志
+
+- CPU 值均在 0–100 范围内 ✓
+- `collection_status`: `partial` ✓
+- `uptime_days`、接口聚合字段正常 ✓
+- Alembic 版本：`b8c9d0e1f2a3` ✓
+- `nas-backend`：`active (running)` ✓
+- 日志：无 exporter、事实写入或轮询错误 ✓
+
+**结论**: Step 1.3 验证通过。Prometheus 周期 CPU 事实采集正常，值与 Prometheus 解析值完全一致，与实时 SNMP CPU 差值 0 点。Cisco CPU OID 已正确配置到 snmp_exporter。
