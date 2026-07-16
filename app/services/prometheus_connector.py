@@ -101,7 +101,7 @@ class PrometheusConnector:
                     dev_map[if_idx] = entry
                 elif not entry.get("ifName") and m.get("ifName"):
                     entry["ifName"] = m.get("ifName")
-                raw_value = _prometheus_metric_raw_value(item, metric)
+                raw_value, _from_label = _prometheus_metric_raw_value(item, metric)
                 try:
                     entry[metric] = int(raw_value)
                 except (ValueError, TypeError):
@@ -122,13 +122,21 @@ class PrometheusConnector:
             if not instance:
                 continue
             try:
-                uptime_seconds = float(
-                    _prometheus_metric_raw_value(item, "sysUpTime")
-                )
+                raw, from_label = _prometheus_metric_raw_value(item, "sysUpTime")
+            except (TypeError, ValueError):
+                continue
+            if raw is None:
+                continue
+            try:
+                uptime_seconds = float(raw)
             except (TypeError, ValueError):
                 continue
             if uptime_seconds < 0 or not math.isfinite(uptime_seconds):
                 continue
+            # snmp_exporter 将 sysUpTime 放在同名标签时是 SNMP 原始厘秒值
+            # 标准 Prometheus 格式的样本值已经是秒
+            if from_label:
+                uptime_seconds /= 100
             uptimes[instance] = int(uptime_seconds // 86400)
         return uptimes
 
@@ -433,14 +441,18 @@ def stop_connector():
 # ── 工具函数 ──
 
 def _prometheus_metric_raw_value(item: dict, metric_name: str):
-    """Read exporter label-style values with standard samples as fallback."""
+    """Read exporter label-style values with standard samples as fallback.
+
+    Returns (value, from_label) tuple where from_label=True indicates
+    the value came from the metric label (snmp_exporter format).
+    """
     metric = item.get("metric") or {}
     label_value = metric.get(metric_name)
     if label_value not in (None, ""):
-        return label_value
+        return label_value, True
 
     sample = item.get("value") or []
-    return sample[1] if len(sample) >= 2 else None
+    return (sample[1], False) if len(sample) >= 2 else (None, False)
 
 
 def _counter_delta(prev: Optional[int], curr: Optional[int]) -> int:

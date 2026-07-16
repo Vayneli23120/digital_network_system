@@ -51,8 +51,8 @@ def test_fetch_device_uptimes_converts_exporter_seconds(monkeypatch):
 
     try:
         assert connector._fetch_device_uptimes() == {
-            "192.0.2.40": 19,
-            "192.0.2.44": 1,
+            "192.0.2.40": 0,  # 1641600 centiseconds = 0.19 days
+            "192.0.2.44": 1,  # 86400 seconds (no label, sample fallback) = 1 day
         }
     finally:
         connector._http.close()
