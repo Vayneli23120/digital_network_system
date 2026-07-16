@@ -80,3 +80,57 @@ Base64 编码导致 HTML body 断言失败。
 - 日志: 无数据库连接失败或事务异常 ✓
 
 **结论**: 事务隔离防护（Step 0）在真实 PostgreSQL 上验证通过，库存不会为负，并发维修单创建只保留一条记录。
+
+---
+
+## Step 1：设备指标事实层远程验证（补充验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §14
+**Git 提交**: `3e282df`
+**Alembic 版本**: `b8c9d0e1f2a3`
+
+### 14.3 聚焦回归
+
+| 测试文件 | 结果 |
+|---|---|
+| `test_device_metric_facts.py` (4 tests) | 通过 |
+
+**4 passed** ✓
+前端 Vite 构建成功 ✓
+
+### 14.5 Alembic 迁移
+
+`c30eb4f78004` → `b8c9d0e1f2a3`（add canonical device metric fact table）
+
+### 14.6 PostgreSQL 表结构
+
+- 主键 `device_metric_samples_pkey` ✓
+- 外键 `device_id → devices.id ON DELETE CASCADE` ✓
+- 索引 `idx_device_metric_device_ts` ✓
+- 字段 `cpu_percent`, `memory_percent`, `temperature_c`, `collection_status` ✓
+
+### 14.7 真实 SNMP 样本
+
+| 项目 | 值 |
+|---|---|
+| 设备 | pnetlab-swr (192.168.4.1) |
+| snmp_available | True |
+| CPU | 37.0% (normal) |
+| 样本计数 | 0 → 1 |
+
+### 14.8 历史查询
+
+- 返回 1 条记录，按时间升序 ✓
+- source: `snmp_live` ✓
+- collection_status: `partial`（SNMP 不支持 temperature 等字段）
+- 附加字段: uptime_days=19, interfaces_up=17, interfaces_down=102, total_errors=0
+
+### 14.9 后端重启
+
+- `nas-backend` 状态: `active (running)` ✓
+- `/health`: `{"status":"healthy","version":"2.0.0"}` ✓
+- 日志: 无 `device_metric_samples` 异常或迁移错误 ✓
+
+**结论**: Step 1 设备指标事实层在真实 PostgreSQL + SNMP 设备上验证通过，事实表写入和历史查询均正常，不影响原实时指标接口。
