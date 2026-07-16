@@ -12,7 +12,7 @@ import logging
 import math
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -22,6 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.services.device_metric_facts import record_device_metric_sample
+from app.services.metric_retention import delete_expired_metric_samples_batch
 from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceInterface, InterfaceTrafficSample
 
@@ -32,6 +33,22 @@ COUNTER64_MAX = 2**64
 # Prometheus 直连地址（Python 应用与 Prometheus 同机部署；Prometheus 在 Docker，端口发布到宓主机）
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 POLL_INTERVAL = int(os.environ.get("PROMETHEUS_POLL_INTERVAL", "60"))  # 秒，与 Prometheus scrape_interval 对齐
+METRIC_SAMPLE_INTERVAL = max(
+    60,
+    int(os.environ.get("DEVICE_METRIC_SAMPLE_INTERVAL", "300")),
+)
+METRIC_RETENTION_DAYS = max(
+    1,
+    int(os.environ.get("DEVICE_METRIC_RETENTION_DAYS", "90")),
+)
+METRIC_CLEANUP_INTERVAL = max(
+    3600,
+    int(os.environ.get("DEVICE_METRIC_CLEANUP_INTERVAL", "86400")),
+)
+METRIC_CLEANUP_BATCH_SIZE = max(
+    1,
+    int(os.environ.get("DEVICE_METRIC_CLEANUP_BATCH_SIZE", "5000")),
+)
 
 # Prometheus file_sd 目标文件：由本连接器根据数据库自动生成。
 # 可用环境变量 PROMETHEUS_TARGETS_FILE 覆盖（例如容器挂载路径）。
@@ -44,12 +61,23 @@ TARGETS_FILE = os.environ.get("PROMETHEUS_TARGETS_FILE", _DEFAULT_TARGETS_FILE)
 class PrometheusConnector:
     """查询 Prometheus → 写入 PostgreSQL"""
 
-    def __init__(self, prometheus_url: str = PROMETHEUS_URL):
+    def __init__(
+        self,
+        prometheus_url: str = PROMETHEUS_URL,
+        *,
+        metric_sample_interval: int = METRIC_SAMPLE_INTERVAL,
+        metric_retention_days: int = METRIC_RETENTION_DAYS,
+        metric_cleanup_batch_size: int = METRIC_CLEANUP_BATCH_SIZE,
+    ):
         self._http = httpx.Client(timeout=30)
         self._prometheus_url = prometheus_url.rstrip("/")
         self._running = False
         self._scheduler = BackgroundScheduler()
         self._last_counters: Dict[str, Dict[int, Dict[str, int | float]]] = {}
+        self._last_metric_sample_at: Dict[int, datetime] = {}
+        self._metric_sample_interval = max(1, metric_sample_interval)
+        self._metric_retention_days = max(1, metric_retention_days)
+        self._metric_cleanup_batch_size = max(1, metric_cleanup_batch_size)
         # {device_ip: {ifIndex: {"in": octets, "out": octets, "ts": timestamp}}}
 
     # ── Prometheus 查询 ──
@@ -326,6 +354,49 @@ class PrometheusConnector:
 
     # ── 轮询入口 ──
 
+    def _metric_fact_due(self, device_id: int, now: datetime) -> bool:
+        last_sample_at = self._last_metric_sample_at.get(device_id)
+        if last_sample_at is None:
+            return True
+        return (now - last_sample_at).total_seconds() >= self._metric_sample_interval
+
+    def cleanup_old_metric_samples(self) -> Dict[str, int]:
+        """Delete expired metric rows in bounded, independently committed batches."""
+        cutoff = datetime.utcnow() - timedelta(days=self._metric_retention_days)
+        totals = {
+            "device_metric_samples": 0,
+            "interface_traffic_samples": 0,
+        }
+        db = get_db_manager().get_session()
+        try:
+            while True:
+                deleted = delete_expired_metric_samples_batch(
+                    db,
+                    cutoff,
+                    batch_size=self._metric_cleanup_batch_size,
+                )
+                if any(deleted.values()):
+                    db.commit()
+                for table_name, count in deleted.items():
+                    totals[table_name] += count
+                if all(
+                    count < self._metric_cleanup_batch_size
+                    for count in deleted.values()
+                ):
+                    break
+            logger.info(
+                "Metric retention cleanup: %d device facts, %d interface samples before %s",
+                totals["device_metric_samples"],
+                totals["interface_traffic_samples"],
+                cutoff.isoformat(),
+            )
+            return totals
+        except Exception:
+            db.rollback()
+            raise
+        finally:
+            db.close()
+
     def poll_once(self):
         """单次轮询周期：同步目标清单 → 查询 Prometheus → 写入数据库。"""
         started = time.monotonic()
@@ -361,6 +432,7 @@ class PrometheusConnector:
             device_count = 0
             iface_count = 0
             fact_count = 0
+            sampled_device_ids = []
             instances = sorted(
                 set(by_instance) | set(uptimes_by_instance) | set(cpu_by_instance)
             )
@@ -380,24 +452,28 @@ class PrometheusConnector:
                 except Exception as exc:
                     logger.error("Persist failed for %s: %s", instance, exc)
 
-                try:
-                    with db.begin_nested():
-                        record_device_metric_sample(
-                            db,
-                            device.id,
-                            _build_device_metric_payload(
-                                ifaces,
-                                uptimes_by_instance.get(instance),
-                                cpu_by_instance.get(instance),
-                            ),
-                            source="prometheus_snmp",
-                            ts=now,
-                        )
-                    fact_count += 1
-                except Exception as exc:
-                    logger.warning("Metric fact persist failed for %s: %s", instance, exc)
+                if self._metric_fact_due(device.id, now):
+                    try:
+                        with db.begin_nested():
+                            record_device_metric_sample(
+                                db,
+                                device.id,
+                                _build_device_metric_payload(
+                                    ifaces,
+                                    uptimes_by_instance.get(instance),
+                                    cpu_by_instance.get(instance),
+                                ),
+                                source="prometheus_snmp",
+                                ts=now,
+                            )
+                        sampled_device_ids.append(device.id)
+                        fact_count += 1
+                    except Exception as exc:
+                        logger.warning("Metric fact persist failed for %s: %s", instance, exc)
 
             db.commit()
+            for device_id in sampled_device_ids:
+                self._last_metric_sample_at[device_id] = now
             persist_ms = int((time.monotonic() - persist_started) * 1000)
 
             # 根据交换机端口 oper_status 刷新 AP 在线状态（AP 不 ping，靠 CDP + 端口）
@@ -433,6 +509,15 @@ class PrometheusConnector:
             id="prometheus_connector_poll",
             name="Prometheus SNMP connector",
             replace_existing=True,
+        )
+        self._scheduler.add_job(
+            self.cleanup_old_metric_samples,
+            trigger=IntervalTrigger(seconds=METRIC_CLEANUP_INTERVAL),
+            id="prometheus_metric_retention",
+            name="Metric sample retention cleanup",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
         )
         self._scheduler.start()
         self._running = True

@@ -1,6 +1,6 @@
 # 远程测试机 PostgreSQL 并发测试手册
 
-版本：v1.4
+版本：v1.5
 日期：2026-07-16
 适用分支：`main`
 Step 0 实现基线：`3e92d88`
@@ -1212,3 +1212,270 @@ journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
 
 将提交号、CPU series 数、匹配事实数、对照设备与两个 CPU 数值、服务状态追加到
 测试报告；不要记录 SNMP community、数据库密码或其他凭据。
+
+---
+
+## 18. Step 1.4：指标保留、节流与查询性能门禁
+
+### 18.1 验证目标
+
+这是进入计划维护/AOP 等大模块改造前的最后一项指标基础门禁：
+
+1. Prometheus 接口状态仍每 60 秒刷新，设备事实默认每 300 秒最多写一条。
+2. 设备事实和接口流量样本默认保留 90 天，每 24 小时执行一次清理。
+3. 清理按每表最多 5000 行一批提交，避免长事务持续锁表。
+4. cutoff 使用严格小于号：恰好位于 cutoff 的记录必须保留。
+5. `device_metric_samples.ts` 和 `interface_traffic_samples.ts` 均有可用索引。
+
+默认值可由以下环境变量覆盖：
+
+```text
+DEVICE_METRIC_SAMPLE_INTERVAL=300
+DEVICE_METRIC_RETENTION_DAYS=90
+DEVICE_METRIC_CLEANUP_INTERVAL=86400
+DEVICE_METRIC_CLEANUP_BATCH_SIZE=5000
+```
+
+生产调整前必须在测试机重新执行本节。不得把采样间隔降到 60 秒后直接上线。
+
+### 18.2 拉取代码并运行本地逻辑测试
+
+```bash
+cd /home/vayne/network-automation-system
+git status --short
+git pull --ff-only origin main
+git rev-parse --short HEAD
+
+unset TEST_DATABASE_URL
+.venv/bin/python -m pytest -q \
+  tests/test_device_metric_facts.py \
+  tests/test_prometheus_metric_facts.py \
+  tests/test_metric_retention.py
+```
+
+拉取前 `git status --short` 必须无输出。预期：
+
+```text
+14 passed
+```
+
+必须包含以下边界通过：
+
+- 连续两次轮询只写一批设备事实
+- 299 秒不写、300 秒允许写
+- cutoff 时刻记录保留
+- 多批清理可完整排空
+- 时间索引存在
+
+### 18.3 真实 PostgreSQL 事务语义测试
+
+使用第 7 节已经配置的隔离数据库 `TEST_DATABASE_URL`，不得使用系统 Python：
+
+```bash
+.venv/bin/python -m pytest -q tests/test_postgresql_metric_retention.py
+```
+
+预期：
+
+```text
+1 passed
+```
+
+测试在同一事务内创建 1899/1900 年边界记录，验证后执行 rollback，不留下设备、
+接口或指标样本。随后检查临时前缀：
+
+```bash
+psql "$TEST_DATABASE_URL" -tAc \
+  "SELECT COUNT(*) FROM devices WHERE name LIKE 'METRIC-RETENTION-PG-%';"
+```
+
+预期为 `0`。
+
+### 18.4 备份应用测试数据库
+
+以下操作只允许在测试环境数据库 `nas` 执行：
+
+```bash
+mkdir -p ~/nas-test-results
+BACKUP_FILE=~/nas-test-results/nas-before-step1.4-$(date +%Y%m%d-%H%M%S).dump
+sudo -u postgres pg_dump -Fc nas > "$BACKUP_FILE"
+test -s "$BACKUP_FILE"
+ls -lh "$BACKUP_FILE"
+```
+
+备份为空时停止，不得执行迁移或清理。
+
+### 18.5 执行 retention 索引迁移
+
+```bash
+.venv/bin/python -m alembic heads
+.venv/bin/python -m alembic current
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m alembic current
+```
+
+预期迁移：
+
+```text
+b8c9d0e1f2a3 -> d0e1f2a3b4c5
+```
+
+检查索引：
+
+```bash
+sudo -u postgres psql -d nas -tAc \
+  "SELECT indexname || ' | ' || indexdef
+     FROM pg_indexes
+    WHERE tablename IN ('device_metric_samples', 'interface_traffic_samples')
+      AND indexname IN ('idx_device_metric_ts', 'ix_interface_traffic_samples_ts')
+    ORDER BY indexname;"
+```
+
+必须同时存在：
+
+```text
+idx_device_metric_ts
+ix_interface_traffic_samples_ts
+```
+
+若接口时间索引不存在，停止清理，不得用全表扫描继续测试。
+
+### 18.6 验证 PostgreSQL 清理查询计划
+
+测试库数据量较小时 PostgreSQL 可能合理选择顺序扫描，因此只在本会话关闭顺序扫描，
+用于证明两个索引可以支撑生产 cutoff 查询：
+
+```bash
+sudo -u postgres psql -d nas <<'SQL'
+BEGIN;
+SET LOCAL enable_seqscan = off;
+EXPLAIN (COSTS OFF)
+SELECT id
+  FROM device_metric_samples
+ WHERE ts < NOW() - INTERVAL '90 days'
+ ORDER BY ts, id
+ LIMIT 5000;
+
+EXPLAIN (COSTS OFF)
+SELECT id
+  FROM interface_traffic_samples
+ WHERE ts < NOW() - INTERVAL '90 days'
+ ORDER BY ts, id
+ LIMIT 5000;
+ROLLBACK;
+SQL
+```
+
+第一份计划必须包含 `idx_device_metric_ts`，第二份必须包含
+`ix_interface_traffic_samples_ts`。允许出现 `Incremental Sort`。
+
+### 18.7 记录当前容量与 90 天预测
+
+```bash
+sudo -u postgres psql -d nas <<'SQL'
+SELECT
+  (SELECT COUNT(*) FROM devices WHERE snmp_enabled IS TRUE) AS snmp_devices,
+  (SELECT COUNT(*) FROM device_interfaces WHERE monitored IS TRUE) AS monitored_interfaces,
+  (SELECT COUNT(*) FROM device_metric_samples) AS device_fact_rows,
+  (SELECT COUNT(*) FROM interface_traffic_samples) AS interface_sample_rows,
+  (SELECT pg_size_pretty(pg_total_relation_size('device_metric_samples'))) AS device_fact_size,
+  (SELECT pg_size_pretty(pg_total_relation_size('interface_traffic_samples'))) AS interface_sample_size;
+
+SELECT
+  (SELECT COUNT(*) FROM devices WHERE snmp_enabled IS TRUE) * 25920
+    AS projected_device_fact_rows_90d,
+  (SELECT COUNT(*) FROM device_interfaces WHERE monitored IS TRUE) * 129600
+    AS projected_interface_sample_rows_90d;
+SQL
+```
+
+预测公式：
+
+- 每台 SNMP 设备：`90 × 24 × 12 = 25,920` 条设备事实
+- 每个 monitored 接口：`90 × 24 × 60 = 129,600` 条流量样本
+
+将实际数量、表大小和预测行数写入报告。若接口预测超过 5000 万行，记录为生产上线前
+必须增加降采样/分区的容量风险，但不阻塞业务模块在测试环境继续开发。
+
+### 18.8 验证 5 分钟事实节流
+
+重启会清空进程内节流状态，因此第一次轮询应写事实；约一分钟后的第二次轮询仍刷新
+接口，但设备事实数应为 `0`：
+
+```bash
+CHECK_STARTED=$(date --iso-8601=seconds)
+sudo systemctl restart nas-backend
+sudo systemctl is-active --quiet nas-backend
+curl -fsS http://127.0.0.1:8000/health
+sleep 75
+journalctl -u nas-backend --since "$CHECK_STARTED" --no-pager -o cat | \
+  grep "Prometheus poll:"
+```
+
+至少看到两条轮询日志。通过标准：
+
+- 第一条包含大于 `0` 的 `metric facts`
+- 下一分钟轮询包含 `0 metric facts`
+- 两条日志的接口数量均正常，说明只节流事实落库，没有停止接口刷新
+
+### 18.9 执行一次真实保留清理
+
+先记录 90 天前数据量：
+
+```bash
+sudo -u postgres psql -d nas -c \
+  "SELECT
+     (SELECT COUNT(*) FROM device_metric_samples
+       WHERE ts < NOW() - INTERVAL '90 days') AS expired_device_facts,
+     (SELECT COUNT(*) FROM interface_traffic_samples
+       WHERE ts < NOW() - INTERVAL '90 days') AS expired_interface_samples;"
+```
+
+确认 18.4 备份有效后执行应用清理入口：
+
+```bash
+.venv/bin/python - <<'PY'
+from app.services.prometheus_connector import PrometheusConnector
+
+connector = PrometheusConnector()
+try:
+  print(connector.cleanup_old_metric_samples())
+finally:
+  connector._http.close()
+PY
+```
+
+再次查询 90 天前数据量，两项都必须为 `0`。日志中的删除数量应与执行前统计一致；
+如果执行前为 `0`，返回零删除是正常结果。
+
+### 18.10 检查服务、调度和错误日志
+
+```bash
+.venv/bin/python -m alembic current
+sudo systemctl --no-pager --full status nas-backend
+curl -fsS http://127.0.0.1:8000/health
+journalctl -u nas-backend --since "$CHECK_STARTED" --no-pager | \
+  grep -E "Prometheus poll:|Metric retention cleanup:|Metric fact persist failed|Poll cycle failed"
+```
+
+通过标准：
+
+- Alembic 当前版本为 `d0e1f2a3b4c5`
+- 后端为 `active (running)`，健康检查成功
+- 没有持续 `Metric fact persist failed` 或 `Poll cycle failed`
+- 原 CPU、uptime、接口聚合样本继续生成
+
+### 18.11 Step 1.4 通过标准
+
+必须同时满足：
+
+- 本地逻辑测试 `14 passed`
+- 真实 PostgreSQL 保留语义测试 `1 passed`，临时数据为 `0`
+- 迁移版本为 `d0e1f2a3b4c5`，两个时间索引存在且执行计划可使用
+- 第一分钟写设备事实、下一分钟事实为 `0`，接口刷新未停止
+- 真实清理后 90 天前记录为 `0`
+- 容量预测已记录，超过 5000 万行时已登记生产容量风险
+- 后端健康，CPU、uptime、接口聚合无回归
+
+将提交号、测试数量、迁移版本、执行计划索引名、轮询日志、清理前后数量、容量预测和
+服务状态追加到测试报告；不要记录 SNMP community、数据库密码或其他凭据。

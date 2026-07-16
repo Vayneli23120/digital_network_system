@@ -94,6 +94,27 @@ def test_fetch_device_cpu_uses_highest_valid_series(monkeypatch):
         connector._http.close()
 
 
+def test_metric_fact_due_uses_exact_sampling_boundary():
+    connector = PrometheusConnector(
+        "http://prometheus.test",
+        metric_sample_interval=300,
+    )
+    sampled_at = connector_module.datetime(2026, 7, 16, 12, 0, 0)
+    connector._last_metric_sample_at[42] = sampled_at
+
+    try:
+        assert connector._metric_fact_due(
+            42,
+            sampled_at + connector_module.timedelta(seconds=299),
+        ) is False
+        assert connector._metric_fact_due(
+            42,
+            sampled_at + connector_module.timedelta(seconds=300),
+        ) is True
+    finally:
+        connector._http.close()
+
+
 def test_poll_once_records_one_periodic_metric_fact(
     db_manager,
     db_session,
@@ -133,6 +154,7 @@ def test_poll_once_records_one_periodic_metric_fact(
     monkeypatch.setattr(connector_module, "get_db_manager", lambda: db_manager)
 
     try:
+        connector.poll_once()
         connector.poll_once()
     finally:
         connector._http.close()

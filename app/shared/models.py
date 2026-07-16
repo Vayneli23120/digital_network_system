@@ -949,6 +949,7 @@ class DeviceMetricSample(Base):
     __tablename__ = "device_metric_samples"
     __table_args__ = (
         Index("idx_device_metric_device_ts", "device_id", "ts"),
+        Index("idx_device_metric_ts", "ts"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
