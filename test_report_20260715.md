@@ -193,3 +193,51 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 - 日志：今日无 `error`/`failed`/`poll` 相关异常 ✓
 
 **结论**: Step 1.1 Prometheus 周期事实采集在真实 PostgreSQL + snmp_exporter 上验证通过，后端启动后自动写入 6 条 `prometheus_snmp` 事实，`device_interfaces.last_check` 同步更新，无任何错误。
+
+---
+
+## Step 1.2：Prometheus uptime 双格式兼容验证（补充验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §16
+**Git 提交**: `36a4c60`
+**Alembic 版本**: `b8c9d0e1f2a3`（无变化）
+
+### 发现并修复的 Bug
+
+根因：snmp_exporter 将 `sysUpTime` 放在 metric label 时是 SNMP 原始厘秒值（hundredths of a second），而标准 Prometheus 格式的样本值已经是秒。上游代码仅从 label 取值后直接 `// 86400`，导致 `uptime_days` 膨胀 100 倍（如 19 天 → 1962 天）。
+
+修复：`_prometheus_metric_raw_value()` 改为返回 `(value, from_label)` 二元组，`_fetch_device_uptimes()` 对 label 来源的值先 `/ 100` 再换算天数。
+
+### 16.3 原始 Prometheus uptime 格式
+
+| 实例 | 来源位置 | 原始值 | 正确天数 |
+|---|---|---|---|
+| 10.121.2.2 | **label** | 500214737 厘秒 | 57 |
+| 10.121.2.3 | **label** | 490453026 厘秒 | 56 |
+| 10.121.1.1 | **label** | 508073863 厘秒 | 58 |
+| 10.121.2.254 | **label** | 488300953 厘秒 | 56 |
+| 192.168.4.1 | **label** | 169565060 厘秒 | 19 |
+| 10.121.2.1 | **label** | 488086217 厘秒 | 56 |
+
+所有设备 `sysUpTime` 值均位于 **label** 位（snmp_exporter 格式），sample 值始终为 `1`。
+
+### 16.4 周期事实与 Prometheus 原始值对照
+
+6/6 台设备 `fact_days == expected_days`，全部一致 ✓
+
+### 16.5 周期与实时 SNMP uptime 对照
+
+| 设备 | 周期事实 | 实时 SNMP | 差值 |
+|---|---|---|---|
+| pnetlab-swr (192.168.4.1) | 19 天 | 19 天 | 0 天 ✓ |
+
+### 16.6 版本、服务、日志
+
+- Alembic 版本：`b8c9d0e1f2a3` ✓
+- `nas-backend` 状态：`active (running)` ✓
+- `/health`：`{"status":"healthy","version":"2.0.0"}` ✓
+- Prometheus 连接器日志：正常 ✅
+
+**结论**: Step 1.2 验证通过。修复后周期事实 `uptime_days` 与 Prometheus 原始值完全一致，与实时 SNMP 差值 0 天。代码已提交 (`36a4c60`)，聚焦测试 8/8 通过。
