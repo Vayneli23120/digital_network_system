@@ -2,6 +2,27 @@
   <div class="dashboard">
     <div class="dashboard-shell">
 
+      <!-- AI 运营建议卡（无建议或接口失败时自动隐藏） -->
+      <section v-if="aiRecommendations.length" class="ai-reco-strip">
+        <div class="ai-reco-head">
+          <span class="ai-reco-title">{{ t('aiRecoTitle') }}</span>
+          <span class="ai-reco-count">{{ aiRecommendations.length }}</span>
+        </div>
+        <div class="ai-reco-list">
+          <button
+            v-for="(card, idx) in aiRecommendations"
+            :key="idx"
+            class="ai-reco-card"
+            :class="card.severity"
+            @click="card.link && navigateTo(card.link)"
+          >
+            <span class="ai-reco-cat">{{ t('aiRecoCat_' + card.category) }}</span>
+            <strong class="ai-reco-card-title">{{ card.title }}</strong>
+            <span class="ai-reco-detail">{{ card.detail }}</span>
+          </button>
+        </div>
+      </section>
+
       <!-- KPI Cards: 每个模块只出现一次 -->
       <section class="kpi-section">
         <div class="section-heading">
@@ -440,7 +461,7 @@ import { ref, onMounted, nextTick, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardSummary, getAlerts } from '@/api'
+import { getDashboardSummary, getAlerts, getAiRecommendations } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -459,6 +480,16 @@ const faultTotal = ref(0)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 const costTrend = ref({ labels: [], total: [], parts: [], labor: [] })
 let timerId = null
+
+const aiRecommendations = ref([])
+const loadAiRecommendations = async () => {
+  try {
+    const res = await getAiRecommendations(6)
+    aiRecommendations.value = res.items || []
+  } catch (err) {
+    aiRecommendations.value = []
+  }
+}
 
 const timeOptions = computed(() => [
   { value: '7d', label: '7D' },
@@ -861,6 +892,7 @@ watch(currentLang, () => {
 onMounted(() => {
   loadDashboardData()
   loadAlerts()
+  loadAiRecommendations()
   window.addEventListener('resize', handleResize)
   window.addEventListener('theme-change', handleThemeChange)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
@@ -875,6 +907,74 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
+.ai-reco-strip {
+  border: 1px solid var(--border-color, #dfe4ea);
+  border-radius: 10px;
+  background: var(--card-bg, #fff);
+  padding: 14px 16px;
+}
+.ai-reco-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.ai-reco-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary, #1e293b);
+}
+.ai-reco-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  background: #ef4444;
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}
+.ai-reco-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 10px;
+}
+.ai-reco-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #e6eaee);
+  border-left-width: 4px;
+  border-radius: 8px;
+  background: var(--card-bg, #fff);
+  cursor: pointer;
+  transition: box-shadow 0.15s;
+}
+.ai-reco-card:hover { box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+.ai-reco-card.critical { border-left-color: #d63031; }
+.ai-reco-card.high { border-left-color: #e17055; }
+.ai-reco-card.medium { border-left-color: #f59e0b; }
+.ai-reco-card.low { border-left-color: #0984e3; }
+.ai-reco-cat {
+  font-size: 11px;
+  color: var(--text-secondary, #77838f);
+  text-transform: uppercase;
+}
+.ai-reco-card-title {
+  font-size: 13px;
+  color: var(--text-primary, #25313c);
+}
+.ai-reco-detail {
+  font-size: 12px;
+  color: var(--text-secondary, #77838f);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .dashboard {
   background:
     radial-gradient(circle at top left, rgba(9, 132, 227, 0.08), transparent 28%),
@@ -890,8 +990,7 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 24px;
   max-width: 1600px;
-  margin: 0 auto;
-}
+  margin: 0 auto;}
 
 /* ===== Section Heading ===== */
 .section-heading {

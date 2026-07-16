@@ -20,6 +20,16 @@ export function getAlerts() {
   return api.get('/dashboard/alerts')
 }
 
+// AI 运营建议卡（规则聚合，未配置模型也可用）
+export function getAiRecommendations(limit = 8) {
+  return api.get('/ai/recommendations', { params: { limit } })
+}
+
+// 一键 AI 故障预判
+export function aiPreDiagnoseFault(faultId) {
+  return api.post(`/faults/${faultId}/ai-pre-diagnose`)
+}
+
 // 设备相关
 export function getDevices(params) {
   return api.get('/devices', { params })

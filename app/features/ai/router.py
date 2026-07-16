@@ -100,6 +100,19 @@ async def list_providers():
     }
 
 
+@router.get("/recommendations")
+async def get_operational_recommendations(limit: int = 8, db: Session = Depends(get_db)):
+    """大屏 AI 建议卡（规则聚合，无需模型即可返回，未配置 AI 时仍可用）。"""
+    from app.services.ai_triage import build_operational_recommendations, ai_available
+
+    cards = build_operational_recommendations(db, limit=limit)
+    return {
+        "ai_configured": ai_available(),
+        "total": len(cards),
+        "items": cards,
+    }
+
+
 # ===== Fault Analysis =====
 
 @router.post("/analyze-fault")

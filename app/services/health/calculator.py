@@ -1,11 +1,12 @@
 """设备健康评分计算器
 
 评分因素权重：
-- 故障频率：30%
-- 维修频率：20%
-- 设备年龄/生命周期：15%
-- 日志异常：15%
-- AI分析：20%
+- 温度：30%（生产环境高温对设备影响最大）
+- 故障频率：25%
+- 设备年龄/生命周期：20%
+- 维修频率：10%
+- 日志异常：5%
+- AI分析：10%
 
 健康评分范围：0-100
 风险等级：low(>=80) / medium(60-79) / high(40-59) / critical(<40)
@@ -19,7 +20,7 @@ import json
 from sqlalchemy.orm import Session
 from app.shared.models import (
     Device, FaultRecord, MaintenanceRecord, DeviceHealthScore,
-    LogEntry, AIAnalysisRecord
+    LogEntry, AIAnalysisRecord, DeviceMetricSample
 )
 
 
@@ -28,11 +29,12 @@ class HealthScoreCalculator:
 
     # 评分权重配置
     WEIGHTS = {
-        'fault_frequency': 0.30,    # 故障频率权重
-        'repair_frequency': 0.20,   # 维修频率权重
-        'device_age': 0.15,         # 设备年龄权重
-        'log_anomalies': 0.15,      # 日志异常权重
-        'ai_analysis': 0.20         # AI分析权重
+        'temperature': 0.30,        # 温度权重（高温影响最大）
+        'fault_frequency': 0.25,    # 故障频率权重
+        'device_age': 0.20,         # 设备年龄权重
+        'repair_frequency': 0.10,   # 维修频率权重
+        'log_anomalies': 0.05,      # 日志异常权重
+        'ai_analysis': 0.10         # AI分析权重
     }
 
     # 风险等级阈值
@@ -58,6 +60,15 @@ class HealthScoreCalculator:
             (health_score, score_factors, risk_level)
         """
         score_factors = {}
+
+        # 0. 计算温度分数 (0-100) - 权重最高
+        temperature_score = self._calculate_temperature_score(device)
+        score_factors['temperature'] = {
+            'score': temperature_score,
+            'weight': self.WEIGHTS['temperature'],
+            'contribution': temperature_score * self.WEIGHTS['temperature'],
+            'details': self._get_temperature_details(device)
+        }
 
         # 1. 计算故障频率分数 (0-100)
         fault_score = self._calculate_fault_score(device)
@@ -118,6 +129,62 @@ class HealthScoreCalculator:
         risk_level = self._determine_risk_level(health_score)
 
         return health_score, score_factors, risk_level
+
+    def _calculate_temperature_score(self, device: Device) -> int:
+        """
+        计算温度分数（权重最高，生产环境高温对设备损害最大）
+        取近24小时温度样本的最高值（最坏情况）评分：
+        - <=45℃：100分
+        - <=55℃：85分
+        - <=65℃：65分
+        - <=75℃：40分
+        - <=85℃：20分
+        - >85℃：5分
+        无温度数据时按中性 100 分处理，不惩罚未采集设备。
+        """
+        peak = self._peak_temperature(device)
+        if peak is None:
+            return 100
+        if peak <= 45:
+            return 100
+        if peak <= 55:
+            return 85
+        if peak <= 65:
+            return 65
+        if peak <= 75:
+            return 40
+        if peak <= 85:
+            return 20
+        return 5
+
+    def _peak_temperature(self, device: Device) -> Optional[float]:
+        """近24小时温度峰值（无数据返回 None）"""
+        window_start = datetime.utcnow() - timedelta(hours=24)
+        samples = self.db.query(DeviceMetricSample.temperature_c).filter(
+            DeviceMetricSample.device_id == device.id,
+            DeviceMetricSample.ts >= window_start,
+            DeviceMetricSample.temperature_c.isnot(None)
+        ).all()
+        values = [row[0] for row in samples if row[0] is not None]
+        return max(values) if values else None
+
+    def _get_temperature_details(self, device: Device) -> Dict:
+        """获取温度详情"""
+        window_start = datetime.utcnow() - timedelta(hours=24)
+        samples = self.db.query(DeviceMetricSample.temperature_c).filter(
+            DeviceMetricSample.device_id == device.id,
+            DeviceMetricSample.ts >= window_start,
+            DeviceMetricSample.temperature_c.isnot(None)
+        ).all()
+        values = [row[0] for row in samples if row[0] is not None]
+        if not values:
+            return {'has_data': False, 'peak_c': None, 'avg_c': None, 'sample_count': 0}
+        return {
+            'has_data': True,
+            'peak_c': round(max(values), 1),
+            'avg_c': round(sum(values) / len(values), 1),
+            'sample_count': len(values)
+        }
 
     def _calculate_fault_score(self, device: Device) -> int:
         """

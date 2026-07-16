@@ -647,6 +647,27 @@ async def get_root_cause(fault_id: int, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/{fault_id}/ai-pre-diagnose")
+async def ai_pre_diagnose(fault_id: int, db: Session = Depends(get_db)):
+    """一键 AI 预判故障原因（轻量、可降级）。
+
+    把设备、故障、近期温度与故障历史一键投喂给已配置的模型，返回预判根因和
+    处理建议。未配置 AI 或调用失败时返回 available=false，不影响故障流程。
+    """
+    from app.services.ai_triage import pre_diagnose_fault
+
+    fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+    if not fault:
+        raise HTTPException(status_code=404, detail="故障记录不存在")
+
+    diagnosis = await pre_diagnose_fault(db, fault)
+    if diagnosis.get("available") and diagnosis.get("probable_cause"):
+        fault.ai_root_cause = diagnosis["probable_cause"]
+        db.commit()
+
+    return {"fault_id": fault_id, **diagnosis}
+
+
 @router.post("/{fault_id}/auto-create-maintenance")
 async def auto_create_maintenance(
     fault_id: int,
