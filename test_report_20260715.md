@@ -134,3 +134,62 @@ Base64 编码导致 HTML body 断言失败。
 - 日志: 无 `device_metric_samples` 异常或迁移错误 ✓
 
 **结论**: Step 1 设备指标事实层在真实 PostgreSQL + SNMP 设备上验证通过，事实表写入和历史查询均正常，不影响原实时指标接口。
+
+---
+
+## Step 1.1：Prometheus 周期事实采集远程验证（补充验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §15
+**Git 提交**: `9af3cfc`
+**Alembic 版本**: `b8c9d0e1f2a3`（无变化）
+
+### 15.3 聚焦回归
+
+| 测试文件 | 结果 |
+|---|---|
+| `test_device_metric_facts.py` (4 tests) | 通过 |
+| `test_prometheus_metric_facts.py` (4 tests) | 通过 |
+| 其中 `test_metric_fact_failure_preserves_interface_updates` | 通过 |
+
+**8 passed** ✓
+
+### 15.4 Prometheus 批量指标
+
+| 指标 | Series 数 |
+|---|---|
+| `sysUpTime` | 6 |
+| `ifOperStatus` | 165 |
+| `ifInErrors` | 161 |
+| `ifOutErrors` | 161 |
+
+### 15.5 轮询基线 → 触发后对比
+
+| 项目 | 轮询前 | 轮询后 |
+|---|---|---|
+| `prometheus_snmp` 样本数 | 0 | 6 |
+| `device_interfaces.last_check` | 02:01:12 | 02:03:33 |
+
+样本数自动增加 ✓，last_check 更新 ✓
+
+### 15.6 周期事实内容示例
+
+| 字段 | 示例值 |
+|---|---|
+| source | `prometheus_snmp` |
+| collection_status | `partial` |
+| uptime_days | 0 |
+| interfaces_up + down ≤ total | 17+102=119 ≤ 119 ✓ |
+| total_errors | 0 |
+
+CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
+
+### 15.7 版本、服务、日志
+
+- Alembic 版本：`b8c9d0e1f2a3` ✓
+- `nas-backend` 状态：`active (running)` ✓
+- `/health`：`{"status":"healthy","version":"2.0.0"}` ✓
+- 日志：今日无 `error`/`failed`/`poll` 相关异常 ✓
+
+**结论**: Step 1.1 Prometheus 周期事实采集在真实 PostgreSQL + snmp_exporter 上验证通过，后端启动后自动写入 6 条 `prometheus_snmp` 事实，`device_interfaces.last_check` 同步更新，无任何错误。
