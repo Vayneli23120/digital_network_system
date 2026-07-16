@@ -1,6 +1,6 @@
 # 远程测试机 PostgreSQL 并发测试手册
 
-版本：v1.2
+版本：v1.3
 日期：2026-07-16
 适用分支：`main`
 Step 0 实现基线：`3e92d88`
@@ -686,3 +686,229 @@ journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
 
 将提交号、测试数量、轮询前后样本数、最新事实字段和服务状态追加到测试报告；
 不要记录 SNMP community、数据库密码或其他凭据。
+
+---
+
+## 16. Step 1.2：Prometheus uptime 双格式兼容验证
+
+### 16.1 验证目标
+
+Step 1.1 的真实报告中，同一设备实时 SNMP 返回 `uptime_days=19`，周期事实却为
+`uptime_days=0`。本切片验证根因和修复结果：
+
+1. snmp_exporter 将真实值放在 `sysUpTime` 同名标签时，优先读取标签。
+2. 标准 Prometheus 格式仍从样本 `value[1]` 读取。
+3. 周期事实与原始 Prometheus 值完全一致。
+4. 周期事实与同一设备实时 SNMP uptime 的差值不超过 1 天。
+
+本切片不增加数据库迁移，不修改前端页面，也不改变采集频率。
+
+### 16.2 拉取代码并运行聚焦回归
+
+```bash
+cd /home/vayne/network-automation-system
+git status --short
+git pull --ff-only origin main
+git rev-parse --short HEAD
+unset TEST_DATABASE_URL
+.venv/bin/python -m pytest -q \
+  tests/test_device_metric_facts.py \
+  tests/test_prometheus_metric_facts.py
+```
+
+`git status --short` 必须无输出，预期测试结果：
+
+```text
+8 passed
+```
+
+### 16.3 检查原始 Prometheus uptime 格式
+
+```bash
+.venv/bin/python - <<'PY'
+import math
+
+import httpx
+
+response = httpx.get(
+  'http://127.0.0.1:9090/api/v1/query',
+  params={'query': 'sysUpTime'},
+  timeout=30,
+)
+response.raise_for_status()
+results = response.json().get('data', {}).get('result', [])
+if not results:
+  raise SystemExit('FAIL: sysUpTime has no Prometheus series')
+
+for item in results:
+  labels = item.get('metric') or {}
+  sample = item.get('value') or []
+  label_value = labels.get('sysUpTime')
+  sample_value = sample[1] if len(sample) >= 2 else None
+  selected = label_value if label_value not in (None, '') else sample_value
+  try:
+    seconds = float(selected)
+  except (TypeError, ValueError):
+    raise SystemExit(f"FAIL: invalid sysUpTime for {labels.get('instance')}")
+  if seconds < 0 or not math.isfinite(seconds):
+    raise SystemExit(f"FAIL: invalid sysUpTime for {labels.get('instance')}")
+  print(
+    'instance=', labels.get('instance'),
+    'label=', label_value,
+    'sample=', sample_value,
+    'selected=', selected,
+    'expected_days=', int(seconds // 86400),
+  )
+PY
+```
+
+记录输出中真实值位于 `label` 还是 `sample`。禁止只记录 `expected_days`，否则无法
+证明测试覆盖了哪一种 exporter 格式。
+
+### 16.4 触发新周期事实并逐设备对照原始值
+
+```bash
+BEFORE_ID=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COALESCE(MAX(id), 0) FROM device_metric_samples;")
+sudo systemctl restart nas-backend
+sudo systemctl is-active --quiet nas-backend
+curl -fsS http://127.0.0.1:8000/health
+echo "before id: $BEFORE_ID"
+
+BEFORE_ID="$BEFORE_ID" .venv/bin/python - <<'PY'
+import os
+
+import httpx
+
+from app.shared.database import get_db_manager
+from app.shared.models import Device, DeviceMetricSample
+
+before_id = int(os.environ['BEFORE_ID'])
+response = httpx.get(
+  'http://127.0.0.1:9090/api/v1/query',
+  params={'query': 'sysUpTime'},
+  timeout=30,
+)
+response.raise_for_status()
+
+expected_by_ip = {}
+for item in response.json().get('data', {}).get('result', []):
+  labels = item.get('metric') or {}
+  sample = item.get('value') or []
+  instance = labels.get('instance')
+  if not instance:
+    continue
+  raw = labels.get('sysUpTime')
+  if raw in (None, ''):
+    raw = sample[1] if len(sample) >= 2 else None
+  expected_by_ip[instance.rsplit(':', 1)[0]] = int(float(raw) // 86400)
+
+db = get_db_manager().get_session()
+try:
+  rows = (
+    db.query(Device.ip, DeviceMetricSample)
+    .join(DeviceMetricSample, DeviceMetricSample.device_id == Device.id)
+    .filter(
+      DeviceMetricSample.id > before_id,
+      DeviceMetricSample.source == 'prometheus_snmp',
+    )
+    .all()
+  )
+  if not rows:
+    raise SystemExit('FAIL: restart did not create prometheus_snmp facts')
+
+  checked = 0
+  for ip, sample in rows:
+    if ip not in expected_by_ip:
+      continue
+    expected = expected_by_ip[ip]
+    print(ip, 'fact_days=', sample.uptime_days, 'expected_days=', expected)
+    if sample.uptime_days != expected:
+      raise SystemExit(f'FAIL: uptime mismatch for {ip}')
+    checked += 1
+  if checked == 0:
+    raise SystemExit('FAIL: no fact could be matched to Prometheus instance')
+  print('matched facts:', checked)
+finally:
+  db.close()
+PY
+```
+
+必须至少匹配一台设备，且每台输出的 `fact_days == expected_days`。
+
+### 16.5 与同一设备实时 SNMP uptime 对照
+
+```bash
+.venv/bin/python - <<'PY'
+import asyncio
+
+from app.features.devices.router import get_device_performance_metrics
+from app.shared.database import get_db_manager
+from app.shared.models import Device, DeviceMetricSample
+
+db = get_db_manager().get_session()
+try:
+  periodic = (
+    db.query(DeviceMetricSample)
+    .join(Device, Device.id == DeviceMetricSample.device_id)
+    .filter(
+      DeviceMetricSample.source == 'prometheus_snmp',
+      DeviceMetricSample.uptime_days.isnot(None),
+      Device.snmp_enabled.is_(True),
+      Device.snmp_community.isnot(None),
+    )
+    .order_by(DeviceMetricSample.ts.desc(), DeviceMetricSample.id.desc())
+    .first()
+  )
+  if not periodic:
+    raise SystemExit('FAIL: no comparable periodic fact found')
+
+  device = db.query(Device).filter(Device.id == periodic.device_id).one()
+  live = asyncio.run(get_device_performance_metrics(device.id, db))
+  live_days = (live.get('uptime') or {}).get('uptime_days')
+  print(
+    'device=', device.id, device.name, device.ip,
+    'periodic_days=', periodic.uptime_days,
+    'live_days=', live_days,
+  )
+  if live.get('error'):
+    raise SystemExit(f"FAIL: live SNMP query failed: {live['error']}")
+  if live_days is None:
+    raise SystemExit('FAIL: live SNMP uptime is unavailable')
+  if abs(periodic.uptime_days - live_days) > 1:
+    raise SystemExit('FAIL: periodic and live uptime differ by more than 1 day')
+finally:
+  db.close()
+PY
+```
+
+只记录设备 ID、名称、IP 和两个天数；不要记录 SNMP community。允许最多 1 天差值，
+用于覆盖采样时间跨日边界。
+
+### 16.6 检查版本和日志
+
+```bash
+.venv/bin/python -m alembic current
+sudo systemctl --no-pager --full status nas-backend
+journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
+  grep -E "Prometheus poll:|Metric fact persist failed|Poll cycle failed"
+```
+
+通过标准：
+
+- Alembic 仍为 `b8c9d0e1f2a3`
+- 后端为 `active (running)`
+- 日志包含成功轮询，且没有持续事实写入或轮询失败
+
+### 16.7 Step 1.2 通过标准
+
+必须同时满足：
+
+- 聚焦测试 `8 passed`
+- 原始输出明确记录 label/sample 两种位置中的实际值来源
+- 新周期事实至少匹配一台设备，且 uptime 与 Prometheus 原始值换算结果一致
+- 同一设备周期 uptime 与实时 SNMP uptime 差值不超过 1 天
+- Alembic 版本未变化，后端健康且日志无持续错误
+
+将原始值位置、对照设备、两个 uptime 天数、匹配事实数、提交号和服务状态追加到
+测试报告；不要记录 SNMP community、数据库密码或其他凭据。

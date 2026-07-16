@@ -101,9 +101,9 @@ class PrometheusConnector:
                     dev_map[if_idx] = entry
                 elif not entry.get("ifName") and m.get("ifName"):
                     entry["ifName"] = m.get("ifName")
-                # snmp_exporter 将指标真实值存在标签中，value 始终为 1；回退到 value
+                raw_value = _prometheus_metric_raw_value(item, metric)
                 try:
-                    entry[metric] = int(m.get(metric, item["value"][1]))
+                    entry[metric] = int(raw_value)
                 except (ValueError, TypeError):
                     pass
         return by_instance
@@ -119,11 +119,12 @@ class PrometheusConnector:
 
         for item in results:
             instance = (item.get("metric") or {}).get("instance")
-            value = item.get("value") or []
-            if not instance or len(value) < 2:
+            if not instance:
                 continue
             try:
-                uptime_seconds = float(value[1])
+                uptime_seconds = float(
+                    _prometheus_metric_raw_value(item, "sysUpTime")
+                )
             except (TypeError, ValueError):
                 continue
             if uptime_seconds < 0 or not math.isfinite(uptime_seconds):
@@ -430,6 +431,17 @@ def stop_connector():
 
 
 # ── 工具函数 ──
+
+def _prometheus_metric_raw_value(item: dict, metric_name: str):
+    """Read exporter label-style values with standard samples as fallback."""
+    metric = item.get("metric") or {}
+    label_value = metric.get(metric_name)
+    if label_value not in (None, ""):
+        return label_value
+
+    sample = item.get("value") or []
+    return sample[1] if len(sample) >= 2 else None
+
 
 def _counter_delta(prev: Optional[int], curr: Optional[int]) -> int:
     """处理 64 位计数器翻转。"""

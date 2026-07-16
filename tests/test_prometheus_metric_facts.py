@@ -36,14 +36,24 @@ def test_fetch_device_uptimes_converts_exporter_seconds(monkeypatch):
         connector,
         "_query",
         lambda metric: [
-            {"metric": {"instance": "192.0.2.40"}, "value": [1, "1641600"]},
+            {
+                "metric": {
+                    "instance": "192.0.2.40",
+                    "sysUpTime": "1641600",
+                },
+                "value": [1, "1"],
+            },
+            {"metric": {"instance": "192.0.2.44"}, "value": [1, "86400"]},
             {"metric": {}, "value": [1, "100"]},
             {"metric": {"instance": "192.0.2.41"}, "value": [1, "invalid"]},
         ],
     )
 
     try:
-        assert connector._fetch_device_uptimes() == {"192.0.2.40": 19}
+        assert connector._fetch_device_uptimes() == {
+            "192.0.2.40": 19,
+            "192.0.2.44": 1,
+        }
     finally:
         connector._http.close()
 
