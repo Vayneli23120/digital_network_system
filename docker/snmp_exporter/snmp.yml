@@ -24,6 +24,7 @@ modules:
       - 1.3.6.1.2.1.1.3        # sysUpTime
       - 1.3.6.1.2.1.1.5        # sysName
       - 1.3.6.1.2.1.1.1        # sysDescr
+      - 1.3.6.1.4.1.9.9.109.1.1.1.1.8  # cpmCPUTotal5minRev
     metrics:
     # ── 接口表 ifEntry (1.3.6.1.2.1.2.2.1) ──
     - name: ifDescr
@@ -169,3 +170,12 @@ modules:
       oid: 1.3.6.1.2.1.1.1
       type: DisplayString
       help: 'System description'
+
+    # ── Cisco CPU (CISCO-PROCESS-MIB) ──
+    - name: cpmCPUTotal5minRev
+      oid: 1.3.6.1.4.1.9.9.109.1.1.1.1.8
+      type: Gauge32
+      help: 'Five-minute CPU utilization percentage'
+      indexes:
+      - labelname: cpmCPUTotalIndex
+        type: Integer

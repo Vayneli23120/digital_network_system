@@ -1,6 +1,6 @@
 # 远程测试机 PostgreSQL 并发测试手册
 
-版本：v1.3
+版本：v1.4
 日期：2026-07-16
 适用分支：`main`
 Step 0 实现基线：`3e92d88`
@@ -425,7 +425,7 @@ sudo -u postgres psql -d nas -tAc \
 .venv/bin/python - <<'PY'
 import asyncio
 
-from app.features.devices.router import get_device_performance_metrics
+from app.features.devices.snmp_service import get_snmp_service
 from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceMetricSample
 
@@ -911,4 +911,304 @@ journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
 - Alembic 版本未变化，后端健康且日志无持续错误
 
 将原始值位置、对照设备、两个 uptime 天数、匹配事实数、提交号和服务状态追加到
+测试报告；不要记录 SNMP community、数据库密码或其他凭据。
+
+---
+
+## 17. Step 1.3：Prometheus 周期 CPU 事实验证
+
+### 17.1 验证目标
+
+本切片在现有 `cisco_if` exporter 模块中增加 Cisco
+`cpmCPUTotal5minRev`，每轮通过一次 Prometheus 全量查询写入设备事实：
+
+1. 不增加逐台 SNMP 请求，轮询批量查询数从 8 次增加到 9 次。
+2. 同一设备有多个 CPU series 时，采用有效值中的最大值，避免局部高负载被平均。
+3. CPU 必须为有限的 `0–100` 数值；缺失、非法或越界时保持 `NULL`。
+4. 新周期事实的 `cpu_percent` 与连接器从 Prometheus 解析出的值一致。
+5. 与同一 OID 的实时 SNMP CPU 做合理性对照。
+
+本切片不增加数据库迁移、不切换前端页面，也不采集尚未验证的内存或温度 OID。
+
+### 17.2 备份 exporter 配置并拉取代码
+
+```bash
+cd /home/vayne/network-automation-system
+git status --short
+mkdir -p ~/nas-test-results
+CPU_CONFIG_BACKUP=~/nas-test-results/snmp-before-step1.3-$(date +%Y%m%d-%H%M%S).yml
+cp docker/snmp_exporter/snmp.yml "$CPU_CONFIG_BACKUP"
+test -s "$CPU_CONFIG_BACKUP"
+
+git pull --ff-only origin main
+git rev-parse --short HEAD
+```
+
+拉取前 `git status --short` 必须无输出，备份文件必须存在且大小大于 `0`。
+
+### 17.3 运行聚焦回归和静态配置检查
+
+```bash
+unset TEST_DATABASE_URL
+.venv/bin/python -m pytest -q \
+  tests/test_device_metric_facts.py \
+  tests/test_prometheus_metric_facts.py
+
+.venv/bin/python - <<'PY'
+import yaml
+
+path = 'docker/snmp_exporter/snmp.yml'
+with open(path, encoding='utf-8') as stream:
+  config = yaml.safe_load(stream)
+module = config['modules']['cisco_if']
+metric = next(
+  item for item in module['metrics']
+  if item['name'] == 'cpmCPUTotal5minRev'
+)
+expected_oid = '1.3.6.1.4.1.9.9.109.1.1.1.1.8'
+assert metric['oid'] == expected_oid
+assert metric['type'] == 'Gauge32'
+assert metric['indexes'] == [
+  {'labelname': 'cpmCPUTotalIndex', 'type': 'Integer'}
+]
+assert expected_oid in module['walk']
+print('snmp CPU config: OK')
+PY
+```
+
+预期：
+
+```text
+9 passed
+snmp CPU config: OK
+```
+
+### 17.4 重启 snmp_exporter 并确认 CPU series
+
+```bash
+sudo docker restart netsnmp
+sudo docker inspect -f '{{.State.Status}}' netsnmp
+sudo docker logs --since 2m netsnmp
+```
+
+容器状态必须为 `running`，日志不得包含配置解析错误。如果启动失败，立即恢复：
+
+```bash
+cp "$CPU_CONFIG_BACKUP" docker/snmp_exporter/snmp.yml
+sudo docker restart netsnmp
+sudo docker inspect -f '{{.State.Status}}' netsnmp
+```
+
+恢复后停止 Step 1.3，不得继续重启后端。
+
+容器正常时，等待 Prometheus 下一次 scrape 并检查新指标：
+
+```bash
+.venv/bin/python - <<'PY'
+import time
+
+import httpx
+
+url = 'http://127.0.0.1:9090/api/v1/query'
+results = []
+for _attempt in range(9):
+  response = httpx.get(
+    url,
+    params={'query': 'cpmCPUTotal5minRev'},
+    timeout=30,
+  )
+  response.raise_for_status()
+  results = response.json().get('data', {}).get('result', [])
+  if results:
+    break
+  time.sleep(10)
+
+print('CPU series:', len(results))
+if not results:
+  raise SystemExit('FAIL: cpmCPUTotal5minRev has no Prometheus series')
+
+instances = sorted({
+  (item.get('metric') or {}).get('instance')
+  for item in results
+  if (item.get('metric') or {}).get('instance')
+})
+print('CPU instances:', instances)
+PY
+```
+
+至少返回一个 CPU series。只记录 instance 和 series 数，不记录 auth/community 标签。
+部分不支持 CISCO-PROCESS-MIB 的设备可以没有该指标。
+
+### 17.5 触发周期事实并与 Prometheus 解析值对照
+
+```bash
+BEFORE_ID=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COALESCE(MAX(id), 0) FROM device_metric_samples;")
+sudo systemctl restart nas-backend
+sudo systemctl is-active --quiet nas-backend
+curl -fsS http://127.0.0.1:8000/health
+echo "before id: $BEFORE_ID"
+
+BEFORE_ID="$BEFORE_ID" .venv/bin/python - <<'PY'
+import os
+
+from app.services.prometheus_connector import PrometheusConnector
+from app.shared.database import get_db_manager
+from app.shared.models import Device, DeviceMetricSample
+
+before_id = int(os.environ['BEFORE_ID'])
+connector = PrometheusConnector()
+try:
+  cpu_by_instance = connector._fetch_device_cpu()
+finally:
+  connector._http.close()
+
+expected_by_ip = {
+  instance.rsplit(':', 1)[0]: value
+  for instance, value in cpu_by_instance.items()
+}
+print('parsed CPU devices:', len(expected_by_ip))
+if not expected_by_ip:
+  raise SystemExit('FAIL: connector parsed no CPU values')
+
+db = get_db_manager().get_session()
+try:
+  rows = (
+    db.query(Device, DeviceMetricSample)
+    .join(DeviceMetricSample, DeviceMetricSample.device_id == Device.id)
+    .filter(
+      DeviceMetricSample.id > before_id,
+      DeviceMetricSample.source == 'prometheus_snmp',
+      DeviceMetricSample.cpu_percent.isnot(None),
+    )
+    .all()
+  )
+  if not rows:
+    raise SystemExit('FAIL: restart created no periodic CPU facts')
+
+  checked = 0
+  for device, sample in rows:
+    expected = expected_by_ip.get(device.ip)
+    if expected is None:
+      continue
+    print(
+      device.id, device.name, device.ip,
+      'fact_cpu=', sample.cpu_percent,
+      'prometheus_cpu=', expected,
+    )
+    if sample.cpu_percent != expected:
+      raise SystemExit(f'FAIL: CPU fact mismatch for {device.ip}')
+    checked += 1
+  if checked == 0:
+    raise SystemExit('FAIL: no CPU fact matched a Prometheus instance')
+  print('matched CPU facts:', checked)
+finally:
+  db.close()
+PY
+```
+
+必须至少匹配一台设备，且每台输出的 `fact_cpu == prometheus_cpu`。
+
+### 17.6 与同一设备实时 SNMP CPU 对照
+
+```bash
+.venv/bin/python - <<'PY'
+import asyncio
+
+from app.features.devices.router import get_device_performance_metrics
+from app.shared.database import get_db_manager
+from app.shared.models import Device, DeviceMetricSample
+
+db = get_db_manager().get_session()
+try:
+  periodic = (
+    db.query(DeviceMetricSample)
+    .join(Device, Device.id == DeviceMetricSample.device_id)
+    .filter(
+      DeviceMetricSample.source == 'prometheus_snmp',
+      DeviceMetricSample.cpu_percent.isnot(None),
+      Device.snmp_enabled.is_(True),
+      Device.snmp_community.isnot(None),
+    )
+    .order_by(DeviceMetricSample.ts.desc(), DeviceMetricSample.id.desc())
+    .first()
+  )
+  if not periodic:
+    raise SystemExit('FAIL: no comparable periodic CPU fact found')
+
+  device = db.query(Device).filter(Device.id == periodic.device_id).one()
+  service = get_snmp_service()
+  if not service.is_available():
+    raise SystemExit('FAIL: live SNMP service is unavailable')
+  cpu_oid = service.get_oid_set(device.vendor or 'cisco').get('cpu_5min')
+  values = asyncio.run(
+    service.snmp_walk_async(
+      device.ip,
+      device.snmp_community,
+      cpu_oid,
+      timeout=3,
+    )
+  )
+  valid = [
+    float(value)
+    for value in values.values()
+    if isinstance(value, (int, float)) and 0 <= float(value) <= 100
+  ]
+  live_cpu = max(valid) if valid else None
+  print(
+    'device=', device.id, device.name, device.ip,
+    'periodic_cpu=', periodic.cpu_percent,
+    'live_cpu=', live_cpu,
+  )
+  if live_cpu is None:
+    raise SystemExit('FAIL: live SNMP CPU is unavailable')
+  if abs(periodic.cpu_percent - live_cpu) > 20:
+    raise SystemExit('FAIL: periodic and live CPU differ by more than 20 points')
+finally:
+  db.close()
+PY
+```
+
+周期和实时 SNMP 都对同一 OID 的有效 series 取最大值。CPU 是动态值，因此允许
+20 个百分点差值。
+只记录设备 ID、名称、IP 和两个 CPU 数值，不记录 SNMP community。
+
+### 17.7 检查事实完整度、服务和日志
+
+```bash
+sudo -u postgres psql -d nas -x -c \
+  "SELECT id, device_id, ts, source, collection_status,
+          cpu_percent, uptime_days, interfaces_up,
+          interfaces_down, interfaces_total, total_errors
+     FROM device_metric_samples
+    WHERE source='prometheus_snmp' AND cpu_percent IS NOT NULL
+    ORDER BY ts DESC, id DESC
+    LIMIT 5;"
+
+.venv/bin/python -m alembic current
+sudo systemctl --no-pager --full status nas-backend
+journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
+  grep -E "Prometheus poll:|cpmCPUTotal5minRev|Metric fact persist failed|Poll cycle failed"
+```
+
+通过标准：
+
+- 周期事实 CPU 均在 `0–100`
+- `collection_status` 为 `partial`
+- uptime 和接口聚合字段仍正常存在
+- Alembic 仍为 `b8c9d0e1f2a3`
+- 后端为 `active (running)`，连接器日志无持续错误
+
+### 17.8 Step 1.3 通过标准
+
+必须同时满足：
+
+- 聚焦测试 `9 passed`，静态 exporter 配置检查通过
+- snmp_exporter 重启成功，Prometheus 至少返回一个 CPU series
+- 新周期事实至少有一条非空 CPU，且与连接器 Prometheus 解析值一致
+- 同一设备周期 CPU 与实时 SNMP CPU 差值不超过 20 个百分点
+- uptime、接口聚合未回归，Alembic 版本未变化
+- 后端健康且日志无持续 exporter、事实写入或轮询错误
+
+将提交号、CPU series 数、匹配事实数、对照设备与两个 CPU 数值、服务状态追加到
 测试报告；不要记录 SNMP community、数据库密码或其他凭据。

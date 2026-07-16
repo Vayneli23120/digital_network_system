@@ -140,6 +140,34 @@ class PrometheusConnector:
             uptimes[instance] = int(uptime_seconds // 86400)
         return uptimes
 
+    def _fetch_device_cpu(self) -> Dict[str, float]:
+        """Fetch the highest valid five-minute Cisco CPU value per target."""
+        cpu_by_instance: Dict[str, float] = {}
+        try:
+            results = self._query("cpmCPUTotal5minRev")
+        except Exception as exc:
+            logger.warning("Prometheus batch query cpmCPUTotal5minRev failed: %s", exc)
+            return cpu_by_instance
+
+        for item in results:
+            instance = (item.get("metric") or {}).get("instance")
+            if not instance:
+                continue
+            raw, _from_label = _prometheus_metric_raw_value(
+                item,
+                "cpmCPUTotal5minRev",
+            )
+            try:
+                cpu_percent = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(cpu_percent) or not 0 <= cpu_percent <= 100:
+                continue
+            current = cpu_by_instance.get(instance)
+            if current is None or cpu_percent > current:
+                cpu_by_instance[instance] = cpu_percent
+        return cpu_by_instance
+
     # ── 持久化 ──
 
     def _persist_device(self, db, device: Device, ifaces: Dict[int, dict], now: datetime) -> int:
@@ -322,17 +350,20 @@ class PrometheusConnector:
 
             now = datetime.utcnow()
 
-            # 一次性批量查询所有指标（8 次查询，而非逐台设备查询）
+            # 一次性批量查询所有指标（9 次查询，而非逐台设备查询）
             q_started = time.monotonic()
             by_instance = self._fetch_all_interfaces()
             uptimes_by_instance = self._fetch_device_uptimes()
+            cpu_by_instance = self._fetch_device_cpu()
             query_ms = int((time.monotonic() - q_started) * 1000)
 
             persist_started = time.monotonic()
             device_count = 0
             iface_count = 0
             fact_count = 0
-            instances = sorted(set(by_instance) | set(uptimes_by_instance))
+            instances = sorted(
+                set(by_instance) | set(uptimes_by_instance) | set(cpu_by_instance)
+            )
             processed_device_ids = set()
             for instance in instances:
                 device = devices_by_ip.get(instance)
@@ -357,6 +388,7 @@ class PrometheusConnector:
                             _build_device_metric_payload(
                                 ifaces,
                                 uptimes_by_instance.get(instance),
+                                cpu_by_instance.get(instance),
                             ),
                             source="prometheus_snmp",
                             ts=now,
@@ -467,6 +499,7 @@ def _counter_delta(prev: Optional[int], curr: Optional[int]) -> int:
 def _build_device_metric_payload(
     ifaces: Dict[int, dict],
     uptime_days: Optional[int],
+    cpu_percent: Optional[float] = None,
 ) -> dict:
     """Aggregate one Prometheus target into the canonical collector shape."""
     oper_statuses = [
@@ -491,7 +524,7 @@ def _build_device_metric_payload(
         interface_metrics = {"up": None, "down": None, "total": None}
 
     return {
-        "cpu": {"value": None, "status": "unknown"},
+        "cpu": {"value": cpu_percent, "status": "unknown"},
         "memory": {"used_percent": None, "status": "unknown"},
         "temperature": {"value": None, "status": "unknown"},
         "uptime": {"uptime_days": uptime_days},

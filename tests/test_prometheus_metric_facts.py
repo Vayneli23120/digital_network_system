@@ -16,8 +16,10 @@ def test_build_device_metric_payload_aggregates_interfaces():
             3: {"ifOperStatus": 6},
         },
         uptime_days=19,
+        cpu_percent=37.0,
     )
 
+    assert payload["cpu"]["value"] == 37.0
     assert payload["uptime"]["uptime_days"] == 19
     assert payload["interfaces"] == {"up": 1, "down": 1, "total": 3}
     assert payload["errors"]["total_errors"] == 6
@@ -58,6 +60,40 @@ def test_fetch_device_uptimes_converts_exporter_seconds(monkeypatch):
         connector._http.close()
 
 
+def test_fetch_device_cpu_uses_highest_valid_series(monkeypatch):
+    connector = PrometheusConnector("http://prometheus.test")
+    monkeypatch.setattr(
+        connector,
+        "_query",
+        lambda metric: [
+            {
+                "metric": {
+                    "instance": "192.0.2.40",
+                    "cpmCPUTotal5minRev": "37",
+                },
+                "value": [1, "1"],
+            },
+            {
+                "metric": {"instance": "192.0.2.40"},
+                "value": [1, "41"],
+            },
+            {
+                "metric": {"instance": "192.0.2.41"},
+                "value": [1, "101"],
+            },
+            {
+                "metric": {"instance": "192.0.2.42"},
+                "value": [1, "invalid"],
+            },
+        ],
+    )
+
+    try:
+        assert connector._fetch_device_cpu() == {"192.0.2.40": 41.0}
+    finally:
+        connector._http.close()
+
+
 def test_poll_once_records_one_periodic_metric_fact(
     db_manager,
     db_session,
@@ -89,6 +125,11 @@ def test_poll_once_records_one_periodic_metric_fact(
         "_fetch_device_uptimes",
         lambda: {device.ip: 7},
     )
+    monkeypatch.setattr(
+        connector,
+        "_fetch_device_cpu",
+        lambda: {device.ip: 43.0},
+    )
     monkeypatch.setattr(connector_module, "get_db_manager", lambda: db_manager)
 
     try:
@@ -101,6 +142,7 @@ def test_poll_once_records_one_periodic_metric_fact(
     ).one()
     assert sample.source == "prometheus_snmp"
     assert sample.collection_status == "partial"
+    assert sample.cpu_percent == 43.0
     assert sample.uptime_days == 7
     assert sample.interfaces_up == 1
     assert sample.interfaces_down == 1
@@ -152,6 +194,7 @@ def test_metric_fact_failure_preserves_interface_updates(
         "_fetch_device_uptimes",
         lambda: {device.ip: 1},
     )
+    monkeypatch.setattr(connector, "_fetch_device_cpu", lambda: {})
     monkeypatch.setattr(connector_module, "get_db_manager", lambda: db_manager)
 
     def fail_metric_fact(*args, **kwargs):
