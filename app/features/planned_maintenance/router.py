@@ -18,13 +18,22 @@ import json
 from pydantic import BaseModel
 
 from app.shared.database import get_db
-from app.shared.models import MaintenancePlan, MaintenanceTask, MaintenanceRecord, Device
+from app.shared.models import (
+    AopMaintenanceWindow,
+    AopProject,
+    MaintenancePlan,
+    MaintenanceTask,
+    MaintenanceRecord,
+    Device,
+)
 
 # ADK 导入（预测性维护功能）
 from app.services.adk.runner import adk_runner
 from app.services.adk.agents import predictive_agent
+from app.features.planned_maintenance.aop_router import router as aop_router
 
 router = APIRouter(prefix="/api/planned-maintenance", tags=["planned-maintenance"])
+router.include_router(aop_router)
 
 
 # ============ Pydantic 模型 ============
@@ -280,10 +289,15 @@ async def list_tasks(
         items.append({
             "id": t.id,
             "plan_id": t.plan_id,
+            "aop_project_id": t.aop_project_id,
+            "maintenance_window_id": t.maintenance_window_id,
             "device_id": t.device_id,
             "device_name": t.device_name,
             "task_no": t.task_no,
             "scheduled_date": t.scheduled_date.isoformat() if t.scheduled_date else None,
+            "scheduled_end": t.scheduled_end.isoformat() if t.scheduled_end else None,
+            "estimated_hours": float(t.estimated_hours) if t.estimated_hours is not None else None,
+            "schedule_source": t.schedule_source,
             "actual_date": t.actual_date.isoformat() if t.actual_date else None,
             "status": "overdue" if t.status == "pending" and t.scheduled_date < now else t.status,
             "maintenance_id": t.maintenance_id,
@@ -361,6 +375,36 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
                 "plan_type": plan.plan_type
             }
 
+    aop_project_info = None
+    if task.aop_project_id:
+        project = db.query(AopProject).filter(AopProject.id == task.aop_project_id).first()
+        if project:
+            aop_project_info = {
+                "id": project.id,
+                "program_id": project.program_id,
+                "project_code": project.project_code,
+                "name": project.name,
+                "project_type": project.project_type,
+                "priority": project.priority,
+                "risk_level": project.risk_level,
+                "rollback_plan": project.rollback_plan,
+            }
+
+    maintenance_window_info = None
+    if task.maintenance_window_id:
+        window = db.query(AopMaintenanceWindow).filter(
+            AopMaintenanceWindow.id == task.maintenance_window_id
+        ).first()
+        if window:
+            maintenance_window_info = {
+                "id": window.id,
+                "name": window.name,
+                "window_type": window.window_type,
+                "start_at": window.start_at.isoformat(),
+                "end_at": window.end_at.isoformat(),
+                "timezone": window.timezone,
+            }
+
     # 获取设备健康信息
     device_info = None
     if task.device_id:
@@ -376,11 +420,18 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
         "id": task.id,
         "plan_id": task.plan_id,
         "plan": plan_info,
+        "aop_project_id": task.aop_project_id,
+        "aop_project": aop_project_info,
+        "maintenance_window_id": task.maintenance_window_id,
+        "maintenance_window": maintenance_window_info,
         "device_id": task.device_id,
         "device_name": task.device_name,
         "device": device_info,
         "task_no": task.task_no,
         "scheduled_date": task.scheduled_date.isoformat() if task.scheduled_date else None,
+        "scheduled_end": task.scheduled_end.isoformat() if task.scheduled_end else None,
+        "estimated_hours": float(task.estimated_hours) if task.estimated_hours is not None else None,
+        "schedule_source": task.schedule_source,
         "actual_date": task.actual_date.isoformat() if task.actual_date else None,
         "status": task.status,
         "maintenance_id": task.maintenance_id,
@@ -401,6 +452,8 @@ async def start_task(task_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="任务状态不允许开始")
 
     task.status = "in_progress"
+    if task.aop_project:
+        task.aop_project.status = "in_progress"
     db.commit()
 
     return {"message": "任务已开始"}
@@ -440,21 +493,21 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
             maint_time=datetime.utcnow()
         )
         db.add(maintenance)
-        db.commit()
-        db.refresh(maintenance)
-
+        db.flush()
         task.maintenance_id = maintenance.id
 
     task.status = "completed"
     task.actual_date = datetime.utcnow()
-    db.commit()
 
     # 如果有关联计划，更新下次执行日期
     if task.plan_id:
         plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == task.plan_id).first()
         if plan and plan.cycle_days:
             plan.next_date = datetime.utcnow() + timedelta(days=plan.cycle_days)
-            db.commit()
+    if task.aop_project:
+        task.aop_project.status = "completed"
+
+    db.commit()
 
     # 触发工作流（维修完成）
     from app.shared.cache import cache
@@ -486,6 +539,8 @@ async def skip_task(task_id: int, reason: Optional[str] = None, db: Session = De
 
     notes_data['skip_reason'] = reason or '未说明'
     task.notes = json.dumps(notes_data)
+    if task.aop_project:
+        task.aop_project.status = "cancelled"
 
     db.commit()
 
@@ -502,6 +557,8 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
     if task.status in ["in_progress", "completed"]:
         raise HTTPException(status_code=400, detail="进行中或已完成的任务不能删除")
 
+    if task.aop_project:
+        task.aop_project.status = "proposed"
     db.delete(task)
     db.commit()
 

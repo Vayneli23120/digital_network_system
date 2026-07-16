@@ -641,16 +641,126 @@ class MaintenancePlan(Base):
         return f"<MaintenancePlan(name='{self.name}', type='{self.plan_type}')>"
 
 
+class AopProgram(Base):
+    """Versioned annual operating plan for planned network work."""
+    __tablename__ = "aop_programs"
+    __table_args__ = (
+        UniqueConstraint("year", "version", name="uq_aop_program_year_version"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    year = Column(Integer, nullable=False, index=True)
+    version = Column(Integer, default=1, nullable=False)
+    name = Column(String(200), nullable=False)
+    status = Column(String(20), default="draft", nullable=False, index=True)
+    owner = Column(String(100))
+    currency = Column(String(3), default="CNY", nullable=False)
+    budget_amount = Column(DECIMAL(14, 2), default=0, nullable=False)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    projects = relationship("AopProject", back_populates="program", cascade="all, delete-orphan")
+    maintenance_windows = relationship(
+        "AopMaintenanceWindow",
+        back_populates="program",
+        cascade="all, delete-orphan",
+    )
+
+
+class AopMaintenanceWindow(Base):
+    """Approved shutdown, holiday, weekend, or standard maintenance slot."""
+    __tablename__ = "aop_maintenance_windows"
+    __table_args__ = (
+        CheckConstraint("end_at > start_at", name="ck_aop_window_valid_range"),
+        CheckConstraint("max_parallel_tasks > 0", name="ck_aop_window_parallel_positive"),
+        Index("idx_aop_window_program_start", "program_id", "start_at"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    program_id = Column(Integer, ForeignKey("aop_programs.id", ondelete="CASCADE"), nullable=False)
+    name = Column(String(200), nullable=False)
+    window_type = Column(String(30), nullable=False, index=True)
+    start_at = Column(DateTime, nullable=False, index=True)
+    end_at = Column(DateTime, nullable=False, index=True)
+    timezone = Column(String(64), default="Asia/Shanghai", nullable=False)
+    max_parallel_tasks = Column(Integer, default=1, nullable=False)
+    status = Column(String(20), default="draft", nullable=False, index=True)
+    owner = Column(String(100))
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    program = relationship("AopProgram", back_populates="maintenance_windows")
+    tasks = relationship("MaintenanceTask", back_populates="maintenance_window")
+
+
+class AopProject(Base):
+    """One budgeted replacement, maintenance, or upgrade item in an AOP."""
+    __tablename__ = "aop_projects"
+    __table_args__ = (
+        UniqueConstraint("program_id", "project_code", name="uq_aop_project_program_code"),
+        Index("idx_aop_project_program_status", "program_id", "status"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    program_id = Column(Integer, ForeignKey("aop_programs.id", ondelete="CASCADE"), nullable=False)
+    project_code = Column(String(50), nullable=False)
+    name = Column(String(200), nullable=False)
+    project_type = Column(String(30), nullable=False, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
+    device_name = Column(String(100))
+    asset_scope = Column(Text)
+    current_version = Column(String(100))
+    target_version = Column(String(100))
+    planned_start = Column(DateTime, nullable=False, index=True)
+    planned_end = Column(DateTime)
+    preferred_window_type = Column(String(30))
+    estimated_hours = Column(DECIMAL(8, 2), default=1, nullable=False)
+    estimated_cost = Column(DECIMAL(14, 2), default=0, nullable=False)
+    owner = Column(String(100))
+    priority = Column(String(10), default="P3", nullable=False, index=True)
+    risk_level = Column(String(20), default="medium", nullable=False, index=True)
+    approval_status = Column(String(20), default="draft", nullable=False, index=True)
+    status = Column(String(20), default="proposed", nullable=False, index=True)
+    dependencies = Column(Text)
+    business_justification = Column(Text)
+    rollback_plan = Column(Text)
+    notes = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+
+    program = relationship("AopProgram", back_populates="projects")
+    device = relationship("Device")
+    task = relationship("MaintenanceTask", back_populates="aop_project", uselist=False)
+
+
 class MaintenanceTask(Base):
     """运维任务表 - 计划性运维的具体执行任务"""
     __tablename__ = "maintenance_tasks"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     plan_id = Column(Integer, ForeignKey("maintenance_plans.id", ondelete="SET NULL"), nullable=True)
+    aop_project_id = Column(
+        Integer,
+        ForeignKey("aop_projects.id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+        index=True,
+    )
+    maintenance_window_id = Column(
+        Integer,
+        ForeignKey("aop_maintenance_windows.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
     device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True)
     device_name = Column(String(100))
     task_no = Column(String(50), unique=True, nullable=False)
     scheduled_date = Column(DateTime, nullable=False, index=True)
+    scheduled_end = Column(DateTime)
+    estimated_hours = Column(DECIMAL(8, 2))
+    schedule_source = Column(String(30), default="legacy_plan", nullable=False, index=True)
     actual_date = Column(DateTime)
     status = Column(String(20), default="pending", index=True)  # pending, in_progress, completed, skipped, overdue
     maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)
@@ -659,6 +769,8 @@ class MaintenanceTask(Base):
 
     # 关系
     plan = relationship("MaintenancePlan", back_populates="tasks")
+    aop_project = relationship("AopProject", back_populates="task")
+    maintenance_window = relationship("AopMaintenanceWindow", back_populates="tasks")
     maintenance = relationship("MaintenanceRecord")
 
     def __repr__(self):

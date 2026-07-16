@@ -616,6 +616,44 @@ export function generateTasksForPlans() {
   return api.post('/planned-maintenance/generate-tasks')
 }
 
+// AOP 年度规划
+export function getAopPrograms(params) {
+  return api.get('/planned-maintenance/aop/programs', { params })
+}
+export function createAopProgram(data) {
+  return api.post('/planned-maintenance/aop/programs', data)
+}
+export function getAopProgram(id) {
+  return api.get(`/planned-maintenance/aop/programs/${id}`)
+}
+export function updateAopProgram(id, data) {
+  return api.put(`/planned-maintenance/aop/programs/${id}`, data)
+}
+export function getAopProjects(programId) {
+  return api.get(`/planned-maintenance/aop/programs/${programId}/projects`)
+}
+export function createAopProject(programId, data) {
+  return api.post(`/planned-maintenance/aop/programs/${programId}/projects`, data)
+}
+export function updateAopProject(projectId, data) {
+  return api.put(`/planned-maintenance/aop/projects/${projectId}`, data)
+}
+export function getAopWindows(programId) {
+  return api.get(`/planned-maintenance/aop/programs/${programId}/windows`)
+}
+export function createAopWindow(programId, data) {
+  return api.post(`/planned-maintenance/aop/programs/${programId}/windows`, data)
+}
+export function updateAopWindow(windowId, data) {
+  return api.put(`/planned-maintenance/aop/windows/${windowId}`, data)
+}
+export function generateAopTasks(programId) {
+  return api.post(`/planned-maintenance/aop/programs/${programId}/generate-tasks`)
+}
+export function getAopCalendar(params) {
+  return api.get('/planned-maintenance/aop/calendar', { params })
+}
+
 // ============ 用户管理 API ============
 export function getUsers() {
   return api.get('/auth/users')

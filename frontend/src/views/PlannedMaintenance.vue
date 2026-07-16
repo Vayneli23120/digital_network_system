@@ -4,8 +4,12 @@
     <section class="page-nav-bar">
       <div class="nav-left">
         <h1 class="page-title">{{ t('menuPlannedMaintenance') }}</h1>
+        <el-radio-group v-model="activeWorkspace" size="small" class="workspace-switch">
+          <el-radio-button value="aop">{{ t('aopWorkspace') }}</el-radio-button>
+          <el-radio-button value="legacy">{{ t('aopLegacyWorkspace') }}</el-radio-button>
+        </el-radio-group>
       </div>
-      <div class="nav-right">
+      <div v-if="activeWorkspace === 'legacy'" class="nav-right">
         <button class="nav-action-btn" @click="showPlanDialog = true">
           <el-icon><Plus /></el-icon>
           <span>{{ t('pmCreatePlan') }}</span>
@@ -20,6 +24,9 @@
       </div>
     </section>
 
+    <AopPlanningWorkspace v-if="activeWorkspace === 'aop'" />
+
+    <template v-else>
     <!-- 顶部统计 Dashboard -->
     <section class="stats-dashboard">
       <div class="stats-grid">
@@ -547,11 +554,12 @@
         <el-button type="success" @click="completeTask">{{ t('pmBtnConfirmComplete') }}</el-button>
       </template>
     </el-dialog>
+    </template>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Document, Clock, CircleCheck, Warning, WarningFilled, ArrowRight, Connection, Edit, Delete, VideoPlay, Right, Calendar, Tools, RefreshLeft, Coin, InfoFilled } from '@element-plus/icons-vue'
@@ -564,9 +572,12 @@ import { formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
+import AopPlanningWorkspace from '@/components/AopPlanningWorkspace.vue'
 
 const { t } = useI18n()
 const router = useRouter()
+const activeWorkspace = ref('aop')
+const legacyLoaded = ref(false)
 const plans = ref([])
 const tasks = ref([])
 const devices = ref([])
@@ -1015,11 +1026,21 @@ const deleteTask = async (row) => {
   }
 }
 
-onMounted(() => {
+const loadLegacyWorkspace = () => {
+  if (legacyLoaded.value) return
+  legacyLoaded.value = true
   loadStats()
   loadPlans()
   loadTasks()
   loadDevices()
+}
+
+watch(activeWorkspace, value => {
+  if (value === 'legacy') loadLegacyWorkspace()
+})
+
+onMounted(() => {
+  if (activeWorkspace.value === 'legacy') loadLegacyWorkspace()
 })
 </script>
 
@@ -1075,6 +1096,10 @@ onMounted(() => {
   display: flex;
   align-items: baseline;
   gap: 12px;
+}
+
+.workspace-switch {
+  margin-left: 8px;
 }
 
 .page-title {
@@ -1814,6 +1839,16 @@ onMounted(() => {
   .page-nav-bar {
     flex-direction: column;
     gap: 12px;
+  }
+
+  .nav-left {
+    width: 100%;
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .workspace-switch {
+    margin-left: 0;
   }
 
   .nav-right {

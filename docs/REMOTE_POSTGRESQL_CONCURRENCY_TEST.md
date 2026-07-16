@@ -1,6 +1,6 @@
 # 远程测试机 PostgreSQL 并发测试手册
 
-版本：v1.5
+版本：v1.6
 日期：2026-07-16
 适用分支：`main`
 Step 0 实现基线：`3e92d88`
@@ -1479,3 +1479,199 @@ journalctl -u nas-backend --since "$CHECK_STARTED" --no-pager | \
 
 将提交号、测试数量、迁移版本、执行计划索引名、轮询日志、清理前后数量、容量预测和
 服务状态追加到测试报告；不要记录 SNMP community、数据库密码或其他凭据。
+
+---
+
+## 19. AOP 年度计划：迁移、并发排程与前端门禁
+
+### 19.1 验证目标
+
+本节验证计划性运维从周期模板扩展为年度 AOP 后的关键边界：
+
+1. 旧 `maintenance_plans` 数据和 API 保持可用。
+2. AOP 项目、维护窗口和任务关联结构正确迁移到 PostgreSQL。
+3. 两个独立连接同时生成同一 AOP 时只创建一条任务，后到请求复用该任务。
+4. AOP API 可由真实后端访问，Vue 生产构建成功。
+5. 迁移和后端重启不影响 Step 1.4 指标采集与保留策略。
+
+### 19.2 拉取代码并运行聚焦回归
+
+```bash
+cd /home/vayne/network-automation-system
+git status --short
+git pull --ff-only origin main
+git rev-parse --short HEAD
+
+env -u TEST_DATABASE_URL .venv/bin/python -m pytest -q tests/test_aop_planning.py
+.venv/bin/python -m alembic heads
+```
+
+拉取前工作区必须干净。预期聚焦测试为 `9 passed`，唯一 Alembic head 为：
+
+```text
+e1f2a3b4c5d6 (head)
+```
+
+### 19.3 备份应用测试数据库
+
+以下操作只允许在测试环境数据库 `nas` 执行：
+
+```bash
+mkdir -p ~/nas-test-results
+BACKUP_FILE=~/nas-test-results/nas-before-aop-$(date +%Y%m%d-%H%M%S).dump
+sudo -u postgres pg_dump -Fc nas > "$BACKUP_FILE"
+test -s "$BACKUP_FILE"
+ls -lh "$BACKUP_FILE"
+```
+
+备份为空时停止。不得跳过备份直接迁移，也不得把备份提交到 Git。
+
+### 19.4 执行并检查 AOP 迁移
+
+```bash
+.venv/bin/python -m alembic current
+.venv/bin/python -m alembic upgrade head
+.venv/bin/python -m alembic current
+```
+
+预期迁移：
+
+```text
+d0e1f2a3b4c5 -> e1f2a3b4c5d6
+```
+
+检查表、任务列、唯一索引和外键：
+
+```bash
+sudo -u postgres psql -d nas <<'SQL'
+SELECT table_name
+  FROM information_schema.tables
+ WHERE table_schema = 'public'
+   AND table_name IN ('aop_programs', 'aop_projects', 'aop_maintenance_windows')
+ ORDER BY table_name;
+
+SELECT column_name
+  FROM information_schema.columns
+ WHERE table_schema = 'public'
+   AND table_name = 'maintenance_tasks'
+   AND column_name IN (
+     'aop_project_id', 'maintenance_window_id', 'scheduled_end',
+     'estimated_hours', 'schedule_source'
+   )
+ ORDER BY column_name;
+
+SELECT indexname
+  FROM pg_indexes
+ WHERE tablename = 'maintenance_tasks'
+   AND indexname IN (
+     'ix_maintenance_tasks_aop_project_id',
+     'ix_maintenance_tasks_maintenance_window_id',
+     'ix_maintenance_tasks_schedule_source'
+   )
+ ORDER BY indexname;
+
+SELECT conname
+  FROM pg_constraint
+ WHERE conname IN (
+   'fk_maintenance_task_aop_project',
+   'fk_maintenance_task_aop_window',
+   'uq_aop_program_year_version',
+   'uq_aop_project_program_code'
+ )
+ ORDER BY conname;
+SQL
+```
+
+必须看到 3 张表、5 个任务列、3 个任务索引和 4 个命名约束。任何一组缺失都应停止
+后续排程测试并保留日志，不要手工补列或补索引。
+
+### 19.5 在隔离数据库验证并发幂等
+
+继续使用第 7 节的 `PGPASSFILE` 和 `TEST_DATABASE_URL`。先确认目标数据库，输出必须是
+`nas_concurrency_test`：
+
+```bash
+psql "$TEST_DATABASE_URL" -tAc "SELECT current_database(), current_user;"
+DATABASE_URL="$TEST_DATABASE_URL" .venv/bin/python -m alembic upgrade head
+DATABASE_URL="$TEST_DATABASE_URL" .venv/bin/python -m alembic current
+.venv/bin/python -m pytest -q tests/test_postgresql_aop_planning.py
+```
+
+预期迁移版本为 `e1f2a3b4c5d6`，测试为：
+
+```text
+1 passed
+```
+
+该测试使用两个独立 SQLAlchemy Session 同时调用真实生成入口。通过标准是一方返回一个
+`generated_task_id`，另一方返回同一个 `existing_task_id`，数据库最终只有一条任务。
+测试结束后检查临时数据：
+
+```bash
+psql "$TEST_DATABASE_URL" -tAc \
+  "SELECT COUNT(*) FROM aop_programs WHERE name LIKE 'AOP-PG-%';"
+```
+
+预期为 `0`。非零表示测试清理失败，必须先清理隔离库，不能删除业务库中的同名数据。
+
+### 19.6 AOP API 冒烟测试
+
+重启后端并检查只读 AOP 列表接口：
+
+```bash
+CHECK_STARTED=$(date --iso-8601=seconds)
+sudo systemctl restart nas-backend
+sudo systemctl is-active --quiet nas-backend
+curl -fsS http://127.0.0.1:8000/health
+curl -fsS "http://127.0.0.1:8000/api/planned-maintenance/aop/programs?year=2099" | \
+  .venv/bin/python -m json.tool
+```
+
+接口必须返回 JSON 且无 `500`。这里只执行只读请求，不在业务测试库创建占位 AOP。
+
+### 19.7 Vue 生产构建
+
+本地 Windows 环境的 npm 镜像证书无法可靠安装依赖，因此以测试机生产构建为准：
+
+```bash
+node --version
+npm --version
+npm --prefix frontend ci
+npm --prefix frontend run build
+test -f frontend/dist/index.html
+```
+
+不得使用 `strict-ssl=false`、`NODE_TLS_REJECT_UNAUTHORIZED=0` 或其他方式关闭 TLS 校验。
+若 `npm ci` 因测试机证书链失败，记录完整错误并修复系统/企业 CA，不得把它记为 Vue
+代码缺陷；依赖可用后必须重新执行构建。
+
+### 19.8 服务与旧功能回归
+
+```bash
+.venv/bin/python -m alembic current
+curl -fsS "http://127.0.0.1:8000/api/planned-maintenance/plans?limit=1"
+curl -fsS "http://127.0.0.1:8000/api/planned-maintenance/tasks?limit=1"
+curl -fsS http://127.0.0.1:8000/health
+sudo systemctl --no-pager --full status nas-backend
+journalctl -u nas-backend --since "$CHECK_STARTED" --no-pager | \
+  grep -E "Traceback|IntegrityError|AOP|Prometheus poll:|Metric retention cleanup:"
+```
+
+旧接口若需要认证，应使用测试账号按现有登录流程获取凭据，不要把 token 写入手册、报告
+或 shell 脚本。后端必须保持 `active (running)`，且日志中不得有持续数据库、排程或指标
+轮询错误。
+
+### 19.9 AOP 通过标准
+
+必须同时满足：
+
+- AOP 聚焦测试 `9 passed`，覆盖反序依赖、峰值并行容量、窗口时区和已排程写保护
+- 应用数据库和隔离数据库均为 `e1f2a3b4c5d6`
+- 3 张 AOP 表、5 个任务列、3 个任务索引和 4 个命名约束齐全
+- PostgreSQL 并发测试 `1 passed`，`AOP-PG-` 临时数据为 `0`
+- AOP 只读 API 返回有效 JSON，旧计划和任务接口无回归
+- `npm --prefix frontend run build` 成功并生成 `frontend/dist/index.html`
+- 后端健康，Step 1.4 指标轮询与保留日志无持续错误
+
+将提交号、测试数量、两个数据库的迁移版本、结构检查结果、并发结果、API 状态、前端
+构建结果和服务状态追加到测试报告；不要记录数据库密码、认证 token 或其他凭据。
