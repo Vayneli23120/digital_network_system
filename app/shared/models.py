@@ -87,6 +87,7 @@ class Device(Base):
     nodes = relationship("DeviceNode", back_populates="device", cascade="all, delete-orphan")
     ports = relationship("DevicePort", back_populates="device", cascade="all, delete-orphan")
     health_records = relationship("DeviceHealthScore", back_populates="device", cascade="all, delete-orphan")
+    metric_samples = relationship("DeviceMetricSample", back_populates="device", cascade="all, delete-orphan")
     spare_relations = relationship("DeviceSpareRelation", back_populates="device", cascade="all, delete-orphan")
     def __repr__(self):
         return f"<Device(name='{self.name}', ip='{self.ip}', status='{self.status}', health={self.health_score})>"
@@ -941,6 +942,35 @@ class InterfaceTrafficSample(Base):
 
     def __repr__(self):
         return f"<InterfaceTrafficSample(iface={self.interface_id}, ts={self.ts})>"
+
+
+class DeviceMetricSample(Base):
+    """Canonical time-series facts for device-level performance metrics."""
+    __tablename__ = "device_metric_samples"
+    __table_args__ = (
+        Index("idx_device_metric_device_ts", "device_id", "ts"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False)
+    ts = Column(DateTime, default=datetime.utcnow, nullable=False)
+    source = Column(String(30), default="snmp_live", nullable=False)
+    collection_status = Column(String(20), default="partial", nullable=False)
+    cpu_percent = Column(Float)
+    memory_percent = Column(Float)
+    memory_used_mb = Column(Float)
+    memory_total_mb = Column(Float)
+    temperature_c = Column(Float)
+    uptime_days = Column(Integer)
+    interfaces_up = Column(Integer)
+    interfaces_down = Column(Integer)
+    interfaces_total = Column(Integer)
+    total_errors = Column(BigInteger)
+
+    device = relationship("Device", back_populates="metric_samples")
+
+    def __repr__(self):
+        return f"<DeviceMetricSample(device={self.device_id}, ts={self.ts}, status={self.collection_status})>"
 
 
 class WorkflowRule(Base):

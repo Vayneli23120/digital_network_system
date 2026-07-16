@@ -1,7 +1,8 @@
 """Device management router"""
 
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from loguru import logger
 from sqlalchemy.orm import Session
 from typing import Optional, List, Literal
 from pathlib import Path
@@ -26,6 +27,11 @@ from app.shared.database import get_db
 from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart, DeviceInterface, InterfaceTrafficSample
 from app.shared.config import get_config
 from app.shared.time_utils import utc_iso
+from app.services.device_metric_facts import (
+    device_metric_sample_to_dict,
+    get_device_metric_samples,
+    record_device_metric_sample,
+)
 
 config = get_config()
 
@@ -512,6 +518,14 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
         )
         metrics["snmp_available"] = True
         metrics["device_ip"] = device.ip
+        try:
+            record_device_metric_sample(db, device.id, metrics, source="snmp_live")
+            db.commit()
+        except Exception as persist_error:
+            db.rollback()
+            logger.warning(
+                f"Device metric persistence failed for {device.id}: {persist_error}"
+            )
         return metrics
     except asyncio.TimeoutError:
         logger.warning(f"SNMP query timeout for device {device.ip}")
@@ -541,6 +555,25 @@ async def get_device_performance_metrics(device_id: int, db: Session = Depends(g
             "device_ip": device.ip,
             "error": str(e)
         }
+
+
+@router.get("/{device_id}/metrics/history")
+async def get_device_performance_metric_history(
+    device_id: int,
+    limit: int = Query(60, ge=1, le=500),
+    db: Session = Depends(get_db),
+):
+    """Return canonical device metric facts in chronological order."""
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
+
+    samples = get_device_metric_samples(db, device_id, limit=limit)
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "samples": [device_metric_sample_to_dict(sample) for sample in samples],
+    }
 
 
 @router.get("/{device_id}/snmp-diagnose")

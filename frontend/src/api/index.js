@@ -91,6 +91,10 @@ export function getDeviceMetrics(deviceId) {
   return api.get(`/devices/${deviceId}/metrics`, { timeout: 20000 })
 }
 
+export function getDeviceMetricHistory(deviceId, limit = 60) {
+  return api.get(`/devices/${deviceId}/metrics/history`, { params: { limit } })
+}
+
 // 接口监控（SNMP）
 export function listDeviceInterfaces(deviceId, monitoredOnly = false) {
   return api.get(`/devices/${deviceId}/interfaces`, { params: { monitored_only: monitoredOnly } })
