@@ -362,14 +362,14 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 **执行日期**: 2026-07-16
 **测试机**: 192.168.4.37（k8s-worker）
 **测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §19
-**Git 提交**: `e47bbf9`
-**Alembic 版本**: `d0e1f2a3b4c5` → `e1f2a3b4c5d6`
+**Git 提交**: `f27c220`
+**Alembic 版本**: `d0e1f2a3b4c5` → `e1f2a3b4c5d6` → `f2a3b4c5d6e7`
 
 ### 19.2 聚焦回归
 
 | 测试 | 结果 |
 |---|---|
-| `test_aop_planning.py` | **9 passed** |
+| `test_aop_planning.py` | **11 passed** |
 
 ### 19.4 结构检查
 
@@ -377,6 +377,7 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 |---|---|
 | 3 张 AOP 表 (`aop_programs`, `aop_projects`, `aop_maintenance_windows`) | ✓ |
 | 5 个任务列 (`aop_project_id`, `maintenance_window_id`, `scheduled_end`, `estimated_hours`, `schedule_source`) | ✓ |
+| 5 个执行结果列 (`actual_hours`, `actual_cost`, `completion_result`, `completion_notes`, `completed_at`) | ✓ |
 | 3 个索引 (`ix_maintenance_tasks_aop_project_id`, `ix_maintenance_tasks_maintenance_window_id`, `ix_maintenance_tasks_schedule_source`) | ✓ |
 | 4 个约束 (`fk_maintenance_task_aop_project`, `fk_maintenance_task_aop_window`, `uq_aop_program_year_version`, `uq_aop_project_program_code`) | ✓ |
 
@@ -414,4 +415,4 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 - `nas-backend`：`active (running)` ✓
 - 日志：无 Traceback、IntegrityError 或持续错误 ✓
 
-**结论**: AOP 年度计划功能验证通过。迁移到 `e1f2a3b4c5d6`，表结构完整，并发幂等测试通过，AOP API 正常，Vue 构建成功，旧功能无回归。23/23 全量聚焦测试通过。
+**结论**: AOP 年度计划功能验证通过。迁移到 `f2a3b4c5d6e7`（含执行结果列），表结构完整，并发幂等测试通过，AOP API 正常，Vue 构建成功，旧功能无回归。25/25 全量聚焦测试通过。
