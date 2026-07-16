@@ -1,6 +1,6 @@
 # 远程测试机 PostgreSQL 并发测试手册
 
-版本：v1.1
+版本：v1.2
 日期：2026-07-16
 适用分支：`main`
 Step 0 实现基线：`3e92d88`
@@ -521,4 +521,168 @@ journalctl -u nas-backend --since "5 minutes ago" --no-pager | tail -n 100
 - 后端重启及健康检查正常
 
 将结果追加到测试报告，记录提交号、迁移版本、测试数量和真实样本字段；
+不要记录 SNMP community、数据库密码或其他凭据。
+
+---
+
+## 15. Step 1.1：Prometheus 周期事实采集远程验证
+
+### 15.1 验证目标
+
+本切片不增加数据库迁移、不修改前端页面，验证以下行为：
+
+1. 后端每次 Prometheus 轮询自动写入一条 `prometheus_snmp` 设备事实，
+   不再依赖用户打开实时指标页面。
+2. 接口 up/down/total、错误计数和 `sysUpTime` 从同一批 Prometheus 数据派生，
+   不增加逐台设备 SNMP 请求。
+3. 事实写入使用独立 savepoint；即使旁路写入失败，原接口状态更新仍可提交。
+4. Alembic 版本保持 `b8c9d0e1f2a3`。
+
+### 15.2 拉取代码并确认运行环境
+
+```bash
+cd /home/vayne/network-automation-system
+git status --short
+git pull --ff-only origin main
+git rev-parse --short HEAD
+.venv/bin/python - <<'PY'
+import apscheduler
+import httpx
+
+print('python dependencies: OK')
+print('httpx:', httpx.__version__, httpx.__file__)
+print('apscheduler:', apscheduler.__version__, apscheduler.__file__)
+PY
+```
+
+`git status --short` 必须无输出，两个模块路径必须位于项目 `.venv` 下。
+如果模块缺失，停止验证并从测试环境批准的离线包源补齐依赖；不要切换公共镜像，
+不要关闭 TLS 校验。
+
+### 15.3 运行聚焦回归
+
+```bash
+unset TEST_DATABASE_URL
+.venv/bin/python -m pytest -q \
+  tests/test_device_metric_facts.py \
+  tests/test_prometheus_metric_facts.py
+```
+
+预期：
+
+```text
+8 passed
+```
+
+其中必须包含 `test_metric_fact_failure_preserves_interface_updates` 通过。
+
+### 15.4 验证 Prometheus 已提供批量指标
+
+```bash
+.venv/bin/python - <<'PY'
+import httpx
+
+base_url = 'http://127.0.0.1:9090'
+for metric in ('sysUpTime', 'ifOperStatus', 'ifInErrors', 'ifOutErrors'):
+  response = httpx.get(
+    f'{base_url}/api/v1/query',
+    params={'query': metric},
+    timeout=30,
+  )
+  response.raise_for_status()
+  body = response.json()
+  results = body.get('data', {}).get('result', [])
+  print(metric, 'series:', len(results))
+  if body.get('status') != 'success' or not results:
+    raise SystemExit(f'FAIL: Prometheus metric unavailable: {metric}')
+PY
+```
+
+四项查询都必须成功且至少返回一个 series。`sysUpTime` 由 snmp_exporter
+按秒暴露，连接器换算后写入 `uptime_days`。
+
+### 15.5 记录基线并触发真实后台轮询
+
+```bash
+BEFORE_FACTS=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COUNT(*) FROM device_metric_samples WHERE source='prometheus_snmp';")
+BEFORE_LAST_CHECK=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COALESCE(MAX(last_check)::text, '') FROM device_interfaces;")
+echo "before facts: $BEFORE_FACTS"
+echo "before interface last_check: $BEFORE_LAST_CHECK"
+
+sudo systemctl restart nas-backend
+sudo systemctl is-active --quiet nas-backend
+curl -fsS http://127.0.0.1:8000/health
+
+AFTER_FACTS=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COUNT(*) FROM device_metric_samples WHERE source='prometheus_snmp';")
+AFTER_LAST_CHECK=$(sudo -u postgres psql -d nas -tAc \
+  "SELECT COALESCE(MAX(last_check)::text, '') FROM device_interfaces;")
+echo "after facts: $AFTER_FACTS"
+echo "after interface last_check: $AFTER_LAST_CHECK"
+
+test "$AFTER_FACTS" -gt "$BEFORE_FACTS"
+test -n "$AFTER_LAST_CHECK"
+test "$AFTER_LAST_CHECK" != "$BEFORE_LAST_CHECK"
+```
+
+连接器在后端启动时立即执行一次，因此无需等待下一个 60 秒周期。通过标准：
+
+- `AFTER_FACTS > BEFORE_FACTS`
+- `AFTER_LAST_CHECK` 非空且发生变化
+- 全程没有调用设备实时指标 API
+
+### 15.6 检查周期事实内容
+
+```bash
+sudo -u postgres psql -d nas -x -c \
+  "SELECT id, device_id, ts, source, collection_status,
+          uptime_days, interfaces_up, interfaces_down,
+          interfaces_total, total_errors
+     FROM device_metric_samples
+    WHERE source='prometheus_snmp'
+    ORDER BY ts DESC, id DESC
+    LIMIT 5;"
+```
+
+预期：
+
+- `source` 全部为 `prometheus_snmp`
+- `collection_status` 为 `partial`
+- `uptime_days` 为非负整数
+- `interfaces_up + interfaces_down <= interfaces_total`
+- 支持 IF-MIB 错误计数时，`total_errors` 为非负整数
+
+CPU、内存和温度在当前 exporter 配置中没有对应厂商 OID，保持 `NULL` 是预期行为；
+本切片不得为填充这些字段改回逐台 SNMP 轮询。
+
+### 15.7 检查版本、服务和日志
+
+```bash
+.venv/bin/python -m alembic current
+sudo systemctl --no-pager --full status nas-backend
+journalctl -u nas-backend --since "10 minutes ago" --no-pager | \
+  grep -E "Prometheus poll:|metric facts|Metric fact persist failed|Poll cycle failed"
+```
+
+通过标准：
+
+- Alembic 当前版本仍为 `b8c9d0e1f2a3`
+- 服务为 `active (running)`
+- 日志包含 `Prometheus poll: ... metric facts`
+- 日志没有持续出现 `Metric fact persist failed` 或 `Poll cycle failed`
+
+### 15.8 Step 1.1 通过标准
+
+必须同时满足：
+
+- 聚焦测试 `8 passed`
+- Prometheus 四项批量指标均有数据
+- 后端启动轮询后 `prometheus_snmp` 样本数自动增加
+- 原 `device_interfaces.last_check` 同时更新
+- 周期事实字段满足 15.6 的约束
+- Alembic 版本未变化，后端健康且日志无持续轮询错误
+
+将提交号、测试数量、轮询前后样本数、最新事实字段和服务状态追加到测试报告；
 不要记录 SNMP community、数据库密码或其他凭据。

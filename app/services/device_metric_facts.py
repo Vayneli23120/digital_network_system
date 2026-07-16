@@ -25,12 +25,16 @@ def _integer(value: Any) -> Optional[int]:
     return int(number) if number is not None else None
 
 
-def _collection_status(metrics: Dict[str, Any], primary_values: list[Optional[float]]) -> str:
+def _collection_status(
+    metrics: Dict[str, Any],
+    primary_values: list[Optional[float]],
+    supporting_values: list[Optional[float]],
+) -> str:
     if metrics.get("error"):
         return "error"
     if all(value is not None for value in primary_values):
         return "complete"
-    if any(value is not None for value in primary_values):
+    if any(value is not None for value in primary_values + supporting_values):
         return "partial"
     return "empty"
 
@@ -49,6 +53,11 @@ def record_device_metric_sample(
     memory_percent = _number(memory.get("used_percent"))
     temperature_c = _number((metrics.get("temperature") or {}).get("value"))
     interfaces = metrics.get("interfaces") or {}
+    uptime_days = _integer((metrics.get("uptime") or {}).get("uptime_days"))
+    interfaces_up = _integer(interfaces.get("up"))
+    interfaces_down = _integer(interfaces.get("down"))
+    interfaces_total = _integer(interfaces.get("total"))
+    total_errors = _integer((metrics.get("errors") or {}).get("total_errors"))
 
     sample = DeviceMetricSample(
         device_id=device_id,
@@ -57,17 +66,24 @@ def record_device_metric_sample(
         collection_status=_collection_status(
             metrics,
             [cpu_percent, memory_percent, temperature_c],
+            [
+                uptime_days,
+                interfaces_up,
+                interfaces_down,
+                interfaces_total,
+                total_errors,
+            ],
         ),
         cpu_percent=cpu_percent,
         memory_percent=memory_percent,
         memory_used_mb=_number(memory.get("used_mb")),
         memory_total_mb=_number(memory.get("total_mb")),
         temperature_c=temperature_c,
-        uptime_days=_integer((metrics.get("uptime") or {}).get("uptime_days")),
-        interfaces_up=_integer(interfaces.get("up")),
-        interfaces_down=_integer(interfaces.get("down")),
-        interfaces_total=_integer(interfaces.get("total")),
-        total_errors=_integer((metrics.get("errors") or {}).get("total_errors")),
+        uptime_days=uptime_days,
+        interfaces_up=interfaces_up,
+        interfaces_down=interfaces_down,
+        interfaces_total=interfaces_total,
+        total_errors=total_errors,
     )
     db.add(sample)
     db.flush()

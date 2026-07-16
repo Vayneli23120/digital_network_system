@@ -9,6 +9,7 @@ Prometheus 连接器 — 替代自定义 SNMP 轮询
 """
 
 import logging
+import math
 import os
 import time
 from datetime import datetime
@@ -20,7 +21,8 @@ import yaml
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.shared.database import get_db
+from app.services.device_metric_facts import record_device_metric_sample
+from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceInterface, InterfaceTrafficSample
 
 logger = logging.getLogger(__name__)
@@ -105,6 +107,29 @@ class PrometheusConnector:
                 except (ValueError, TypeError):
                     pass
         return by_instance
+
+    def _fetch_device_uptimes(self) -> Dict[str, int]:
+        """Fetch device uptime from snmp_exporter, keyed by target instance."""
+        uptimes: Dict[str, int] = {}
+        try:
+            results = self._query("sysUpTime")
+        except Exception as exc:
+            logger.warning("Prometheus batch query sysUpTime failed: %s", exc)
+            return uptimes
+
+        for item in results:
+            instance = (item.get("metric") or {}).get("instance")
+            value = item.get("value") or []
+            if not instance or len(value) < 2:
+                continue
+            try:
+                uptime_seconds = float(value[1])
+            except (TypeError, ValueError):
+                continue
+            if uptime_seconds < 0 or not math.isfinite(uptime_seconds):
+                continue
+            uptimes[instance] = int(uptime_seconds // 86400)
+        return uptimes
 
     # ── 持久化 ──
 
@@ -267,7 +292,7 @@ class PrometheusConnector:
     def poll_once(self):
         """单次轮询周期：同步目标清单 → 查询 Prometheus → 写入数据库。"""
         started = time.monotonic()
-        db = next(get_db())
+        db = get_db_manager().get_session()
         try:
             # 先同步目标文件，让新增/变更的 SNMP 设备自动进入采集
             try:
@@ -288,26 +313,48 @@ class PrometheusConnector:
 
             now = datetime.utcnow()
 
-            # 一次性批量查询所有指标（7 次查询，而非每台设备 7 次）
+            # 一次性批量查询所有指标（8 次查询，而非逐台设备查询）
             q_started = time.monotonic()
             by_instance = self._fetch_all_interfaces()
+            uptimes_by_instance = self._fetch_device_uptimes()
             query_ms = int((time.monotonic() - q_started) * 1000)
 
             persist_started = time.monotonic()
             device_count = 0
             iface_count = 0
-            for instance, ifaces in by_instance.items():
+            fact_count = 0
+            instances = sorted(set(by_instance) | set(uptimes_by_instance))
+            processed_device_ids = set()
+            for instance in instances:
                 device = devices_by_ip.get(instance)
                 # 端口非 161 时 instance 形如 ip:port，回退按 IP 匹配
                 if device is None and ":" in instance:
                     device = devices_by_ip.get(instance.rsplit(":", 1)[0])
-                if device is None:
+                if device is None or device.id in processed_device_ids:
                     continue
+                processed_device_ids.add(device.id)
+                ifaces = by_instance.get(instance, {})
                 try:
                     iface_count += self._persist_device(db, device, ifaces, now)
                     device_count += 1
                 except Exception as exc:
                     logger.error("Persist failed for %s: %s", instance, exc)
+
+                try:
+                    with db.begin_nested():
+                        record_device_metric_sample(
+                            db,
+                            device.id,
+                            _build_device_metric_payload(
+                                ifaces,
+                                uptimes_by_instance.get(instance),
+                            ),
+                            source="prometheus_snmp",
+                            ts=now,
+                        )
+                    fact_count += 1
+                except Exception as exc:
+                    logger.warning("Metric fact persist failed for %s: %s", instance, exc)
 
             db.commit()
             persist_ms = int((time.monotonic() - persist_started) * 1000)
@@ -323,8 +370,8 @@ class PrometheusConnector:
 
             total_ms = int((time.monotonic() - started) * 1000)
             logger.info(
-                "Prometheus poll: %d devices, %d interfaces, query=%dms persist=%dms total=%dms",
-                device_count, iface_count, query_ms, persist_ms, total_ms,
+                "Prometheus poll: %d devices, %d interfaces, %d metric facts, query=%dms persist=%dms total=%dms",
+                device_count, iface_count, fact_count, query_ms, persist_ms, total_ms,
             )
         except Exception as exc:
             logger.error("Poll cycle failed: %s", exc)
@@ -391,3 +438,42 @@ def _counter_delta(prev: Optional[int], curr: Optional[int]) -> int:
     if curr >= prev:
         return curr - prev
     return (COUNTER64_MAX - prev) + curr
+
+
+def _build_device_metric_payload(
+    ifaces: Dict[int, dict],
+    uptime_days: Optional[int],
+) -> dict:
+    """Aggregate one Prometheus target into the canonical collector shape."""
+    oper_statuses = [
+        data["ifOperStatus"]
+        for data in ifaces.values()
+        if "ifOperStatus" in data
+    ]
+    error_values = [
+        data[metric]
+        for data in ifaces.values()
+        for metric in ("ifInErrors", "ifOutErrors")
+        if isinstance(data.get(metric), (int, float))
+    ]
+    total_errors = int(sum(error_values)) if error_values else None
+    if oper_statuses:
+        interface_metrics = {
+            "up": sum(1 for status in oper_statuses if status == 1),
+            "down": sum(1 for status in oper_statuses if status == 2),
+            "total": len(oper_statuses),
+        }
+    else:
+        interface_metrics = {"up": None, "down": None, "total": None}
+
+    return {
+        "cpu": {"value": None, "status": "unknown"},
+        "memory": {"used_percent": None, "status": "unknown"},
+        "temperature": {"value": None, "status": "unknown"},
+        "uptime": {"uptime_days": uptime_days},
+        "interfaces": interface_metrics,
+        "errors": {
+            "total_errors": total_errors,
+            "has_errors": bool(total_errors),
+        },
+    }
