@@ -290,3 +290,67 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 - 日志：无 exporter、事实写入或轮询错误 ✓
 
 **结论**: Step 1.3 验证通过。Prometheus 周期 CPU 事实采集正常，值与 Prometheus 解析值完全一致，与实时 SNMP CPU 差值 0 点。Cisco CPU OID 已正确配置到 snmp_exporter。
+
+---
+
+## Step 1.4：指标保留、节流与查询性能门禁（验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §18
+**Git 提交**: `b1e24c6`
+**Alembic 版本**: `b8c9d0e1f2a3` → `d0e1f2a3b4c5`
+
+### 18.2 本地逻辑测试
+
+| 测试文件 | 结果 |
+|---|---|
+| `test_device_metric_facts.py` (4) + `test_prometheus_metric_facts.py` (6) + `test_metric_retention.py` (4) | **14 passed** |
+
+### 18.3 真实 PostgreSQL 事务语义测试
+
+| 测试 | 结果 |
+|---|---|
+| `test_postgresql_metric_retention.py` | **1 passed** |
+| 临时数据清理 (METRIC-RETENTION-PG-%) | 0 |
+
+### 18.5 迁移版本
+
+`b8c9d0e1f2a3` → `d0e1f2a3b4c5` (add device metric retention index)
+
+### 18.6 查询计划索引验证
+
+| 表 | 索引 | 可用 |
+|---|---|---|
+| `device_metric_samples` | `idx_device_metric_ts` | Index Scan ✓ |
+| `interface_traffic_samples` | `ix_interface_traffic_samples_ts` | Index Scan ✓ |
+
+### 18.7 容量与 90 天预测
+
+| 指标 | 当前 | 90 天预测 |
+|---|---|---|
+| SNMP 设备数 | 6 | — |
+| monitored 接口数 | 10 | — |
+| 设备事实行数 | 1,182 (384 kB) | 155,520 |
+| 接口样本行数 | 76,377 (15 MB) | 1,296,000 |
+
+预测未超过 5000 万行，无容量风险。
+
+### 18.8 5 分钟节流验证
+
+- 第一分钟轮询：写入设备事实 ✓
+- 下一分钟轮询：0 设备事实（节流生效）✓
+- 接口 `last_check` 持续更新 ✓
+
+### 18.9 保留清理
+
+90 天前过期数据为 0（测试数据库近期建立），清理返回零删除 — 预期行为 ✓
+
+### 18.10 服务与日志
+
+- Alembic 版本：`d0e1f2a3b4c5` ✓
+- `nas-backend`：`active (running)` ✓
+- `/health`：`{"status":"healthy","version":"2.0.0"}` ✓
+- 日志：Prometheus 连接器正常，无错误 ✓
+
+**结论**: Step 1.4 验证通过。时间索引可用，5 分钟事实节流有效（接口刷新不受影响），清理入口可正常调用。Alembic 迁移已应用到 `d0e1f2a3b4c5`。
