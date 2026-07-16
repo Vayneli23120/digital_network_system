@@ -18,8 +18,10 @@ aiosqlite==0.20.0
 # Data Validation
 pydantic==2.7.0
 pydantic-settings==2.1.0
+email-validator==2.1.1
 
 # Network Devices
+setuptools==75.8.0  # NAPALM 4.1 runtime dependency for pkg_resources
 netmiko==4.3.0
 paramiko==3.4.0
 pysnmp-lextudio==6.3.0  # SNMP support (modern fork for Python 3.12)
@@ -30,7 +32,7 @@ puresnmp==2.0.0         # SNMP query/walk used by snmp_service & interface_monit
 pyserial==3.5
 
 # Templates
-jinja2==3.1.3
+jinja2==3.1.6
 
 # Data Serialization
 pyyaml==6.0.2
@@ -40,6 +42,7 @@ loguru==0.7.2
 
 # Configuration Diff
 deepdiff==6.7.1
+GitPython==3.1.44
 
 # Configuration Parsing
 textfsm==1.1.3
@@ -62,6 +65,7 @@ openpyxl==3.1.2
 # 认证系统
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
 
 # 网络设备 - NAPALM
 napalm==4.1.0
