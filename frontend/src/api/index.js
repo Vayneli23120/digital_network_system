@@ -644,6 +644,9 @@ export function getAopWindows(programId) {
 export function createAopWindow(programId, data) {
   return api.post(`/planned-maintenance/aop/programs/${programId}/windows`, data)
 }
+export function createAopWindowsBatch(programId, windows) {
+  return api.post(`/planned-maintenance/aop/programs/${programId}/windows/batch`, { windows })
+}
 export function updateAopWindow(windowId, data) {
   return api.put(`/planned-maintenance/aop/windows/${windowId}`, data)
 }

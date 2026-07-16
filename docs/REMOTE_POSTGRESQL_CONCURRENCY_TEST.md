@@ -1506,10 +1506,10 @@ env -u TEST_DATABASE_URL .venv/bin/python -m pytest -q tests/test_aop_planning.p
 .venv/bin/python -m alembic heads
 ```
 
-拉取前工作区必须干净。预期聚焦测试为 `9 passed`，唯一 Alembic head 为：
+拉取前工作区必须干净。预期聚焦测试为 `11 passed`，唯一 Alembic head 为：
 
 ```text
-e1f2a3b4c5d6 (head)
+f2a3b4c5d6e7 (head)
 ```
 
 ### 19.3 备份应用测试数据库
@@ -1538,7 +1538,11 @@ ls -lh "$BACKUP_FILE"
 
 ```text
 d0e1f2a3b4c5 -> e1f2a3b4c5d6
+e1f2a3b4c5d6 -> f2a3b4c5d6e7
 ```
+
+`f2a3b4c5d6e7` 向 `aop_projects` 增加执行结果列 `actual_hours`、`actual_cost`、
+`completion_result`、`completion_notes`、`completed_at`，用于完工后回填实际工时/成本。
 
 检查表、任务列、唯一索引和外键：
 
@@ -1629,6 +1633,10 @@ curl -fsS "http://127.0.0.1:8000/api/planned-maintenance/aop/programs?year=2099"
 
 接口必须返回 JSON 且无 `500`。这里只执行只读请求，不在业务测试库创建占位 AOP。
 
+维护窗口批量导入（节假日/停产日历）和成本汇总仅需以聚焦测试
+`test_batch_window_import_creates_all_windows` 和 `test_aop_completion_rolls_up_execution_results`
+为准（已含在 19.2 的 `11 passed` 中），Vue 端在 19.7 构建中一并验证。
+
 ### 19.7 Vue 生产构建
 
 本地 Windows 环境的 npm 镜像证书无法可靠安装依赖，因此以测试机生产构建为准：
@@ -1665,9 +1673,10 @@ journalctl -u nas-backend --since "$CHECK_STARTED" --no-pager | \
 
 必须同时满足：
 
-- AOP 聚焦测试 `9 passed`，覆盖反序依赖、峰值并行容量、窗口时区和已排程写保护
-- 应用数据库和隔离数据库均为 `e1f2a3b4c5d6`
+- AOP 聚焦测试 `11 passed`，覆盖反序依赖、峰值并行容量、窗口时区、已排程写保护、执行结果回填和窗口批量导入
+- 应用数据库和隔离数据库均为 `f2a3b4c5d6e7`
 - 3 张 AOP 表、5 个任务列、3 个任务索引和 4 个命名约束齐全
+- `aop_projects` 含 `actual_hours`、`actual_cost`、`completion_result`、`completion_notes`、`completed_at` 五个执行结果列
 - PostgreSQL 并发测试 `1 passed`，`AOP-PG-` 临时数据为 `0`
 - AOP 只读 API 返回有效 JSON，旧计划和任务接口无回归
 - `npm --prefix frontend run build` 成功并生成 `frontend/dist/index.html`

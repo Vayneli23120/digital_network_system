@@ -11,12 +11,15 @@ from app.features.planned_maintenance.aop_router import (
     ProgramUpdate,
     ProjectCreate,
     ProjectUpdate,
+    WindowBatchCreate,
     WindowCreate,
     WindowUpdate,
     create_program,
     create_project,
     create_window,
+    create_windows_batch,
     list_projects,
+    list_windows,
     schedule_program,
     update_project,
     update_program,
@@ -303,3 +306,96 @@ async def test_aop_api_generated_task_uses_legacy_execution_flow(db_session):
 
     assert project["status"] == "completed"
     assert project["task"]["status"] == "completed"
+
+
+@pytest.mark.asyncio
+async def test_aop_completion_rolls_up_execution_results(db_session):
+    program_data = create_program(
+        ProgramCreate(year=2029, name="2029 Network AOP", status="approved"),
+        db_session,
+    )
+    program_id = program_data["id"]
+    create_window(
+        program_id,
+        WindowCreate(
+            name="Spring Shutdown",
+            window_type="shutdown",
+            start_at=datetime(2029, 2, 1, 0),
+            end_at=datetime(2029, 2, 1, 8),
+            status="approved",
+        ),
+        db_session,
+    )
+    create_project(
+        program_id,
+        ProjectCreate(
+            project_code="NET-2029-001",
+            name="Access switch replacement",
+            project_type="replacement",
+            planned_start=datetime(2029, 1, 1),
+            preferred_window_type="shutdown",
+            estimated_hours=3,
+            approval_status="approved",
+        ),
+        db_session,
+    )
+
+    generated = schedule_program(program_id, db_session)
+    task_id = generated["generated_task_ids"][0]
+    await legacy_router.start_task(task_id, db_session)
+    await legacy_router.complete_task(
+        task_id,
+        {
+            "labor_hours": 2.5,
+            "parts_cost": 1200,
+            "labor_cost": 800,
+            "completion_result": "success",
+            "completion_notes": "Replaced access switch, verified uplinks",
+        },
+        db_session,
+    )
+
+    project = list_projects(program_id, db_session)["items"][0]
+
+    assert project["status"] == "completed"
+    assert project["actual_hours"] == 2.5
+    assert project["actual_cost"] == 2000.0
+    assert project["completion_result"] == "success"
+    assert project["completion_notes"] == "Replaced access switch, verified uplinks"
+    assert project["completed_at"] is not None
+
+
+def test_batch_window_import_creates_all_windows(db_session):
+    program_data = create_program(
+        ProgramCreate(year=2030, name="2030 Network AOP", status="approved"),
+        db_session,
+    )
+    program_id = program_data["id"]
+
+    result = create_windows_batch(
+        program_id,
+        WindowBatchCreate(
+            windows=[
+                WindowCreate(
+                    name="National Day",
+                    window_type="holiday",
+                    start_at=datetime(2030, 10, 1, 0),
+                    end_at=datetime(2030, 10, 2, 0),
+                    status="approved",
+                ),
+                WindowCreate(
+                    name="Spring Shutdown",
+                    window_type="shutdown",
+                    start_at=datetime(2030, 2, 1, 0),
+                    end_at=datetime(2030, 2, 8, 0),
+                    status="approved",
+                ),
+            ]
+        ),
+        db_session,
+    )
+
+    assert result["created"] == 2
+    windows = list_windows(program_id, db_session)["items"]
+    assert len(windows) == 2
+    assert windows[0]["start_at"] <= windows[1]["start_at"]

@@ -506,6 +506,15 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
             plan.next_date = datetime.utcnow() + timedelta(days=plan.cycle_days)
     if task.aop_project:
         task.aop_project.status = "completed"
+        task.aop_project.completed_at = task.actual_date
+        result = (maintenance_data or {}).get("completion_result")
+        task.aop_project.completion_result = result if result in ("success", "partial", "rolled_back") else "success"
+        completion_notes = (maintenance_data or {}).get("completion_notes") or (maintenance_data or {}).get("description")
+        if completion_notes:
+            task.aop_project.completion_notes = completion_notes
+        if maintenance_data:
+            task.aop_project.actual_hours = labor_hours
+            task.aop_project.actual_cost = parts_cost + labor_cost
 
     db.commit()
 

@@ -30,6 +30,9 @@
         <el-button :icon="Calendar" :disabled="!currentProgramId" @click="openWindowDialog()">
           {{ t('aopNewWindow') }}
         </el-button>
+        <el-button :icon="Upload" :disabled="!currentProgramId" @click="openImportDialog">
+          {{ t('aopImportWindows') }}
+        </el-button>
         <el-button type="primary" :icon="DocumentAdd" :disabled="!currentProgramId" @click="openProjectDialog()">
           {{ t('aopNewProject') }}
         </el-button>
@@ -48,7 +51,7 @@
         <div class="summary-item budget">
           <span class="summary-label">{{ t('aopBudget') }}</span>
           <strong>{{ formatMoney(currentProgram?.budget_amount || 0) }}</strong>
-          <small>{{ t('aopEstimated') }} {{ formatMoney(estimatedCost) }}</small>
+          <small>{{ t('aopEstimated') }} {{ formatMoney(estimatedCost) }} · {{ t('aopActual') }} {{ formatMoney(actualCost) }}</small>
         </div>
         <div class="summary-item projects">
           <span class="summary-label">{{ t('aopProjects') }}</span>
@@ -137,6 +140,16 @@
         </aside>
       </section>
 
+      <section class="cost-section" v-if="projects.length">
+        <div class="section-heading">
+          <div>
+            <h2>{{ t('aopCostRollup') }}</h2>
+            <span>{{ t('aopEstimated') }} {{ formatMoney(estimatedCost) }} · {{ t('aopActual') }} {{ formatMoney(actualCost) }}</span>
+          </div>
+        </div>
+        <div ref="costChartRef" class="cost-chart"></div>
+      </section>
+
       <section class="portfolio-section">
         <el-tabs v-model="activeTable">
           <el-tab-pane :label="`${t('aopProjects')} (${projects.length})`" name="projects">
@@ -154,6 +167,17 @@
               </el-table-column>
               <el-table-column prop="estimated_cost" :label="t('aopCost')" width="130" align="right">
                 <template #default="{ row }">{{ formatMoney(row.estimated_cost) }}</template>
+              </el-table-column>
+              <el-table-column prop="actual_cost" :label="t('aopActualCost')" width="130" align="right">
+                <template #default="{ row }">{{ row.actual_cost != null ? formatMoney(row.actual_cost) : '--' }}</template>
+              </el-table-column>
+              <el-table-column prop="completion_result" :label="t('aopResult')" width="110">
+                <template #default="{ row }">
+                  <el-tag v-if="row.completion_result" :type="resultType(row.completion_result)" size="small" effect="plain">
+                    {{ resultText(row.completion_result) }}
+                  </el-tag>
+                  <span v-else>--</span>
+                </template>
               </el-table-column>
               <el-table-column prop="approval_status" :label="t('aopApproval')" width="110">
                 <template #default="{ row }">
@@ -333,19 +357,56 @@
         <el-button type="primary" @click="submitWindow">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="importDialog" :title="t('aopImportWindows')" width="560px">
+      <el-form :model="importForm" label-position="top">
+        <div class="form-grid two-columns">
+          <el-form-item :label="t('aopWindowType')" required>
+            <el-select v-model="importForm.window_type">
+              <el-option v-for="type in windowTypes" :key="type" :label="windowTypeText(type)" :value="type" />
+            </el-select>
+          </el-form-item>
+          <el-form-item :label="t('aopCapacity')">
+            <el-input-number v-model="importForm.max_parallel_tasks" :min="1" :max="100" />
+          </el-form-item>
+          <el-form-item :label="t('aopWindowStart')">
+            <el-time-picker v-model="importForm.start_time" value-format="HH:mm:ss" :clearable="false" />
+          </el-form-item>
+          <el-form-item :label="t('aopWindowEnd')">
+            <el-time-picker v-model="importForm.end_time" value-format="HH:mm:ss" :clearable="false" />
+          </el-form-item>
+          <el-form-item :label="t('pmColStatus')">
+            <el-select v-model="importForm.status">
+              <el-option :label="approvalText('draft')" value="draft" />
+              <el-option :label="approvalText('approved')" value="approved" />
+            </el-select>
+          </el-form-item>
+        </div>
+        <el-form-item :label="t('aopImportDates')" required>
+          <el-date-picker v-model="importForm.dates" type="dates" value-format="YYYY-MM-DD" :clearable="true" style="width: 100%" />
+        </el-form-item>
+        <p class="import-hint">{{ t('aopImportHint') }}</p>
+      </el-form>
+      <template #footer>
+        <el-button @click="importDialog = false">{{ t('actionCancel') }}</el-button>
+        <el-button type="primary" @click="submitImport">{{ t('actionConfirm') }}</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, nextTick, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Calendar, DocumentAdd, Edit, MagicStick, Plus, Refresh } from '@element-plus/icons-vue'
+import { Calendar, DocumentAdd, Edit, MagicStick, Plus, Refresh, Upload } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
+import * as echarts from 'echarts'
 import {
   createAopProgram,
   createAopProject,
   createAopWindow,
+  createAopWindowsBatch,
   generateAopTasks,
   getAopCalendar,
   getAopProgram,
@@ -379,10 +440,13 @@ const activeTable = ref('projects')
 const programDialog = ref(false)
 const projectDialog = ref(false)
 const windowDialog = ref(false)
+const importDialog = ref(false)
 const editingProjectId = ref(null)
 const editingWindowId = ref(null)
 const projectLocked = ref(false)
 const windowLocked = ref(false)
+const costChartRef = ref(null)
+let costChart = null
 
 const programsForYear = () => ({ year: selectedYear.value })
 const currentProgram = computed(() => programs.value.find(item => item.id === currentProgramId.value))
@@ -393,6 +457,7 @@ const scheduledProjects = computed(() => projects.value.filter(item => item.task
 const completedProjects = computed(() => projects.value.filter(item => item.status === 'completed').length)
 const approvedWindows = computed(() => windows.value.filter(item => item.status === 'approved').length)
 const estimatedCost = computed(() => projects.value.reduce((sum, item) => sum + Number(item.estimated_cost || 0), 0))
+const actualCost = computed(() => projects.value.reduce((sum, item) => sum + Number(item.actual_cost || 0), 0))
 const canSchedule = computed(() => ['approved', 'active'].includes(currentProgram.value?.status) && approvedProjects.value > 0 && approvedWindows.value > 0)
 const selectedWindows = computed(() => windowsForDay(selectedDay.value))
 const selectedTasks = computed(() => tasksForDay(selectedDay.value))
@@ -410,8 +475,13 @@ const emptyWindow = () => ({
   name: '', window_type: 'shutdown', start_at: '', end_at: '', timezone: 'Asia/Shanghai',
   max_parallel_tasks: 1, status: 'draft', owner: '', notes: ''
 })
+const emptyImport = () => ({
+  window_type: 'holiday', max_parallel_tasks: 1, status: 'approved',
+  start_time: '00:00:00', end_time: '08:00:00', dates: []
+})
 const projectForm = ref(emptyProject())
 const windowForm = ref(emptyWindow())
+const importForm = ref(emptyImport())
 
 const loadPrograms = async () => {
   const data = await getAopPrograms(programsForYear())
@@ -568,6 +638,38 @@ const submitWindow = async () => {
   }
 }
 
+const openImportDialog = () => {
+  importForm.value = emptyImport()
+  importDialog.value = true
+}
+
+const submitImport = async () => {
+  const form = importForm.value
+  if (!form.dates?.length) return ElMessage.warning(t('pmMsgFillRequired'))
+  const typeLabel = windowTypeText(form.window_type)
+  const windowsPayload = form.dates.map(date => {
+    const start = dayjs(`${date}T${form.start_time}`)
+    let end = dayjs(`${date}T${form.end_time}`)
+    if (!end.isAfter(start)) end = end.add(1, 'day')
+    return {
+      name: `${typeLabel} ${date}`,
+      window_type: form.window_type,
+      start_at: start.format('YYYY-MM-DDTHH:mm:ss'),
+      end_at: end.format('YYYY-MM-DDTHH:mm:ss'),
+      max_parallel_tasks: form.max_parallel_tasks,
+      status: form.status
+    }
+  })
+  try {
+    const result = await createAopWindowsBatch(currentProgramId.value, windowsPayload)
+    importDialog.value = false
+    await Promise.all([loadProgram(), loadCalendar()])
+    ElMessage.success(t('aopImportResult', { count: result.created || windowsPayload.length }))
+  } catch (error) {
+    ElMessage.error(error.response?.data?.detail || t('aopSaveFailed'))
+  }
+}
+
 const scheduleProjects = async () => {
   try {
     const result = await generateAopTasks(currentProgramId.value)
@@ -593,7 +695,37 @@ const projectStatusText = status => t(`aopProjectStatus_${status}`)
 const windowTypeText = type => t(`aopWindowType_${type}`)
 const approvalText = status => t(`aopApproval_${status}`)
 const approvalType = status => ({ approved: 'success', submitted: 'warning', rejected: 'danger' }[status] || 'info')
+const resultText = value => t(`aopResult_${value}`)
+const resultType = value => ({ success: 'success', partial: 'warning', rolled_back: 'danger' }[value] || 'info')
 const riskText = value => t(`aopRisk_${value}`)
+
+const renderCostChart = () => {
+  if (!costChartRef.value) return
+  if (!costChart) costChart = echarts.init(costChartRef.value)
+  const items = projects.value
+  costChart.setOption({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
+    legend: { data: [t('aopEstimated'), t('aopActual')], top: 0 },
+    grid: { left: 8, right: 16, bottom: 8, top: 36, containLabel: true },
+    xAxis: { type: 'category', data: items.map(item => item.project_code), axisLabel: { interval: 0, rotate: items.length > 8 ? 40 : 0 } },
+    yAxis: { type: 'value' },
+    series: [
+      { name: t('aopEstimated'), type: 'bar', itemStyle: { color: '#5b8ff9' }, data: items.map(item => Number(item.estimated_cost || 0)) },
+      { name: t('aopActual'), type: 'bar', itemStyle: { color: '#5ad8a6' }, data: items.map(item => item.actual_cost != null ? Number(item.actual_cost) : 0) }
+    ]
+  }, true)
+}
+
+const disposeCostChart = () => {
+  if (costChart) { costChart.dispose(); costChart = null }
+}
+
+const refreshCostChart = () => {
+  nextTick(() => {
+    if (!projects.value.length) { disposeCostChart(); return }
+    renderCostChart()
+  })
+}
 
 watch(selectedYear, async year => {
   calendarDate.value = new Date(year, 0, 1)
@@ -610,9 +742,19 @@ watch(calendarDate, async value => {
   const month = dayjs(value).format('YYYY-MM')
   if (month !== loadedMonth.value) await loadCalendar()
 })
+watch(projects, refreshCostChart)
+watch(currentLang, refreshCostChart)
+
+const handleResize = () => costChart?.resize()
 
 onMounted(async () => {
   await Promise.all([refreshWorkspace(), loadDevices()])
+  window.addEventListener('resize', handleResize)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', handleResize)
+  disposeCostChart()
 })
 </script>
 
@@ -665,6 +807,9 @@ onMounted(async () => {
 .agenda-row small { margin-top: 3px; color: #77838f; }
 .agenda-empty { padding: 10px 0; color: #9aa4ae; font-size: 12px; }
 .portfolio-section { padding: 0 16px 16px; border: 1px solid #dfe4ea; border-radius: 6px; background: #fff; }
+.cost-section { border: 1px solid #dfe4ea; border-radius: 6px; background: #fff; }
+.cost-chart { height: 300px; padding: 8px 12px 12px; }
+.import-hint { margin: 4px 0 0; color: #77838f; font-size: 12px; }
 .aop-table { width: 100%; }
 .form-grid { display: grid; gap: 0 16px; }
 .two-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }

@@ -94,6 +94,10 @@ class WindowUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class WindowBatchCreate(BaseModel):
+    windows: List[WindowCreate] = Field(min_length=1, max_length=366)
+
+
 class ProjectCreate(BaseModel):
     project_code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=200)
@@ -239,6 +243,11 @@ def _project_dict(project: AopProject) -> dict:
         "preferred_window_type": project.preferred_window_type,
         "estimated_hours": float(project.estimated_hours or 0),
         "estimated_cost": float(project.estimated_cost or 0),
+        "actual_hours": float(project.actual_hours) if project.actual_hours is not None else None,
+        "actual_cost": float(project.actual_cost) if project.actual_cost is not None else None,
+        "completion_result": project.completion_result,
+        "completion_notes": project.completion_notes,
+        "completed_at": project.completed_at.isoformat() if project.completed_at else None,
         "owner": project.owner,
         "priority": project.priority,
         "risk_level": project.risk_level,
@@ -340,6 +349,21 @@ def create_window(program_id: int, data: WindowCreate, db: Session = Depends(get
     db.commit()
     db.refresh(window)
     return _window_dict(window)
+
+
+@router.post("/programs/{program_id}/windows/batch", status_code=201)
+def create_windows_batch(program_id: int, data: WindowBatchCreate, db: Session = Depends(get_db)):
+    """Bulk import maintenance windows, e.g. an annual holiday/shutdown calendar."""
+    _lock_program(db, program_id)
+    created = [
+        AopMaintenanceWindow(program_id=program_id, **item.model_dump())
+        for item in data.windows
+    ]
+    db.add_all(created)
+    db.commit()
+    for window in created:
+        db.refresh(window)
+    return {"created": len(created), "items": [_window_dict(window) for window in created]}
 
 
 @router.put("/windows/{window_id}")

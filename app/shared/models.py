@@ -718,6 +718,11 @@ class AopProject(Base):
     preferred_window_type = Column(String(30))
     estimated_hours = Column(DECIMAL(8, 2), default=1, nullable=False)
     estimated_cost = Column(DECIMAL(14, 2), default=0, nullable=False)
+    actual_hours = Column(DECIMAL(8, 2))
+    actual_cost = Column(DECIMAL(14, 2))
+    completion_result = Column(String(20))  # success, partial, rolled_back
+    completion_notes = Column(Text)
+    completed_at = Column(DateTime)
     owner = Column(String(100))
     priority = Column(String(10), default="P3", nullable=False, index=True)
     risk_level = Column(String(20), default="medium", nullable=False, index=True)
