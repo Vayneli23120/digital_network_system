@@ -354,3 +354,64 @@ CPU/温度保持 NULL（对应厂商 OID 不支持）— 预期行为 ✓
 - 日志：Prometheus 连接器正常，无错误 ✓
 
 **结论**: Step 1.4 验证通过。时间索引可用，5 分钟事实节流有效（接口刷新不受影响），清理入口可正常调用。Alembic 迁移已应用到 `d0e1f2a3b4c5`。
+
+---
+
+## Step 1.5：AOP 年度计划 — 迁移、并发排程与前端门禁（验证）
+
+**执行日期**: 2026-07-16
+**测试机**: 192.168.4.37（k8s-worker）
+**测试文档**: `docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md` §19
+**Git 提交**: `e47bbf9`
+**Alembic 版本**: `d0e1f2a3b4c5` → `e1f2a3b4c5d6`
+
+### 19.2 聚焦回归
+
+| 测试 | 结果 |
+|---|---|
+| `test_aop_planning.py` | **9 passed** |
+
+### 19.4 结构检查
+
+| 项目 | 状态 |
+|---|---|
+| 3 张 AOP 表 (`aop_programs`, `aop_projects`, `aop_maintenance_windows`) | ✓ |
+| 5 个任务列 (`aop_project_id`, `maintenance_window_id`, `scheduled_end`, `estimated_hours`, `schedule_source`) | ✓ |
+| 3 个索引 (`ix_maintenance_tasks_aop_project_id`, `ix_maintenance_tasks_maintenance_window_id`, `ix_maintenance_tasks_schedule_source`) | ✓ |
+| 4 个约束 (`fk_maintenance_task_aop_project`, `fk_maintenance_task_aop_window`, `uq_aop_program_year_version`, `uq_aop_project_program_code`) | ✓ |
+
+### 19.5 并发幂等测试
+
+| 测试 | 结果 |
+|---|---|
+| `test_postgresql_aop_planning.py` (隔离库) | **1 passed** |
+| 临时数据 `AOP-PG-%` | 0 |
+
+### 19.6 AOP API 冒烟
+
+| 端点 | 状态 |
+|---|---|
+| `GET /api/planned-maintenance/aop/programs?year=2099` | `{"total":0,"items":[]}` (200) ✓ |
+
+### 19.7 Vue 生产构建
+
+| 步骤 | 结果 |
+|---|---|
+| `npm ci` | 成功 (98 packages) |
+| `npm run build` | 成功 |
+| `frontend/dist/index.html` | 存在 ✓ |
+
+### 19.8 旧功能回归
+
+| 端点 | 状态 |
+|---|---|
+| `GET /api/planned-maintenance/plans?limit=1` | 返回 5 条计划 (200) ✓ |
+| `GET /api/planned-maintenance/tasks?limit=1` | 返回 8 条任务 (200) ✓ |
+| `/health` | `{"status":"healthy","version":"2.0.0"}` ✓ |
+
+### 服务与日志
+
+- `nas-backend`：`active (running)` ✓
+- 日志：无 Traceback、IntegrityError 或持续错误 ✓
+
+**结论**: AOP 年度计划功能验证通过。迁移到 `e1f2a3b4c5d6`，表结构完整，并发幂等测试通过，AOP API 正常，Vue 构建成功，旧功能无回归。23/23 全量聚焦测试通过。
