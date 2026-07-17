@@ -115,10 +115,22 @@ async def get_operational_recommendations(limit: int = 8, db: Session = Depends(
 
 @router.get("/briefing")
 async def get_operational_briefing(limit: int = 8, db: Session = Depends(get_db)):
-    """运营研判简报：规则卡片 + 可选的 AI 综合研判（未配置 AI 时回落为纯卡片）。"""
-    from app.services.ai_triage import generate_operational_briefing
+    """运营研判简报：规则卡片 + 可选的 AI 综合研判（未配置 AI 时回落为纯卡片）。
 
-    return await generate_operational_briefing(db, limit=limit)
+    AI 研判结果缓存 5 分钟，避免每次刷新都重复调用模型消耗 token。
+    """
+    from app.services.ai_triage import generate_operational_briefing
+    from app.shared.cache import cache, _cache_key
+
+    key = _cache_key("ai:briefing", limit=limit)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    result = await generate_operational_briefing(db, limit=limit)
+    # 有 AI 研判时缓存 5 分钟；没有时短缓存，便于配置后尽快生效
+    cache.set(key, result, ttl=300 if result.get("ai_briefing") else 60)
+    return result
 
 
 # ===== Fault Analysis =====
