@@ -8,7 +8,7 @@
 - 根因分析
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
@@ -114,22 +114,41 @@ async def get_operational_recommendations(limit: int = 8, db: Session = Depends(
 
 
 @router.get("/briefing")
-async def get_operational_briefing(limit: int = 8, db: Session = Depends(get_db)):
-    """运营研判简报：规则卡片 + 可选的 AI 综合研判（未配置 AI 时回落为纯卡片）。
+async def get_operational_briefing(
+    background_tasks: BackgroundTasks,
+    limit: int = 8,
+    db: Session = Depends(get_db),
+):
+    """运营研判简报：规则卡片立即返回，AI 综合研判在后台生成。
 
-    AI 研判结果缓存 5 分钟，避免每次刷新都重复调用模型消耗 token。
+    关键体验优化：不再把 Kimi 的思考时间阻塞在请求里。卡片秒出；
+    若已有缓存的 AI 研判则一并返回；否则 ai_pending=true，前端轮询拉取。
     """
-    from app.services.ai_triage import generate_operational_briefing
+    from app.services.ai_triage import (
+        ai_available,
+        build_operational_recommendations,
+        refresh_briefing_cache,
+    )
     from app.shared.cache import cache, _cache_key
 
+    cards = build_operational_recommendations(db, limit=limit)
     key = _cache_key("ai:briefing", limit=limit)
     cached = cache.get(key)
-    if cached is not None:
-        return cached
+    ai_briefing = cached.get("ai_briefing") if isinstance(cached, dict) else None
 
-    result = await generate_operational_briefing(db, limit=limit)
-    # 有 AI 研判时缓存 15 分钟；没有时短缓存(60s)，便于配置后尽快生效
-    cache.set(key, result, ttl=900 if result.get("ai_briefing") else 60)
+    result = {
+        "ai_configured": ai_available(),
+        "total": len(cards),
+        "items": cards,
+        "ai_briefing": ai_briefing,
+        "ai_pending": False,
+    }
+
+    # 有卡片、已配 AI、且无缓存 AI 研判 → 后台生成，立即返回 pending
+    if ai_available() and cards and ai_briefing is None:
+        result["ai_pending"] = True
+        background_tasks.add_task(refresh_briefing_cache, key, limit)
+
     return result
 
 

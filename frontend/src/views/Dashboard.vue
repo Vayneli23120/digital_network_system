@@ -89,6 +89,7 @@
               <div class="summary-icon"><el-icon><DataBoard /></el-icon></div>
               <span class="summary-text">{{ (aiSummary && aiSummary.narrative) || (executiveSummary && executiveSummary.summary_text) }}</span>
               <span v-if="aiSummary && aiSummary.narrative" class="summary-ai-badge">{{ t('aiRecoAiBadge') }}</span>
+              <span v-else-if="aiSummaryPending" class="summary-ai-pending"><i class="summary-ai-dot"></i>{{ t('aiRecoGenerating') }}</span>
               <span class="summary-range">{{ executiveSummary && executiveSummary.range }}</span>
             </div>
 
@@ -166,6 +167,9 @@ import ChangeCorrelation from '@/components/ui/ChangeCorrelation.vue'
 const { t } = useI18n()
 const executiveSummary = ref(null)
 const aiSummary = ref(null)
+const aiSummaryPending = ref(false)
+let aiSummaryTimer = null
+let aiSummaryPollCount = 0
 const realtime = ref(null)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 let timerId = null
@@ -197,9 +201,34 @@ const loadAiSummary = async () => {
   try {
     const res = await getAiExecutiveSummary('30d')
     aiSummary.value = res.ai_summary || null
+    if (res.ai_summary) {
+      aiSummaryPending.value = false
+      stopAiSummaryPoll()
+    } else if (res.ai_pending) {
+      aiSummaryPending.value = true
+      scheduleAiSummaryPoll()
+    } else {
+      aiSummaryPending.value = false
+      stopAiSummaryPoll()
+    }
   } catch (err) {
     aiSummary.value = null
+    aiSummaryPending.value = false
+    stopAiSummaryPoll()
   }
+}
+
+const stopAiSummaryPoll = () => {
+  if (aiSummaryTimer) { clearTimeout(aiSummaryTimer); aiSummaryTimer = null }
+  aiSummaryPollCount = 0
+}
+const scheduleAiSummaryPoll = () => {
+  if (aiSummaryTimer || aiSummaryPollCount >= 8) return
+  aiSummaryTimer = setTimeout(async () => {
+    aiSummaryTimer = null
+    aiSummaryPollCount += 1
+    await loadAiSummary()
+  }, 5000)
 }
 
 const loadRealtime = async () => {
@@ -221,6 +250,7 @@ onMounted(() => {
 onUnmounted(() => {
   if (timerId) window.clearInterval(timerId)
   if (realtimeTimerId) window.clearInterval(realtimeTimerId)
+  stopAiSummaryPoll()
 })
 
 // ===== 模块化仪表板（P1：拖拽/缩放/增删 + localStorage 持久化）=====
@@ -591,6 +621,27 @@ loadLayout()
   background: linear-gradient(135deg, #6366f1, #0ea5e9);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.summary-ai-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.summary-ai-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: summaryAiPulse 1s ease-in-out infinite;
+}
+@keyframes summaryAiPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 
 .executive-kpi-grid {
