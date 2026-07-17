@@ -957,6 +957,8 @@ onUnmounted(() => {
   color: #fff;
   font-size: 11px;
   line-height: 18px;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 .ai-briefing {
   margin-bottom: 12px;
