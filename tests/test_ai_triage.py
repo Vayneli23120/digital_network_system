@@ -110,3 +110,60 @@ def test_recommendations_empty_when_all_healthy(db_session):
     cards = ai_triage.build_operational_recommendations(db_session)
 
     assert cards == []
+
+
+@pytest.mark.asyncio
+async def test_briefing_returns_cards_without_ai_when_unconfigured(db_session, monkeypatch):
+    weak = Device(name="BRIEF-WEAK", ip="192.0.2.93", health_score=30)
+    db_session.add(weak)
+    db_session.flush()
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: False)
+
+    result = await ai_triage.generate_operational_briefing(db_session)
+
+    assert result["ai_configured"] is False
+    assert result["ai_briefing"] is None
+    assert result["total"] >= 1
+
+
+@pytest.mark.asyncio
+async def test_briefing_adds_ai_synthesis_when_configured(db_session, monkeypatch):
+    weak = Device(name="BRIEF-HOT", ip="192.0.2.94", health_score=25)
+    db_session.add(weak)
+    db_session.flush()
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: True)
+
+    async def fake_chat(**kwargs):
+        return {
+            "success": True,
+            "response": '{"briefing": "多台设备健康度告急", '
+            '"priorities": ["优先处理核心设备", "检查机柜散热"], '
+            '"insight": "过热与低健康度集中在同一区域"}',
+        }
+
+    monkeypatch.setattr(ai_triage.adk_runner, "chat", fake_chat)
+
+    result = await ai_triage.generate_operational_briefing(db_session)
+
+    assert result["ai_configured"] is True
+    assert result["ai_briefing"]["briefing"] == "多台设备健康度告急"
+    assert len(result["ai_briefing"]["priorities"]) == 2
+    assert result["ai_briefing"]["insight"]
+
+
+@pytest.mark.asyncio
+async def test_briefing_degrades_on_model_failure(db_session, monkeypatch):
+    weak = Device(name="BRIEF-FAIL", ip="192.0.2.95", health_score=20)
+    db_session.add(weak)
+    db_session.flush()
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: True)
+
+    async def failing_chat(**kwargs):
+        return {"success": False, "error": "timeout"}
+
+    monkeypatch.setattr(ai_triage.adk_runner, "chat", failing_chat)
+
+    result = await ai_triage.generate_operational_briefing(db_session)
+
+    assert result["ai_briefing"] is None
+    assert result["ai_error"] == "timeout"

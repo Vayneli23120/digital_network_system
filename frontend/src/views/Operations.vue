@@ -7,6 +7,14 @@
         <div class="ai-reco-head">
           <span class="ai-reco-title">{{ t('aiRecoTitle') }}</span>
           <span class="ai-reco-count">{{ aiRecommendations.length }}</span>
+          <span v-if="aiBriefing" class="ai-reco-badge">{{ t('aiRecoAiBadge') }}</span>
+        </div>
+        <div v-if="aiBriefing" class="ai-briefing">
+          <p class="ai-briefing-text">{{ aiBriefing.briefing }}</p>
+          <ul v-if="aiBriefing.priorities && aiBriefing.priorities.length" class="ai-briefing-priorities">
+            <li v-for="(p, i) in aiBriefing.priorities" :key="i">{{ p }}</li>
+          </ul>
+          <p v-if="aiBriefing.insight" class="ai-briefing-insight">{{ aiBriefing.insight }}</p>
         </div>
         <div class="ai-reco-list">
           <button
@@ -461,7 +469,7 @@ import { ref, onMounted, nextTick, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardSummary, getAlerts, getAiRecommendations } from '@/api'
+import { getDashboardSummary, getAlerts, getAiBriefing } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -482,12 +490,15 @@ const costTrend = ref({ labels: [], total: [], parts: [], labor: [] })
 let timerId = null
 
 const aiRecommendations = ref([])
+const aiBriefing = ref(null)
 const loadAiRecommendations = async () => {
   try {
-    const res = await getAiRecommendations(6)
+    const res = await getAiBriefing(6)
     aiRecommendations.value = res.items || []
+    aiBriefing.value = res.ai_briefing || null
   } catch (err) {
     aiRecommendations.value = []
+    aiBriefing.value = null
   }
 }
 
@@ -934,6 +945,40 @@ onUnmounted(() => {
   font-size: 12px;
   line-height: 20px;
   text-align: center;
+}
+.ai-reco-badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #6366f1, #0ea5e9);
+  color: #fff;
+  font-size: 11px;
+  line-height: 18px;
+}
+.ai-briefing {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.06);
+  border: 1px solid rgba(99, 102, 241, 0.18);
+}
+.ai-briefing-text {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #1e293b);
+}
+.ai-briefing-priorities {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 12px;
+  color: var(--text-secondary, #475569);
+}
+.ai-briefing-priorities li { margin: 2px 0; }
+.ai-briefing-insight {
+  margin: 6px 0 0;
+  font-size: 12px;
+  font-style: italic;
+  color: var(--text-secondary, #64748b);
 }
 .ai-reco-list {
   display: grid;

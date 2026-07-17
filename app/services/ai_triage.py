@@ -29,6 +29,14 @@ _SYSTEM_PROMPT = (
     "不要编造未提供的数据。"
 )
 
+_BRIEFING_SYSTEM_PROMPT = (
+    "你是工厂网络运维值班主管。基于给定的运营告警卡片列表，产出一份简短的"
+    "运营研判。只返回 JSON，字段：briefing(string，一到两句总体判断)、"
+    "priorities(string 数组，最多3条按优先级排序的处置建议)、"
+    "insight(string，一句跨条目关联洞察，没有则空字符串)。"
+    "只基于给定卡片，不要编造设备或数据。"
+)
+
 
 def ai_available() -> bool:
     """Whether an AI provider is configured."""
@@ -221,3 +229,52 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
     severity_rank = {"critical": 0, "high": 1, "medium": 2, "low": 3}
     cards.sort(key=lambda c: severity_rank.get(c["severity"], 9))
     return cards[:limit]
+
+
+async def generate_operational_briefing(db: Session, limit: int = 8) -> Dict:
+    """Rule cards + optional AI synthesis for the dashboard.
+
+    Always returns the deterministic cards. When an AI provider is configured
+    and reachable, adds an AI ``briefing`` with prioritized actions and a
+    cross-item insight; otherwise ``ai_briefing`` is None and the page still
+    works from the rule cards alone.
+    """
+    cards = build_operational_recommendations(db, limit=limit)
+    result: Dict = {
+        "ai_configured": ai_available(),
+        "total": len(cards),
+        "items": cards,
+        "ai_briefing": None,
+    }
+
+    if not cards or not ai_available():
+        return result
+
+    card_lines = [
+        f"- [{c['severity']}] {c['category']}: {c['title']} — {c['detail']}"
+        for c in cards
+    ]
+    message = "运营告警卡片如下：\n" + "\n".join(card_lines)
+    chat_result = await adk_runner.chat(
+        message=message,
+        system_prompt=_BRIEFING_SYSTEM_PROMPT,
+        temperature=0.2,
+        max_tokens=700,
+        timeout=60,
+    )
+    if not chat_result.get("success"):
+        result["ai_error"] = chat_result.get("error", "AI 调用失败")
+        return result
+
+    parsed = _parse_object(chat_result.get("response", ""))
+    briefing_text = parsed.get("briefing")
+    if briefing_text:
+        priorities = parsed.get("priorities") or []
+        if isinstance(priorities, str):
+            priorities = [priorities]
+        result["ai_briefing"] = {
+            "briefing": str(briefing_text),
+            "priorities": [str(item) for item in priorities][:3],
+            "insight": str(parsed.get("insight") or ""),
+        }
+    return result
