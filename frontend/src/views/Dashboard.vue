@@ -569,6 +569,8 @@ loadLayout()
   font-size: 14px;
   font-weight: 500;
   color: var(--text-primary);
+  flex: 1;
+  min-width: 0;
 }
 
 .summary-range {
@@ -577,6 +579,8 @@ loadLayout()
   padding: 2px 8px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .summary-ai-badge {
@@ -585,6 +589,8 @@ loadLayout()
   padding: 1px 7px;
   border-radius: 8px;
   background: linear-gradient(135deg, #6366f1, #0ea5e9);
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .executive-kpi-grid {
