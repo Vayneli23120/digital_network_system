@@ -33,6 +33,17 @@ def test_classify_traffic_heat_down_overrides_utilization():
     assert heat["particle_speed"] == 0
 
 
+def test_classify_traffic_heat_unreachable_device_is_down():
+    now = datetime.utcnow()
+    # 设备不可达：接口 oper_status 还是旧的 up、采样也还新鲜，
+    # 但必须直接判为 down（中断），而不是空闲。
+    heat = classify_traffic_heat(0, 0, "up", now, now, device_reachability="unreachable")
+
+    assert heat["level"] == "down"
+    assert heat["color"] == "#ef4444"
+    assert heat["stale"] is False
+
+
 def test_classify_traffic_heat_marks_stale_samples():
     now = datetime.utcnow()
     heat = classify_traffic_heat(90, 5, "up", now - timedelta(minutes=11), now)
@@ -106,6 +117,31 @@ def test_build_traffic_heat_items_filters_monitored_interfaces_and_sorts(db_sess
     assert items[0]["direction"] == "out"
     assert items[0]["is_uplink"] is True
     assert items[1]["level"] == "low"
+
+
+def test_build_traffic_heat_items_marks_unreachable_device_down(db_session):
+    now = datetime.utcnow()
+    # 设备被中断：reachability=unreachable，但接口仍保留旧的 up 与新鲜采样。
+    offline = Device(name="Offline-01", ip="10.0.2.1", status="online", reachability="unreachable")
+    db_session.add(offline)
+    db_session.commit()
+    db_session.add(DeviceInterface(
+        device_id=offline.id,
+        if_index=1,
+        if_name="Gi1/0/1",
+        oper_status="up",
+        is_uplink=True,
+        monitored=True,
+        last_in_util=0,
+        last_out_util=0,
+        last_sample_at=now,
+    ))
+    db_session.commit()
+
+    items = build_traffic_heat_items(db_session, [offline.id])
+
+    assert len(items) == 1
+    assert items[0]["level"] == "down"
 
 
 def test_build_traffic_heat_items_can_scope_to_floor_plan_devices(db_session):
