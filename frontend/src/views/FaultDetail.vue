@@ -1022,12 +1022,12 @@ const getNoteTypeColor = (type) => {
     created: 'info',
     assigned: 'primary',
     diagnosing: 'warning',
-    diagnosis: '',
+    diagnosis: 'warning',
     transferred: 'success',
     resolved: 'success',
     closed: 'info'
   }
-  return colors[type] || ''
+  return colors[type] || 'info'
 }
 
 // 日志类型标签
