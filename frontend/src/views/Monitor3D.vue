@@ -539,11 +539,13 @@
                 <span class="incident-ai-text">{{ selectedActiveFault.ai_root_cause }}</span>
               </div>
               <div class="incident-actions">
-                <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">{{ t('monitorFaultConfirm') }}</el-button>
-                <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">{{ t('monitorFaultFalseAlarm') }}</el-button>
+                <template v-if="selectedFaultNeedsReview">
+                  <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">{{ t('monitorFaultConfirm') }}</el-button>
+                  <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">{{ t('monitorFaultFalseAlarm') }}</el-button>
+                </template>
+                <el-button v-else type="primary" size="small" @click="openSelectedFaultDetail">{{ t('monitorFaultDetail') }}</el-button>
                 <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">{{ t('monitorTransferMaintenance') }}</el-button>
                 <el-button size="small" :loading="aiDiagnosing" @click="runIncidentAiPrediagnose">{{ t('faultAiRunPrediagnose') }}</el-button>
-                <el-button size="small" @click="openSelectedFaultDetail">{{ t('monitorFaultDetail') }}</el-button>
               </div>
             </div>
             <!-- 设备缩放调节 -->
@@ -935,6 +937,11 @@ const offlineDevices = computed(() => {
 const selectedActiveFault = computed(() => {
   if (!selectedDevice.value) return null
   return getActiveFaultForDevice(selectedDevice.value)
+})
+
+// 是否仍需复核：自动创建、尚未被确认/误报的故障才显示确认/误报按钮
+const selectedFaultNeedsReview = computed(() => {
+  return selectedActiveFault.value?.review_required === true
 })
 
 function getActiveFaultForDevice(device) {
