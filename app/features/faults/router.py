@@ -275,6 +275,7 @@ async def list_faults(
             "false_positive": bool(f.false_positive) if f.false_positive is not None else False,
             "has_ai_analysis": f.ai_analysis_result is not None,
             "ai_recommendation": f.ai_recommendation,
+            "ai_root_cause": f.ai_root_cause,
             "ai_confidence": float(f.ai_confidence) if f.ai_confidence else None,
             "fault_time": f.fault_time.isoformat() if f.fault_time else None,
             "created_at": f.created_at.isoformat(),
