@@ -133,7 +133,26 @@ class TestGetFaultTrend:
 
         result = get_fault_trend(db_session, time_range="30d")
         assert result["total"] == 10
-        assert len(result["labels"]) == 30  # daily granularity for 30d
+        assert len(result["labels"]) == 31  # 30 天 + 今天（含当日）
+
+    def test_fault_trend_includes_today(self, db_session):
+        device = Device(name="sw-today", ip="10.0.0.9", status="online")
+        db_session.add(device)
+        db_session.commit()
+
+        now = datetime.utcnow()
+        for i in range(2):
+            db_session.add(FaultRecord(
+                device_id=device.id, device_name="sw-today", fault_no=f"F-TODAY-{i}",
+                severity="major", created_at=now,
+            ))
+        db_session.commit()
+
+        result = get_fault_trend(db_session, time_range="30d")
+        today_label = now.strftime("%m-%d")
+        assert today_label in result["labels"]
+        idx = result["labels"].index(today_label)
+        assert result["values"][idx] == 2
 
     def test_fault_trend_custom_range(self, db_session):
         device = Device(name="sw-01", ip="10.0.0.1", status="online")
@@ -161,7 +180,7 @@ class TestGetFaultTrend:
     def test_fault_trend_empty(self, db_session):
         result = get_fault_trend(db_session, time_range="7d")
         assert result["total"] == 0
-        assert len(result["labels"]) == 7
+        assert len(result["labels"]) == 8  # 7 天 + 今天
 
     def test_fault_trend_by_severity(self, db_session):
         device = Device(name="sw-01", ip="10.0.0.1", status="online")
@@ -188,5 +207,5 @@ class TestGetFaultTrend:
     def test_fault_trend_default_range(self, db_session):
         result = get_fault_trend(db_session)
         assert "labels" in result
-        # Default is 30d
-        assert len(result["labels"]) == 30
+        # Default is 30d（含今天）
+        assert len(result["labels"]) == 31
