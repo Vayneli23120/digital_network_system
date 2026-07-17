@@ -111,6 +111,27 @@
           </div>
         </el-card>
 
+        <!-- AI 预判卡片 -->
+        <el-card class="ai-prediagnose-card" style="margin-top: 20px">
+          <template #header>
+            <div class="card-header-flex">
+              <span>{{ t('faultAiPrediagnose') }}</span>
+              <button class="nav-action-btn secondary" :disabled="aiDiagnosing" @click="runAiPrediagnose">
+                <el-icon><Aim /></el-icon>
+                {{ aiDiagnosing ? t('faultAiDiagnosing') : t('faultAiRunPrediagnose') }}
+              </button>
+            </div>
+          </template>
+          <div v-if="fault.ai_root_cause" class="ai-prediagnose-body">
+            <div class="ai-prediagnose-label">{{ t('faultAiProbableCause') }}</div>
+            <p class="ai-prediagnose-cause">{{ fault.ai_root_cause }}</p>
+            <ul v-if="aiRecommendations.length" class="ai-prediagnose-recos">
+              <li v-for="(r, i) in aiRecommendations" :key="i">{{ r }}</li>
+            </ul>
+          </div>
+          <div v-else class="ai-prediagnose-empty">{{ t('faultAiNoPrediagnose') }}</div>
+        </el-card>
+
         <!-- 工作日志/诊断记录（ServiceNow Activity风格 - 整合操作按钮） -->
         <el-card class="work-notes-card" style="margin-top: 20px">
           <template #header>
@@ -804,7 +825,8 @@ import {
   resolveFault,
   closeFault as closeFaultApi,
   getUsers,
-  updateMaintenance
+  updateMaintenance,
+  aiPreDiagnoseFault
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -823,6 +845,27 @@ const loading = ref(false)
 const users = ref([])
 const validTransitions = ref([])
 const maintenanceInfo = ref(null)
+const aiDiagnosing = ref(false)
+const aiRecommendations = ref([])
+
+const runAiPrediagnose = async () => {
+  if (!fault.value.id) return
+  aiDiagnosing.value = true
+  try {
+    const res = await aiPreDiagnoseFault(fault.value.id)
+    if (res.available) {
+      if (res.probable_cause) fault.value.ai_root_cause = res.probable_cause
+      aiRecommendations.value = res.recommendations || []
+      ElMessage.success(t('faultAiDiagnoseDone'))
+    } else {
+      ElMessage.warning(res.reason || t('faultAiUnavailable'))
+    }
+  } catch (e) {
+    ElMessage.error(t('faultAiDiagnoseFailed'))
+  } finally {
+    aiDiagnosing.value = false
+  }
+}
 
 // 对话框状态
 const showAssignDialog = ref(false)

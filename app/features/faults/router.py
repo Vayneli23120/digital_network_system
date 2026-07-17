@@ -470,6 +470,10 @@ async def create_fault(
         request.severity
     )
 
+    # 严重/重要故障：后台触发 AI 预判（仅在已配置 AI 时生效）
+    if request.severity in ("critical", "major"):
+        background_tasks.add_task(trigger_fault_ai_prediagnosis, fault.id)
+
     # 如果有负责人，触发通知（后台执行）
     if request.assigned_to:
         background_tasks.add_task(
@@ -1009,6 +1013,33 @@ async def trigger_fault_workflow(fault_id: int, severity: str):
         await executor.trigger_fault_created(fault_id)
     except Exception as e:
         print(f"Workflow trigger error: {e}")
+    finally:
+        db.close()
+
+
+async def trigger_fault_ai_prediagnosis(fault_id: int):
+    """后台 AI 故障预判：把设备/故障/温度/历史投给已配置的模型，写入 ai_root_cause。
+
+    仅在配置了 AI 时执行；任何失败都不影响故障流程。
+    """
+    from app.shared.database import get_db_manager
+    from app.services.ai_triage import ai_available, pre_diagnose_fault
+
+    if not ai_available():
+        return
+
+    db_manager = get_db_manager()
+    db = db_manager.get_session()
+    try:
+        fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
+        if not fault:
+            return
+        result = await pre_diagnose_fault(db, fault)
+        if result.get("available") and result.get("probable_cause"):
+            fault.ai_root_cause = result["probable_cause"]
+            db.commit()
+    except Exception as e:
+        print(f"AI pre-diagnosis error: {e}")
     finally:
         db.close()
 

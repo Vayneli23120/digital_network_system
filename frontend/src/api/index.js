@@ -35,6 +35,11 @@ export function aiPreDiagnoseFault(faultId) {
   return api.post(`/faults/${faultId}/ai-pre-diagnose`)
 }
 
+// 领导层 AI 经营摘要（未配置模型时回落模板文案）
+export function getAiExecutiveSummary(timeRange = '30d') {
+  return api.get('/dashboard/ai-summary', { params: { time_range: timeRange } })
+}
+
 // 设备相关
 export function getDevices(params) {
   return api.get('/devices', { params })

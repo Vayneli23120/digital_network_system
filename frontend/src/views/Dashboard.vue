@@ -87,7 +87,8 @@
             <!-- 态势摘要条 -->
             <div v-else-if="wg.type === 'summary'" class="summary-bar" :class="summaryBarClass" v-loading="!executiveSummary">
               <div class="summary-icon"><el-icon><DataBoard /></el-icon></div>
-              <span class="summary-text">{{ executiveSummary && executiveSummary.summary_text }}</span>
+              <span class="summary-text">{{ (aiSummary && aiSummary.narrative) || (executiveSummary && executiveSummary.summary_text) }}</span>
+              <span v-if="aiSummary && aiSummary.narrative" class="summary-ai-badge">{{ t('aiRecoAiBadge') }}</span>
               <span class="summary-range">{{ executiveSummary && executiveSummary.range }}</span>
             </div>
 
@@ -151,7 +152,7 @@
 <script setup>
 import { ref, onMounted, computed, onUnmounted } from 'vue'
 import { DataBoard, Rank } from '@element-plus/icons-vue'
-import { getExecutiveSummary, getRealtimeStatus } from '@/api'
+import { getExecutiveSummary, getRealtimeStatus, getAiExecutiveSummary } from '@/api'
 import NetworkOverviewWidget from '@/components/ui/NetworkOverviewWidget.vue'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
@@ -164,6 +165,7 @@ import ChangeCorrelation from '@/components/ui/ChangeCorrelation.vue'
 
 const { t } = useI18n()
 const executiveSummary = ref(null)
+const aiSummary = ref(null)
 const realtime = ref(null)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 let timerId = null
@@ -191,6 +193,15 @@ const loadExecutive = async (force = false) => {
   }
 }
 
+const loadAiSummary = async () => {
+  try {
+    const res = await getAiExecutiveSummary('30d')
+    aiSummary.value = res.ai_summary || null
+  } catch (err) {
+    aiSummary.value = null
+  }
+}
+
 const loadRealtime = async () => {
   try {
     realtime.value = await getRealtimeStatus()
@@ -201,6 +212,7 @@ const loadRealtime = async () => {
 
 onMounted(() => {
   loadExecutive()
+  loadAiSummary()
   loadRealtime()
   realtimeTimerId = window.setInterval(loadRealtime, 30000)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
@@ -565,6 +577,14 @@ loadLayout()
   padding: 2px 8px;
   background: var(--bg-tertiary);
   border-radius: var(--radius-sm);
+}
+
+.summary-ai-badge {
+  font-size: 10px;
+  color: #fff;
+  padding: 1px 7px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #6366f1, #0ea5e9);
 }
 
 .executive-kpi-grid {

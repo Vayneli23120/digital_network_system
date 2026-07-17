@@ -37,6 +37,13 @@ _BRIEFING_SYSTEM_PROMPT = (
     "只基于给定卡片，不要编造设备或数据。"
 )
 
+_EXEC_SYSTEM_PROMPT = (
+    "你是面向管理层的网络运维分析师。基于给定的关键指标(KPI)，用中文写一段"
+    "面向领导的经营简报。只返回 JSON，字段：narrative(string，2-3句话，客观、"
+    "点出风险与趋势)、highlights(string 数组，最多3条关键结论)。"
+    "只基于给定指标，不要编造数字。"
+)
+
 
 def ai_available() -> bool:
     """Whether an AI provider is configured."""
@@ -278,3 +285,48 @@ async def generate_operational_briefing(db: Session, limit: int = 8) -> Dict:
             "insight": str(parsed.get("insight") or ""),
         }
     return result
+
+
+def _kpi_lines(kpis: Dict) -> List[str]:
+    lines = []
+    for key, kpi in (kpis or {}).items():
+        if not isinstance(kpi, dict):
+            continue
+        value = kpi.get("value")
+        if value is None:
+            continue
+        unit = kpi.get("unit") or ""
+        status = kpi.get("status") or ""
+        lines.append(f"- {key}: {value}{unit} ({status})")
+    return lines
+
+
+async def generate_executive_narrative(kpis: Dict) -> Optional[Dict]:
+    """AI leadership narrative from executive KPIs. None when unavailable."""
+    if not ai_available():
+        return None
+    lines = _kpi_lines(kpis)
+    if not lines:
+        return None
+
+    chat_result = await adk_runner.chat(
+        message="关键指标如下：\n" + "\n".join(lines),
+        system_prompt=_EXEC_SYSTEM_PROMPT,
+        temperature=0.3,
+        max_tokens=600,
+        timeout=60,
+    )
+    if not chat_result.get("success"):
+        return None
+
+    parsed = _parse_object(chat_result.get("response", ""))
+    narrative = parsed.get("narrative")
+    if not narrative:
+        return None
+    highlights = parsed.get("highlights") or []
+    if isinstance(highlights, str):
+        highlights = [highlights]
+    return {
+        "narrative": str(narrative),
+        "highlights": [str(item) for item in highlights][:3],
+    }
