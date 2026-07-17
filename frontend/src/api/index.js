@@ -25,6 +25,11 @@ export function getAiRecommendations(limit = 8) {
   return api.get('/ai/recommendations', { params: { limit } })
 }
 
+// AI 运营研判简报（规则卡片 + 可选 AI 综合研判）
+export function getAiBriefing(limit = 8) {
+  return api.get('/ai/briefing', { params: { limit } })
+}
+
 // 一键 AI 故障预判
 export function aiPreDiagnoseFault(faultId) {
   return api.post(`/faults/${faultId}/ai-pre-diagnose`)

@@ -113,6 +113,14 @@ async def get_operational_recommendations(limit: int = 8, db: Session = Depends(
     }
 
 
+@router.get("/briefing")
+async def get_operational_briefing(limit: int = 8, db: Session = Depends(get_db)):
+    """运营研判简报：规则卡片 + 可选的 AI 综合研判（未配置 AI 时回落为纯卡片）。"""
+    from app.services.ai_triage import generate_operational_briefing
+
+    return await generate_operational_briefing(db, limit=limit)
+
+
 # ===== Fault Analysis =====
 
 @router.post("/analyze-fault")
