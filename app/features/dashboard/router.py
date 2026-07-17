@@ -42,14 +42,14 @@ async def get_cost_trend(db: Session = Depends(get_db), months: int = 6):
 
 
 @router.get("/top-fault-devices")
-async def get_top_fault_devices(db: Session = Depends(get_db), days: int = 30, limit: int = 5):
-    """获取近 N 天故障最多的设备（60s 缓存）"""
-    key = _cache_key("dashboard:top-fault-devices", days=days, limit=limit)
+async def get_top_fault_devices(db: Session = Depends(get_db), days: int = 30, limit: int = 5, only_active: bool = False):
+    """获取近 N 天故障最多的设备（60s 缓存）。only_active=true 时仅统计未闭环故障。"""
+    key = _cache_key("dashboard:top-fault-devices", days=days, limit=limit, only_active=only_active)
     result = cache.get(key)
     if result is not None:
         return result
 
-    result = svc_get_top_fault_devices(db, days=days, limit=limit)
+    result = svc_get_top_fault_devices(db, days=days, limit=limit, only_active=only_active)
     cache.set(key, result, ttl=_TREND_TTL)
     return result
 

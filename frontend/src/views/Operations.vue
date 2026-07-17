@@ -635,7 +635,7 @@ const recentConfigChanges = computed(() => {
 })
 
 const devicesWithIssues = computed(() => {
-  return faultDeviceList.value.filter(d => d.count > 0)
+  return activeIssueDevices.value.filter(d => d.count > 0)
 })
 
 const topIssueDevice = computed(() => {
@@ -756,6 +756,7 @@ const costTrendMax = computed(() => Math.max(...costTrend.value.total, 1))
 
 // Top fault devices — from API
 const faultDeviceList = ref([])
+const activeIssueDevices = ref([])
 
 const loadFaultDeviceList = async (force = false) => {
   try {
@@ -775,6 +776,18 @@ const loadFaultDeviceList = async (force = false) => {
     }))
   } catch (err) {
     console.error('Failed to load top fault devices:', err)
+  }
+  try {
+    // 「配置合规」小条的"故障设备"改用当前未闭环故障，故障解决后自动消失/切换
+    const active = await cachedRequest(
+      () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5&only_active=true').then(r => r.json()),
+      'dashboardActiveFaultDevices',
+      {},
+      { forceRefresh: force }
+    )
+    activeIssueDevices.value = Array.isArray(active) ? active : []
+  } catch (err) {
+    activeIssueDevices.value = []
   }
 }
 

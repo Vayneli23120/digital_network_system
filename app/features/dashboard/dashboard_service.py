@@ -240,13 +240,14 @@ def get_cost_trend(db: Session, months: int = 6) -> Dict[str, Any]:
     }
 
 
-def get_top_fault_devices(db: Session, days: int = 30, limit: int = 5) -> List[Dict[str, Any]]:
+def get_top_fault_devices(db: Session, days: int = 30, limit: int = 5, only_active: bool = False) -> List[Dict[str, Any]]:
     """获取近 N 天故障最多的设备
 
     Args:
         db: 数据库会话
         days: 回溯天数（默认 30）
         limit: 返回设备数量（默认 5）
+        only_active: 仅统计未闭环（open/处理中）的故障，用于“当前故障设备”
 
     Returns:
         按故障数排序的设备列表 [{device_id, device_name, count, severity_breakdown}]
@@ -255,9 +256,12 @@ def get_top_fault_devices(db: Session, days: int = 30, limit: int = 5) -> List[D
     from sqlalchemy import desc
 
     cutoff = datetime.utcnow() - timedelta(days=days)
-    faults = db.query(FaultRecord).filter(
+    query = db.query(FaultRecord).filter(
         FaultRecord.created_at >= cutoff
-    ).limit(5000).all()
+    )
+    if only_active:
+        query = query.filter(FaultRecord.status.notin_(["resolved", "closed"]))
+    faults = query.limit(5000).all()
 
     # 按设备分组统计
     by_device = defaultdict(list)
