@@ -71,14 +71,23 @@ const toggleCollapse = () => {
 /* ===== Sidebar ===== */
 .sidebar {
   width: var(--layout-sidebar-w);
-  background: var(--sidebar-bg);
-  border-right: 1px solid var(--border-default);
+  /* 玻璃透明质感（呼应 3D 数字孪生工具面板） */
+  background: rgba(255, 255, 255, 0.62);
+  backdrop-filter: blur(14px) saturate(150%);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  border-right: 1px solid rgba(0, 120, 212, 0.15);
   position: sticky;
   top: var(--layout-topbar-h);
   height: calc(100vh - var(--layout-topbar-h));
   overflow-y: auto;
   overflow-x: hidden;
   transition: width 0.3s ease;
+}
+
+/* 暗色模式玻璃质感 */
+.sidebar.dark {
+  background: rgba(17, 22, 31, 0.58);
+  border-right: 1px solid rgba(34, 211, 238, 0.18);
 }
 
 .sidebar.collapsed {
@@ -97,12 +106,17 @@ const toggleCollapse = () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-default);
+  background: rgba(255, 255, 255, 0.35);
+  border: 1px solid rgba(0, 120, 212, 0.14);
   border-radius: var(--radius-md);
   color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s;
+}
+
+.sidebar.dark .collapse-toggle {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(34, 211, 238, 0.16);
 }
 
 .collapse-toggle:hover {
