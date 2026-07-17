@@ -59,10 +59,12 @@ class ADKRunner:
                 return {"success": False, "error": "未配置 AI 服务"}
 
             # 构建消息
+            # 将 system_prompt 合并到 user message 中以确保兼容所有 provider
             messages = []
             if system_prompt:
-                messages.append({"role": "system", "content": system_prompt})
-            messages.append({"role": "user", "content": message})
+                messages.append({"role": "user", "content": f"{system_prompt}\n\n{message}"})
+            else:
+                messages.append({"role": "user", "content": message})
 
             # 直接调用 LiteLLM（ADK 底层使用的也是 LiteLLM）
             from litellm import acompletion
@@ -76,7 +78,7 @@ class ADKRunner:
                 timeout=timeout
             )
 
-            response_text = response.choices[0].message.content
+            response_text = response.choices[0].message.content or ""
             processing_time_ms = int((time.time() - start_time) * 1000)
 
             logger.info(f"AI Chat 成功，耗时 {processing_time_ms}ms，响应长度 {len(response_text)}")
