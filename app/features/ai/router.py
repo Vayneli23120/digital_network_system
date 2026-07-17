@@ -128,8 +128,8 @@ async def get_operational_briefing(limit: int = 8, db: Session = Depends(get_db)
         return cached
 
     result = await generate_operational_briefing(db, limit=limit)
-    # 有 AI 研判时缓存 5 分钟；没有时短缓存，便于配置后尽快生效
-    cache.set(key, result, ttl=300 if result.get("ai_briefing") else 60)
+    # 有 AI 研判时缓存 15 分钟；没有时短缓存(60s)，便于配置后尽快生效
+    cache.set(key, result, ttl=900 if result.get("ai_briefing") else 60)
     return result
 
 
