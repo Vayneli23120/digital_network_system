@@ -538,6 +538,7 @@
                 <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">{{ t('monitorFaultConfirm') }}</el-button>
                 <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">{{ t('monitorFaultFalseAlarm') }}</el-button>
                 <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">{{ t('monitorTransferMaintenance') }}</el-button>
+                <el-button size="small" @click="openSelectedFaultDetail">{{ t('monitorFaultDetail') }}</el-button>
               </div>
             </div>
             <!-- 设备缩放调节 -->
@@ -5664,6 +5665,11 @@ async function reviewSelectedFault(falsePositive = false) {
   } finally {
     faultActionLoading.value = false
   }
+}
+
+function openSelectedFaultDetail() {
+  if (!selectedActiveFault.value?.id) return
+  router.push(`/faults/${selectedActiveFault.value.id}`)
 }
 
 async function transferSelectedFaultToMaintenance() {

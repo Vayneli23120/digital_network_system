@@ -1287,6 +1287,7 @@ export const languages = {
     monitorPeerPrefix: '对端',
     monitorFaultConfirm: '确认',
     monitorFaultFalseAlarm: '误报',
+    monitorFaultDetail: '故障详情',
     monitorFaultRefresh: '刷新',
 
     // 3D 大屏 - 事件流
@@ -4617,6 +4618,7 @@ export const languages = {
     monitorPeerPrefix: 'Peer',
     monitorFaultConfirm: 'Confirm',
     monitorFaultFalseAlarm: 'False Alarm',
+    monitorFaultDetail: 'Fault Detail',
 
     monitorScreenTotalDevices: 'Total Devices',
     monitorScreenSwitches: 'Switches',
