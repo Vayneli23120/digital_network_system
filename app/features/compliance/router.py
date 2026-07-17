@@ -587,44 +587,54 @@ async def update_ai_config(config_id: int, request: AIConfigRequest):
 
 @router.post("/ai-config/test")
 async def test_ai_config(request: AIConfigRequest):
-    """测试 AI 配置是否有效"""
-    try:
-        # 使用 ADK config 进行测试
-        from app.services.adk.config import adk_config
+    """测试 AI 配置是否有效（litellm 直连真实 ping，不依赖 google-adk）。"""
+    import os
 
-        # 临时设置环境变量进行测试
-        import os
-        provider_map = {
-            'openai': 'OPENAI_API_KEY',
-            'anthropic': 'ANTHROPIC_API_KEY',
-            'deepseek': 'DEEPSEEK_API_KEY'
+    try:
+        import litellm
+    except ImportError:
+        return {
+            "success": False,
+            "error": "litellm 未安装，请先安装 requirements-ai.txt",
         }
-        env_key = provider_map.get(request.provider, f"{request.provider.upper()}_API_KEY")
+
+    # 与运行时一致的环境变量映射
+    env_key_map = {
+        "openai": "OPENAI_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "deepseek": "DEEPSEEK_API_KEY",
+    }
+    env_key = env_key_map.get(request.provider, f"{request.provider.upper()}_API_KEY")
+    if request.api_key:
         os.environ[env_key] = request.api_key
 
-        # 尝试创建 LiteLlm 模型
-        from google.adk.models import LiteLlm
-
+    # 与 adk_config.get_model_config 一致：自定义 base_url 时用 provider/model 前缀
+    if request.base_url:
         model_str = f"{request.provider}/{request.model_name}"
+    else:
+        model_str = request.model_name
 
-        # 简单验证配置格式
-        test_model = LiteLlm(
+    try:
+        response = litellm.completion(
             model=model_str,
-            api_base=request.base_url if request.base_url else None,
-            temperature=request.temperature or 0.7,
-            max_tokens=request.max_tokens or 4096
+            api_base=request.base_url or None,
+            messages=[{"role": "user", "content": "reply with exactly: OK"}],
+            max_tokens=32,
+            temperature=request.temperature or 0.2,
+            timeout=request.timeout or 30,
         )
-
+        content = response.choices[0].message.content
         return {
             "success": True,
-            "message": "AI 配置格式有效",
+            "message": "AI 连通性测试通过",
             "provider": request.provider,
-            "model": request.model_name
+            "model": request.model_name,
+            "reply": (content or "").strip()[:200],
         }
     except Exception as e:
         return {
             "success": False,
-            "error": str(e)
+            "error": str(e),
         }
 
 
