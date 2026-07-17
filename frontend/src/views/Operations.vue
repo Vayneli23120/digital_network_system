@@ -8,6 +8,9 @@
           <span class="ai-reco-title">{{ t('aiRecoTitle') }}</span>
           <span class="ai-reco-count">{{ aiRecommendations.length }}</span>
           <span v-if="aiBriefing" class="ai-reco-badge">{{ t('aiRecoAiBadge') }}</span>
+          <span v-else-if="aiBriefingPending" class="ai-reco-pending">
+            <i class="ai-reco-dot"></i>{{ t('aiRecoGenerating') }}
+          </span>
         </div>
         <div v-if="aiBriefing" class="ai-briefing">
           <p class="ai-briefing-text">{{ aiBriefing.briefing }}</p>
@@ -495,14 +498,42 @@ let timerId = null
 
 const aiRecommendations = ref([])
 const aiBriefing = ref(null)
+const aiBriefingPending = ref(false)
+let aiPollTimer = null
+let aiPollCount = 0
+
+const stopAiPoll = () => {
+  if (aiPollTimer) { clearTimeout(aiPollTimer); aiPollTimer = null }
+  aiPollCount = 0
+}
+const scheduleAiPoll = () => {
+  if (aiPollTimer || aiPollCount >= 8) return
+  aiPollTimer = setTimeout(async () => {
+    aiPollTimer = null
+    aiPollCount += 1
+    await loadAiRecommendations()
+  }, 5000)
+}
 const loadAiRecommendations = async () => {
   try {
     const res = await getAiBriefing(6)
     aiRecommendations.value = res.items || []
     aiBriefing.value = res.ai_briefing || null
+    if (res.ai_briefing) {
+      aiBriefingPending.value = false
+      stopAiPoll()
+    } else if (res.ai_pending) {
+      aiBriefingPending.value = true
+      scheduleAiPoll()
+    } else {
+      aiBriefingPending.value = false
+      stopAiPoll()
+    }
   } catch (err) {
     aiRecommendations.value = []
     aiBriefing.value = null
+    aiBriefingPending.value = false
+    stopAiPoll()
   }
 }
 
@@ -917,6 +948,7 @@ onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('theme-change', handleThemeChange)
   if (timerId) window.clearInterval(timerId)
+  stopAiPoll()
   faultChartInstance.value?.dispose()
 })
 </script>
@@ -959,6 +991,26 @@ onUnmounted(() => {
   line-height: 18px;
   white-space: nowrap;
   flex-shrink: 0;
+}
+.ai-reco-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--text-secondary, #6366f1);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.ai-reco-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: aiRecoPulse 1s ease-in-out infinite;
+}
+@keyframes aiRecoPulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.1); }
 }
 .ai-briefing {
   margin-bottom: 12px;

@@ -1,6 +1,6 @@
 """Dashboard router — 带缓存"""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, BackgroundTasks, Depends
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -113,26 +113,35 @@ async def get_executive_summary(
 
 
 @router.get("/ai-summary")
-async def get_ai_executive_summary(db: Session = Depends(get_db), time_range: str = "30d"):
-    """领导层 AI 经营摘要：基于 KPI 由模型生成（10分钟缓存，未配置 AI 时回落模板）。"""
-    from app.services.ai_triage import ai_available, generate_executive_narrative
+async def get_ai_executive_summary(
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    time_range: str = "30d",
+):
+    """领导层 AI 经营摘要：模板摘要立即返回，AI 摘要后台生成。
+
+    不再把模型思考时间阻塞在请求里；若已有缓存 AI 摘要则一并返回，
+    否则 ai_pending=true，前端轮询拉取。
+    """
+    from app.services.ai_triage import ai_available, refresh_executive_summary_cache
 
     key = _cache_key("dashboard:ai-summary", time_range=time_range)
     cached = cache.get(key)
-    if cached is not None:
-        return cached
+    ai_narrative = cached.get("ai_summary") if isinstance(cached, dict) else None
 
     summary = svc_get_executive_summary(db, time_range=time_range)
-    fallback = summary.get("summary_text")
-    ai_narrative = await generate_executive_narrative(summary.get("kpis") or {})
     result = {
         "ai_configured": ai_available(),
         "ai_summary": ai_narrative,
-        "fallback_text": fallback,
+        "fallback_text": summary.get("summary_text"),
         "range": time_range,
+        "ai_pending": False,
     }
-    # AI 结果缓存 15 分钟；未生成时短缓存(60s)，便于配置后尽快生效
-    cache.set(key, result, ttl=900 if ai_narrative else 60)
+
+    if ai_available() and ai_narrative is None:
+        result["ai_pending"] = True
+        background_tasks.add_task(refresh_executive_summary_cache, key, time_range)
+
     return result
 
 
