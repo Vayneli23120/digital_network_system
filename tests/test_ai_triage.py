@@ -167,3 +167,49 @@ async def test_briefing_degrades_on_model_failure(db_session, monkeypatch):
 
     assert result["ai_briefing"] is None
     assert result["ai_error"] == "timeout"
+
+
+@pytest.mark.asyncio
+async def test_executive_narrative_none_when_unconfigured(monkeypatch):
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: False)
+
+    result = await ai_triage.generate_executive_narrative(
+        {"availability": {"value": 99.5, "unit": "%", "status": "good"}}
+    )
+
+    assert result is None
+
+
+@pytest.mark.asyncio
+async def test_executive_narrative_generated_when_configured(monkeypatch):
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: True)
+
+    async def fake_chat(**kwargs):
+        return {
+            "success": True,
+            "response": '{"narrative": "整体可用率达标，故障处理时长偏高需关注", '
+            '"highlights": ["可用率99.5%", "MTTR偏高"]}',
+        }
+
+    monkeypatch.setattr(ai_triage.adk_runner, "chat", fake_chat)
+
+    result = await ai_triage.generate_executive_narrative(
+        {
+            "availability": {"value": 99.5, "unit": "%", "status": "good"},
+            "mttr_hours": {"value": 9, "unit": "h", "status": "warning"},
+        }
+    )
+
+    assert result["narrative"].startswith("整体可用率")
+    assert len(result["highlights"]) == 2
+
+
+@pytest.mark.asyncio
+async def test_executive_narrative_none_when_no_kpi_values(monkeypatch):
+    monkeypatch.setattr(ai_triage, "ai_available", lambda: True)
+
+    result = await ai_triage.generate_executive_narrative(
+        {"availability": {"value": None, "unit": "%"}}
+    )
+
+    assert result is None

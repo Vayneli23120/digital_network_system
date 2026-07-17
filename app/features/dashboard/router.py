@@ -112,6 +112,30 @@ async def get_executive_summary(
     return result
 
 
+@router.get("/ai-summary")
+async def get_ai_executive_summary(db: Session = Depends(get_db), time_range: str = "30d"):
+    """领导层 AI 经营摘要：基于 KPI 由模型生成（10分钟缓存，未配置 AI 时回落模板）。"""
+    from app.services.ai_triage import ai_available, generate_executive_narrative
+
+    key = _cache_key("dashboard:ai-summary", time_range=time_range)
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    summary = svc_get_executive_summary(db, time_range=time_range)
+    fallback = summary.get("summary_text")
+    ai_narrative = await generate_executive_narrative(summary.get("kpis") or {})
+    result = {
+        "ai_configured": ai_available(),
+        "ai_summary": ai_narrative,
+        "fallback_text": fallback,
+        "range": time_range,
+    }
+    # AI 结果缓存 10 分钟；未生成时短缓存，便于配置后尽快生效
+    cache.set(key, result, ttl=600 if ai_narrative else 60)
+    return result
+
+
 @router.get("/realtime-status")
 async def get_realtime_status(db: Session = Depends(get_db)):
     """实时基础设施状态 - 当前在线率 + 进行中故障 + 按厂区聚合（短缓存）。"""
