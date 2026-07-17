@@ -688,6 +688,10 @@ const alerts = computed(() => realAlerts.value)
 // Alert i18n 渲染函数
 const alertTitle = (a) => {
   switch (a.alert_key) {
+    case 'device_offline':
+      return `${t('alertDeviceOffline')}: ${a.device_name || t('alertUnknownDevice')}`
+    case 'temperature_high':
+      return `${t('alertTemperatureHigh')}: ${a.device_name || t('alertUnknownDevice')}`
     case 'fault':
       return `${t('alertFault')}: ${a.device_name || t('alertUnknownDevice')}`
     case 'backup_overdue':
@@ -700,6 +704,10 @@ const alertTitle = (a) => {
 }
 const alertSummary = (a) => {
   switch (a.alert_key) {
+    case 'device_offline':
+      return t('alertDeviceUnreachable')
+    case 'temperature_high':
+      return t('alertPeakTemperature', { temp: a.peak_c })
     case 'fault':
       return a.description || t('alertNoDescription')
     case 'backup_overdue':
