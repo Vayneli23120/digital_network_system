@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 
 from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord
-from app.features.dashboard.dashboard_service import get_dashboard_summary, get_fault_trend
+from app.features.dashboard.dashboard_service import get_dashboard_summary, get_fault_trend, get_alerts
 
 
 class TestGetDashboardSummary:
@@ -209,3 +209,62 @@ class TestGetFaultTrend:
         assert "labels" in result
         # Default is 30d（含今天）
         assert len(result["labels"]) == 31
+
+
+class TestGetAlerts:
+    def test_alerts_healthy_when_empty(self, db_session):
+        result = get_alerts(db_session)
+        assert len(result) == 1
+        assert result[0]["alert_key"] == "system_healthy"
+
+    def test_offline_device_alert_ranks_first(self, db_session):
+        offline = Device(
+            name="cn-core-01", ip="10.0.0.1",
+            deployment_status="in-use", reachability="unreachable",
+            last_reachability_check=datetime.utcnow(),
+        )
+        db_session.add(offline)
+        db_session.commit()
+        # 一条较旧的 major 故障
+        db_session.add(FaultRecord(
+            device_id=offline.id, device_name="cn-core-01", fault_no="F-1",
+            severity="major", status="open",
+            created_at=datetime.utcnow() - timedelta(hours=5),
+        ))
+        db_session.commit()
+
+        result = get_alerts(db_session)
+        keys = [a["alert_key"] for a in result]
+        assert "device_offline" in keys
+        # 设备掉线（danger, rank0）应排在 major 故障（rank1）之前
+        assert result[0]["alert_key"] == "device_offline"
+        assert result[0]["severity"] == "danger"
+
+    def test_high_temperature_alert(self, db_session):
+        from app.shared.models import DeviceMetricSample
+        dev = Device(name="cn-sw-hot", ip="10.0.0.2", deployment_status="in-use")
+        db_session.add(dev)
+        db_session.commit()
+        db_session.add(DeviceMetricSample(
+            device_id=dev.id, ts=datetime.utcnow(), temperature_c=85.0,
+        ))
+        db_session.commit()
+
+        result = get_alerts(db_session)
+        hot = [a for a in result if a["alert_key"] == "temperature_high"]
+        assert len(hot) == 1
+        assert hot[0]["severity"] == "danger"
+        assert hot[0]["peak_c"] == 85.0
+
+    def test_cool_device_no_temperature_alert(self, db_session):
+        from app.shared.models import DeviceMetricSample
+        dev = Device(name="cn-sw-cool", ip="10.0.0.3", deployment_status="in-use")
+        db_session.add(dev)
+        db_session.commit()
+        db_session.add(DeviceMetricSample(
+            device_id=dev.id, ts=datetime.utcnow(), temperature_c=45.0,
+        ))
+        db_session.commit()
+
+        result = get_alerts(db_session)
+        assert not any(a["alert_key"] == "temperature_high" for a in result)

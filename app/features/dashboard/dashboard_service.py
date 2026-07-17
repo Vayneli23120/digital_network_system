@@ -479,63 +479,107 @@ def get_fault_trend(
 
 
 def get_alerts(db: Session) -> List[Dict[str, Any]]:
-    """获取实时告警列表
+    """获取实时告警事件流（统一按严重度+时间倒序）。
 
-    Returns:
-        告警列表，每条包含 alert_key + 结构化参数，前端负责 i18n 渲染
+    覆盖：设备掉线、高危故障、温度过高、备份超期。每条含 alert_key + 结构化参数，
+    前端负责 i18n 渲染。无任何告警时返回系统健康。
     """
     from datetime import datetime, timedelta
-    from app.shared.models import FaultRecord, Device
-    from sqlalchemy import func
+    from app.shared.models import FaultRecord, Device, DeviceMetricSample
 
-    alerts = []
     now = datetime.utcnow()
+    # (severity_rank, sort_ts, alert_dict) —— rank 越小越靠前
+    collected: List[tuple] = []
 
-    # 1. 高危故障：severity in (critical, major) 且 status 属未关闭
+    def rel_time(dt: Optional[datetime]) -> str:
+        if not dt:
+            return "now"
+        diff = now - dt
+        if diff.days > 0:
+            return f"{diff.days}d"
+        if diff.seconds >= 3600:
+            return f"{int(diff.seconds / 3600)}h"
+        return f"{max(1, int(diff.seconds / 60))}m"
+
+    # 1. 设备掉线/不可达（运维最高优先告警）
+    offline_devices = db.query(Device).filter(
+        Device.deployment_status == 'in-use',
+        Device.reachability == 'unreachable',
+    ).order_by(Device.last_reachability_check.desc()).limit(6).all()
+    for dev in offline_devices:
+        ts = dev.last_reachability_check or now
+        collected.append((0, ts, {
+            "severity": "danger",
+            "alert_key": "device_offline",
+            "device_name": dev.name,
+            "time": rel_time(dev.last_reachability_check),
+            "link": f"/devices/{dev.id}",
+        }))
+
+    # 2. 高危故障（critical/major 且未闭环）
     critical_faults = db.query(FaultRecord).filter(
         FaultRecord.severity.in_(['critical', 'major']),
         FaultRecord.status.in_(['open', 'assigned', 'accepted', 'diagnosing', 'resolving'])
-    ).order_by(FaultRecord.created_at.desc()).limit(3).all()
-
+    ).order_by(FaultRecord.created_at.desc()).limit(6).all()
     for fault in critical_faults:
-        time_diff = now - fault.created_at
-        if time_diff.days > 0:
-            time_str = f"{time_diff.days}d"
-        elif time_diff.seconds >= 3600:
-            time_str = f"{int(time_diff.seconds / 3600)}h"
-        else:
-            time_str = f"{int(time_diff.seconds / 60)}m"
-
-        severity_map = {'critical': 'danger', 'major': 'warn'}
-        alerts.append({
-            "severity": severity_map.get(fault.severity, 'warn'),
+        rank = 0 if fault.severity == 'critical' else 1
+        collected.append((rank, fault.created_at or now, {
+            "severity": 'danger' if fault.severity == 'critical' else 'warn',
             "alert_key": "fault",
-            "device_name": fault.device_name,  # None 表示未知，前端兜底
-            "description": fault.description[:50] if fault.description else None,  # None → 前端显示"无描述"
-            "time": time_str,
+            "device_name": fault.device_name,
+            "description": fault.description[:50] if fault.description else None,
+            "time": rel_time(fault.created_at),
             "link": "/faults?status=open"
-        })
+        }))
 
-    # 2. 备份超期：设备 last_backup_time 超过 30 天
+    # 3. 温度过高（近1小时峰值 ≥70℃）
+    one_hour_ago = now - timedelta(hours=1)
+    hot_rows = db.query(
+        DeviceMetricSample.device_id,
+        Device.name,
+        func.max(DeviceMetricSample.temperature_c).label('peak'),
+        func.max(DeviceMetricSample.ts).label('last_ts'),
+    ).join(Device, Device.id == DeviceMetricSample.device_id).filter(
+        DeviceMetricSample.ts >= one_hour_ago,
+        DeviceMetricSample.temperature_c.isnot(None),
+        DeviceMetricSample.temperature_c >= 70,
+    ).group_by(DeviceMetricSample.device_id, Device.name).order_by(
+        func.max(DeviceMetricSample.temperature_c).desc()
+    ).limit(6).all()
+    for device_id, name, peak, last_ts in hot_rows:
+        peak_c = round(float(peak), 1) if peak is not None else None
+        collected.append((0 if (peak_c or 0) >= 80 else 1, last_ts or now, {
+            "severity": "danger" if (peak_c or 0) >= 80 else "warn",
+            "alert_key": "temperature_high",
+            "device_name": name,
+            "peak_c": peak_c,
+            "time": rel_time(last_ts),
+            "link": f"/device-health?device_id={device_id}",
+        }))
+
+    # 4. 备份超期（in-use 设备 last_backup_time 超过 30 天）
     thirty_days_ago = now - timedelta(days=30)
     devices_with_old_backup = db.query(Device).filter(
         Device.deployment_status == 'in-use',
         Device.last_backup_time < thirty_days_ago
-    ).limit(3).all()
-
+    ).order_by(Device.last_backup_time.asc()).limit(4).all()
     for device in devices_with_old_backup:
         if device.last_backup_time:
             days_overdue = (now - device.last_backup_time).days
-            alerts.append({
+            collected.append((2, device.last_backup_time, {
                 "severity": "warn",
                 "alert_key": "backup_overdue",
                 "device_name": device.name,
                 "days_overdue": days_overdue,
                 "time": f"{days_overdue}d",
                 "link": "/backups"
-            })
+            }))
 
-    # 3. 如果没有任何告警，显示系统健康状态
+    # 统一排序：严重度优先，其次时间倒序
+    collected.sort(key=lambda item: (item[0], -(item[1].timestamp() if item[1] else 0)))
+    alerts = [item[2] for item in collected][:12]
+
+    # 无任何告警 → 系统健康
     if not alerts:
         alerts.append({
             "severity": "success",
