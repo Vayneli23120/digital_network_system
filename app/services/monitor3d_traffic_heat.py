@@ -18,11 +18,15 @@ def classify_traffic_heat(
     oper_status: Optional[str] = None,
     sample_at: Optional[datetime] = None,
     now: Optional[datetime] = None,
+    device_reachability: Optional[str] = None,
 ) -> dict:
     """Classify the latest interface state for the Monitor3D heat layer."""
     now = now or datetime.utcnow()
     status = (oper_status or "unknown").lower()
-    if status == "down":
+    reachability = (device_reachability or "").lower()
+    # 设备不可达时，SNMP 无法把接口 oper_status 置为 down（探测本身失败），
+    # 此时应直接按“中断”呈现，而不是沿用旧的 up 状态被判成空闲/过期。
+    if status == "down" or reachability == "unreachable":
         return {
             "level": "down",
             "utilization": max([value for value in [in_util, out_util] if value is not None], default=0.0),
@@ -107,6 +111,7 @@ def build_traffic_heat_items(db: Session, plan_device_ids: Optional[Iterable[int
             iface.oper_status,
             iface.last_sample_at,
             now,
+            device.reachability,
         )
         items.append({
             "device_id": iface.device_id,
