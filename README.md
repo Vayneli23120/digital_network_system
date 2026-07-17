@@ -291,3 +291,4 @@ network-automation-system/
 ---
 
 *版本：1.2.0 | 最后更新：2026-04-21*
+sk-kimi-ECotntEbT5fel3ZOWlGZQMIDZgscAic7CzqRjImIgSI5Le063CE5yLJdd2nKnZt5
