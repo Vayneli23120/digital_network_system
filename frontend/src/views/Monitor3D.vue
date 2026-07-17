@@ -534,10 +534,15 @@
               <div class="incident-meta" v-if="selectedActiveFault.if_name">
                 {{ selectedActiveFault.if_name }}<span v-if="selectedActiveFault.event_count"> · {{ t('monitorEventCount', { count: selectedActiveFault.event_count }) }}</span>
               </div>
+              <div class="incident-ai" v-if="selectedActiveFault.ai_root_cause">
+                <span class="incident-ai-label">{{ t('faultAiProbableCause') }}</span>
+                <span class="incident-ai-text">{{ selectedActiveFault.ai_root_cause }}</span>
+              </div>
               <div class="incident-actions">
                 <el-button type="primary" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(false)">{{ t('monitorFaultConfirm') }}</el-button>
                 <el-button type="warning" size="small" :loading="faultActionLoading" @click="reviewSelectedFault(true)">{{ t('monitorFaultFalseAlarm') }}</el-button>
                 <el-button type="danger" size="small" :loading="faultActionLoading" @click="transferSelectedFaultToMaintenance">{{ t('monitorTransferMaintenance') }}</el-button>
+                <el-button size="small" :loading="aiDiagnosing" @click="runIncidentAiPrediagnose">{{ t('faultAiRunPrediagnose') }}</el-button>
                 <el-button size="small" @click="openSelectedFaultDetail">{{ t('monitorFaultDetail') }}</el-button>
               </div>
             </div>
@@ -659,7 +664,7 @@ import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRe
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit, Rank } from '@element-plus/icons-vue'
 import axios from 'axios'
-import { reviewFault, transferFaultToMaintenance } from '@/api'
+import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 
@@ -741,6 +746,7 @@ const heatLegendLevels = computed(() => [
   { level: 'stale', color: '#64748b', label: t('heatLevelStale'), range: '>10min' },
 ])
 const faultActionLoading = ref(false)
+const aiDiagnosing = ref(false)
 
 // ===== 面板可拖拽位置 =====
 function loadPanelPos(key, defaultX, defaultY) {
@@ -5672,6 +5678,24 @@ function openSelectedFaultDetail() {
   router.push(`/faults/${selectedActiveFault.value.id}`)
 }
 
+async function runIncidentAiPrediagnose() {
+  if (!selectedActiveFault.value?.id) return
+  aiDiagnosing.value = true
+  try {
+    const res = await aiPreDiagnoseFault(selectedActiveFault.value.id)
+    if (res.available) {
+      ElMessage.success(t('faultAiDiagnoseDone'))
+      await loadActiveFaults()
+    } else {
+      ElMessage.warning(res.reason || t('faultAiUnavailable'))
+    }
+  } catch (e) {
+    ElMessage.error(t('faultAiDiagnoseFailed'))
+  } finally {
+    aiDiagnosing.value = false
+  }
+}
+
 async function transferSelectedFaultToMaintenance() {
   if (!selectedActiveFault.value) return
   faultActionLoading.value = true
@@ -7349,6 +7373,27 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
+.incident-ai {
+  margin-top: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.14);
+  border: 1px solid rgba(99, 102, 241, 0.32);
+}
+
+.incident-ai-label {
+  display: block;
+  margin-bottom: 2px;
+  color: #c7d2fe;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.incident-ai-text {
+  color: #e0e7ff;
+  font-size: 11px;
+  line-height: 1.4;
+}
 .hint {
   color: #6b7280;
   font-size: 11px;
