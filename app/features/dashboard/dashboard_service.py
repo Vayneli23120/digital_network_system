@@ -391,7 +391,8 @@ def get_fault_trend(
 
     if group_by == "day":
         current = query_start_date
-        while current < query_end_date:
+        # 用日期比较并包含结束日（今天），否则今天的当日故障不会生成数据点
+        while current.date() <= query_end_date.date():
             label = current.strftime(group_format)
             labels.append(label)
             values.append(fault_counts.get(label, 0))
