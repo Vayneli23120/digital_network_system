@@ -99,13 +99,14 @@
                       <div class="noc-segment maintenance" v-if="coreMaintenance > 0" :style="{ width: (coreTotal > 0 ? coreMaintenance / coreTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
-                      <div class="noc-type-pill" v-for="dtype in ['core_switch', 'server_switch', 'router']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
-                        v-if="deviceByType(dtype, 'total') > 0">
-                        <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
-                        <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
-                        <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
-                      </div>
+                      <template v-for="dtype in ['core_switch', 'server_switch', 'router']" :key="dtype">
+                        <div class="noc-type-pill" v-if="deviceByType(dtype, 'total') > 0"
+                          :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }">
+                          <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
+                          <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
+                          <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
+                        </div>
+                      </template>
                     </div>
                   </div>
                   <div class="noc-layer">
@@ -119,13 +120,14 @@
                       <div class="noc-segment maintenance" v-if="firewallMaintenance > 0" :style="{ width: (firewallTotal > 0 ? firewallMaintenance / firewallTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
-                      <div class="noc-type-pill" v-for="dtype in ['pa', 'ftd']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
-                        v-if="deviceByType(dtype, 'total') > 0">
-                        <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
-                        <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
-                        <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
-                      </div>
+                      <template v-for="dtype in ['pa', 'ftd']" :key="dtype">
+                        <div class="noc-type-pill" v-if="deviceByType(dtype, 'total') > 0"
+                          :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }">
+                          <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
+                          <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
+                          <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
+                        </div>
+                      </template>
                     </div>
                   </div>
                   <div class="noc-layer">
@@ -139,13 +141,14 @@
                       <div class="noc-segment maintenance" v-if="wifiMaintenance > 0" :style="{ width: (wifiTotal > 0 ? wifiMaintenance / wifiTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
-                      <div class="noc-type-pill" v-for="dtype in ['ap', 'wlc']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
-                        v-if="deviceByType(dtype, 'total') > 0">
-                        <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
-                        <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
-                        <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
-                      </div>
+                      <template v-for="dtype in ['ap', 'wlc']" :key="dtype">
+                        <div class="noc-type-pill" v-if="deviceByType(dtype, 'total') > 0"
+                          :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }">
+                          <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
+                          <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
+                          <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
+                        </div>
+                      </template>
                     </div>
                   </div>
                   <div class="noc-layer">
@@ -159,13 +162,14 @@
                       <div class="noc-segment maintenance" v-if="accessMaintenance > 0" :style="{ width: (accessTotal > 0 ? accessMaintenance / accessTotal * 100 : 0) + '%' }"></div>
                     </div>
                     <div class="noc-layer-types">
-                      <div class="noc-type-pill" v-for="dtype in ['uce', 'office_switch']" :key="dtype"
-                        :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }"
-                        v-if="deviceByType(dtype, 'total') > 0">
-                        <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
-                        <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
-                        <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
-                      </div>
+                      <template v-for="dtype in ['uce', 'office_switch']" :key="dtype">
+                        <div class="noc-type-pill" v-if="deviceByType(dtype, 'total') > 0"
+                          :class="{ active: deviceByType(dtype, 'total') > 0, alert: deviceByType(dtype, 'unreachable') > 0 }">
+                          <span class="noc-type-dot" :class="typeStatus(dtype)"></span>
+                          <span class="noc-type-name">{{ typeLabel(dtype) }}</span>
+                          <span class="noc-type-num">{{ deviceByType(dtype, 'total') }}</span>
+                        </div>
+                      </template>
                     </div>
                   </div>
                 </div>
