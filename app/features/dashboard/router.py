@@ -131,8 +131,8 @@ async def get_ai_executive_summary(db: Session = Depends(get_db), time_range: st
         "fallback_text": fallback,
         "range": time_range,
     }
-    # AI 结果缓存 10 分钟；未生成时短缓存，便于配置后尽快生效
-    cache.set(key, result, ttl=600 if ai_narrative else 60)
+    # AI 结果缓存 15 分钟；未生成时短缓存(60s)，便于配置后尽快生效
+    cache.set(key, result, ttl=900 if ai_narrative else 60)
     return result
 
 
