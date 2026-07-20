@@ -316,16 +316,45 @@
       <el-form :model="aiConfigForm" label-width="100px" size="default" class="config-form">
         <div class="form-section">
           <el-form-item :label="t('complianceAIProvider')">
-            <el-select v-model="aiConfigForm.provider" style="width: 100%">
-              <el-option value="openai" :label="t('complianceAIProviderOpenAI')" />
-              <el-option value="anthropic" :label="t('complianceAIProviderAnthropic')" />
+            <el-select v-model="aiConfigForm.provider" style="width: 100%" @change="onProviderChange">
+              <el-option-group label="🌐 官方 API">
+                <el-option value="openai" label="OpenAI (GPT-4, GPT-3.5)" />
+                <el-option value="anthropic" label="Anthropic (Claude, Kimi)" />
+                <el-option value="groq" label="Groq API" />
+                <el-option value="deepseek" label="DeepSeek" />
+                <el-option value="cohere" label="Cohere" />
+              </el-option-group>
+              <el-option-group label="💻 本地/自托管">
+                <el-option value="ollama" label="Ollama (本地模型)" />
+                <el-option value="llmstudio" label="LM Studio (本地模型)" />
+                <el-option value="local" label="本地 OpenAI 兼容端点" />
+              </el-option-group>
+              <el-option-group label="☁️ 其他云服务">
+                <el-option value="azure" label="Azure OpenAI" />
+                <el-option value="together" label="Together AI" />
+                <el-option value="replicate" label="Replicate" />
+              </el-option-group>
             </el-select>
           </el-form-item>
-          <el-form-item :label="t('complianceAIApiKey')">
-            <el-input v-model="aiConfigForm.api_key" type="password" show-password />
+          <el-form-item :label="t('complianceAIApiKey')" :required="isApiKeyRequired">
+            <el-input 
+              v-model="aiConfigForm.api_key" 
+              type="password" 
+              show-password
+              :placeholder="apiKeyPlaceholder" 
+            />
+            <div v-if="!isApiKeyRequired" class="form-hint">
+              {{ t('complianceAIApiKeyOptional') || '此提供商可选' }}
+            </div>
           </el-form-item>
           <el-form-item :label="t('complianceAIBaseUrl')">
-            <el-input v-model="aiConfigForm.base_url" :placeholder="getDefaultUrl()" />
+            <el-input 
+              v-model="aiConfigForm.base_url" 
+              :placeholder="getBaseUrlPlaceholder()" 
+            />
+            <div class="form-hint">
+              {{ getBaseUrlHint() }}
+            </div>
           </el-form-item>
           <el-form-item :label="t('complianceAIModel')">
             <el-input v-model="aiConfigForm.model_name" />
@@ -942,6 +971,78 @@ const getDefaultUrl = () => {
     return 'https://api.anthropic.com/v1'
   }
   return ''
+}
+
+// 根据提供商返回 Base URL 的 Placeholder
+const getBaseUrlPlaceholder = () => {
+  const provider = aiConfigForm.provider
+  const placeholders = {
+    openai: 'https://api.openai.com/v1 (官方 API，通常不需要)',
+    anthropic: 'https://api.anthropic.com/v1 (官方 API，通常不需要)',
+    groq: 'https://api.groq.com/openai/v1 (官方 API，通常不需要)',
+    deepseek: 'https://api.deepseek.com/v1 (官方 API，通常不需要)',
+    cohere: 'https://api.cohere.com/v1 (官方 API，通常不需要)',
+    ollama: 'http://localhost:11434/v1 (本地 Ollama)',
+    llmstudio: 'http://localhost:1234/v1 (LM Studio 默认端口)',
+    lmstudio: 'http://localhost:1234/v1 (LM Studio 默认端口)',
+    local: 'http://localhost:8000/v1 (vLLM / text-generation-webui)',
+    azure: 'https://{resource-name}.openai.azure.com/ (Azure 资源)',
+    together: 'https://api.together.xyz/v1 (官方 API，通常不需要)',
+    replicate: 'https://api.replicate.com/v1 (官方 API，通常不需要)',
+  }
+  return placeholders[provider] || 'API Base URL (仅本地模型和自定义端点需要填写)'
+}
+
+// 根据提供商返回 Base URL 的提示
+const getBaseUrlHint = () => {
+  const provider = aiConfigForm.provider
+  const localProviders = ['ollama', 'llmstudio', 'lmstudio', 'local']
+  const cloudProviders = ['openai', 'anthropic', 'groq', 'deepseek', 'cohere', 'together', 'replicate', 'cohere']
+  
+  if (localProviders.includes(provider)) {
+    return '✓ 本地模型：必须填写本地端点 URL'
+  } else if (provider === 'azure') {
+    return '⚠ Azure：必须填写 Azure 资源 URL'
+  }
+  return '💡 官方 API：通常可留空（使用默认 URL）'
+}
+
+// 判断 API Key 是否必需
+const isApiKeyRequired = computed(() => {
+  const provider = aiConfigForm.provider
+  // Ollama 通常不需要 API Key
+  return !['ollama'].includes(provider)
+})
+
+// API Key 的 Placeholder
+const apiKeyPlaceholder = computed(() => {
+  const provider = aiConfigForm.provider
+  if (provider === 'ollama') {
+    return '可选（本地 Ollama 通常不需要）'
+  }
+  return '输入 API Key'
+})
+
+// Provider 变化时的回调
+const onProviderChange = () => {
+  // 根据提供商自动设置默认模型
+  const defaultModels = {
+    openai: 'gpt-4',
+    anthropic: 'claude-3-opus-20240229',
+    groq: 'mixtral-8x7b-32768',
+    deepseek: 'deepseek-chat',
+    cohere: 'command',
+    ollama: 'llama2',
+    llmstudio: 'local-model',
+    lmstudio: 'local-model',
+    local: 'local-model',
+    azure: 'gpt-4',
+    together: 'mistralai/Mixtral-8x7B-Instruct-v0.1',
+    replicate: 'model:version',
+  }
+  if (defaultModels[aiConfigForm.provider]) {
+    aiConfigForm.model_name = defaultModels[aiConfigForm.provider]
+  }
 }
 
 // 加载 AI 配置

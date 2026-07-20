@@ -96,11 +96,11 @@ class StandardUpdateRequest(BaseModel):
 
 
 class AIConfigRequest(BaseModel):
-    """AI 配置请求"""
-    provider: str  # openai / anthropic
-    api_key: str
-    base_url: Optional[str] = None
-    model_name: Optional[str] = "gpt-4"
+    """AI 模型配置请求 - 支持所有 LLM 提供商（OpenAI、Anthropic、Ollama、LMStudio、本地等）"""
+    provider: str  # openai / anthropic / ollama / llmstudio / groq / azure / local / 等
+    api_key: Optional[str] = None  # 部分本地模型可能不需要
+    base_url: Optional[str] = None  # 自定义端点 URL (本地模型必需)
+    model_name: Optional[str] = "gpt-4"  # 模型名称 (e.g., gpt-4, claude-3-opus, llama2, etc.)
     temperature: Optional[float] = 0.7
     max_tokens: Optional[int] = 4096
     timeout: Optional[int] = 60
@@ -587,7 +587,7 @@ async def update_ai_config(config_id: int, request: AIConfigRequest):
 
 @router.post("/ai-config/test")
 async def test_ai_config(request: AIConfigRequest):
-    """测试 AI 配置是否有效（litellm 直连真实 ping，不依赖 google-adk）。"""
+    """测试 AI 配置是否有效 - 支持所有 LLM 提供商（litellm 直连）"""
     import os
 
     try:
@@ -598,19 +598,48 @@ async def test_ai_config(request: AIConfigRequest):
             "error": "litellm 未安装，请先安装 requirements-ai.txt",
         }
 
-    # 与运行时一致的环境变量映射
+    # 通用环境变量映射
     env_key_map = {
         "openai": "OPENAI_API_KEY",
         "anthropic": "ANTHROPIC_API_KEY",
         "deepseek": "DEEPSEEK_API_KEY",
+        "groq": "GROQ_API_KEY",
+        "azure": "AZURE_API_KEY",
+        "together": "TOGETHER_API_KEY",
+        "replicate": "REPLICATE_API_KEY",
+        "cohere": "COHERE_API_KEY",
+        "ollama": "OLLAMA_API_KEY",
+        "llmstudio": "LMSTUDIO_API_KEY",
+        "lmstudio": "LMSTUDIO_API_KEY",
+        "local": "LOCAL_API_KEY",
     }
-    env_key = env_key_map.get(request.provider, f"{request.provider.upper()}_API_KEY")
+    env_key = env_key_map.get(request.provider.lower(), f"{request.provider.upper()}_API_KEY")
     if request.api_key:
         os.environ[env_key] = request.api_key
 
-    # 与 adk_config.get_model_config 一致：自定义 base_url 时用 provider/model 前缀
+    # 根据提供商构建模型字符串
+    provider_lower = request.provider.lower()
+    
+    # litellm provider 映射
+    provider_map = {
+        'openai': 'openai',
+        'anthropic': 'anthropic',
+        'deepseek': 'deepseek',
+        'ollama': 'ollama',
+        'llmstudio': 'openai',      # LM Studio 使用 OpenAI 兼容
+        'lmstudio': 'openai',
+        'groq': 'groq',
+        'azure': 'azure',
+        'together': 'together',
+        'replicate': 'replicate',
+        'cohere': 'cohere',
+        'local': 'openai',          # 本地 OpenAI 兼容
+    }
+    litellm_provider = provider_map.get(provider_lower, provider_lower)
+    
+    # 构建模型字符串
     if request.base_url:
-        model_str = f"{request.provider}/{request.model_name}"
+        model_str = f"{litellm_provider}/{request.model_name}"
     else:
         model_str = request.model_name
 
@@ -626,15 +655,19 @@ async def test_ai_config(request: AIConfigRequest):
         content = response.choices[0].message.content
         return {
             "success": True,
-            "message": "AI 连通性测试通过",
+            "message": "LLM 连通性测试通过",
             "provider": request.provider,
             "model": request.model_name,
+            "base_url": request.base_url or "官方 API",
             "reply": (content or "").strip()[:200],
         }
     except Exception as e:
         return {
             "success": False,
-            "error": str(e),
+            "error": f"连接失败: {str(e)}",
+            "provider": request.provider,
+            "base_url": request.base_url or "官方 API",
+            "hint": "检查 API Key、Base URL 和网络连接是否正确"
         }
 
 
