@@ -495,6 +495,7 @@ const faultTotal = ref(0)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 const costTrend = ref({ labels: [], total: [], parts: [], labor: [] })
 let timerId = null
+let dataRefreshTimer = null
 
 const aiRecommendations = ref([])
 const aiBriefing = ref(null)
@@ -949,12 +950,18 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('theme-change', handleThemeChange)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
+  // 30s 自动刷新统计卡与告警流，数据变化（设备离线/新故障单）后无需手动刷新
+  dataRefreshTimer = window.setInterval(() => {
+    loadDashboardData(true)
+    loadAlerts()
+  }, 30000)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)
   window.removeEventListener('theme-change', handleThemeChange)
   if (timerId) window.clearInterval(timerId)
+  if (dataRefreshTimer) window.clearInterval(dataRefreshTimer)
   stopAiPoll()
   faultChartInstance.value?.dispose()
 })

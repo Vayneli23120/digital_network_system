@@ -128,6 +128,8 @@ async def get_ai_executive_summary(
     key = _cache_key("dashboard:ai-summary", time_range=time_range)
     cached = cache.get(key)
     ai_narrative = cached.get("ai_summary") if isinstance(cached, dict) else None
+    # 已有缓存条目（成功或冷却中）则不重复触发，避免每次进页都重新生成
+    attempted = isinstance(cached, dict)
 
     summary = svc_get_executive_summary(db, time_range=time_range)
     result = {
@@ -138,7 +140,7 @@ async def get_ai_executive_summary(
         "ai_pending": False,
     }
 
-    if ai_available() and ai_narrative is None:
+    if ai_available() and ai_narrative is None and not attempted:
         result["ai_pending"] = True
         background_tasks.add_task(refresh_executive_summary_cache, key, time_range)
 
