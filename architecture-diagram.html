@@ -154,7 +154,7 @@ graph TB
     end
 
     subgraph External["🌐 外部集成"]
-        KimiAPI["🤖 Kimi API"]
+        LLM_API["🤖 通用LLM API<br/>(OpenAI/Anthropic/<br/>Ollama/本地端点)"]
         Netmiko["🔌 Netmiko"]
         SNMP["📡 SNMP"]
         Celery["⏱️ Celery"]
@@ -275,7 +275,7 @@ graph LR
     SpareLow["📦 备件不足"] -.-> Cards
     
     Cards -->|立即返回| UICard["🖥️ 用户立即看到<br/>卡片列表"]
-    Cards -->|后台异步| AICall["🤖 Kimi AI<br/>智能分析<br/>5-60秒"]
+    Cards -->|后台异步| AICall["🤖 LLM 智能分析<br/>(支持多个提供商)<br/>5-60秒"]
     
     AICall -->|成功| Brief["📝 研判总结<br/>+ 优先级建议"]
     AICall -->|失败/超时| Cool["❄️ 冷却3分钟<br/>不重复调用"]
@@ -305,7 +305,7 @@ graph TD
     
     AITrigger -->|收集| Context["📋 故障上下文<br/>• 设备信息<br/>• 最新指标<br/>• 历史故障"]
     
-    Context -->|调用| AI["🤖 Kimi AI<br/>根因分析"]
+    Context -->|调用| AI["🤖 LLM 根因分析<br/>(可配置任意提供商)"]
     
     AI -->|返回| Analysis["🔍 根因分析结果<br/>• probable_cause<br/>• recommendations<br/>• confidence"]
     
@@ -445,7 +445,7 @@ graph TB
     Backend -->|CRUD| DB["🗄️ 数据库<br/>SQLite(开发)<br/>PostgreSQL(生产)"]
     Backend -->|异步任务| Celery["⏱️ Celery Worker<br/>后台队列<br/>• AI生成<br/>• 邮件发送<br/>• 长流程任务"]
     
-    Backend -->|调用| External["🌐 外部服务<br/>• Kimi API<br/>• SNMP/Syslog<br/>• Netmiko命令"]
+    Backend -->|调用| External["🌐 外部服务<br/>• 通用LLM API<br/>• SNMP/Syslog<br/>• Netmiko命令"]
     
     Celery -->|同步| DB
     Celery -->|调用| External
