@@ -135,6 +135,8 @@ async def get_operational_briefing(
     key = _cache_key("ai:briefing", limit=limit)
     cached = cache.get(key)
     ai_briefing = cached.get("ai_briefing") if isinstance(cached, dict) else None
+    # 已有缓存条目（成功或冷却中）则不重复触发，避免每次进页都重新生成
+    attempted = isinstance(cached, dict)
 
     result = {
         "ai_configured": ai_available(),
@@ -144,8 +146,8 @@ async def get_operational_briefing(
         "ai_pending": False,
     }
 
-    # 有卡片、已配 AI、且无缓存 AI 研判 → 后台生成，立即返回 pending
-    if ai_available() and cards and ai_briefing is None:
+    # 有卡片、已配 AI、且无缓存 AI 研判（且非冷却中）→ 后台生成，立即返回 pending
+    if ai_available() and cards and ai_briefing is None and not attempted:
         result["ai_pending"] = True
         background_tasks.add_task(refresh_briefing_cache, key, limit)
 

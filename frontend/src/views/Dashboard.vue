@@ -174,6 +174,7 @@ const realtime = ref(null)
 const currentTime = ref(dayjs().format('HH:mm:ss'))
 let timerId = null
 let realtimeTimerId = null
+let kpiTimerId = null
 
 const summaryBarClass = computed(() => {
   const summary = executiveSummary.value?.summary_text
@@ -244,12 +245,15 @@ onMounted(() => {
   loadAiSummary()
   loadRealtime()
   realtimeTimerId = window.setInterval(loadRealtime, 30000)
+  // 30s 自动刷新领导层 KPI 统计卡，数据变化后无需手动刷新
+  kpiTimerId = window.setInterval(() => loadExecutive(true), 30000)
   timerId = window.setInterval(() => { currentTime.value = dayjs().format('HH:mm:ss') }, 1000)
 })
 
 onUnmounted(() => {
   if (timerId) window.clearInterval(timerId)
   if (realtimeTimerId) window.clearInterval(realtimeTimerId)
+  if (kpiTimerId) window.clearInterval(kpiTimerId)
   stopAiSummaryPoll()
 })
 
