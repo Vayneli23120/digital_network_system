@@ -12,12 +12,38 @@ from app.shared.models import AIConfig
 
 
 class ADKConfig:
-    """从数据库获取 AI 配置，创建 LiteLlm 模型"""
+    """从数据库获取 AI 配置，创建 LiteLlm 模型 - 支持所有常见 LLM 提供商"""
 
+    # 所有支持的提供商
+    SUPPORTED_PROVIDERS = [
+        'openai',           # OpenAI (GPT-4, GPT-3.5 等)
+        'anthropic',        # Anthropic (Claude 等) - Kimi 兼容
+        'deepseek',         # DeepSeek
+        'ollama',           # Ollama 本地模型
+        'llmstudio',        # LM Studio 本地模型
+        'lmstudio',         # LM Studio 别名
+        'groq',             # Groq API
+        'azure',            # Azure OpenAI
+        'together',         # Together AI
+        'replicate',        # Replicate
+        'cohere',           # Cohere
+        'local',            # 通用本地 OpenAI 兼容端点
+    ]
+    
+    # litellm 模型前缀映射（某些提供商需要前缀）
     PROVIDER_MAP = {
         'openai': 'openai',
         'anthropic': 'anthropic',
         'deepseek': 'deepseek',
+        'ollama': 'ollama',
+        'llmstudio': 'openai',      # LM Studio 使用 OpenAI 兼容接口
+        'lmstudio': 'openai',       # 别名
+        'groq': 'groq',
+        'azure': 'azure',
+        'together': 'together',
+        'replicate': 'replicate',
+        'cohere': 'cohere',
+        'local': 'openai',          # 本地 OpenAI 兼容服务（如 vLLM、text-generation-webui）
     }
 
     def get_active_config(self) -> Optional[AIConfig]:
@@ -37,44 +63,64 @@ class ADKConfig:
             db.close()
 
     def get_model_config(self) -> Optional[Dict]:
-        """获取 LiteLLM 模型配置字典"""
+        """获取 LiteLLM 模型配置字典 - 支持所有提供商的通用逻辑"""
         config = self.get_active_config()
         if not config:
             logger.warning("未配置 AI 服务")
             return None
 
-        provider = self.PROVIDER_MAP.get(config.provider, config.provider)
+        provider = config.provider.lower()
+        if provider not in self.PROVIDER_MAP:
+            logger.warning(f"未知提供商: {provider}，使用 openai 兼容模式")
+            provider = 'local'  # 默认使用本地 OpenAI 兼容
 
-        # 对于自定义 base_url，使用 provider 前缀格式
+        litellm_provider = self.PROVIDER_MAP[provider]
+
+        # 构建模型字符串
+        # 对于本地/自定义 base_url，使用 "provider/model" 格式
+        # 对于官方 API，直接使用模型名
         if config.base_url:
-            # 使用 provider/model 格式让 LiteLLM 正确处理
-            model_str = f"{provider}/{config.model_name}"
+            # 自定义 API 端点（本地 Ollama、LM Studio 等）
+            model_str = f"{litellm_provider}/{config.model_name}"
         else:
-            # 使用官方 API 时，直接用模型名
+            # 官方 API（OpenAI、Anthropic、Groq 等）
             model_str = config.model_name
 
         result = {
             "model": model_str,
+            "provider": provider,
             "temperature": config.temperature or 0.7,
             "max_tokens": config.max_tokens or 4096,
             "timeout": config.timeout or 120,
         }
 
-        # 自定义 base_url
+        # 自定义 base_url 处理
         if config.base_url:
             result["api_base"] = config.base_url
 
-        # API Key 通过环境变量传递给 litellm
-        api_key = config.api_key_encrypted or ""
-        env_key_map = {
-            'openai': 'OPENAI_API_KEY',
-            'anthropic': 'ANTHROPIC_API_KEY',
-            'deepseek': 'DEEPSEEK_API_KEY',
-        }
-        env_key = env_key_map.get(config.provider, f"{config.provider.upper()}_API_KEY")
-        os.environ[env_key] = api_key
+        # 设置 API Key（部分本地模型可能不需要）
+        if config.api_key_encrypted:
+            # 环境变量名映射
+            env_key_map = {
+                'openai': 'OPENAI_API_KEY',
+                'anthropic': 'ANTHROPIC_API_KEY',
+                'deepseek': 'DEEPSEEK_API_KEY',
+                'groq': 'GROQ_API_KEY',
+                'azure': 'AZURE_API_KEY',
+                'together': 'TOGETHER_API_KEY',
+                'replicate': 'REPLICATE_API_KEY',
+                'cohere': 'COHERE_API_KEY',
+                'ollama': 'OLLAMA_API_KEY',      # 可选，Ollama 通常不需要
+                'lmstudio': 'LMSTUDIO_API_KEY',  # 可选
+                'local': 'LOCAL_API_KEY',        # 自定义
+            }
+            env_key = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
+            os.environ[env_key] = config.api_key_encrypted
 
-        logger.info(f"ADK 配置: provider={config.provider}, model={model_str}, api_base={config.base_url}")
+        logger.info(
+            f"LLM 配置: provider={provider}, model={model_str}, "
+            f"base_url={config.base_url or '官方API'}"
+        )
 
         return result
 
