@@ -79,6 +79,10 @@ export const languages = {
     systemHelpReleaseWindow: '生效窗口',
     systemHelpReleaseSummary: '变更摘要',
     systemHelpReleaseSummaryText: '新增系统内架构中心、版本切换、目录导航与打印导出能力。',
+    systemHelpCompare: '版本对比',
+    systemHelpExitCompare: '退出对比',
+    systemHelpCompareTitle: '版本对比视图 (v1.0 ↔ v1.1)',
+    systemHelpChangeLogTitle: '变更清单 (v1.0 → v1.1)',
 
     // Dashboard
     dashNetworkDevices: '网络设备',
@@ -3454,6 +3458,10 @@ export const languages = {
     systemHelpReleaseWindow: 'Effective Window',
     systemHelpReleaseSummary: 'Change Summary',
     systemHelpReleaseSummaryText: 'Added in-app architecture center, version switching, table-of-contents navigation, and print/export capability.',
+    systemHelpCompare: 'Compare Versions',
+    systemHelpExitCompare: 'Exit Compare',
+    systemHelpCompareTitle: 'Version Comparison (v1.0 ↔ v1.1)',
+    systemHelpChangeLogTitle: 'Change Log (v1.0 → v1.1)',
 
     // Dashboard
     dashNetworkDevices: 'Network Devices',

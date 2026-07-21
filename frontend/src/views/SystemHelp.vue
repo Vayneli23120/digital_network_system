@@ -11,6 +11,9 @@
           </div>
         </div>
         <div class="hero-actions">
+          <el-button :type="compareMode ? 'warning' : 'default'" @click="toggleCompare">
+            {{ compareMode ? (t('systemHelpExitCompare') || '退出对比') : (t('systemHelpCompare') || '版本对比') }}
+          </el-button>
           <el-button @click="refreshDiagram">{{ t('commonRefresh') || '刷新' }}</el-button>
           <el-button @click="printAsPdf">{{ t('systemHelpPrintPdf') || '打印/PDF' }}</el-button>
           <el-button type="primary" @click="openStandalone">{{ t('systemHelpOpenNewTab') || '新窗口打开' }}</el-button>
@@ -24,7 +27,7 @@
       </div>
     </el-card>
 
-    <div class="workspace-grid">
+    <div class="workspace-grid" v-if="!compareMode">
       <el-card class="catalog-card" shadow="never">
         <template #header>
           <span>{{ t('systemHelpCatalogTitle') || '架构目录' }}</span>
@@ -64,6 +67,46 @@
       </el-card>
     </div>
 
+    <el-card class="compare-card" v-else shadow="never">
+      <template #header>
+        <div class="diagram-header">
+          <span>{{ t('systemHelpCompareTitle') || '版本对比视图 (v1.0 ↔ v1.1)' }}</span>
+          <el-select v-model="compareSection" class="compare-section-select" size="small" @change="onCompareSectionChange">
+            <el-option v-for="section in sections" :key="section.id" :label="section.label" :value="section.id" />
+          </el-select>
+        </div>
+      </template>
+
+      <div class="compare-grid">
+        <div class="compare-pane">
+          <div class="compare-pane-title baseline">v1.0 (Baseline)</div>
+          <iframe
+            :key="`base-${compareKey}`"
+            class="compare-frame"
+            :src="`/system-architecture-v1.0.html#${compareSection}`"
+            title="Architecture v1.0"
+          />
+        </div>
+        <div class="compare-pane">
+          <div class="compare-pane-title latest">v1.1 (Latest)</div>
+          <iframe
+            :key="`latest-${compareKey}`"
+            class="compare-frame"
+            :src="`/system-architecture.html#${compareSection}`"
+            title="Architecture v1.1"
+          />
+        </div>
+      </div>
+
+      <div class="change-log">
+        <div class="change-log-title">{{ t('systemHelpChangeLogTitle') || '变更清单 (v1.0 → v1.1)' }}</div>
+        <div class="change-item" v-for="(item, idx) in changeLog" :key="idx">
+          <el-tag :type="item.type" size="small" effect="light">{{ item.tag }}</el-tag>
+          <span class="change-text">{{ item.text }}</span>
+        </div>
+      </div>
+    </el-card>
+
     <el-card class="release-card" shadow="never">
       <template #header>
         <span>{{ t('systemHelpReleaseTitle') || '受控发布说明' }}</span>
@@ -99,6 +142,9 @@ const { t } = useI18n()
 const iframeKey = ref(0)
 const selectedSection = ref('overall-architecture')
 const selectedVersion = ref('v1.1')
+const compareMode = ref(false)
+const compareSection = ref('overall-architecture')
+const compareKey = ref(0)
 
 const versionOptions = [
   { value: 'v1.1', label: 'v1.1 (Latest)', url: '/system-architecture.html', updatedAt: '2026-07-21' },
@@ -121,6 +167,25 @@ const sections = [
 const selectedVersionMeta = computed(() => {
   return versionOptions.find(v => v.value === selectedVersion.value) || versionOptions[0]
 })
+
+const changeLog = [
+  { type: 'success', tag: '新增', text: '系统内“系统架构中心”页面，可直接在系统内查看架构图。' },
+  { type: 'success', tag: '新增', text: '架构目录导航、版本切换与打印/PDF 导出能力。' },
+  { type: 'warning', tag: '调整', text: 'LLM 集成由 Kimi 专用改为通用端点（Base URL + API Key，可接入任意兼容服务）。' },
+  { type: 'info', tag: '优化', text: '告警事件流统一排序，AI 研判改为卡片秒出 + 后台异步生成。' },
+]
+
+function toggleCompare() {
+  compareMode.value = !compareMode.value
+  if (compareMode.value) {
+    compareSection.value = selectedSection.value
+    compareKey.value += 1
+  }
+}
+
+function onCompareSectionChange() {
+  compareKey.value += 1
+}
 
 const diagramUrl = computed(() => {
   const base = selectedVersionMeta.value.url
@@ -300,6 +365,74 @@ function printAsPdf() {
   border: 1px solid #e4e7ed;
 }
 
+.compare-card {
+  border: 1px solid #e4e7ed;
+}
+
+.compare-section-select {
+  width: 260px;
+}
+
+.compare-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.compare-pane {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ebeef5;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.compare-pane-title {
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.compare-pane-title.baseline {
+  background: #909399;
+}
+
+.compare-pane-title.latest {
+  background: #409eff;
+}
+
+.compare-frame {
+  width: 100%;
+  height: 62vh;
+  border: none;
+  background: #fff;
+}
+
+.change-log {
+  margin-top: 16px;
+  border-top: 1px dashed #dcdfe6;
+  padding-top: 12px;
+}
+
+.change-log-title {
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 10px;
+}
+
+.change-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.change-text {
+  font-size: 13px;
+  color: #475569;
+}
+
 .release-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
@@ -343,6 +476,10 @@ function printAsPdf() {
 
   .catalog-card {
     position: static;
+  }
+
+  .compare-grid {
+    grid-template-columns: 1fr;
   }
 
   .diagram-wrap,
