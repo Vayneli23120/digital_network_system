@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>数字网络运维管理系统 - 系统架构图</title>
-    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <script src="/vendor/mermaid.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -72,6 +72,24 @@
             padding: 20px;
             margin: 20px 0;
             overflow-x: auto;
+        }
+
+        /* Hide raw mermaid source until the diagram is rendered to avoid garbled flash */
+        .mermaid:not([data-processed="true"]) {
+            visibility: hidden;
+            min-height: 120px;
+            position: relative;
+        }
+
+        .mermaid:not([data-processed="true"])::after {
+            content: '图形渲染中…';
+            visibility: visible;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #909399;
+            font-size: 14px;
         }
         
         .mermaid svg {
@@ -472,7 +490,9 @@ graph TB
     </div>
     
     <script>
-        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        if (window.mermaid) {
+            mermaid.initialize({ startOnLoad: true, theme: 'default' });
+        }
     </script>
 </body>
 </html>
