@@ -72,6 +72,13 @@ export const languages = {
     systemHelpUpdatedAtLabel: '最近更新',
     systemHelpPrintPdf: '打印/PDF',
     systemHelpQuickEntryDesc: '用于查看系统全景架构、模块关系与数据流，适合运维交接、问题定位与汇报展示。',
+    systemHelpCatalogTitle: '架构目录',
+    systemHelpReleaseTitle: '受控发布说明',
+    systemHelpReleaseOwner: '负责人',
+    systemHelpReleaseReviewer: '审核人',
+    systemHelpReleaseWindow: '生效窗口',
+    systemHelpReleaseSummary: '变更摘要',
+    systemHelpReleaseSummaryText: '新增系统内架构中心、版本切换、目录导航与打印导出能力。',
 
     // Dashboard
     dashNetworkDevices: '网络设备',
@@ -3440,6 +3447,13 @@ export const languages = {
     systemHelpUpdatedAtLabel: 'Updated At',
     systemHelpPrintPdf: 'Print/PDF',
     systemHelpQuickEntryDesc: 'Open a unified architecture view for operations handover, troubleshooting, and executive reporting.',
+    systemHelpCatalogTitle: 'Architecture Catalog',
+    systemHelpReleaseTitle: 'Controlled Release Notes',
+    systemHelpReleaseOwner: 'Owner',
+    systemHelpReleaseReviewer: 'Reviewer',
+    systemHelpReleaseWindow: 'Effective Window',
+    systemHelpReleaseSummary: 'Change Summary',
+    systemHelpReleaseSummaryText: 'Added in-app architecture center, version switching, table-of-contents navigation, and print/export capability.',
 
     // Dashboard
     dashNetworkDevices: 'Network Devices',
