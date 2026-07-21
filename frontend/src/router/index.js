@@ -276,6 +276,19 @@ const routes = [
       }
     ]
   },
+  {
+    path: '/system-help',
+    name: 'SystemHelpLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'SystemHelp',
+        component: () => import('@/views/SystemHelp.vue'),
+        meta: { title: '系统帮助' }
+      }
+    ]
+  },
   // v1.3 新增路由
   {
     path: '/users',
