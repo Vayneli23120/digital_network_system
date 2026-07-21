@@ -1,0 +1,40 @@
+{
+  "versions": [
+    {
+      "value": "v1.1",
+      "label": "v1.1 (Latest)",
+      "url": "/system-architecture.html",
+      "updatedAt": "2026-07-21",
+      "owner": "NOC Architecture Team",
+      "reviewer": "Platform Governance",
+      "effectiveWindow": "2026-07-21 00:00 - 23:59"
+    },
+    {
+      "value": "v1.0",
+      "label": "v1.0 (Baseline)",
+      "url": "/system-architecture-v1.0.html",
+      "updatedAt": "2026-07-20",
+      "owner": "NOC Architecture Team",
+      "reviewer": "Platform Governance",
+      "effectiveWindow": "2026-07-20 00:00 - 23:59"
+    }
+  ],
+  "sections": [
+    { "id": "overall-architecture", "label": "📐 整体系统架构" },
+    { "id": "core-dataflow-offline", "label": "🔄 核心数据流：设备离线检测" },
+    { "id": "realtime-alert-stream", "label": "🚨 实时告警事件流系统" },
+    { "id": "health-scoring", "label": "💊 设备健康评分算法" },
+    { "id": "ai-analysis-system", "label": "🤖 AI研判与建议系统" },
+    { "id": "fault-ai-triage", "label": "🔬 故障创建与AI预判流程" },
+    { "id": "cache-strategy", "label": "⚡ 多层缓存策略" },
+    { "id": "frontend-auto-refresh", "label": "🔄 前端自动刷新机制" },
+    { "id": "cost-trend-analysis", "label": "💰 成本分析与趋势预测" },
+    { "id": "deployment-architecture", "label": "🏗️ 部署架构" }
+  ],
+  "changeLog": [
+    { "type": "success", "tag": "新增", "text": "系统内“系统架构中心”页面，可直接在系统内查看架构图。" },
+    { "type": "success", "tag": "新增", "text": "架构目录导航、版本切换与打印/PDF 导出能力。" },
+    { "type": "warning", "tag": "调整", "text": "LLM 集成由 Kimi 专用改为通用端点（Base URL + API Key，可接入任意兼容服务）。" },
+    { "type": "info", "tag": "优化", "text": "告警事件流统一排序，AI 研判改为卡片秒出 + 后台异步生成。" }
+  ]
+}
