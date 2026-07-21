@@ -5,9 +5,14 @@
         <div>
           <h1>{{ t('systemHelpTitle') || '系统架构中心' }}</h1>
           <p>{{ t('systemHelpSubtitle') || '统一展示系统拓扑、模块关系与数据流，便于运维交接和故障分析。' }}</p>
+          <div class="meta-row">
+            <span>{{ t('systemHelpVersionLabel') || '架构版本' }}: {{ architectureVersion }}</span>
+            <span>{{ t('systemHelpUpdatedAtLabel') || '最近更新' }}: {{ updatedAt }}</span>
+          </div>
         </div>
         <div class="hero-actions">
           <el-button @click="refreshDiagram">{{ t('commonRefresh') || '刷新' }}</el-button>
+          <el-button @click="printAsPdf">{{ t('systemHelpPrintPdf') || '打印/PDF' }}</el-button>
           <el-button type="primary" @click="openStandalone">{{ t('systemHelpOpenNewTab') || '新窗口打开' }}</el-button>
         </div>
       </div>
@@ -47,6 +52,8 @@ const { t } = useI18n()
 
 const diagramUrl = '/system-architecture.html'
 const iframeKey = ref(0)
+const architectureVersion = 'v1.0.0'
+const updatedAt = '2026-07-21'
 
 function openStandalone() {
   window.open(diagramUrl, '_blank', 'noopener')
@@ -54,6 +61,14 @@ function openStandalone() {
 
 function refreshDiagram() {
   iframeKey.value += 1
+}
+
+function printAsPdf() {
+  const iframe = document.querySelector('.diagram-frame')
+  if (iframe && iframe.contentWindow) {
+    iframe.contentWindow.focus()
+    iframe.contentWindow.print()
+  }
 }
 </script>
 
@@ -89,6 +104,15 @@ function refreshDiagram() {
   margin: 8px 0 0;
   color: #606266;
   font-size: 14px;
+}
+
+.meta-row {
+  margin-top: 10px;
+  display: flex;
+  gap: 14px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 12px;
 }
 
 .hero-actions {

@@ -68,6 +68,10 @@ export const languages = {
     systemHelpPointAsync: '异步研判：规则卡片秒级返回，AI 总结后台生成并自动更新。',
     systemHelpDiagramTitle: '系统全景架构图',
     systemHelpDiagramTip: '支持缩放与滚动查看',
+    systemHelpVersionLabel: '架构版本',
+    systemHelpUpdatedAtLabel: '最近更新',
+    systemHelpPrintPdf: '打印/PDF',
+    systemHelpQuickEntryDesc: '用于查看系统全景架构、模块关系与数据流，适合运维交接、问题定位与汇报展示。',
 
     // Dashboard
     dashNetworkDevices: '网络设备',
@@ -3432,6 +3436,10 @@ export const languages = {
     systemHelpPointAsync: 'Asynchronous analysis: rule cards return instantly while AI summary updates in background.',
     systemHelpDiagramTitle: 'System Architecture Overview',
     systemHelpDiagramTip: 'Supports zoom and scroll navigation',
+    systemHelpVersionLabel: 'Architecture Version',
+    systemHelpUpdatedAtLabel: 'Updated At',
+    systemHelpPrintPdf: 'Print/PDF',
+    systemHelpQuickEntryDesc: 'Open a unified architecture view for operations handover, troubleshooting, and executive reporting.',
 
     // Dashboard
     dashNetworkDevices: 'Network Devices',
