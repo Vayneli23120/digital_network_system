@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>数字网络运维管理系统 - 系统架构图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .header p {
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .diagram-section {
+            margin-bottom: 60px;
+        }
+        
+        .diagram-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #333;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 3px solid #667eea;
+            display: inline-block;
+        }
+        
+        .mermaid {
+            display: flex;
+            justify-content: center;
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            overflow-x: auto;
+        }
+        
+        .mermaid svg {
+            max-width: 100%;
+            height: auto;
+        }
+        
+        .description {
+            font-size: 14px;
+            color: #666;
+            line-height: 1.6;
+            margin-top: 15px;
+            padding: 12px;
+            background: #f0f4ff;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        
+        .footer {
+            background: #f8f9fa;
+            padding: 30px;
+            text-align: center;
+            color: #666;
+            border-top: 1px solid #e0e0e0;
+        }
+        
+        @media (max-width: 768px) {
+            .content {
+                padding: 20px;
+            }
+            
+            .header h1 {
+                font-size: 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏢 数字网络运维管理系统</h1>
+            <p>专业的智能网络运维一体化平台</p>
+        </div>
+        
+        <div class="content">
+            <!-- 整体架构 -->
+            <div class="diagram-section">
+                <div class="diagram-title">📐 整体系统架构</div>
+                <div class="mermaid">
+graph TB
+    subgraph Client["🖥️ 前端层 (Vue 3)"]
+        Dashboard["📊 仪表板"]
+        Operations["🔧 运维总览"]
+        Devices["🖧 设备管理"]
+        Faults["⚠️ 故障管理"]
+        Monitor3D["🎯 3D监控"]
+        Compliance["✓ 合规中心"]
+    end
+
+    subgraph API["🔌 API网关 (FastAPI)"]
+        DashRouter["Dashboard"]
+        DeviceRouter["Device"]
+        FaultRouter["Fault"]
+        AIRouter["AI"]
+        MonitorRouter["Monitor"]
+    end
+
+    subgraph Services["⚙️ 业务服务层"]
+        DashService["Dashboard Service"]
+        HealthService["Health Calculator"]
+        AIService["AI Triage Service"]
+        FaultService["Fault Service"]
+        MonitorService["Monitor Service"]
+    end
+
+    subgraph Data["💾 数据层"]
+        Cache["⚡ Cache"]
+        SQLite["🗄️ SQLite"]
+        PostgreSQL["🐘 PostgreSQL"]
+    end
+
+    subgraph External["🌐 外部集成"]
+        LLM_API["🤖 灵活LLM集成<br/>配置Base URL + API Key<br/>支持任意兼容端点"]
+        Netmiko["🔌 Netmiko"]
+        SNMP["📡 SNMP"]
+        Celery["⏱️ Celery"]
+    end
+
+    Client -->|HTTP/REST| API
+    API -->|调用| Services
+    Services -->|读写| Data
+    Services -->|集成| External
+    
+    style Client fill:#e1f5ff,stroke:#01579b,stroke-width:2px
+    style API fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Services fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style Data fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style External fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+                </div>
+                <div class="description">
+                    系统采用典型的四层分布式架构：前端展示层 → API 网关 → 业务服务层 → 数据持久化层 + 外部集成。
+                </div>
+            </div>
+
+            <!-- 数据流 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🔄 核心数据流：设备离线检测</div>
+                <div class="mermaid">
+sequenceDiagram
+    participant Device as 网络设备
+    participant Monitor as SNMP采集器
+    participant Backend as FastAPI后端
+    participant DB as 数据库
+    participant Cache as 缓存
+    participant Frontend as 前端大屏
+    
+    Device->>Monitor: Ping失败/SNMP无响应
+    Monitor->>Backend: 更新 reachability=unreachable
+    Backend->>DB: 持久化设备状态
+    Backend->>Cache: 清除告警流缓存
+    rect rgb(200, 150, 255)
+        Frontend->>Frontend: 30s自动轮询
+        Frontend->>Backend: GET /api/dashboard/alerts
+    end
+    Backend->>DB: 查询离线设备告警
+    Backend->>Cache: 缓存告警(30s TTL)
+    Backend-->>Frontend: 返回告警列表
+    Frontend->>Frontend: 渲染告警事件流
+    Frontend->>Frontend: 显示"设备掉线: cn-core-01"
+    Note over Frontend: 用户无需手动刷新，30s内自动显示
+                </div>
+                <div class="description">
+                    演示了从设备事件到用户界面的完整流程，包括缓存策略和自动刷新机制。
+                </div>
+            </div>
+
+            <!-- 告警流系统 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🚨 实时告警事件流系统</div>
+                <div class="mermaid">
+graph TD
+    A["设备掉线<br/>rank=0<br/>severity=danger"] -->|统一排序| Sort["按严重度+时间<br/>倒序排序"]
+    B["Critical故障<br/>rank=0<br/>severity=danger"] --> Sort
+    C["温度≥80℃<br/>rank=0<br/>severity=danger"] --> Sort
+    D["Major故障<br/>rank=1<br/>severity=warn"] --> Sort
+    E["温度≥70℃<br/>rank=1<br/>severity=warn"] --> Sort
+    F["备份超期<br/>rank=2<br/>severity=warn"] --> Sort
+    
+    Sort -->|limit 12| Stream["📡 告警事件流<br/>最新12条告警"]
+    Stream -->|30s自动刷新| Display["🖥️ Operations<br/>下方实时显示"]
+    
+    style Sort fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style Stream fill:#f48fb1,stroke:#c2185b,stroke-width:2px
+    style Display fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+                </div>
+                <div class="description">
+                    统一的告警流合并了6种告警类型，按严重度和时间戳排序，提供一致的用户体验。每30秒自动刷新，数据变化无需手动操作。
+                </div>
+            </div>
+
+            <!-- 健康评分系统 -->
+            <div class="diagram-section">
+                <div class="diagram-title">💊 设备健康评分算法</div>
+                <div class="mermaid">
+graph LR
+    Temp["🌡️ 温度因子<br/>30%<br/>权重最高"] -->|综合计算| Score["📊 综合<br/>健康评分<br/>0-100"]
+    
+    Fault["⚠️ 故障频率<br/>25%"] --> Score
+    Age["📅 设备年龄<br/>20%"] --> Score
+    Repair["🔧 维修频率<br/>10%"] --> Score
+    Log["📝 日志异常<br/>5%"] --> Score
+    AI["🤖 AI分析<br/>10%"] --> Score
+    
+    Score -->|评分区间| LevelGreen["≥80: 优秀 🟢"]
+    Score -->|评分区间| LevelYellow["60-79: 良好 🟡"]
+    Score -->|评分区间| LevelRed["<60: 需关注 🔴"]
+    
+    LevelGreen -.-> Device["🖧 设备卡片显示<br/>健康度条+风险因子"]
+    LevelYellow -.-> Device
+    LevelRed -.-> Device
+    
+    style Score fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style Temp fill:#ffccbc,stroke:#d84315,stroke-width:2px
+    style Device fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+                </div>
+                <div class="description">
+                    多因子加权评分，温度作为最高权重因子(30%)。低于60分的设备自动触发关注卡片和处置建议。
+                </div>
+            </div>
+
+            <!-- AI研判系统 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🤖 AI研判与建议系统</div>
+                <div class="mermaid">
+graph LR
+    Cards["📋 规则卡片<br/>秒级生成"]
+    
+    TempHigh["🌡️ 温度过高"] -.-> Cards
+    HealthLow["💔 健康度低"] -.-> Cards
+    CriticalFault["⚠️ 重要故障"] -.-> Cards
+    SpareLow["📦 备件不足"] -.-> Cards
+    
+    Cards -->|立即返回| UICard["🖥️ 用户立即看到<br/>卡片列表"]
+    Cards -->|后台异步| AICall["🤖 LLM 智能分析<br/>(自定义端点配置)<br/>5-60秒"]
+    
+    AICall -->|成功| Brief["📝 研判总结<br/>+ 优先级建议"]
+    AICall -->|失败/超时| Cool["❄️ 冷却3分钟<br/>不重复调用"]
+    
+    Brief -->|缓存15分钟| Cache["💾 缓存结果"]
+    Cool -->|缓存标记| Cache
+    
+    Cache -->|前端轮询| Show["🎯 研判区域更新<br/>智能建议展示"]
+    
+    style Cards fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style AICall fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    style Brief fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style Show fill:#f8bbd0,stroke:#880e4f,stroke-width:2px
+                </div>
+                <div class="description">
+                    创新的"卡片秒出 + AI后台" 模式：规则卡片立即显示，AI分析在后台进行，避免阻塞用户交互。失败时有3分钟冷却期，防止频繁重试。
+                </div>
+            </div>
+
+            <!-- 故障诊断流程 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🔬 故障创建与AI预判流程</div>
+                <div class="mermaid">
+graph TD
+    Create["创建故障单<br/>POST /api/faults"]
+    Create -->|触发| AITrigger["🤖 后台任务<br/>Celery异步执行"]
+    
+    AITrigger -->|收集| Context["📋 故障上下文<br/>• 设备信息<br/>• 最新指标<br/>• 历史故障"]
+    
+    Context -->|调用| AI["🤖 LLM 根因分析<br/>(自定义Base URL/API Key)"]
+    
+    AI -->|返回| Analysis["🔍 根因分析结果<br/>• probable_cause<br/>• recommendations<br/>• confidence"]
+    
+    Analysis -->|存储| DB["💾 数据库<br/>FaultRecord.ai_root_cause"]
+    
+    DB -->|异步更新| UI["🖥️ 故障详情页<br/>显示AI根因分析"]
+    
+    UI -->|用户操作| Manual["✏️ 人工验证/修改<br/>确认处置步骤"]
+    
+    Manual -->|执行| Resolve["✅ 故障闭环<br/>记录处置记录"]
+    
+    style Create fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style AITrigger fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    style Analysis fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style UI fill:#f8bbd0,stroke:#880e4f,stroke-width:2px
+                </div>
+                <div class="description">
+                    自动故障创建时触发AI预判，不阻塞用户操作。AI分析结果异步存储，用户可在详情页查看建议。
+                </div>
+            </div>
+
+            <!-- 缓存策略 -->
+            <div class="diagram-section">
+                <div class="diagram-title">⚡ 多层缓存策略</div>
+                <div class="mermaid">
+graph TB
+    Request["HTTP请求"]
+    Request -->|命中?| L1{"L1: 路由缓存<br/>30s-15s"}
+    
+    L1 -->|Hit| Return["✅ 返回缓存<br/>毫秒级响应"]
+    L1 -->|Miss| Query["查询数据库"]
+    
+    Query -->|数据库| L2{"L2: 规则计算<br/>即时"}
+    L2 -->|计算卡片| Cards["规则卡片<br/>健康评分等"]
+    
+    Cards -->|异步后台| L3{"L3: AI分析<br/>900s缓存<br/>失败180s冷却"}
+    
+    L3 -->|成功| AIDone["AI结果存储"]
+    L3 -->|失败| Cooldown["冷却标记"]
+    
+    AIDone -->|缓存900s| Cache["💾 缓存<br/>下次直接用"]
+    Cooldown -->|缓存180s| Cache
+    
+    Cache -->|过期| Refresh["后台自动刷新<br/>用户无感知"]
+    
+    style L1 fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style Return fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+    style Cards fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style L3 fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    style Cache fill:#f8bbd0,stroke:#880e4f,stroke-width:2px
+                </div>
+                <div class="description">
+                    三层缓存策略：路由层15-30秒缓存、规则计算即时、AI分析900秒缓存。失败/空结果也缓存180秒冷却，防止频繁重试。
+                </div>
+            </div>
+
+            <!-- 自动刷新机制 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🔄 前端自动刷新机制</div>
+                <div class="mermaid">
+graph LR
+    subgraph Dashboard["📊 仪表板 Dashboard.vue"]
+        KPI["KPI统计卡<br/>30s轮询"]
+        Realtime["实时基础设施<br/>30s轮询"]
+        AI["AI领导摘要<br/>pending时轮询"]
+    end
+    
+    subgraph Operations["🔧 运维总览 Operations.vue"]
+        Stats["统计卡<br/>30s轮询"]
+        Alerts["告警事件流<br/>30s轮询"]
+        Cards["AI研判卡<br/>pending时轮询"]
+    end
+    
+    Dashboard -->|定时器| Backend1["FastAPI<br/>getData()"]
+    Operations -->|定时器| Backend2["FastAPI<br/>getData()"]
+    
+    Backend1 -->|缓存命中| Fast1["毫秒级返回"]
+    Backend2 -->|缓存命中| Fast2["毫秒级返回"]
+    
+    Fast1 -->|更新| UI1["🖥️ 页面自动刷新<br/>无需用户操作"]
+    Fast2 -->|更新| UI2["🖥️ 页面自动刷新<br/>无需用户操作"]
+    
+    style Dashboard fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    style Operations fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    style Backend1 fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style UI1 fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+                </div>
+                <div class="description">
+                    两个大屏都实现了30秒自动轮询机制，确保统计卡/告警流/KPI始终最新，数据变化（设备离线、新故障、新备份）会在30秒内自动反映到界面。
+                </div>
+            </div>
+
+            <!-- 成本分析系统 -->
+            <div class="diagram-section">
+                <div class="diagram-title">💰 成本分析与趋势预测</div>
+                <div class="mermaid">
+graph LR
+    Hard["🖥️ 硬件成本"]
+    Maint["🔧 维保成本"]
+    Labor["👥 人工成本"]
+    Energy["⚡ 电力成本"]
+    
+    Hard -->|聚合| Total["💵 月度总成本"]
+    Maint --> Total
+    Labor --> Total
+    Energy --> Total
+    
+    Total -->|每月累积| History["📊 历史数据<br/>12个月"]
+    
+    History -->|算法分析| Trend["📈 趋势分析<br/>• 环比增长<br/>• 同比对比<br/>• 预测下月"]
+    
+    Trend -->|可视化| Chart["🎯 成本热力图<br/>柱状图/折线图"]
+    
+    Chart -->|输出| Report["📋 报表<br/>支持邮件发送"]
+    
+    style Total fill:#fff9c4,stroke:#f57f17,stroke-width:2px
+    style History fill:#ffe0b2,stroke:#e65100,stroke-width:2px
+    style Trend fill:#bbdefb,stroke:#0d47a1,stroke-width:2px
+    style Chart fill:#c8e6c9,stroke:#1b5e20,stroke-width:2px
+                </div>
+                <div class="description">
+                    多维度成本追踪，支持硬件、维保、人工、电力等成本类别，实时计算并提供趋势预测和对标分析。
+                </div>
+            </div>
+
+            <!-- 部署拓扑 -->
+            <div class="diagram-section">
+                <div class="diagram-title">🏗️ 部署架构</div>
+                <div class="mermaid">
+graph TB
+    User["👥 用户浏览器/<br/>移动端"]
+    User -->|HTTPS| LB["⚖️ Nginx/LB<br/>可选负载均衡"]
+    
+    LB -->|转发| Backend["🐍 FastAPI<br/>Uvicorn服务器<br/>• 前端资源服务<br/>• REST API<br/>• 业务逻辑"]
+    
+    Backend -->|读写| Cache["⚡ SimpleCache<br/>内存缓存<br/>15-900s"]
+    Backend -->|CRUD| DB["🗄️ 数据库<br/>SQLite(开发)<br/>PostgreSQL(生产)"]
+    Backend -->|异步任务| Celery["⏱️ Celery Worker<br/>后台队列<br/>• AI生成<br/>• 邮件发送<br/>• 长流程任务"]
+    
+    Backend -->|调用| External["🌐 外部服务<br/>• 灵活LLM端点(自定义)<br/>• SNMP/Syslog<br/>• Netmiko命令"]
+    
+    Celery -->|同步| DB
+    Celery -->|调用| External
+    
+    style Backend fill:#fff3e0,stroke:#e65100,stroke-width:2px
+    style Cache fill:#e1f5fe,stroke:#01579b,stroke-width:2px
+    style DB fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    style Celery fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+    style External fill:#fff8e1,stroke:#f57f17,stroke-width:2px
+                </div>
+                <div class="description">
+                    单体架构设计，易于部署和维护。前后端集成在FastAPI中，数据库支持SQLite(本地开发)和PostgreSQL(生产部署)，Celery处理异步任务避免阻塞。
+                </div>
+            </div>
+
+        </div>
+        
+        <div class="footer">
+            <p>数字网络运维管理系统 v1.0</p>
+            <p style="font-size: 12px; margin-top: 8px;">
+                一站式网络运维平台 | AI驱动 | 实时监控 | 智能诊断 | 成本透明
+            </p>
+        </div>
+    </div>
+    
+    <script>
+        mermaid.initialize({ startOnLoad: true, theme: 'default' });
+    </script>
+</body>
+</html>
