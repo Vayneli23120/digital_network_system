@@ -37,6 +37,18 @@
       </el-form>
     </el-card>
 
+    <el-card style="margin-top: 20px">
+      <template #header>
+        <div class="card-header">
+          <span>{{ t('systemHelpTitle') || '系统架构中心' }}</span>
+          <el-button type="primary" plain @click="goSystemHelp">{{ t('menuSystemHelp') || '系统帮助' }}</el-button>
+        </div>
+      </template>
+      <div class="slo-hint">
+        {{ t('systemHelpQuickEntryDesc') || '用于查看系统全景架构、模块关系与数据流，适合运维交接、问题定位与汇报展示。' }}
+      </div>
+    </el-card>
+
     <!-- SLO 服务配置 -->
     <el-card style="margin-top: 20px">
       <template #header>
@@ -107,11 +119,13 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
+const router = useRouter()
 
 const loading = ref(false)
 const saving = ref(false)
@@ -168,6 +182,10 @@ async function saveSettings() {
   } finally {
     saving.value = false
   }
+}
+
+function goSystemHelp() {
+  router.push('/system-help')
 }
 
 onMounted(loadSettings)
