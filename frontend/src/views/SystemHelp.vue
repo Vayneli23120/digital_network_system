@@ -79,21 +79,21 @@
 
       <div class="compare-grid">
         <div class="compare-pane">
-          <div class="compare-pane-title baseline">v1.0 (Baseline)</div>
+          <div class="compare-pane-title baseline">{{ baselineVersion.label }}</div>
           <iframe
             :key="`base-${compareKey}`"
             class="compare-frame"
-            :src="`/system-architecture-v1.0.html#${compareSection}`"
-            title="Architecture v1.0"
+            :src="`${baselineVersion.url}#${compareSection}`"
+            title="Architecture Baseline"
           />
         </div>
         <div class="compare-pane">
-          <div class="compare-pane-title latest">v1.1 (Latest)</div>
+          <div class="compare-pane-title latest">{{ latestVersion.label }}</div>
           <iframe
             :key="`latest-${compareKey}`"
             class="compare-frame"
-            :src="`/system-architecture.html#${compareSection}`"
-            title="Architecture v1.1"
+            :src="`${latestVersion.url}#${compareSection}`"
+            title="Architecture Latest"
           />
         </div>
       </div>
@@ -114,15 +114,15 @@
       <div class="release-grid">
         <div class="release-item">
           <div class="label">{{ t('systemHelpReleaseOwner') || '负责人' }}</div>
-          <div class="value">NOC Architecture Team</div>
+          <div class="value">{{ selectedVersionMeta.owner || 'NOC Architecture Team' }}</div>
         </div>
         <div class="release-item">
           <div class="label">{{ t('systemHelpReleaseReviewer') || '审核人' }}</div>
-          <div class="value">Platform Governance</div>
+          <div class="value">{{ selectedVersionMeta.reviewer || 'Platform Governance' }}</div>
         </div>
         <div class="release-item">
           <div class="label">{{ t('systemHelpReleaseWindow') || '生效窗口' }}</div>
-          <div class="value">2026-07-21 00:00 - 23:59</div>
+          <div class="value">{{ selectedVersionMeta.effectiveWindow || '—' }}</div>
         </div>
         <div class="release-item">
           <div class="label">{{ t('systemHelpReleaseSummary') || '变更摘要' }}</div>
@@ -134,7 +134,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -146,12 +146,13 @@ const compareMode = ref(false)
 const compareSection = ref('overall-architecture')
 const compareKey = ref(0)
 
-const versionOptions = [
-  { value: 'v1.1', label: 'v1.1 (Latest)', url: '/system-architecture.html', updatedAt: '2026-07-21' },
-  { value: 'v1.0', label: 'v1.0 (Baseline)', url: '/system-architecture-v1.0.html', updatedAt: '2026-07-20' },
-]
+// Fallback data used until the manifest is loaded (keeps page usable offline)
+const versionOptions = ref([
+  { value: 'v1.1', label: 'v1.1 (Latest)', url: '/system-architecture.html', updatedAt: '2026-07-21', owner: 'NOC Architecture Team', reviewer: 'Platform Governance', effectiveWindow: '2026-07-21 00:00 - 23:59' },
+  { value: 'v1.0', label: 'v1.0 (Baseline)', url: '/system-architecture-v1.0.html', updatedAt: '2026-07-20', owner: 'NOC Architecture Team', reviewer: 'Platform Governance', effectiveWindow: '2026-07-20 00:00 - 23:59' },
+])
 
-const sections = [
+const sections = ref([
   { id: 'overall-architecture', label: '📐 整体系统架构' },
   { id: 'core-dataflow-offline', label: '🔄 核心数据流：设备离线检测' },
   { id: 'realtime-alert-stream', label: '🚨 实时告警事件流系统' },
@@ -162,18 +163,49 @@ const sections = [
   { id: 'frontend-auto-refresh', label: '🔄 前端自动刷新机制' },
   { id: 'cost-trend-analysis', label: '💰 成本分析与趋势预测' },
   { id: 'deployment-architecture', label: '🏗️ 部署架构' },
-]
+])
 
-const selectedVersionMeta = computed(() => {
-  return versionOptions.find(v => v.value === selectedVersion.value) || versionOptions[0]
-})
-
-const changeLog = [
+const changeLog = ref([
   { type: 'success', tag: '新增', text: '系统内“系统架构中心”页面，可直接在系统内查看架构图。' },
   { type: 'success', tag: '新增', text: '架构目录导航、版本切换与打印/PDF 导出能力。' },
   { type: 'warning', tag: '调整', text: 'LLM 集成由 Kimi 专用改为通用端点（Base URL + API Key，可接入任意兼容服务）。' },
   { type: 'info', tag: '优化', text: '告警事件流统一排序，AI 研判改为卡片秒出 + 后台异步生成。' },
-]
+])
+
+const baselineVersion = computed(() => {
+  return versionOptions.value.find(v => v.value !== selectedVersion.value) || versionOptions.value[versionOptions.value.length - 1]
+})
+
+const latestVersion = computed(() => versionOptions.value[0] || {})
+
+const selectedVersionMeta = computed(() => {
+  return versionOptions.value.find(v => v.value === selectedVersion.value) || versionOptions.value[0]
+})
+
+async function loadManifest() {
+  try {
+    const res = await fetch('/system-architecture-manifest.json', { cache: 'no-cache' })
+    if (!res.ok) return
+    const data = await res.json()
+    if (Array.isArray(data.versions) && data.versions.length) {
+      versionOptions.value = data.versions
+      if (!versionOptions.value.some(v => v.value === selectedVersion.value)) {
+        selectedVersion.value = versionOptions.value[0].value
+      }
+    }
+    if (Array.isArray(data.sections) && data.sections.length) {
+      sections.value = data.sections
+    }
+    if (Array.isArray(data.changeLog) && data.changeLog.length) {
+      changeLog.value = data.changeLog
+    }
+  } catch (err) {
+    // Silent fallback to built-in defaults
+    console.warn('Failed to load architecture manifest, using defaults.', err)
+  }
+}
+
+onMounted(loadManifest)
 
 function toggleCompare() {
   compareMode.value = !compareMode.value
@@ -188,7 +220,7 @@ function onCompareSectionChange() {
 }
 
 const diagramUrl = computed(() => {
-  const base = selectedVersionMeta.value.url
+  const base = selectedVersionMeta.value?.url || '/system-architecture.html'
   const anchor = selectedSection.value ? `#${selectedSection.value}` : ''
   return `${base}${anchor}`
 })
