@@ -27,6 +27,94 @@
       </div>
     </el-card>
 
+    <!-- ====== 系统开发目的与简介 ====== -->
+    <el-card class="intro-card" shadow="never">
+      <div class="section-header">
+        <span class="section-icon">🎯</span>
+        <span>{{ t('systemHelpIntroTitle') || '系统开发目的与简介' }}</span>
+      </div>
+      <div class="intro-body">
+        <p>{{ t('systemHelpIntroP1') || '本系统（Network Automation System, NAS）是为工厂/园区级网络运维场景量身打造的一站式智能化运维平台...' }}</p>
+        <p>{{ t('systemHelpIntroP2') || '适用于：NOC 值班监控、网络工程师日常运维、管理层 KPI 汇报...' }}</p>
+        <p class="intro-tech-stack">{{ t('systemHelpIntroP3') || '底层基于 FastAPI + Vue 3 + PostgreSQL 构建...' }}</p>
+      </div>
+    </el-card>
+
+    <!-- ====== 核心功能与算法 ====== -->
+    <el-card class="feature-card" shadow="never">
+      <div class="section-header">
+        <span class="section-icon">⚙️</span>
+        <span>{{ t('systemHelpFeatureTitle') || '核心功能与算法' }}</span>
+      </div>
+      <div class="feature-grid">
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">🌐</span>
+            <span class="feature-title">{{ t('systemHelpFeature3dTitle') || '3D 数字孪生监控' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeature3dDesc') || '基于 Three.js 构建的 3D 机房/设备拓扑可视化引擎...' }}</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">🤖</span>
+            <span class="feature-title">{{ t('systemHelpFeatureAiTitle') || 'AI 智能研判' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeatureAiDesc') || '基于 LLM 的智能运维助手...' }}</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">💊</span>
+            <span class="feature-title">{{ t('systemHelpFeatureHealthTitle') || '设备健康评分算法' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeatureHealthDesc') || '综合多维度指标加权计算设备健康分...' }}</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">🔮</span>
+            <span class="feature-title">{{ t('systemHelpFeaturePredictTitle') || '预测性维护' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeaturePredictDesc') || '基于设备健康评分趋势、温度历史曲线、故障频率等数据...' }}</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">🚨</span>
+            <span class="feature-title">{{ t('systemHelpFeatureAlertTitle') || '实时告警事件流' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeatureAlertDesc') || '统一聚合多源告警...' }}</p>
+        </div>
+        <div class="feature-item">
+          <div class="feature-item-header">
+            <span class="feature-icon">⚡</span>
+            <span class="feature-title">{{ t('systemHelpFeatureCacheTitle') || '多层缓存策略' }}</span>
+          </div>
+          <p>{{ t('systemHelpFeatureCacheDesc') || '采用内存缓存 + 分布式 Redis 两级缓存...' }}</p>
+        </div>
+      </div>
+    </el-card>
+
+    <!-- ====== 3D 数字孪生详解 ====== -->
+    <el-card class="dt-card" shadow="never">
+      <div class="section-header">
+        <span class="section-icon">🌐</span>
+        <span>{{ t('systemHelpDtTitle') || '3D 数字孪生 — 详解' }}</span>
+      </div>
+
+      <div class="dt-grid">
+        <div class="dt-item">
+          <div class="dt-item-title">{{ t('systemHelpDtArchTitle') || '系统架构' }}</div>
+          <p>{{ t('systemHelpDtArchDesc') || '3D 数字孪生模块由三部分组成...' }}</p>
+        </div>
+        <div class="dt-item">
+          <div class="dt-item-title">{{ t('systemHelpDtAlgoTitle') || '核心算法' }}</div>
+          <p>{{ t('systemHelpDtAlgoDesc') || '① 空间布局算法...' }}</p>
+        </div>
+        <div class="dt-item dt-item-full">
+          <div class="dt-item-title">{{ t('systemHelpDtBizTitle') || '业务价值' }}</div>
+          <p style="white-space: pre-line; line-height: 1.8;">{{ t('systemHelpDtBizDesc') || '• 一屏可视...' }}</p>
+        </div>
+      </div>
+    </el-card>
+
     <div class="workspace-grid" v-if="!compareMode">
       <el-card class="catalog-card" shadow="never">
         <template #header>
@@ -520,4 +608,128 @@ function printAsPdf() {
     height: 66vh;
   }
 }
+
+/* ===== 系统简介 ===== */
+.intro-card {
+  border: 1px solid #e4e7ed;
+  background: linear-gradient(135deg, #f0f9ff 0%, #e6f7ff 100%);
+}
+.intro-body p {
+  color: #475569;
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 10px 0;
+}
+.intro-tech-stack {
+  color: #64748b !important;
+  font-size: 13px !important;
+  background: rgba(255,255,255,0.6);
+  border-radius: 8px;
+  padding: 10px 14px;
+  border: 1px solid #e5eaf3;
+}
+
+/* ===== 核心功能网格 ===== */
+.feature-card {
+  border: 1px solid #e4e7ed;
+}
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+  gap: 14px;
+}
+.feature-item {
+  border: 1px solid #e8ecf4;
+  border-radius: 10px;
+  padding: 16px;
+  background: #fafcff;
+  transition: box-shadow 0.2s;
+}
+.feature-item:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.feature-item-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.feature-icon {
+  font-size: 22px;
+  line-height: 1;
+}
+.feature-title {
+  font-weight: 600;
+  color: #1d4ed8;
+  font-size: 15px;
+}
+.feature-item p {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.65;
+  margin: 0;
+}
+
+/* ===== 3D 数字孪生详解 ===== */
+.dt-card {
+  border: 1px solid #e4e7ed;
+  background: linear-gradient(135deg, #f5f3ff 0%, #eef2ff 100%);
+}
+.dt-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.dt-item {
+  border: 1px solid #e0e7ff;
+  border-radius: 10px;
+  padding: 16px;
+  background: rgba(255,255,255,0.8);
+  transition: box-shadow 0.2s;
+}
+.dt-item:hover {
+  box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+}
+.dt-item-full {
+  grid-column: 1 / -1;
+}
+.dt-item-title {
+  font-weight: 600;
+  color: #4338ca;
+  font-size: 15px;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e7ff;
+}
+.dt-item p {
+  color: #475569;
+  font-size: 13px;
+  line-height: 1.7;
+  margin: 0;
+}
+
+/* ===== 通用 section-header ===== */
+.section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 6px;
+}
+.section-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+
+@media (max-width: 900px) {
+  .feature-grid {
+    grid-template-columns: 1fr;
+  }
+  .dt-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 </style>

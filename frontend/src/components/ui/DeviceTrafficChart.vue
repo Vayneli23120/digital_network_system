@@ -32,7 +32,7 @@ const props = defineProps({
 
 const chartRef = ref(null)
 let chart = null
-let resizeHandler = null
+let resizeObserver = null
 
 const ifaceOptions = ref([])
 const selectedIf = ref(null)
@@ -91,7 +91,7 @@ const renderChart = (samples) => {
       backgroundColor: 'transparent',
       tooltip: { trigger: 'axis', valueFormatter: (v) => fmtBps(v) },
       legend: { data: [t('dtcInbound'), t('dtcOutbound')], textStyle: { color: textColor }, top: 0 },
-      grid: { left: 60, right: 20, top: 36, bottom: 30 },
+      grid: { left: 85, right: 20, top: 46, bottom: 30 },
       xAxis: { type: 'category', data: times, axisLabel: { color: textColor } },
       yAxis: { type: 'value', axisLabel: { color: textColor, formatter: (v) => fmtBps(v) } },
       series: [
@@ -104,14 +104,16 @@ const renderChart = (samples) => {
 
 onMounted(() => {
   loadInterfaces()
-  resizeHandler = () => chart && chart.resize()
-  window.addEventListener('resize', resizeHandler)
+  if (chartRef.value) {
+    resizeObserver = new ResizeObserver(() => { chart && chart.resize() })
+    resizeObserver.observe(chartRef.value)
+  }
 })
 
 watch(currentLang, () => { if (selectedIf.value != null) loadTraffic() })
 
 onBeforeUnmount(() => {
-  if (resizeHandler) window.removeEventListener('resize', resizeHandler)
+  if (resizeObserver) resizeObserver.disconnect()
   if (chart) { chart.dispose(); chart = null }
 })
 </script>

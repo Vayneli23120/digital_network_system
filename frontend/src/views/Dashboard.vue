@@ -224,12 +224,12 @@ const stopAiSummaryPoll = () => {
   aiSummaryPollCount = 0
 }
 const scheduleAiSummaryPoll = () => {
-  if (aiSummaryTimer || aiSummaryPollCount >= 8) return
+  if (aiSummaryTimer || aiSummaryPollCount >= 16) return
   aiSummaryTimer = setTimeout(async () => {
     aiSummaryTimer = null
     aiSummaryPollCount += 1
     await loadAiSummary()
-  }, 5000)
+  }, 7000)
 }
 
 const loadRealtime = async () => {

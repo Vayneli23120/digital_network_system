@@ -508,12 +508,12 @@ const stopAiPoll = () => {
   aiPollCount = 0
 }
 const scheduleAiPoll = () => {
-  if (aiPollTimer || aiPollCount >= 8) return
+  if (aiPollTimer || aiPollCount >= 16) return
   aiPollTimer = setTimeout(async () => {
     aiPollTimer = null
     aiPollCount += 1
     await loadAiRecommendations()
-  }, 5000)
+  }, 7000)
 }
 const loadAiRecommendations = async () => {
   try {

@@ -19,8 +19,10 @@ from app.shared.models import (
     SparePart,
 )
 
+import asyncio
 import json
 import re
+from loguru import logger
 
 _SYSTEM_PROMPT = (
     "你是工业网络设备运维专家。基于给定的设备与故障上下文，给出简明的初步"
@@ -309,24 +311,75 @@ async def generate_executive_narrative(kpis: Dict) -> Optional[Dict]:
     if not lines:
         return None
 
-    chat_result = await adk_runner.chat(
-        message="关键指标如下：\n" + "\n".join(lines),
-        system_prompt=_EXEC_SYSTEM_PROMPT,
-        temperature=0.3,
-        max_tokens=600,
-        timeout=60,
-    )
-    if not chat_result.get("success"):
-        return None
+    for attempt in range(2):
+        chat_result = await adk_runner.chat(
+            message="关键指标如下：\n" + "\n".join(lines),
+            system_prompt=_EXEC_SYSTEM_PROMPT,
+            temperature=0.3,
+            max_tokens=600,
+            timeout=60,
+        )
+        if not chat_result.get("success"):
+            return None
 
-    parsed = _parse_object(chat_result.get("response", ""))
-    narrative = parsed.get("narrative")
-    if not narrative:
-        return None
-    highlights = parsed.get("highlights") or []
-    if isinstance(highlights, str):
-        highlights = [highlights]
-    return {
-        "narrative": str(narrative),
-        "highlights": [str(item) for item in highlights][:3],
-    }
+        parsed = _parse_object(chat_result.get("response", ""))
+        narrative = parsed.get("narrative")
+        if narrative:
+            highlights = parsed.get("highlights") or []
+            if isinstance(highlights, str):
+                highlights = [highlights]
+            return {
+                "narrative": str(narrative),
+                "highlights": [str(item) for item in highlights][:3],
+            }
+        # 空/不可解析响应 → 短暂等待后重试一次
+        if attempt == 0:
+            await asyncio.sleep(2)
+    return None
+
+
+async def refresh_briefing_cache(key: str, limit: int) -> None:
+    """Background task: generate AI briefing and populate cache.
+
+    Called via FastAPI BackgroundTasks so the HTTP response returns
+    immediately with ai_pending=true while the LLM call runs out-of-band.
+    """
+    from app.shared.database import get_db_manager
+    from app.shared.cache import cache
+
+    try:
+        with get_db_manager().session_scope() as db:
+            result = await generate_operational_briefing(db, limit=limit)
+            ai_briefing = result.get("ai_briefing")
+            if ai_briefing:
+                cache.set(key, {"ai_briefing": ai_briefing}, ttl=900)
+            else:
+                # 失败时短缓存 + cooldown 标记，避免前台无效轮询
+                cache.set(key, {"ai_briefing": None, "_cooldown": True}, ttl=60)
+    except Exception as exc:
+        logger.exception("refresh_briefing_cache failed: {}", exc)
+        cache.set(key, {"ai_briefing": None, "_cooldown": True}, ttl=60)
+
+
+async def refresh_executive_summary_cache(key: str, time_range: str) -> None:
+    """Background task: generate AI executive summary and populate cache.
+
+    Called via FastAPI BackgroundTasks; prevents the LLM call from blocking
+    the HTTP response.
+    """
+    from app.shared.database import get_db_manager
+    from app.shared.cache import cache
+
+    try:
+        with get_db_manager().session_scope() as db:
+            from app.features.dashboard.dashboard_service import get_executive_summary
+
+            summary = get_executive_summary(db, time_range=time_range)
+            ai_summary = await generate_executive_narrative(summary.get("kpis", {}))
+            if ai_summary:
+                cache.set(key, {"ai_summary": ai_summary}, ttl=900)
+            else:
+                cache.set(key, {"ai_summary": None, "_cooldown": True}, ttl=60)
+    except Exception as exc:
+        logger.exception("refresh_executive_summary_cache failed: {}", exc)
+        cache.set(key, {"ai_summary": None, "_cooldown": True}, ttl=60)
