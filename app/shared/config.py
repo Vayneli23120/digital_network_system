@@ -5,11 +5,23 @@ Fail-fast configuration: 启动时验证所有关键配置，缺失必填项立�
 """
 
 import os
+import re
 import sys
 import yaml
 from pathlib import Path
 from typing import Optional, List
 from pydantic import BaseModel, Field, field_validator
+
+# DatabaseConfig.url 的占位默认值。它是普通字符串而不是 f-string，
+# 出现这个值说明「配置里没有显式指定数据库 URL」
+_URL_PLACEHOLDER = "sqlite+aiosqlite:///{os.path.join(os.getcwd(), 'data', 'nas.db')}"
+
+
+def describe_db_url(url: str) -> str:
+    """把数据库 URL 脱敏成可以打印到日志里的形式（隐去密码）"""
+    if not url:
+        return "(未配置)"
+    return re.sub(r"://([^:/@]+):[^@]*@", r"://\1:***@", url)
 
 
 class AlertEmailConfig(BaseModel):
@@ -113,7 +125,7 @@ class DatabaseConfig(BaseModel):
     """数据库配置 - 支持 SQLite (开发) 和 PostgreSQL (生产)"""
     # 数据库 URL（优先使用此字段）
     url: str = Field(
-        default="sqlite+aiosqlite:///{os.path.join(os.getcwd(), 'data', 'nas.db')}",
+        default=_URL_PLACEHOLDER,
         description="数据库连接 URL，支持 sqlite+aiosqlite 和 postgresql+asyncpg"
     )
     # SQLite 专用配置（兼容旧配置）
@@ -159,18 +171,36 @@ class DatabaseConfig(BaseModel):
     @property
     def is_postgresql(self) -> bool:
         """是否使用 PostgreSQL"""
-        return 'postgresql' in self.url
+        return 'postgresql' in self.get_effective_url()
 
     @property
     def is_sqlite(self) -> bool:
         """是否使用 SQLite"""
-        return 'sqlite' in self.url and 'postgresql' not in self.url
+        url = self.get_effective_url()
+        return 'sqlite' in url and 'postgresql' not in url
+
+    @property
+    def url_source(self) -> str:
+        """有效 URL 的来源，用于启动日志与排障"""
+        if self.url and self.url != _URL_PLACEHOLDER:
+            return "config.yaml"
+        if os.environ.get("DATABASE_URL"):
+            return "DATABASE_URL 环境变量"
+        return "内置默认值 (SQLite)"
 
     def get_effective_url(self) -> str:
-        """获取有效的数据库 URL"""
-        # 优先使用 url 字段，否则根据 sqlite_path 构建
-        if self.url and not self.url.startswith("sqlite+aiosqlite:///{os.path.join"):
+        """获取有效的数据库 URL
+
+        优先级：config.yaml 的 database.url > DATABASE_URL 环境变量 > 本地 SQLite 默认值。
+        环境变量只在配置文件没给出 URL 时兜底，因此不会覆盖服务器上已有的配置。
+        """
+        if self.url and self.url != _URL_PLACEHOLDER:
             return self.url
+
+        env_url = os.environ.get("DATABASE_URL")
+        if env_url:
+            return env_url
+
         return f"sqlite+aiosqlite:///{self.sqlite_path}"
 
 
@@ -246,11 +276,27 @@ class Config(BaseModel):
         path = Path(config_path)
 
         if not path.exists():
-            # 尝试加载示例配置
-            example_path = Path("config.example.yaml")
-            if example_path.exists():
-                print(f"警告：{config_path} 不存在，请复制 config.example.yaml 并修改配置")
-            return cls()
+            # 配置文件缺失时会静默回退到本地 SQLite。生产是 PostgreSQL 时，
+            # 这种回退会让服务连上一个空的开发库而不报任何错，所以必须显式告警。
+            fallback = cls()
+            effective = fallback.database.get_effective_url()
+            print(
+                f"[CONFIG WARNING] 未找到配置文件 {path.resolve()}，"
+                f"已回退到内置默认配置", file=sys.stderr
+            )
+            print(
+                f"[CONFIG WARNING] 生效的数据库: {describe_db_url(effective)}"
+                f"（来源：{fallback.database.url_source}）", file=sys.stderr
+            )
+            if fallback.database.is_sqlite:
+                print(
+                    "[CONFIG WARNING] 这是本地开发用的 SQLite。若本机应连 PostgreSQL，"
+                    "请在工作目录放置 config.yaml 或设置 DATABASE_URL 环境变量后重试",
+                    file=sys.stderr
+                )
+            if Path("config.example.yaml").exists():
+                print("[CONFIG WARNING] 可复制 config.example.yaml 为 config.yaml 后修改", file=sys.stderr)
+            return fallback
 
         with open(path, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)

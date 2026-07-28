@@ -396,61 +396,74 @@ class UserPermissionsResponse(BaseModel):
 # 初始化函数
 # =============================================================================
 
-def init_permissions_and_roles(db: Session) -> dict:
+def init_permissions_and_roles(db: Session, reset_system_roles: bool = False) -> dict:
     """
     初始化权限和角色数据
 
-    如果表为空，自动插入预定义权限和角色
+    幂等且默认非破坏性：
+      - 权限：增量补齐缺失项，不删除已有权限
+      - 角色：缺失的预置角色会被创建
+      - 系统角色（is_system=True）：默认只补齐缺失的预置权限，**不会**删除管理员
+        在界面上额外授予的权限。因为导航可见权限是允许管理员自定义的，
+        旧实现的「与预置不一致就整体重建」会静默还原这些定制
+      - 非系统角色：完全交由管理员维护，此函数不做任何权限调整
 
     Args:
         db: 数据库会话
+        reset_system_roles: 显式要求把系统角色的权限强制重置为预置值
+            （破坏性操作，会丢弃对 admin / operator / viewer 的自定义授权）
 
     Returns:
         初始化结果统计
     """
-    result = {"permissions_created": 0, "roles_created": 0, "roles_updated": 0}
+    result = {
+        "permissions_created": 0,
+        "roles_created": 0,
+        "roles_updated": 0,
+        "roles_reset": 0,
+    }
 
-    # 检查权限表是否为空
-    existing_permissions = db.query(Permission).count()
+    # ---------------- 权限：增量补齐 ----------------
+    existing_names = {p.name for p in db.query(Permission).all()}
 
-    if existing_permissions == 0:
+    if not existing_names:
         logger.info("权限表为空，初始化预定义权限...")
-        for perm_data in EXTENDED_PERMISSIONS:
-            perm = Permission(
-                name=perm_data["name"],
-                description=perm_data.get("description"),
-                resource=perm_data["resource"],
-                action=perm_data["action"]
-            )
-            db.add(perm)
-            result["permissions_created"] += 1
 
+    for perm_data in EXTENDED_PERMISSIONS:
+        if perm_data["name"] in existing_names:
+            continue
+        db.add(Permission(
+            name=perm_data["name"],
+            description=perm_data.get("description"),
+            resource=perm_data["resource"],
+            action=perm_data["action"]
+        ))
+        result["permissions_created"] += 1
+
+    if result["permissions_created"] > 0:
         db.commit()
-        logger.info(f"创建 {result['permissions_created']} 个权限")
-    else:
-        # 增量添加缺失的权限
-        existing_names = {p.name for p in db.query(Permission).all()}
-        for perm_data in EXTENDED_PERMISSIONS:
-            if perm_data["name"] not in existing_names:
-                perm = Permission(
-                    name=perm_data["name"],
-                    description=perm_data.get("description"),
-                    resource=perm_data["resource"],
-                    action=perm_data["action"]
-                )
-                db.add(perm)
-                result["permissions_created"] += 1
+        logger.info(f"补齐 {result['permissions_created']} 个权限")
 
-        if result["permissions_created"] > 0:
-            db.commit()
-            logger.info(f"增量添加 {result['permissions_created']} 个权限")
+    # ---------------- 角色 ----------------
+    perm_by_name = {p.name: p for p in db.query(Permission).all()}
 
-    # 检查角色表是否为空
-    existing_roles = db.query(Role).count()
+    def resolve(perm_names) -> list:
+        """把权限名解析成 Permission 对象，忽略清单里不存在的名字"""
+        resolved = []
+        for name in perm_names:
+            perm = perm_by_name.get(name)
+            if perm is None:
+                logger.warning(f"预置角色引用了不存在的权限，已跳过: {name}")
+                continue
+            resolved.append(perm)
+        return resolved
 
-    if existing_roles == 0:
-        logger.info("角色表为空，初始化预定义角色...")
-        for role_data in PRESET_ROLES:
+    for role_data in PRESET_ROLES:
+        role = db.query(Role).filter(Role.name == role_data["name"]).first()
+        expected = role_data.get("permissions", [])
+
+        # 缺失的预置角色：直接创建
+        if role is None:
             role = Role(
                 name=role_data["name"],
                 description=role_data.get("description"),
@@ -458,37 +471,40 @@ def init_permissions_and_roles(db: Session) -> dict:
             )
             db.add(role)
             db.flush()
-
-            # 关联权限
-            for perm_name in role_data.get("permissions", []):
-                perm = db.query(Permission).filter(Permission.name == perm_name).first()
-                if perm:
-                    role.permissions.append(perm)
-
+            role.permissions.extend(resolve(expected))
             result["roles_created"] += 1
+            continue
 
+        # 非系统角色由管理员自行维护，不做任何调整
+        if not role_data.get("is_system"):
+            continue
+
+        current = {p.name for p in role.permissions}
+
+        if reset_system_roles:
+            # 破坏性：强制与预置定义一致
+            if current != set(expected):
+                role.permissions.clear()
+                role.permissions.extend(resolve(expected))
+                result["roles_reset"] += 1
+            continue
+
+        # 默认：只补齐缺失项，保留管理员的自定义授权
+        missing = [name for name in expected if name not in current]
+        if missing:
+            role.permissions.extend(resolve(missing))
+            result["roles_updated"] += 1
+            logger.info(f"角色 {role.name} 补齐 {len(missing)} 个预置权限")
+
+    if any(result[k] for k in ("roles_created", "roles_updated", "roles_reset")):
         db.commit()
-        logger.info(f"创建 {result['roles_created']} 个角色")
-    else:
-        # 检查是否需要更新系统角色的权限
-        for role_data in PRESET_ROLES:
-            if role_data.get("is_system"):
-                role = db.query(Role).filter(Role.name == role_data["name"]).first()
-                if role:
-                    current_perm_names = {p.name for p in role.permissions}
-                    expected_perm_names = set(role_data.get("permissions", []))
-
-                    if current_perm_names != expected_perm_names:
-                        role.permissions.clear()
-                        for perm_name in role_data.get("permissions", []):
-                            perm = db.query(Permission).filter(Permission.name == perm_name).first()
-                            if perm:
-                                role.permissions.append(perm)
-                        result["roles_updated"] += 1
-
-        if result["roles_updated"] > 0:
-            db.commit()
-            logger.info(f"更新 {result['roles_updated']} 个系统角色权限")
+        logger.info(
+            "角色初始化完成: 新建 {created} / 补齐 {updated} / 重置 {reset}".format(
+                created=result["roles_created"],
+                updated=result["roles_updated"],
+                reset=result["roles_reset"],
+            )
+        )
 
     return result
 
@@ -498,14 +514,27 @@ def init_permissions_and_roles(db: Session) -> dict:
 # =============================================================================
 
 @router.post("/init")
-async def init_permissions_system(db: Session = Depends(get_db)):
+async def init_permissions_system(
+    reset_system_roles: bool = False,
+    # 用 admin:all 而不是 require_superuser()：靠 admin 角色（admin:all）管理系统的
+    # 管理员账号不一定把 is_superuser 置了位，require_superuser() 会把他们挡在外面，
+    # 导致界面上的「初始化权限系统」按钮直接 403。
+    # require_permission 内部已经放行 is_superuser，覆盖两种管理员
+    _: None = Depends(require_permission("admin:all")),
+    db: Session = Depends(get_db)
+):
     """
-    初始化权限系统（自动创建权限和角色数据）
+    初始化权限系统（补齐权限清单与预置角色）
 
-    首次使用时调用此接口初始化预定义权限和角色
+    幂等操作，可重复调用：
+      - 补齐缺失的权限与缺失的预置角色
+      - 系统角色只补齐缺失的预置权限，保留管理员的自定义授权
+      - reset_system_roles=true 时才会把系统角色强制重置为预置值（破坏性）
+
+    需要超级管理员权限（auth_enabled=false 时不做校验）
     """
     try:
-        result = init_permissions_and_roles(db)
+        result = init_permissions_and_roles(db, reset_system_roles=reset_system_roles)
         return {
             "success": True,
             "message": "权限系统初始化完成",
@@ -1098,35 +1127,56 @@ async def get_my_permissions(
     """
     获取当前用户的所有权限列表
 
-    供前端显示用户权限信息
-    认证关闭时也尝试从 token / X-Username header 解析用户身份
+    供前端渲染菜单与按钮可见性。身份解析顺序：
+      1. JWT token
+      2. X-User 请求头（仅在 auth_enabled=false 的开发模式下作为回退，
+         该请求头由客户端自行填写，不能作为安全凭据）
+
+    auth_enabled=true 时解析失败一律返回 401，让前端走重新登录流程；
+    绝不能返回一份「超管」权限，否则令牌过期的用户会看到全功能菜单，
+    然后每次操作都被后端拒绝
     """
     # 1) 尝试从 JWT token 解析用户
     current_user = None
-    if credentials and credentials.credentials and credentials.credentials != "placeholder_token_auth_disabled":
+    token = credentials.credentials if credentials else None
+    if token and token != "placeholder_token_auth_disabled":
         try:
-            payload = decode_token(credentials.credentials)
+            payload = decode_token(token)
+            # 与 get_current_user_from_token 保持一致：只接受 access 令牌，
+            # 否则 refresh 令牌也能换到一份权限清单
+            if payload.get("type") != "access":
+                raise ValueError(f"非 access 令牌: type={payload.get('type')!r}")
             username = payload.get("sub")
             if username:
                 user = db.query(User).filter(User.username == username).first()
                 if user and user.is_active:
                     current_user = user
-        except Exception:
-            pass
+                else:
+                    logger.debug(f"token 中的用户不存在或已停用: {username}")
+        except Exception as exc:
+            logger.debug(f"解析 token 失败: {type(exc).__name__}: {exc}")
 
-    # 2) 回退: 认证关闭时通过 X-User header 查找用户
+    # 2) 开发模式回退：认证关闭时通过 X-User 请求头识别身份
     if not current_user and not config.security.auth_enabled and x_user:
         user = db.query(User).filter(User.username == x_user).first()
         if user and user.is_active:
             current_user = user
 
     if not current_user:
+        if config.security.auth_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="未认证或令牌已失效",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        # 认证关闭：整个后端本身不做鉴权，这里返回放开的占位身份，
+        # 保持与 require_permission 等依赖在该模式下的行为一致
         return {
             "user_id": 0,
             "username": "guest",
             "is_superuser": True,
             "permissions": ["admin:all"],
-            "roles": [{"id": 1, "name": "admin", "description": "系统管理员"}]
+            "roles": [{"id": 0, "name": "admin", "description": "认证已关闭（开发模式）"}]
         }
 
     permissions = get_user_all_permissions(current_user.id, db)

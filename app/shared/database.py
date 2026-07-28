@@ -85,7 +85,10 @@ class DatabaseManager:
         )
 
         db_type = 'SQLite' if self.is_sqlite else 'PostgreSQL'
-        logger.info(f"数据库引擎初始化完成: {db_type}")
+        # 打印脱敏后的连接目标：只打印类型时，"连错库"（例如生产是 PostgreSQL
+        # 却回退到本地 SQLite）无法从日志里看出来
+        from app.shared.config import describe_db_url
+        logger.info(f"数据库引擎初始化完成: {db_type} -> {describe_db_url(sync_url)}")
 
     def init_db(self):
         """初始化数据库，创建所有表"""
