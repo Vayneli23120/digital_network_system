@@ -163,6 +163,76 @@ EXTENDED_PERMISSIONS = [
     {"name": "nav_system:permissions", "resource": "nav_system", "action": "permissions", "description": "菜单：角色权限"},
 ]
 
+
+# =============================================================================
+# 导航权限分组常量
+# 与前端 Layout.vue 的菜单结构一一对应，供预置角色复用，避免逐个角色手抄字符串
+# =============================================================================
+
+NAV_OVERVIEW = [
+    "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",
+    "nav_overview:device_health", "nav_overview:ai_analysis", "nav_overview:workflows",
+]
+NAV_DEVICES = [
+    "nav_devices:list", "nav_devices:discovery", "nav_devices:backups",
+    "nav_devices:faults", "nav_devices:maintenance", "nav_devices:planned_maintenance",
+]
+NAV_CONFIG = [
+    "nav_config:console", "nav_config:deploy", "nav_config:templates",
+    "nav_config:credentials", "nav_config:compliance", "nav_config:tool_logs",
+]
+NAV_SPARE = [
+    "nav_spare:spare_parts", "nav_spare:movements", "nav_spare:scrap_inventory",
+]
+# 所有角色都应该能看到的系统菜单（只读性质）
+NAV_SYSTEM_COMMON = [
+    "nav_system:notifications", "nav_system:logs", "nav_system:system_help",
+]
+# 系统配置类菜单（需要 alert:manage / 系统设置类权限才有意义）
+NAV_SYSTEM_SETTINGS = [
+    "nav_system:alert_settings", "nav_system:system_settings",
+]
+# 账号与权限治理菜单（nav_system:users / nav_system:permissions）只授予 admin，
+# admin 通过 admin:all 绕过导航过滤，因此不需要在预置角色里显式列出
+
+# 导航权限的显示名，按「完整权限名」索引。
+# 不能复用 action_labels：nav 的 action 是页面名（deploy / compliance / logs ...），
+# 与功能权限的 action 命名空间重叠，同一张表里会互相覆盖
+NAV_LABELS = {
+    "nav_overview:dashboard": "仪表板",
+    "nav_overview:operations": "运维总览",
+    "nav_overview:monitor_3d": "3D数字孪生",
+    "nav_overview:device_health": "设备健康评分",
+    "nav_overview:ai_analysis": "AI分析中心",
+    "nav_overview:workflows": "自动化工作流",
+    "nav_devices:list": "设备管理",
+    "nav_devices:discovery": "设备发现",
+    "nav_devices:backups": "备份管理",
+    "nav_devices:faults": "故障管理",
+    "nav_devices:maintenance": "维修管理",
+    "nav_devices:planned_maintenance": "计划性运维",
+    "nav_config:console": "Console配置",
+    "nav_config:deploy": "配置部署",
+    "nav_config:templates": "配置模板",
+    "nav_config:credentials": "SSH凭证",
+    "nav_config:compliance": "配置合规",
+    "nav_config:tool_logs": "工具日志",
+    "nav_spare:spare_parts": "备件管理",
+    "nav_spare:movements": "出入库历史",
+    "nav_spare:scrap_inventory": "报废库存",
+    "nav_system:notifications": "通知中心",
+    "nav_system:logs": "系统日志",
+    "nav_system:alert_settings": "告警通知",
+    "nav_system:system_settings": "系统设置",
+    "nav_system:system_help": "系统帮助",
+    "nav_system:users": "用户管理",
+    "nav_system:permissions": "角色权限",
+}
+
+# 导航权限按 tab 的展示顺序，与前端顶部标签顺序一致（前端排序用）
+NAV_RESOURCE_ORDER = ["nav_overview", "nav_devices", "nav_config", "nav_spare", "nav_system"]
+
+
 # 预定义角色
 PRESET_ROLES = [
     {
@@ -187,16 +257,9 @@ PRESET_ROLES = [
             "planned_task:read", "planned_task:execute",
             "log:read", "tool_log:read",
             "ai:use", "ai:compliance",
-            "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",
-            "nav_overview:device_health", "nav_overview:ai_analysis", "nav_overview:workflows",
-            "nav_devices:list", "nav_devices:discovery", "nav_devices:backups",
-            "nav_devices:faults", "nav_devices:maintenance", "nav_devices:planned_maintenance",
-            "nav_config:console", "nav_config:deploy", "nav_config:templates",
-            "nav_config:credentials", "nav_config:compliance", "nav_config:tool_logs",
-            "nav_spare:spare_parts", "nav_spare:movements", "nav_spare:scrap_inventory",
-            "nav_system:notifications", "nav_system:logs", "nav_system:alert_settings",
-            "nav_system:system_settings", "nav_system:system_help",
-            "nav_system:users", "nav_system:permissions",
+            # 导航：除用户/角色管理外全部可见（operator 无 user:* / role:* 功能权限）
+            *NAV_OVERVIEW, *NAV_DEVICES, *NAV_CONFIG, *NAV_SPARE,
+            *NAV_SYSTEM_COMMON, *NAV_SYSTEM_SETTINGS,
         ]
     },
     {
@@ -208,16 +271,15 @@ PRESET_ROLES = [
             "fault:read", "maintenance:read", "spare_part:read",
             "template:read", "workflow:read", "planned_task:read",
             "log:read", "tool_log:read", "floor_plan:read",
+            # 导航：只保留与只读功能权限对应的菜单
+            # （不含设备发现/Console/部署/凭证等写操作入口，也不含用户与角色管理）
             "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",
-            "nav_overview:device_health", "nav_overview:ai_analysis", "nav_overview:workflows",
-            "nav_devices:list", "nav_devices:discovery", "nav_devices:backups",
-            "nav_devices:faults", "nav_devices:maintenance", "nav_devices:planned_maintenance",
-            "nav_config:console", "nav_config:deploy", "nav_config:templates",
-            "nav_config:credentials", "nav_config:compliance", "nav_config:tool_logs",
-            "nav_spare:spare_parts", "nav_spare:movements", "nav_spare:scrap_inventory",
-            "nav_system:notifications", "nav_system:logs", "nav_system:alert_settings",
-            "nav_system:system_settings", "nav_system:system_help",
-            "nav_system:users", "nav_system:permissions",
+            "nav_overview:device_health", "nav_overview:workflows",
+            "nav_devices:list", "nav_devices:backups", "nav_devices:faults",
+            "nav_devices:maintenance", "nav_devices:planned_maintenance",
+            "nav_config:templates", "nav_config:compliance", "nav_config:tool_logs",
+            *NAV_SPARE,
+            *NAV_SYSTEM_COMMON,
         ]
     },
     {
@@ -228,6 +290,11 @@ PRESET_ROLES = [
             "device:read", "device:write", "device:delete", "device:import", "device:export", "device:photo",
             "backup:read", "backup:execute", "backup:batch", "backup:delete",
             "config:read",
+            # 导航：设备域全部 + 概览中与设备相关的页面
+            "nav_overview:dashboard", "nav_overview:operations", "nav_overview:device_health",
+            "nav_overview:monitor_3d",
+            *NAV_DEVICES,
+            *NAV_SYSTEM_COMMON,
         ]
     },
     {
@@ -238,6 +305,11 @@ PRESET_ROLES = [
             "device:read", "backup:read", "config:read",
             "fault:read", "fault:write", "fault:delete", "fault:analyze",
             "maintenance:read", "maintenance:write", "maintenance:delete", "maintenance:transition",
+            # 导航：故障与维修相关页面
+            "nav_overview:dashboard", "nav_overview:operations", "nav_overview:device_health",
+            "nav_devices:list", "nav_devices:backups", "nav_devices:faults",
+            "nav_devices:maintenance", "nav_devices:planned_maintenance",
+            *NAV_SYSTEM_COMMON,
         ]
     },
 ]
@@ -1144,35 +1216,6 @@ async def get_default_permissions_info(db: Session = Depends(get_db)):
         "all": "全部权限",
         "use": "使用",
         "config": "配置",
-        # 导航权限操作
-        "dashboard": "仪表板",
-        "operations": "运维总览",
-        "monitor_3d": "3D数字孪生",
-        "device_health": "设备健康评分",
-        "ai_analysis": "AI分析中心",
-        "workflows": "自动化工作流",
-        "list": "设备列表",
-        "discovery": "设备发现",
-        "backups": "备份管理",
-        "faults": "故障管理",
-        "maintenance": "维修管理",
-        "planned_maintenance": "计划性运维",
-        "console": "Console配置",
-        "deploy": "配置部署",
-        "templates": "配置模板",
-        "credentials": "SSH凭证",
-        "compliance": "配置合规",
-        "tool_logs": "工具日志",
-        "spare_parts": "备件管理",
-        "movements": "出入库历史",
-        "scrap_inventory": "报废库存",
-        "notifications": "通知中心",
-        "logs": "系统日志",
-        "alert_settings": "告警通知",
-        "system_settings": "系统设置",
-        "system_help": "系统帮助",
-        "users": "用户管理",
-        "permissions": "角色权限",
     }
 
     # 从数据库获取实际权限数据（包含 id）
@@ -1191,6 +1234,13 @@ async def get_default_permissions_info(db: Session = Depends(get_db)):
     return {
         "resource_labels": resource_labels,
         "action_labels": action_labels,
+        # 导航权限的标签按「完整权限名」索引，而不是复用 action_labels：
+        # nav 的 action 是页面名（deploy / compliance ...），与功能权限的 action
+        # 命名空间重叠，混在一张表里会互相覆盖
+        "nav_labels": NAV_LABELS,
+        # 导航分组/条目的展示顺序，与前端顶部标签与侧边栏顺序一致
+        "nav_resource_order": NAV_RESOURCE_ORDER,
+        "nav_order": list(NAV_LABELS.keys()),
         "permissions": permissions_data
     }
 

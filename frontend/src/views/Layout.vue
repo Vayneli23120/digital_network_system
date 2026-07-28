@@ -123,6 +123,20 @@ const loadUnreadNotifCount = debounce(async (force = false) => {
 // User permissions for nav filtering (null = not loaded / show all)
 const userPermissions = ref(null)
 
+// Nav visibility governance is only active when the current user actually
+// carries at least one nav_* permission.
+// A user with zero nav_* permissions is treated as "not governed by nav
+// permissions" (show everything) instead of "denied everything", so that:
+//   - a permission table that has not been (re)initialised with nav_* records
+//   - a role saved without any nav selection
+// can never lock a user out of the entire UI. Real access control must be
+// enforced by the backend, not by hiding menu entries.
+const navFilterActive = computed(() => {
+  const perms = userPermissions.value
+  if (!perms || perms.includes('admin:all')) return false
+  return perms.some(p => typeof p === 'string' && p.startsWith('nav_'))
+})
+
 // Sidebar groups (organized by domain - no overlap)
 const sidebarData = computed(() => {
   const groups = {
@@ -196,9 +210,9 @@ const sidebarData = computed(() => {
     ],
   }
 
-  // Apply permission filtering when user permissions are loaded
+  // Apply permission filtering only when nav governance is active
   const perms = userPermissions.value
-  if (perms && !perms.includes('admin:all')) {
+  if (navFilterActive.value) {
     for (const tabKey of Object.keys(groups)) {
       for (const group of groups[tabKey]) {
         group.items = group.items.filter(item => !item.permission || perms.includes(item.permission))
@@ -277,17 +291,24 @@ onMounted(() => {
   }
   // Load user permissions for nav filtering
   getMyPermissions().then(data => {
-    const perms = data.permissions || []
-    userPermissions.value = perms
-    // If current active tab is not visible, redirect to first visible tab
-    if (perms.length > 0 && !perms.includes('admin:all') && visibleTopTabs.value.length > 0) {
-      if (!visibleTopTabs.value.includes(activeTopTab.value)) {
-        const firstTab = visibleTopTabs.value[0]
-        activeTopTab.value = firstTab
-        const groups = sidebarGroups.value
-        if (groups.length > 0 && groups[0].items.length > 0) {
-          router.push(groups[0].items[0].path)
-        }
+    userPermissions.value = data.permissions || []
+    if (!navFilterActive.value) return
+
+    // Safety net: the user carries nav_* permissions but none of them matches a
+    // known menu entry (stale/renamed permissions). Rather than rendering an
+    // empty shell with no way out, fall back to showing everything.
+    if (visibleTopTabs.value.length === 0) {
+      console.warn('[Layout] nav permissions matched no menu entry, nav filtering disabled')
+      userPermissions.value = null
+      return
+    }
+
+    // If the current active tab is not visible, redirect to the first visible one
+    if (!visibleTopTabs.value.includes(activeTopTab.value)) {
+      activeTopTab.value = visibleTopTabs.value[0]
+      const groups = sidebarGroups.value
+      if (groups.length > 0 && groups[0].items.length > 0) {
+        router.push(groups[0].items[0].path)
       }
     }
   }).catch(() => {

@@ -2,7 +2,7 @@
   <div class="permission-matrix">
     <!-- 顶部统计 -->
     <div class="header-bar">
-      <span>{{ t('permissionSelected') }}: <strong>{{ selectedIds.length }}</strong> / {{ permissions.length }}</span>
+      <span>{{ t('permissionSelected') }}: <strong>{{ managedSelectedCount }}</strong> / {{ permissions.length }}</span>
       <div class="quick-actions">
         <el-button text size="small" @click="selectAllPerms">{{ t('selectAll') }}</el-button>
         <el-button text size="small" @click="clearAllPerms">{{ t('clearAll') }}</el-button>
@@ -50,7 +50,7 @@
                     size="small"
                     class="perm-check"
                   >
-                    <span class="perm-label">{{ perm.action }}</span>
+                    <span class="perm-label" :title="perm.name">{{ actionLabel(perm.action) }}</span>
                   </el-checkbox>
                 </el-checkbox-group>
               </div>
@@ -72,8 +72,15 @@ const props = defineProps({
     default: () => []
   },
   resourceLabels: {
+    // NOTE: `() => {}` is an arrow function with an empty *body* (returns
+    // undefined), not an empty object - it used to crash the template whenever
+    // the prop was omitted
     type: Object,
-    default: () => {}
+    default: () => ({})
+  },
+  actionLabels: {
+    type: Object,
+    default: () => ({})
   },
   modelValue: {
     type: Array,
@@ -90,6 +97,17 @@ const selectedIds = ref([...props.modelValue])
 watch(() => props.modelValue, (val) => {
   selectedIds.value = [...val]
 })
+
+const actionLabel = (action) => props.actionLabels[action] || action
+
+// This matrix only owns the permissions handed to it. The bound model may also
+// carry ids owned by a sibling editor (nav permissions), so bulk operations must
+// preserve everything outside our own scope instead of replacing the array.
+const managedIds = computed(() => new Set(props.permissions.map(p => p.id)))
+const foreignIds = () => selectedIds.value.filter(id => !managedIds.value.has(id))
+const managedSelectedCount = computed(
+  () => selectedIds.value.filter(id => managedIds.value.has(id)).length
+)
 
 // 按模块分组
 const resourceGroups = computed(() => {
@@ -141,11 +159,9 @@ const partialSelected = computed(() => {
 
 // 操作
 const toggleAll = (val) => {
-  if (val) {
-    selectedIds.value = props.permissions.map(p => p.id)
-  } else {
-    selectedIds.value = []
-  }
+  selectedIds.value = val
+    ? [...foreignIds(), ...props.permissions.map(p => p.id)]
+    : foreignIds()
   emit('update:modelValue', selectedIds.value)
 }
 
@@ -166,15 +182,9 @@ const handleChange = (val) => {
   emit('update:modelValue', val)
 }
 
-const selectAllPerms = () => {
-  selectedIds.value = props.permissions.map(p => p.id)
-  emit('update:modelValue', selectedIds.value)
-}
+const selectAllPerms = () => toggleAll(true)
 
-const clearAllPerms = () => {
-  selectedIds.value = []
-  emit('update:modelValue', selectedIds.value)
-}
+const clearAllPerms = () => toggleAll(false)
 </script>
 
 <style scoped>

@@ -41,8 +41,13 @@
         <div class="card-body">
           <div class="stat-row">
             <div class="stat-item">
-              <span class="stat-label">{{ t('permissionCount') }}</span>
-              <span class="stat-value">{{ role.permissions?.length || 0 }}</span>
+              <span class="stat-label">{{ t('navPermissionSection') }}</span>
+              <span class="stat-value">{{ countNavPerms(role.permissions) }}</span>
+            </div>
+            <div class="stat-divider"></div>
+            <div class="stat-item">
+              <span class="stat-label">{{ t('permissionPermissions') }}</span>
+              <span class="stat-value">{{ countFuncPerms(role.permissions) }}</span>
             </div>
             <div class="stat-divider"></div>
             <div class="stat-item">
@@ -108,20 +113,29 @@
           <el-input v-model="roleForm.description" type="textarea" :rows="2" :placeholder="t('permissionDescriptionPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('navPermissionSection')">
-          <NavPermissionTree
-            v-model="roleForm.permission_ids"
-            :all-permissions="allPermissions"
-            :resource-labels="resourceLabels"
-            :action-labels="actionLabels"
-          />
+          <div class="perm-section">
+            <p class="perm-section-hint">{{ t('navPermissionHint') }}</p>
+            <NavPermissionTree
+              v-model="roleForm.permission_ids"
+              :all-permissions="navPermissions"
+              :resource-labels="resourceLabels"
+              :action-labels="actionLabels"
+              :nav-labels="navLabels"
+              :nav-resource-order="navResourceOrder"
+              :nav-order="navOrder"
+            />
+          </div>
         </el-form-item>
         <el-form-item :label="t('permissionPermissions')">
-          <PermissionMatrix
-            v-model="roleForm.permission_ids"
-            :permissions="allPermissions"
-            :resource-labels="resourceLabels"
-            :action-labels="actionLabels"
-          />
+          <div class="perm-section">
+            <p class="perm-section-hint">{{ t('funcPermissionHint') }}</p>
+            <PermissionMatrix
+              v-model="roleForm.permission_ids"
+              :permissions="funcPermissions"
+              :resource-labels="resourceLabels"
+              :action-labels="actionLabels"
+            />
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -140,20 +154,29 @@
           <el-input v-model="roleForm.description" type="textarea" :rows="2" :placeholder="t('permissionDescriptionPlaceholder')" />
         </el-form-item>
         <el-form-item :label="t('navPermissionSection')">
-          <NavPermissionTree
-            v-model="roleForm.permission_ids"
-            :all-permissions="allPermissions"
-            :resource-labels="resourceLabels"
-            :action-labels="actionLabels"
-          />
+          <div class="perm-section">
+            <p class="perm-section-hint">{{ t('navPermissionHint') }}</p>
+            <NavPermissionTree
+              v-model="roleForm.permission_ids"
+              :all-permissions="navPermissions"
+              :resource-labels="resourceLabels"
+              :action-labels="actionLabels"
+              :nav-labels="navLabels"
+              :nav-resource-order="navResourceOrder"
+              :nav-order="navOrder"
+            />
+          </div>
         </el-form-item>
         <el-form-item :label="t('permissionPermissions')">
-          <PermissionMatrix
-            v-model="roleForm.permission_ids"
-            :permissions="allPermissions"
-            :resource-labels="resourceLabels"
-            :action-labels="actionLabels"
-          />
+          <div class="perm-section">
+            <p class="perm-section-hint">{{ t('funcPermissionHint') }}</p>
+            <PermissionMatrix
+              v-model="roleForm.permission_ids"
+              :permissions="funcPermissions"
+              :resource-labels="resourceLabels"
+              :action-labels="actionLabels"
+            />
+          </div>
         </el-form-item>
       </el-form>
       <template #footer>
@@ -178,7 +201,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Refresh, Key, User, Setting, UserFilled, Edit, CopyDocument, Delete } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
@@ -194,6 +217,17 @@ const roles = ref([])
 const allPermissions = ref([])
 const resourceLabels = ref({})
 const actionLabels = ref({})
+const navLabels = ref({})
+const navResourceOrder = ref([])
+const navOrder = ref([])
+
+// nav_* permissions drive menu visibility, everything else drives feature access.
+// They are edited by two different widgets, so keep the two lists disjoint -
+// otherwise the same checkbox shows up twice and the matrix "clear all" button
+// silently wipes the nav selection above it.
+const isNavPermission = (p) => typeof p?.resource === 'string' && p.resource.startsWith('nav_')
+const navPermissions = computed(() => allPermissions.value.filter(isNavPermission))
+const funcPermissions = computed(() => allPermissions.value.filter(p => !isNavPermission(p)))
 const loading = ref(false)
 const submitting = ref(false)
 const initialized = ref(true)  // 默认 true，加载后更新
@@ -274,6 +308,9 @@ const loadPermissions = debounce(async (force = false) => {
     // 从 defaults 接口获取标签
     resourceLabels.value = data.resource_labels || {}
     actionLabels.value = data.action_labels || {}
+    navLabels.value = data.nav_labels || {}
+    navResourceOrder.value = data.nav_resource_order || []
+    navOrder.value = data.nav_order || []
   } catch (e) {
     if (e.name !== 'CanceledError') {
       console.error(t('permissionLoadFailed'), e)
@@ -399,17 +436,27 @@ const initPermissions = async () => {
   }
 }
 
-// 获取权限模块列表
+// 获取功能权限模块列表（排除 nav_*，否则卡片上会出现两个「设备管理」标签）
 const getPermModules = (permissions) => {
   if (!permissions || !permissions.length) return []
   const modules = new Set()
   for (const perm of permissions) {
-    if (perm.name) {
-      const resource = perm.name.split(':')[0]
-      modules.add(resource)
+    if (perm.name && !perm.name.startsWith('nav_')) {
+      modules.add(perm.name.split(':')[0])
     }
   }
   return Array.from(modules).slice(0, 6)
+}
+
+// 角色可见菜单数量（用于卡片上区分「可见菜单」与「可用操作」）
+const countNavPerms = (permissions) => {
+  if (!permissions || !permissions.length) return 0
+  return permissions.filter(p => p.name?.startsWith('nav_')).length
+}
+
+const countFuncPerms = (permissions) => {
+  if (!permissions || !permissions.length) return 0
+  return permissions.filter(p => !p.name?.startsWith('nav_')).length
 }
 
 onMounted(() => {
@@ -587,5 +634,17 @@ onMounted(() => {
 
 .init-alert {
   margin-bottom: 20px;
+}
+
+/* 权限分区（可见菜单 / 可用操作） */
+.perm-section {
+  width: 100%;
+}
+
+.perm-section-hint {
+  margin: 0 0 6px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--el-text-color-secondary);
 }
 </style>
