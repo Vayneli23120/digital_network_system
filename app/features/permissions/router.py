@@ -5,19 +5,24 @@
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, status
+from fastapi import APIRouter, HTTPException, Depends, Header, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, Field
 from datetime import datetime
 from loguru import logger
 
 from app.shared.database import get_db
+from app.shared.config import get_config
 from app.shared.models import Role, Permission, User
 from app.shared.dependencies import (
     check_user_permission, check_user_permissions, get_user_all_permissions,
     require_permission, require_superuser
 )
-from app.features.auth.router import get_current_user_from_token
+from app.features.auth.router import get_current_user_from_token, decode_token
+
+config = get_config()
+security = HTTPBearer(auto_error=False)
 
 router = APIRouter(prefix="/api/permissions", tags=["permissions"])
 
@@ -118,6 +123,44 @@ EXTENDED_PERMISSIONS = [
     {"name": "ai:use", "resource": "ai", "action": "use", "description": "使用AI功能"},
     {"name": "ai:config", "resource": "ai", "action": "config", "description": "配置AI服务"},
     {"name": "ai:compliance", "resource": "ai", "action": "compliance", "description": "AI合规审核"},
+
+    # 导航权限 - 运维监控 (overview)
+    {"name": "nav_overview:dashboard", "resource": "nav_overview", "action": "dashboard", "description": "菜单：仪表板"},
+    {"name": "nav_overview:operations", "resource": "nav_overview", "action": "operations", "description": "菜单：运维总览"},
+    {"name": "nav_overview:monitor_3d", "resource": "nav_overview", "action": "monitor_3d", "description": "菜单：3D数字孪生"},
+    {"name": "nav_overview:device_health", "resource": "nav_overview", "action": "device_health", "description": "菜单：设备健康评分"},
+    {"name": "nav_overview:ai_analysis", "resource": "nav_overview", "action": "ai_analysis", "description": "菜单：AI分析中心"},
+    {"name": "nav_overview:workflows", "resource": "nav_overview", "action": "workflows", "description": "菜单：自动化工作流"},
+
+    # 导航权限 - 设备管理 (devices)
+    {"name": "nav_devices:list", "resource": "nav_devices", "action": "list", "description": "菜单：设备管理"},
+    {"name": "nav_devices:discovery", "resource": "nav_devices", "action": "discovery", "description": "菜单：设备发现"},
+    {"name": "nav_devices:backups", "resource": "nav_devices", "action": "backups", "description": "菜单：备份管理"},
+    {"name": "nav_devices:faults", "resource": "nav_devices", "action": "faults", "description": "菜单：故障管理"},
+    {"name": "nav_devices:maintenance", "resource": "nav_devices", "action": "maintenance", "description": "菜单：维修管理"},
+    {"name": "nav_devices:planned_maintenance", "resource": "nav_devices", "action": "planned_maintenance", "description": "菜单：计划性运维"},
+
+    # 导航权限 - 配置管理 (config)
+    {"name": "nav_config:console", "resource": "nav_config", "action": "console", "description": "菜单：Console配置"},
+    {"name": "nav_config:deploy", "resource": "nav_config", "action": "deploy", "description": "菜单：配置部署"},
+    {"name": "nav_config:templates", "resource": "nav_config", "action": "templates", "description": "菜单：配置模板"},
+    {"name": "nav_config:credentials", "resource": "nav_config", "action": "credentials", "description": "菜单：SSH凭证"},
+    {"name": "nav_config:compliance", "resource": "nav_config", "action": "compliance", "description": "菜单：配置合规"},
+    {"name": "nav_config:tool_logs", "resource": "nav_config", "action": "tool_logs", "description": "菜单：工具日志"},
+
+    # 导航权限 - 备件管理 (spare)
+    {"name": "nav_spare:spare_parts", "resource": "nav_spare", "action": "spare_parts", "description": "菜单：备件管理"},
+    {"name": "nav_spare:movements", "resource": "nav_spare", "action": "movements", "description": "菜单：出入库历史"},
+    {"name": "nav_spare:scrap_inventory", "resource": "nav_spare", "action": "scrap_inventory", "description": "菜单：报废库存"},
+
+    # 导航权限 - 系统设置 (system)
+    {"name": "nav_system:notifications", "resource": "nav_system", "action": "notifications", "description": "菜单：通知中心"},
+    {"name": "nav_system:logs", "resource": "nav_system", "action": "logs", "description": "菜单：系统日志"},
+    {"name": "nav_system:alert_settings", "resource": "nav_system", "action": "alert_settings", "description": "菜单：告警通知"},
+    {"name": "nav_system:system_settings", "resource": "nav_system", "action": "system_settings", "description": "菜单：系统设置"},
+    {"name": "nav_system:system_help", "resource": "nav_system", "action": "system_help", "description": "菜单：系统帮助"},
+    {"name": "nav_system:users", "resource": "nav_system", "action": "users", "description": "菜单：用户管理"},
+    {"name": "nav_system:permissions", "resource": "nav_system", "action": "permissions", "description": "菜单：角色权限"},
 ]
 
 # 预定义角色
@@ -143,7 +186,17 @@ PRESET_ROLES = [
             "workflow:read", "workflow:trigger",
             "planned_task:read", "planned_task:execute",
             "log:read", "tool_log:read",
-            "ai:use", "ai:compliance",  # AI 功能权限
+            "ai:use", "ai:compliance",
+            "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",
+            "nav_overview:device_health", "nav_overview:ai_analysis", "nav_overview:workflows",
+            "nav_devices:list", "nav_devices:discovery", "nav_devices:backups",
+            "nav_devices:faults", "nav_devices:maintenance", "nav_devices:planned_maintenance",
+            "nav_config:console", "nav_config:deploy", "nav_config:templates",
+            "nav_config:credentials", "nav_config:compliance", "nav_config:tool_logs",
+            "nav_spare:spare_parts", "nav_spare:movements", "nav_spare:scrap_inventory",
+            "nav_system:notifications", "nav_system:logs", "nav_system:alert_settings",
+            "nav_system:system_settings", "nav_system:system_help",
+            "nav_system:users", "nav_system:permissions",
         ]
     },
     {
@@ -155,6 +208,16 @@ PRESET_ROLES = [
             "fault:read", "maintenance:read", "spare_part:read",
             "template:read", "workflow:read", "planned_task:read",
             "log:read", "tool_log:read", "floor_plan:read",
+            "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",
+            "nav_overview:device_health", "nav_overview:ai_analysis", "nav_overview:workflows",
+            "nav_devices:list", "nav_devices:discovery", "nav_devices:backups",
+            "nav_devices:faults", "nav_devices:maintenance", "nav_devices:planned_maintenance",
+            "nav_config:console", "nav_config:deploy", "nav_config:templates",
+            "nav_config:credentials", "nav_config:compliance", "nav_config:tool_logs",
+            "nav_spare:spare_parts", "nav_spare:movements", "nav_spare:scrap_inventory",
+            "nav_system:notifications", "nav_system:logs", "nav_system:alert_settings",
+            "nav_system:system_settings", "nav_system:system_help",
+            "nav_system:users", "nav_system:permissions",
         ]
     },
     {
@@ -292,6 +355,23 @@ def init_permissions_and_roles(db: Session) -> dict:
 
         db.commit()
         logger.info(f"创建 {result['permissions_created']} 个权限")
+    else:
+        # 增量添加缺失的权限
+        existing_names = {p.name for p in db.query(Permission).all()}
+        for perm_data in EXTENDED_PERMISSIONS:
+            if perm_data["name"] not in existing_names:
+                perm = Permission(
+                    name=perm_data["name"],
+                    description=perm_data.get("description"),
+                    resource=perm_data["resource"],
+                    action=perm_data["action"]
+                )
+                db.add(perm)
+                result["permissions_created"] += 1
+
+        if result["permissions_created"] > 0:
+            db.commit()
+            logger.info(f"增量添加 {result['permissions_created']} 个权限")
 
     # 检查角色表是否为空
     existing_roles = db.query(Role).count()
@@ -939,16 +1019,36 @@ async def check_permissions_batch(
 
 @router.get("/my-permissions", response_model=UserPermissionsResponse)
 async def get_my_permissions(
-    current_user: User = Depends(get_current_user_from_token),
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    x_user: Optional[str] = Header(None, alias="X-User"),
     db: Session = Depends(get_db)
 ):
     """
     获取当前用户的所有权限列表
 
     供前端显示用户权限信息
+    认证关闭时也尝试从 token / X-Username header 解析用户身份
     """
+    # 1) 尝试从 JWT token 解析用户
+    current_user = None
+    if credentials and credentials.credentials and credentials.credentials != "placeholder_token_auth_disabled":
+        try:
+            payload = decode_token(credentials.credentials)
+            username = payload.get("sub")
+            if username:
+                user = db.query(User).filter(User.username == username).first()
+                if user and user.is_active:
+                    current_user = user
+        except Exception:
+            pass
+
+    # 2) 回退: 认证关闭时通过 X-User header 查找用户
+    if not current_user and not config.security.auth_enabled and x_user:
+        user = db.query(User).filter(User.username == x_user).first()
+        if user and user.is_active:
+            current_user = user
+
     if not current_user:
-        # 认证关闭时返回模拟权限
         return {
             "user_id": 0,
             "username": "guest",
@@ -1015,6 +1115,11 @@ async def get_default_permissions_info(db: Session = Depends(get_db)):
         "alert": "告警设置",
         "compliance": "合规检查",
         "ai": "AI功能",
+        "nav_overview": "运维监控",
+        "nav_devices": "设备管理",
+        "nav_config": "配置管理",
+        "nav_spare": "备件管理",
+        "nav_system": "系统设置",
     }
 
     # 操作中文名称映射
@@ -1039,6 +1144,35 @@ async def get_default_permissions_info(db: Session = Depends(get_db)):
         "all": "全部权限",
         "use": "使用",
         "config": "配置",
+        # 导航权限操作
+        "dashboard": "仪表板",
+        "operations": "运维总览",
+        "monitor_3d": "3D数字孪生",
+        "device_health": "设备健康评分",
+        "ai_analysis": "AI分析中心",
+        "workflows": "自动化工作流",
+        "list": "设备列表",
+        "discovery": "设备发现",
+        "backups": "备份管理",
+        "faults": "故障管理",
+        "maintenance": "维修管理",
+        "planned_maintenance": "计划性运维",
+        "console": "Console配置",
+        "deploy": "配置部署",
+        "templates": "配置模板",
+        "credentials": "SSH凭证",
+        "compliance": "配置合规",
+        "tool_logs": "工具日志",
+        "spare_parts": "备件管理",
+        "movements": "出入库历史",
+        "scrap_inventory": "报废库存",
+        "notifications": "通知中心",
+        "logs": "系统日志",
+        "alert_settings": "告警通知",
+        "system_settings": "系统设置",
+        "system_help": "系统帮助",
+        "users": "用户管理",
+        "permissions": "角色权限",
     }
 
     # 从数据库获取实际权限数据（包含 id）

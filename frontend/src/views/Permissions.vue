@@ -107,6 +107,14 @@
         <el-form-item :label="t('permissionDescription')" prop="description">
           <el-input v-model="roleForm.description" type="textarea" :rows="2" :placeholder="t('permissionDescriptionPlaceholder')" />
         </el-form-item>
+        <el-form-item :label="t('navPermissionSection')">
+          <NavPermissionTree
+            v-model="roleForm.permission_ids"
+            :all-permissions="allPermissions"
+            :resource-labels="resourceLabels"
+            :action-labels="actionLabels"
+          />
+        </el-form-item>
         <el-form-item :label="t('permissionPermissions')">
           <PermissionMatrix
             v-model="roleForm.permission_ids"
@@ -130,6 +138,14 @@
         </el-form-item>
         <el-form-item :label="t('permissionDescription')">
           <el-input v-model="roleForm.description" type="textarea" :rows="2" :placeholder="t('permissionDescriptionPlaceholder')" />
+        </el-form-item>
+        <el-form-item :label="t('navPermissionSection')">
+          <NavPermissionTree
+            v-model="roleForm.permission_ids"
+            :all-permissions="allPermissions"
+            :resource-labels="resourceLabels"
+            :action-labels="actionLabels"
+          />
         </el-form-item>
         <el-form-item :label="t('permissionPermissions')">
           <PermissionMatrix
@@ -170,6 +186,7 @@ import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import { getPermissionsRoles, createPermissionsRole, updatePermissionsRole, deletePermissionsRole, clonePermissionsRole, getPermissionsDefaultsPermissions, getPermissionsResources, getPermissionsInitStatus, initPermissionsSystem } from '@/api'
 import PermissionMatrix from '@/components/PermissionMatrix.vue'
+import NavPermissionTree from '@/components/NavPermissionTree.vue'
 
 const { t } = useI18n()
 

@@ -72,8 +72,8 @@ class UserResponse(BaseModel):
     is_superuser: bool
     roles: List[dict]
     last_login: Optional[datetime]
-    created_at: datetime
-    updated_at: datetime
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
@@ -377,6 +377,17 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
     """
     # 认证关闭时的预留模式
     if not config.security.auth_enabled:
+        # 如果数据库中有该用户，签发真实 JWT（支持角色/权限隔离）
+        user = db.query(User).filter(User.username == login_data.username).first()
+        if user and verify_password(login_data.password, user.password_hash):
+            access_token = create_access_token(data={"sub": user.username, "user_id": user.id})
+            return {
+                "access_token": access_token,
+                "token_type": "bearer",
+                "expires_in": config.security.jwt_access_token_expire_minutes * 60,
+                "username": user.username,
+            }
+        # 数据库中无此用户时返回模拟令牌
         return {
             "access_token": "placeholder_token_auth_disabled",
             "token_type": "bearer",

@@ -27,6 +27,14 @@
       </div>
     </el-card>
 
+    <!-- 子导航 -->
+    <el-card class="sub-nav-card" shadow="never">
+      <div class="sub-nav">
+        <router-link to="/system-help" class="sub-nav-item active">{{ t('systemHelpSubNavArch') }}</router-link>
+        <router-link to="/system-help/dashboard" class="sub-nav-item">{{ t('systemHelpSubNavDashboard') }}</router-link>
+      </div>
+    </el-card>
+
     <!-- ====== 系统开发目的与简介 ====== -->
     <el-card class="intro-card" shadow="never">
       <div class="section-header">
@@ -706,6 +714,32 @@ function printAsPdf() {
   font-size: 13px;
   line-height: 1.7;
   margin: 0;
+}
+
+/* ===== Sub Navigation ===== */
+.sub-nav-card {
+  border: 1px solid #e4e7ed;
+}
+.sub-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sub-nav-item {
+  padding: 6px 18px;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #606266;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.sub-nav-item:hover {
+  background: #ecf5ff;
+  color: #409eff;
+}
+.sub-nav-item.active {
+  background: #409eff;
+  color: #fff;
 }
 
 /* ===== 通用 section-header ===== */

@@ -286,6 +286,12 @@ const routes = [
         name: 'SystemHelp',
         component: () => import('@/views/SystemHelp.vue'),
         meta: { title: '系统帮助' }
+      },
+      {
+        path: 'dashboard',
+        name: 'SystemHelpDashboard',
+        component: () => import('@/views/SystemHelpDashboard.vue'),
+        meta: { title: '仪表板设计说明' }
       }
     ]
   },

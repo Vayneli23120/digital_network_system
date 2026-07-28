@@ -6,6 +6,7 @@
       :active-top-tab="activeTopTab"
       :current-lang="currentLang"
       :unread-count="unreadNotifCount"
+      :visible-tabs="visibleTopTabs"
       :logo-text="t('logoText')"
       :dashboard-label="t('navDashboard')"
       :devices-label="t('navDevices')"
@@ -64,7 +65,7 @@ import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key,
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
-import { getUnreadCount } from '@/api'
+import { getUnreadCount, getMyPermissions } from '@/api'
 import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
@@ -119,20 +120,23 @@ const loadUnreadNotifCount = debounce(async (force = false) => {
   }
 }, 300)
 
+// User permissions for nav filtering (null = not loaded / show all)
+const userPermissions = ref(null)
+
 // Sidebar groups (organized by domain - no overlap)
-const sidebarGroups = computed(() => {
+const sidebarData = computed(() => {
   const groups = {
     dashboard: [
       {
         key: 'overview',
         label: t('groupOverview'),
         items: [
-          { path: '/', text: t('menuDashboard'), icon: DataBoard },
-          { path: '/operations', text: t('menuOperations'), icon: Odometer },
-          { path: '/monitor-3d', text: t('menuMonitor3D'), icon: VideoPlay },
-          { path: '/device-health', text: t('menuDeviceHealth'), icon: TrendCharts },
-          { path: '/ai-analysis', text: t('menuAIAnalysis'), icon: Cpu },
-          { path: '/workflows', text: t('menuWorkflows'), icon: Operation },
+          { path: '/', text: t('menuDashboard'), icon: DataBoard, permission: 'nav_overview:dashboard' },
+          { path: '/operations', text: t('menuOperations'), icon: Odometer, permission: 'nav_overview:operations' },
+          { path: '/monitor-3d', text: t('menuMonitor3D'), icon: VideoPlay, permission: 'nav_overview:monitor_3d' },
+          { path: '/device-health', text: t('menuDeviceHealth'), icon: TrendCharts, permission: 'nav_overview:device_health' },
+          { path: '/ai-analysis', text: t('menuAIAnalysis'), icon: Cpu, permission: 'nav_overview:ai_analysis' },
+          { path: '/workflows', text: t('menuWorkflows'), icon: Operation, permission: 'nav_overview:workflows' },
         ]
       }
     ],
@@ -141,12 +145,12 @@ const sidebarGroups = computed(() => {
         key: 'device-manage',
         label: t('groupDeviceManage'),
         items: [
-          { path: '/devices', text: t('menuDevices'), icon: Connection },
-          { path: '/discovery', text: t('menuDiscovery'), icon: Aim },
-          { path: '/backups', text: t('menuBackups'), icon: Download },
-          { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null },
-          { path: '/maintenance', text: t('menuMaintenance'), icon: Tools },
-          { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar },
+          { path: '/devices', text: t('menuDevices'), icon: Connection, permission: 'nav_devices:list' },
+          { path: '/discovery', text: t('menuDiscovery'), icon: Aim, permission: 'nav_devices:discovery' },
+          { path: '/backups', text: t('menuBackups'), icon: Download, permission: 'nav_devices:backups' },
+          { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null, permission: 'nav_devices:faults' },
+          { path: '/maintenance', text: t('menuMaintenance'), icon: Tools, permission: 'nav_devices:maintenance' },
+          { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar, permission: 'nav_devices:planned_maintenance' },
         ]
       },
     ],
@@ -155,12 +159,12 @@ const sidebarGroups = computed(() => {
         key: 'config-manage',
         label: t('groupConfigManage'),
         items: [
-          { path: '/console', text: t('menuConsole'), icon: Connection },
-          { path: '/deploy', text: t('menuDeploy'), icon: Upload },
-          { path: '/templates', text: t('menuTemplates'), icon: Document },
-          { path: '/credentials', text: t('menuCredentials'), icon: Key },
-          { path: '/compliance', text: t('menuCompliance'), icon: Checked },
-          { path: '/tool-logs', text: t('menuToolLogs'), icon: List },
+          { path: '/console', text: t('menuConsole'), icon: Connection, permission: 'nav_config:console' },
+          { path: '/deploy', text: t('menuDeploy'), icon: Upload, permission: 'nav_config:deploy' },
+          { path: '/templates', text: t('menuTemplates'), icon: Document, permission: 'nav_config:templates' },
+          { path: '/credentials', text: t('menuCredentials'), icon: Key, permission: 'nav_config:credentials' },
+          { path: '/compliance', text: t('menuCompliance'), icon: Checked, permission: 'nav_config:compliance' },
+          { path: '/tool-logs', text: t('menuToolLogs'), icon: List, permission: 'nav_config:tool_logs' },
         ]
       },
     ],
@@ -169,9 +173,9 @@ const sidebarGroups = computed(() => {
         key: 'spare-parts',
         label: t('groupSpare'),
         items: [
-          { path: '/spare-parts', text: t('menuSpareParts'), icon: Box },
-          { path: '/movements', text: t('menuMovements'), icon: Sort },
-          { path: '/scrap-inventory', text: t('menuScrapInventory'), icon: Delete },
+          { path: '/spare-parts', text: t('menuSpareParts'), icon: Box, permission: 'nav_spare:spare_parts' },
+          { path: '/movements', text: t('menuMovements'), icon: Sort, permission: 'nav_spare:movements' },
+          { path: '/scrap-inventory', text: t('menuScrapInventory'), icon: Delete, permission: 'nav_spare:scrap_inventory' },
         ]
       },
     ],
@@ -180,18 +184,40 @@ const sidebarGroups = computed(() => {
         key: 'system',
         label: t('groupSystem'),
         items: [
-          { path: '/notifications', text: t('menuNotifications') || '通知中心', icon: Bell },
-          { path: '/logs', text: t('menuLogs'), icon: Document },
-          { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell },
-          { path: '/system-settings', text: t('menuSystemSettings') || '系统设置', icon: Setting },
-          { path: '/system-help', text: t('menuSystemHelp') || '系统帮助', icon: QuestionFilled },
-          { path: '/users', text: t('menuUsers'), icon: User },
-          { path: '/permissions', text: t('menuPermissions') || '角色权限', icon: Lock },
+          { path: '/notifications', text: t('menuNotifications'), icon: Bell, permission: 'nav_system:notifications' },
+          { path: '/logs', text: t('menuLogs'), icon: Document, permission: 'nav_system:logs' },
+          { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell, permission: 'nav_system:alert_settings' },
+          { path: '/system-settings', text: t('menuSystemSettings'), icon: Setting, permission: 'nav_system:system_settings' },
+          { path: '/system-help', text: t('menuSystemHelp'), icon: QuestionFilled, permission: 'nav_system:system_help' },
+          { path: '/users', text: t('menuUsers'), icon: User, permission: 'nav_system:users' },
+          { path: '/permissions', text: t('menuPermissions'), icon: Lock, permission: 'nav_system:permissions' },
         ]
       },
     ],
   }
-  return groups[activeTopTab.value] || groups.dashboard
+
+  // Apply permission filtering when user permissions are loaded
+  const perms = userPermissions.value
+  if (perms && !perms.includes('admin:all')) {
+    for (const tabKey of Object.keys(groups)) {
+      for (const group of groups[tabKey]) {
+        group.items = group.items.filter(item => !item.permission || perms.includes(item.permission))
+      }
+      groups[tabKey] = groups[tabKey].filter(g => g.items.length > 0)
+    }
+  }
+
+  return groups
+})
+
+const sidebarGroups = computed(() => {
+  return sidebarData.value[activeTopTab.value] || []
+})
+
+const visibleTopTabs = computed(() => {
+  return Object.entries(sidebarData.value)
+    .filter(([, groups]) => groups.length > 0)
+    .map(([key]) => key)
 })
 
 // Sync top tab based on current route
@@ -249,6 +275,24 @@ onMounted(() => {
   if (darkMode.value) {
     document.documentElement.classList.add('dark')
   }
+  // Load user permissions for nav filtering
+  getMyPermissions().then(data => {
+    const perms = data.permissions || []
+    userPermissions.value = perms
+    // If current active tab is not visible, redirect to first visible tab
+    if (perms.length > 0 && !perms.includes('admin:all') && visibleTopTabs.value.length > 0) {
+      if (!visibleTopTabs.value.includes(activeTopTab.value)) {
+        const firstTab = visibleTopTabs.value[0]
+        activeTopTab.value = firstTab
+        const groups = sidebarGroups.value
+        if (groups.length > 0 && groups[0].items.length > 0) {
+          router.push(groups[0].items[0].path)
+        }
+      }
+    }
+  }).catch(() => {
+    // On error, show all (userPermissions stays null)
+  })
   // Load fault badge
   loadFaultBadge()
   // Load notification unread count

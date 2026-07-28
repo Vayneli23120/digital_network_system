@@ -117,6 +117,11 @@ const props = defineProps({
     type: String,
     default: 'System'
   },
+  // Visible tabs filter (null = show all)
+  visibleTabs: {
+    type: Array,
+    default: null
+  },
   // Labels
   logoText: {
     type: String,
@@ -225,13 +230,19 @@ const handleViewAll = () => {
   router.push('/notifications')
 }
 
-const topTabs = computed(() => [
-  { key: 'dashboard', label: props.dashboardLabel || 'Dashboard' },
-  { key: 'devices', label: props.devicesLabel || 'Devices' },
-  { key: 'config', label: props.configLabel || 'Config' },
-  { key: 'spare', label: props.spareLabel || 'Spare' },
-  { key: 'system', label: props.systemLabel || 'System' }
-])
+const topTabs = computed(() => {
+  const allTabs = [
+    { key: 'dashboard', label: props.dashboardLabel || 'Dashboard' },
+    { key: 'devices', label: props.devicesLabel || 'Devices' },
+    { key: 'config', label: props.configLabel || 'Config' },
+    { key: 'spare', label: props.spareLabel || 'Spare' },
+    { key: 'system', label: props.systemLabel || 'System' }
+  ]
+  if (props.visibleTabs) {
+    return allTabs.filter(tab => props.visibleTabs.includes(tab.key))
+  }
+  return allTabs
+})
 
 const setTopTab = (key) => {
   emit('setTopTab', key)
