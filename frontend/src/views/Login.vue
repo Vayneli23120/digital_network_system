@@ -6,15 +6,14 @@
         <div class="logo-icon">
           <el-icon><Monitor /></el-icon>
         </div>
-        <h1 class="logo-text">NAS</h1>
-        <p class="logo-subtitle">{{ t('brandSubtitle') }}</p>
+        <h1 class="logo-text">{{ t('loginLogoText') }}</h1>
       </div>
 
       <!-- 第一步：选择登录方式 -->
       <div v-if="stage === 'choose'" class="login-methods">
         <button type="button" class="method-card" @click="handleSsoLogin">
           <div class="method-body">
-            <h2 class="method-title">{{ ssoDisplayName }}</h2>
+            <h2 class="method-title">{{ t('loginSsoTitle') }}</h2>
             <p class="method-desc">{{ t('loginSsoDesc') }}</p>
             <p v-if="!ssoEnabled" class="method-badge">{{ t('loginSsoNotReady') }}</p>
           </div>
@@ -86,6 +85,18 @@
         </button>
       </el-form>
 
+      <!-- Language Toggle -->
+      <div class="login-lang">
+        <button
+          :class="['lang-btn', { active: currentLang === 'zh' }]"
+          @click="setLang('zh')"
+        >中</button>
+        <button
+          :class="['lang-btn', { active: currentLang === 'en' }]"
+          @click="setLang('en')"
+        >EN</button>
+      </div>
+
       <!-- Footer -->
       <div class="login-footer">
         <span>{{ t('brandName') }} v1.5</span>
@@ -105,7 +116,7 @@ import { Monitor, WarningFilled, Right } from '@element-plus/icons-vue'
 import { login, getSsoStatus } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
-const { t } = useI18n()
+const { t, currentLang, setLang } = useI18n()
 const router = useRouter()
 
 const loginFormRef = ref(null)
@@ -118,7 +129,6 @@ const stage = ref('choose')
 // SSO 状态由后端 /api/auth/sso/status 决定，未开通时入口仍显示但会给出提示
 const ssoStatus = ref({ enabled: false, display_name: '', login_url: '/api/auth/sso/login' })
 const ssoEnabled = computed(() => ssoStatus.value.enabled === true)
-const ssoDisplayName = computed(() => ssoStatus.value.display_name || t('loginSsoTitle'))
 
 onMounted(async () => {
   try {
@@ -422,6 +432,38 @@ const handleLogin = async () => {
   margin-top: 30px;
   color: #999;
   font-size: 12px;
+}
+
+.login-lang {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.lang-btn {
+  width: 36px;
+  height: 30px;
+  padding: 0;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  background: #fff;
+  color: #999;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.lang-btn:hover {
+  border-color: #00b894;
+  color: #00b894;
+}
+
+.lang-btn.active {
+  border-color: #00b894;
+  background: #00b894;
+  color: #fff;
 }
 
 @media (max-width: 480px) {

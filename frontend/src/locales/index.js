@@ -6,6 +6,7 @@ export const languages = {
     commonRefresh: '刷新',
     brandName: '网络自动化系统',
     brandSubtitle: '运维仪表板',
+    loginLogoText: '网络自动化系统',
 
     // 登录
     loginSsoTitle: '企业账号登录',
@@ -3450,6 +3451,7 @@ export const languages = {
     commonRefresh: '刷新',
     brandName: 'Network Automation',
     brandSubtitle: 'Operations Dashboard',
+    loginLogoText: 'Network Automation System',
 
     // Login
     loginSsoTitle: 'Corporate Account',
