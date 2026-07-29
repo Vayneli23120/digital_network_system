@@ -28,8 +28,8 @@
             @click="card.link && navigateTo(card.link)"
           >
             <span class="ai-reco-cat">{{ t('aiRecoCat_' + card.category) }}</span>
-            <strong class="ai-reco-card-title">{{ card.title }}</strong>
-            <span class="ai-reco-detail">{{ card.detail }}</span>
+            <strong class="ai-reco-card-title">{{ cardTitle(card) }}</strong>
+            <span class="ai-reco-detail">{{ cardDetail(card) }}</span>
           </button>
         </div>
       </section>
@@ -507,6 +507,11 @@ const stopAiPoll = () => {
   if (aiPollTimer) { clearTimeout(aiPollTimer); aiPollTimer = null }
   aiPollCount = 0
 }
+
+// 规则引擎卡片带 i18n key（title_key/detail_key + params），按当前语言渲染；
+// 老结构或用户录入的自由文本（如故障描述）没有 key，原样回退
+const cardTitle = (card) => (card.title_key ? t(card.title_key, card.title_params || {}) : card.title)
+const cardDetail = (card) => (card.detail_key ? t(card.detail_key, card.detail_params || {}) : card.detail)
 const scheduleAiPoll = () => {
   if (aiPollTimer || aiPollCount >= 16) return
   aiPollTimer = setTimeout(async () => {
@@ -517,7 +522,8 @@ const scheduleAiPoll = () => {
 }
 const loadAiRecommendations = async () => {
   try {
-    const res = await getAiBriefing(6)
+    // 语言随请求下发：AI 正文由模型按该语言生成，后端按语言分开缓存
+    const res = await getAiBriefing(6, currentLang.value)
     aiRecommendations.value = res.items || []
     aiBriefing.value = res.ai_briefing || null
     if (res.ai_briefing) {
@@ -941,6 +947,9 @@ const handleThemeChange = () => {
 
 watch(currentLang, () => {
   nextTick(() => { handleThemeChange() })
+  // AI 研判正文是模型按语言生成的，切换语言必须重新取（规则卡片本地即时翻译）
+  stopAiPoll()
+  loadAiRecommendations()
 })
 
 onMounted(() => {

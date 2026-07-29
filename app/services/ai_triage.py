@@ -31,20 +31,71 @@ _SYSTEM_PROMPT = (
     "不要编造未提供的数据。"
 )
 
-_BRIEFING_SYSTEM_PROMPT = (
-    "你是工厂网络运维值班主管。基于给定的运营告警卡片列表，产出一份简短的"
-    "运营研判。只返回 JSON，字段：briefing(string，一到两句总体判断)、"
-    "priorities(string 数组，最多3条按优先级排序的处置建议)、"
-    "insight(string，一句跨条目关联洞察，没有则空字符串)。"
-    "只基于给定卡片，不要编造设备或数据。"
-)
+# =============================================================================
+# 双语提示词
+#
+# AI 生成的正文（研判/简报）无法靠前端 i18n 翻译 —— 它是模型现场写出来的自然
+# 语言。所以语言必须透传到提示词里，由模型直接用目标语言作答；同时缓存键要带上
+# 语言，否则中文用户先访问会把中文结果喂给英文界面。
+# =============================================================================
 
-_EXEC_SYSTEM_PROMPT = (
-    "你是面向管理层的网络运维分析师。基于给定的关键指标(KPI)，用中文写一段"
-    "面向领导的经营简报。只返回 JSON，字段：narrative(string，2-3句话，客观、"
-    "点出风险与趋势)、highlights(string 数组，最多3条关键结论)。"
-    "只基于给定指标，不要编造数字。"
-)
+SUPPORTED_AI_LANGS = ("zh", "en")
+
+
+def normalize_lang(lang: Optional[str]) -> str:
+    """把前端传来的语言标识收敛到受支持的取值，非法值回退中文"""
+    if not lang:
+        return "zh"
+    normalized = str(lang).strip().lower().replace("_", "-").split("-")[0]
+    return normalized if normalized in SUPPORTED_AI_LANGS else "zh"
+
+
+_BRIEFING_SYSTEM_PROMPTS = {
+    "zh": (
+        "你是工厂网络运维值班主管。基于给定的运营告警卡片列表，产出一份简短的"
+        "运营研判。只返回 JSON，字段：briefing(string，一到两句总体判断)、"
+        "priorities(string 数组，最多3条按优先级排序的处置建议)、"
+        "insight(string，一句跨条目关联洞察，没有则空字符串)。"
+        "所有文本用简体中文。只基于给定卡片，不要编造设备或数据。"
+    ),
+    "en": (
+        "You are the shift supervisor for a factory network operations team. "
+        "Based on the given operational alert cards, produce a short operational "
+        "assessment. Return JSON only, with fields: briefing (string, one or two "
+        "sentences of overall judgement), priorities (array of strings, at most 3 "
+        "recommended actions ordered by priority), insight (string, one sentence "
+        "linking items together, empty string if none). "
+        "Write all text in English. Use only the given cards, do not invent "
+        "devices or data."
+    ),
+}
+
+_EXEC_SYSTEM_PROMPTS = {
+    "zh": (
+        "你是面向管理层的网络运维分析师。基于给定的关键指标(KPI)，用简体中文写一段"
+        "面向领导的经营简报。只返回 JSON，字段：narrative(string，2-3句话，客观、"
+        "点出风险与趋势)、highlights(string 数组，最多3条关键结论)。"
+        "只基于给定指标，不要编造数字。"
+    ),
+    "en": (
+        "You are a network operations analyst writing for senior management. "
+        "Based on the given KPIs, write an executive briefing in English. "
+        "Return JSON only, with fields: narrative (string, 2-3 sentences, "
+        "objective, calling out risks and trends), highlights (array of strings, "
+        "at most 3 key conclusions). "
+        "Use only the given metrics, do not invent numbers."
+    ),
+}
+
+# 发给模型的用户消息前缀
+_CARD_MESSAGE_PREFIX = {
+    "zh": "运营告警卡片如下：\n",
+    "en": "Operational alert cards:\n",
+}
+_KPI_MESSAGE_PREFIX = {
+    "zh": "关键指标如下：\n",
+    "en": "Key metrics:\n",
+}
 
 
 def ai_available() -> bool:
@@ -161,6 +212,12 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
     Always returns without needing an LLM, so the dashboard "建议卡" works even
     when no AI provider is configured. Each card is a dict with severity,
     category, title, detail and an optional link target.
+
+    国际化约定：这些卡片是规则引擎拼出来的固定句式，所以除了中文的
+    ``title`` / ``detail``（保留给 AI 提示词和旧客户端）之外，还返回
+    ``title_key`` / ``title_params`` / ``detail_key`` / ``detail_params``，
+    由前端用 i18n 渲染。这样切换语言时无需重新请求接口，也不必把语言
+    状态带进规则引擎。
     """
     cards: List[Dict] = []
 
@@ -190,6 +247,10 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
             "category": "temperature",
             "title": f"{name} 温度偏高",
             "detail": f"近24小时峰值 {peak_c}℃，建议检查散热并巡检风扇",
+            "title_key": "aiCardTempTitle",
+            "title_params": {"device": name},
+            "detail_key": "aiCardTempDetail",
+            "detail_params": {"peak": peak_c},
             "link": f"/device-health?device_id={device_id}",
         })
 
@@ -204,6 +265,10 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
             "category": "health",
             "title": f"{device.name} 健康度偏低",
             "detail": f"当前健康评分 {device.health_score}，建议安排预防性维护",
+            "title_key": "aiCardHealthTitle",
+            "title_params": {"device": device.name},
+            "detail_key": "aiCardHealthDetail",
+            "detail_params": {"score": device.health_score},
             "link": f"/device-health?device_id={device.id}",
         })
 
@@ -218,7 +283,15 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
             "category": "fault",
             "title": f"未处理{('严重' if fault.severity == 'critical' else '重要')}故障：{fault.device_name}",
             "detail": (fault.description or "")[:80],
-            "link": f"/faults?status=open",
+            # 故障描述是用户录入的自由文本，无法翻译，原样透出
+            "title_key": (
+                "aiCardFaultCriticalTitle" if fault.severity == "critical"
+                else "aiCardFaultMajorTitle"
+            ),
+            "title_params": {"device": fault.device_name},
+            "detail_key": None,
+            "detail_params": {},
+            "link": "/faults?status=open",
         })
 
     # Low spare stock.
@@ -232,6 +305,10 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
             "category": "spare",
             "title": f"备件不足：{part.name}",
             "detail": f"当前库存 {part.quantity_in_stock}，低于最低值 {part.min_quantity}",
+            "title_key": "aiCardSpareTitle",
+            "title_params": {"part": part.name},
+            "detail_key": "aiCardSpareDetail",
+            "detail_params": {"stock": part.quantity_in_stock, "min": part.min_quantity},
             "link": "/spare-parts?low_stock=true",
         })
 
@@ -240,20 +317,26 @@ def build_operational_recommendations(db: Session, limit: int = 8) -> List[Dict]
     return cards[:limit]
 
 
-async def generate_operational_briefing(db: Session, limit: int = 8) -> Dict:
+async def generate_operational_briefing(db: Session, limit: int = 8, lang: str = "zh") -> Dict:
     """Rule cards + optional AI synthesis for the dashboard.
 
     Always returns the deterministic cards. When an AI provider is configured
     and reachable, adds an AI ``briefing`` with prioritized actions and a
     cross-item insight; otherwise ``ai_briefing`` is None and the page still
     works from the rule cards alone.
+
+    Args:
+        lang: 生成语言（zh / en）。只影响 AI 正文；规则卡片始终带 i18n key，
+            由前端翻译。
     """
+    lang = normalize_lang(lang)
     cards = build_operational_recommendations(db, limit=limit)
     result: Dict = {
         "ai_configured": ai_available(),
         "total": len(cards),
         "items": cards,
         "ai_briefing": None,
+        "lang": lang,
     }
 
     if not cards or not ai_available():
@@ -263,10 +346,10 @@ async def generate_operational_briefing(db: Session, limit: int = 8) -> Dict:
         f"- [{c['severity']}] {c['category']}: {c['title']} — {c['detail']}"
         for c in cards
     ]
-    message = "运营告警卡片如下：\n" + "\n".join(card_lines)
+    message = _CARD_MESSAGE_PREFIX[lang] + "\n".join(card_lines)
     chat_result = await adk_runner.chat(
         message=message,
-        system_prompt=_BRIEFING_SYSTEM_PROMPT,
+        system_prompt=_BRIEFING_SYSTEM_PROMPTS[lang],
         temperature=0.2,
         max_tokens=700,
         timeout=60,
@@ -303,18 +386,23 @@ def _kpi_lines(kpis: Dict) -> List[str]:
     return lines
 
 
-async def generate_executive_narrative(kpis: Dict) -> Optional[Dict]:
-    """AI leadership narrative from executive KPIs. None when unavailable."""
+async def generate_executive_narrative(kpis: Dict, lang: str = "zh") -> Optional[Dict]:
+    """AI leadership narrative from executive KPIs. None when unavailable.
+
+    Args:
+        lang: 生成语言（zh / en）
+    """
     if not ai_available():
         return None
+    lang = normalize_lang(lang)
     lines = _kpi_lines(kpis)
     if not lines:
         return None
 
     for attempt in range(2):
         chat_result = await adk_runner.chat(
-            message="关键指标如下：\n" + "\n".join(lines),
-            system_prompt=_EXEC_SYSTEM_PROMPT,
+            message=_KPI_MESSAGE_PREFIX[lang] + "\n".join(lines),
+            system_prompt=_EXEC_SYSTEM_PROMPTS[lang],
             temperature=0.3,
             max_tokens=600,
             timeout=60,
@@ -338,18 +426,20 @@ async def generate_executive_narrative(kpis: Dict) -> Optional[Dict]:
     return None
 
 
-async def refresh_briefing_cache(key: str, limit: int) -> None:
+async def refresh_briefing_cache(key: str, limit: int, lang: str = "zh") -> None:
     """Background task: generate AI briefing and populate cache.
 
     Called via FastAPI BackgroundTasks so the HTTP response returns
     immediately with ai_pending=true while the LLM call runs out-of-band.
+
+    ``key`` 由调用方带上语言，保证中英文各自独立缓存。
     """
     from app.shared.database import get_db_manager
     from app.shared.cache import cache
 
     try:
         with get_db_manager().session_scope() as db:
-            result = await generate_operational_briefing(db, limit=limit)
+            result = await generate_operational_briefing(db, limit=limit, lang=lang)
             ai_briefing = result.get("ai_briefing")
             if ai_briefing:
                 cache.set(key, {"ai_briefing": ai_briefing}, ttl=900)
@@ -361,11 +451,13 @@ async def refresh_briefing_cache(key: str, limit: int) -> None:
         cache.set(key, {"ai_briefing": None, "_cooldown": True}, ttl=60)
 
 
-async def refresh_executive_summary_cache(key: str, time_range: str) -> None:
+async def refresh_executive_summary_cache(key: str, time_range: str, lang: str = "zh") -> None:
     """Background task: generate AI executive summary and populate cache.
 
     Called via FastAPI BackgroundTasks; prevents the LLM call from blocking
     the HTTP response.
+
+    ``key`` 由调用方带上语言，保证中英文各自独立缓存。
     """
     from app.shared.database import get_db_manager
     from app.shared.cache import cache
@@ -375,7 +467,7 @@ async def refresh_executive_summary_cache(key: str, time_range: str) -> None:
             from app.features.dashboard.dashboard_service import get_executive_summary
 
             summary = get_executive_summary(db, time_range=time_range)
-            ai_summary = await generate_executive_narrative(summary.get("kpis", {}))
+            ai_summary = await generate_executive_narrative(summary.get("kpis", {}), lang=lang)
             if ai_summary:
                 cache.set(key, {"ai_summary": ai_summary}, ttl=900)
             else:

@@ -1121,17 +1121,25 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     change_trend = change_success_rate - prev_change_success_rate
 
     # ===== 17. 自动生成摘要文本 =====
+    # 同时产出结构化的 summary_risks（key + params），供前端按当前语言渲染；
+    # summary_text 保留中文成品，兼容旧客户端与 AI 提示词。
     summary_parts = []
+    summary_risks = []
     if offlineDeviceCount := (total_deployed - reachable_devices):
         summary_parts.append(f"离线设备 {offlineDeviceCount} 台")
+        summary_risks.append({"key": "riskOfflineDevices", "params": {"count": offlineDeviceCount}})
     if sla_overdue := (sla_total - sla_compliant):
         summary_parts.append(f"SLA 超期 {sla_overdue} 单")
+        summary_risks.append({"key": "riskSlaOverdue", "params": {"count": sla_overdue}})
     if low_stock_count > 0:
         summary_parts.append(f"低库存 {low_stock_count} 项")
+        summary_risks.append({"key": "riskLowStock", "params": {"count": low_stock_count}})
     if recurring_rate > 15:
         summary_parts.append(f"复发故障率 {recurring_rate:.0f}%")
+        summary_risks.append({"key": "riskRecurringRate", "params": {"rate": f"{recurring_rate:.0f}"}})
     if change_success_rate < 90 and changes_with_faults > 0:
         summary_parts.append(f"变更引发故障 {changes_with_faults} 次")
+        summary_risks.append({"key": "riskChangeInducedFaults", "params": {"count": changes_with_faults}})
 
     if summary_parts:
         summary_text = "风险提示：" + "、".join(summary_parts)
@@ -1171,6 +1179,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
             "change_success_rate": _make_kpi(change_success_rate, "%", 95, 85, change_trend, change_status),
         },
         "summary_text": summary_text,
+        "summary_risks": summary_risks,
         "root_cause_distribution": root_cause_distribution,
         "root_cause_pareto": root_cause_pareto,
         "mttr_breakdown": mttr_breakdown,

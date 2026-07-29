@@ -26,8 +26,9 @@ export function getAiRecommendations(limit = 8) {
 }
 
 // AI 运营研判简报（规则卡片 + 可选 AI 综合研判）
-export function getAiBriefing(limit = 8) {
-  return api.get('/ai/briefing', { params: { limit } })
+// lang 决定 AI 正文语言，并参与后端缓存键，切换语言后会重新生成对应语种的研判
+export function getAiBriefing(limit = 8, lang = 'zh') {
+  return api.get('/ai/briefing', { params: { limit, lang } })
 }
 
 // 一键 AI 故障预判
@@ -36,8 +37,8 @@ export function aiPreDiagnoseFault(faultId) {
 }
 
 // 领导层 AI 经营摘要（未配置模型时回落模板文案）
-export function getAiExecutiveSummary(timeRange = '30d') {
-  return api.get('/dashboard/ai-summary', { params: { time_range: timeRange } })
+export function getAiExecutiveSummary(timeRange = '30d', lang = 'zh') {
+  return api.get('/dashboard/ai-summary', { params: { time_range: timeRange, lang } })
 }
 
 // 设备相关

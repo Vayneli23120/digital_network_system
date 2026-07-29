@@ -117,15 +117,22 @@ async def get_ai_executive_summary(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     time_range: str = "30d",
+    lang: str = "zh",
 ):
     """领导层 AI 经营摘要：模板摘要立即返回，AI 摘要后台生成。
 
     不再把模型思考时间阻塞在请求里；若已有缓存 AI 摘要则一并返回，
     否则 ai_pending=true，前端轮询拉取。
-    """
-    from app.services.ai_triage import ai_available, refresh_executive_summary_cache
 
-    key = _cache_key("dashboard:ai-summary", time_range=time_range)
+    ``lang`` 决定 AI 正文的语言，并且必须参与缓存键 —— 否则中文用户先访问
+    会把中文研判喂给英文界面。
+    """
+    from app.services.ai_triage import (
+        ai_available, normalize_lang, refresh_executive_summary_cache,
+    )
+
+    lang = normalize_lang(lang)
+    key = _cache_key("dashboard:ai-summary", time_range=time_range, lang=lang)
     cached = cache.get(key)
     if isinstance(cached, dict):
         ai_narrative = cached.get("ai_summary")
@@ -139,13 +146,15 @@ async def get_ai_executive_summary(
         "ai_configured": ai_available(),
         "ai_summary": ai_narrative,
         "fallback_text": summary.get("summary_text"),
+        "fallback_risks": summary.get("summary_risks", []),
         "range": time_range,
+        "lang": lang,
         "ai_pending": False,
     }
 
     if ai_available() and ai_narrative is None and not cooldown:
         result["ai_pending"] = True
-        background_tasks.add_task(refresh_executive_summary_cache, key, time_range)
+        background_tasks.add_task(refresh_executive_summary_cache, key, time_range, lang)
 
     return result
 

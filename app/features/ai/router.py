@@ -117,22 +117,28 @@ async def get_operational_recommendations(limit: int = 8, db: Session = Depends(
 async def get_operational_briefing(
     background_tasks: BackgroundTasks,
     limit: int = 8,
+    lang: str = "zh",
     db: Session = Depends(get_db),
 ):
     """运营研判简报：规则卡片立即返回，AI 综合研判在后台生成。
 
     关键体验优化：不再把 Kimi 的思考时间阻塞在请求里。卡片秒出；
     若已有缓存的 AI 研判则一并返回；否则 ai_pending=true，前端轮询拉取。
+
+    ``lang`` 只影响 AI 正文的语言（规则卡片带 i18n key 由前端翻译），
+    并且参与缓存键，避免中英文互相污染。
     """
     from app.services.ai_triage import (
         ai_available,
         build_operational_recommendations,
+        normalize_lang,
         refresh_briefing_cache,
     )
     from app.shared.cache import cache, _cache_key
 
+    lang = normalize_lang(lang)
     cards = build_operational_recommendations(db, limit=limit)
-    key = _cache_key("ai:briefing", limit=limit)
+    key = _cache_key("ai:briefing", limit=limit, lang=lang)
     cached = cache.get(key)
     if isinstance(cached, dict):
         ai_briefing = cached.get("ai_briefing")
@@ -146,13 +152,14 @@ async def get_operational_briefing(
         "total": len(cards),
         "items": cards,
         "ai_briefing": ai_briefing,
+        "lang": lang,
         "ai_pending": False,
     }
 
     # 有卡片、已配 AI、无缓存 AI 研判、且不在失败冷却期 → 后台生成
     if ai_available() and cards and ai_briefing is None and not cooldown:
         result["ai_pending"] = True
-        background_tasks.add_task(refresh_briefing_cache, key, limit)
+        background_tasks.add_task(refresh_briefing_cache, key, limit, lang)
 
     return result
 

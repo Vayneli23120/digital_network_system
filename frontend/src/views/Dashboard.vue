@@ -87,7 +87,7 @@
             <!-- 态势摘要条 -->
             <div v-else-if="wg.type === 'summary'" class="summary-bar" :class="summaryBarClass" v-loading="!executiveSummary">
               <div class="summary-icon"><el-icon><DataBoard /></el-icon></div>
-              <span class="summary-text">{{ (aiSummary && aiSummary.narrative) || (executiveSummary && executiveSummary.summary_text) }}</span>
+              <span class="summary-text">{{ (aiSummary && aiSummary.narrative) || riskSummaryText }}</span>
               <span v-if="aiSummary && aiSummary.narrative" class="summary-ai-badge">{{ t('aiRecoAiBadge') }}</span>
               <span v-else-if="aiSummaryPending" class="summary-ai-pending"><i class="summary-ai-dot"></i>{{ t('aiRecoGenerating') }}</span>
               <span class="summary-range">{{ executiveSummary && executiveSummary.range }}</span>
@@ -151,7 +151,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUnmounted } from 'vue'
+import { ref, onMounted, computed, onUnmounted, watch } from 'vue'
 import { DataBoard, Rank } from '@element-plus/icons-vue'
 import { getExecutiveSummary, getRealtimeStatus, getAiExecutiveSummary } from '@/api'
 import NetworkOverviewWidget from '@/components/ui/NetworkOverviewWidget.vue'
@@ -164,7 +164,7 @@ import ParetoChart from '@/components/ui/ParetoChart.vue'
 import ErrorBudget from '@/components/ui/ErrorBudget.vue'
 import ChangeCorrelation from '@/components/ui/ChangeCorrelation.vue'
 
-const { t } = useI18n()
+const { t, currentLang } = useI18n()
 const executiveSummary = ref(null)
 const aiSummary = ref(null)
 const aiSummaryPending = ref(false)
@@ -176,11 +176,23 @@ let timerId = null
 let realtimeTimerId = null
 let kpiTimerId = null
 
+// 风险提示条：后端给结构化的 summary_risks（key + params），这里按当前语言拼；
+// 没有结构化字段时（旧接口）回退到中文成品 summary_text
+const riskSummaryText = computed(() => {
+  const risks = executiveSummary.value?.summary_risks
+  if (Array.isArray(risks)) {
+    if (risks.length === 0) return t('riskNoneStable')
+    const joined = risks.map(r => t(r.key, r.params || {})).join(t('riskSeparator'))
+    return t('riskPrefix') + joined
+  }
+  return executiveSummary.value?.summary_text || ''
+})
+
+// 有风险项就标红，无风险项标稳定；不再靠中文关键字匹配判断
 const summaryBarClass = computed(() => {
-  const summary = executiveSummary.value?.summary_text
-  if (!summary) return 'stable'
-  if (summary.includes('风险') || summary.includes('Risk')) return 'risk'
-  if (summary.includes('平稳') || summary.includes('Stable')) return 'stable'
+  const risks = executiveSummary.value?.summary_risks
+  if (Array.isArray(risks)) return risks.length ? 'risk' : 'stable'
+  if (!executiveSummary.value?.summary_text) return 'stable'
   return 'warning'
 })
 
@@ -200,7 +212,8 @@ const loadExecutive = async (force = false) => {
 
 const loadAiSummary = async () => {
   try {
-    const res = await getAiExecutiveSummary('30d')
+    // 语言随请求下发：AI 正文由模型按该语言生成，后端按语言分开缓存
+    const res = await getAiExecutiveSummary('30d', currentLang.value)
     aiSummary.value = res.ai_summary || null
     if (res.ai_summary) {
       aiSummaryPending.value = false
@@ -239,6 +252,12 @@ const loadRealtime = async () => {
     console.error('Failed to load realtime status:', err)
   }
 }
+
+// AI 研判正文是模型按语言生成的，切换语言必须重新取一份
+watch(currentLang, () => {
+  stopAiSummaryPoll()
+  loadAiSummary()
+})
 
 onMounted(() => {
   loadExecutive()
