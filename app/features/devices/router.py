@@ -1102,7 +1102,7 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
 
     results = []
     total_found = total_matched = total_uplinks = 0
-    total_cleared = 0
+    total_aps = total_cleared = 0
     for dev in devices:
         res = await asyncio.to_thread(discover_neighbors, dev.id)
         results.append({

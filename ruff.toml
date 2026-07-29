@@ -1,0 +1,47 @@
+# Ruff 配置 —— 只做「能抓真 bug」的静态检查，不做代码风格约束
+#
+# 背景：2026-07-28 的代码审查中，有 4 处「未定义变量」级别的故障进入了主干
+# （部署服务引用不存在的 device、napalm 流式服务缺 import asyncio、
+#   WebSocket 路由缺 tool_executor 导入、邻居发现累加器未初始化），
+# 它们都会在运行时 NameError，但被宽泛的 except 吞成业务失败信息。
+# 本配置的目标就是让这一类问题在提交前就暴露。
+#
+# 用法：
+#   ruff check app scripts migrations tests          # 检查
+#   ruff check app --select F401 --fix               # 单独清理未使用导入
+
+target-version = "py311"
+line-length = 120
+
+exclude = [
+    ".venv",
+    "__pycache__",
+    "backend",          # 已归档的旧后端（backend/README_ARCHIVED.md）
+    "frontend-react",
+    "node_modules",
+]
+
+[lint]
+# 当前启用的规则（保持零告警）：
+#   F821 undefined-name        —— 未定义变量，运行时 NameError
+#   F822 undefined-export      —— __all__ 里导出了不存在的名字
+#   F823 undefined-local       —— 局部变量在赋值前被使用
+#   F811 redefined-while-unused —— 重复定义（可能遮蔽路由处理器/导入）
+#   F632 is-literal            —— 用 is 比较字面量
+#   F702/F706/F707 等 E9 语法级错误
+select = ["F821", "F822", "F823", "F811", "F632", "E9"]
+
+# 尚未清理、暂不纳入门禁的规则（属于技术债，见 docs/CODE_REVIEW_ISSUES.md）：
+#   F401 unused-import  —— 约 200 处，需单独一轮清理后再启用
+#   F841 unused-variable —— 约 20 处，其中少数指向真实的死逻辑
+#
+# 刻意不启用的规则：
+#   E712 (== True/False) —— SQLAlchemy 的 filter(Column == True) 是必要写法，
+#        改成 if Column: 会破坏查询语义，该规则在本项目属误报
+ignore = []
+
+[lint.per-file-ignores]
+# CLI 里大量函数内重复导入模型，属风格问题不影响正确性
+"app/cli.py" = ["F811"]
+# 迁移脚本由 alembic 生成，模板本身带重复导入
+"migrations/versions/*.py" = ["F811"]

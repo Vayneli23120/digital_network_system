@@ -247,7 +247,6 @@ async def api_manual_stock_in(
 ):
     """手动入库（创建备件实例）"""
     from app.shared.models import SparePart, SparePartInstance, SparePartMovement
-    from datetime import datetime
 
     part = db.query(SparePart).filter(SparePart.id == part_id).first()
     if not part:
@@ -323,7 +322,6 @@ async def api_manual_stock_out(
 ):
     """手动出库（通过序列号定位实例）"""
     from app.shared.models import SparePart, SparePartInstance, SparePartMovement
-    from datetime import datetime
 
     part = db.query(SparePart).filter(SparePart.id == part_id).first()
     if not part:

@@ -109,7 +109,13 @@ class DeployService:
             logger.error(f"获取配置失败：{e}")
             raise RuntimeError(f"获取配置失败：{str(e)}")
 
-    def deploy_config(self, connection: object, config: str, dry_run: bool = False) -> dict:
+    def deploy_config(
+        self,
+        connection: object,
+        config: str,
+        dry_run: bool = False,
+        device: Optional[dict] = None,
+    ) -> dict:
         """
         部署配置到设备
 
@@ -117,10 +123,15 @@ class DeployService:
             connection: Netmiko 连接对象
             config: 要部署的完整配置
             dry_run: 是否仅为预览，不实际执行
+            device: 设备字典（用于命令守卫判定厂商与记录上下文）。
+                历史版本漏传该参数，导致下方命令守卫段落 NameError，
+                异常被调用方的宽泛 except 吞成"部署失败"，
+                安全守卫实际从未生效 —— 不要再把它改成可选之外的形式。
 
         Returns:
             部署结果字典
         """
+        device = device or {}
         result = {
             'success': False,
             'changes': [],
@@ -372,7 +383,7 @@ class DeployService:
         connection = None
         try:
             connection = self.connect_device(device, credentials)
-            deploy_result = self.deploy_config(connection, config, dry_run)
+            deploy_result = self.deploy_config(connection, config, dry_run, device=device)
             result.update(deploy_result)
         except Exception as e:
             result['success'] = False

@@ -13,6 +13,8 @@ from pathlib import Path
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
 from loguru import logger
 
+from app.features.tool_logs.tool_executor import tool_executor
+
 router = APIRouter(tags=["WebSocket"])
 
 

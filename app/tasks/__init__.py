@@ -3,10 +3,16 @@ Celery 任务模块
 
 包含：
 - backup_tasks: 配置备份任务
-- deploy_tasks: 配置部署任务
+- deploy_tasks: 配置部署任务（占位，待实现）
 - ai_tasks: AI 分析任务
-- notification_tasks: 通知发送任务
-- scheduled_tasks: 定时任务
+- notification_tasks: 通知发送任务（占位，待实现）
+- scheduled_tasks: 定时任务（占位，待实现）
+
+注意：这里不再在导入时生成占位模块文件。
+原实现用 `Path.write_text()` 写入中文 docstring，在默认编码为 cp1252/GBK 的
+Windows 上会抛 UnicodeEncodeError，导致整个 app.tasks 包无法导入（Celery 任务
+与相关测试全部失败）；在 Linux 上则会静默生成未纳入版本控制的源文件。
+占位模块现在是仓库里的真实文件。
 """
 
 # 延迟导入各任务模块，避免循环依赖
@@ -17,26 +23,3 @@ __all__ = [
     "notification_tasks",
     "scheduled_tasks",
 ]
-
-
-# 创建占位文件
-def _create_placeholder_tasks():
-    """创建占位任务模块（如果不存在）"""
-    import os
-    from pathlib import Path
-
-    tasks_dir = Path(__file__).parent
-
-    placeholders = {
-        "deploy_tasks.py": "\"\"\"部署任务（待实现）\"\"\"",
-        "notification_tasks.py": "\"\"\"通知任务（待实现）\"\"\"",
-        "scheduled_tasks.py": "\"\"\"定时任务（待实现）\"\"\"",
-    }
-
-    for filename, content in placeholders.items():
-        filepath = tasks_dir / filename
-        if not filepath.exists():
-            filepath.write_text(content)
-
-
-_create_placeholder_tasks()

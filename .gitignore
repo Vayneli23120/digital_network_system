@@ -42,10 +42,14 @@ inventory/devices.yaml
 # 数据库
 data/*.db
 data/*.db-journal
+# SQLite WAL 模式的临时文件（database.py 对 SQLite 启用了 journal_mode=WAL）
+data/*.db-shm
+data/*.db-wal
 *.db
 
-# 备份文件
-backups/*
+# 备份文件（只忽略仓库根目录的 backups/，否则会连带忽略 app/features/backups/
+# 这类源码目录 —— 该目录下的新文件曾必须用 git add -f 才能加入版本控制）
+/backups/
 
 # 日志
 logs/*
@@ -75,4 +79,3 @@ htmlcov/
 
 # Windows
 Thumbs.db
-backups/

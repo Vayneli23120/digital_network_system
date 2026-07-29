@@ -4,11 +4,14 @@
 """
 
 import os
-from typing import Optional, Dict
+from typing import TYPE_CHECKING, Optional, Dict
 from loguru import logger
 
 from app.shared.database import get_db
 from app.shared.models import AIConfig
+
+if TYPE_CHECKING:  # 仅用于类型标注，运行时不导入 google-adk（可选依赖）
+    from google.adk.models import LiteLlm
 
 
 class ADKConfig:

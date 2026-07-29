@@ -241,23 +241,27 @@ async def get_fault_analysis(fault_id: int, db: Session = Depends(get_db)):
         AIAnalysisRecord.target_id == fault_id
     ).order_by(AIAnalysisRecord.created_at.desc()).first()
 
+    # FaultRecord 没有 title 字段，只有 fault_no / description。
+    # 这里沿用 workflow/triggers/triggers.py 的取法保持一致。
+    fault_title = fault.description[:50] if fault.description else fault.fault_no
+
     if record:
         return {
             "fault_id": fault_id,
-            "fault_title": fault.title,
+            "fault_title": fault_title,
             "has_analysis": True,
             "ai_provider": record.ai_provider,
             "model": record.model_name,
             "result": record.output_result[:500] if record.output_result else None,
             "processing_time_ms": record.processing_time_ms,
-            "analyzed_at": record.created_at.isoformat(),
+            "analyzed_at": record.created_at.isoformat() if record.created_at else None,
             "ai_root_cause": fault.ai_root_cause,
             "ai_recommendation": fault.ai_recommendation
         }
     else:
         return {
             "fault_id": fault_id,
-            "fault_title": fault.title,
+            "fault_title": fault_title,
             "has_analysis": False,
             "ai_root_cause": fault.ai_root_cause,
             "ai_recommendation": fault.ai_recommendation

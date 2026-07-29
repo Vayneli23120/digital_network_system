@@ -277,7 +277,6 @@ class HealthScoreCalculator:
             MaintenanceRecord.created_at >= ninety_days_ago
         ).all()
 
-        from decimal import Decimal
 
         return {
             'count_90days': len(repairs),

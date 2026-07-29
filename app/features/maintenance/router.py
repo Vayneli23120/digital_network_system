@@ -109,7 +109,6 @@ def get_next_action_button(current_status):
     return ACTION_BUTTONS.get(current_status, {'action': None, 'label': '查看详情', 'icon': 'View'})
 
 
-import json
 
 
 def add_utc_suffix(dt_iso: str) -> str:

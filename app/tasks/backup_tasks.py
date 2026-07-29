@@ -30,9 +30,9 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
     """
     from app.shared.database import get_db_manager
     from app.shared.models_jobs import Job, JobStatus, update_job_status
-    from app.shared.models import Device
-    from app.features.backups.netmiko_service import NetmikoService
-    from app.features.credentials.credential_service import CredentialService
+    from app.shared.models import BackupRecord, Device
+    from app.features.backups.netmiko_service import backup_device_config
+    from app.features.credentials.credential_service import resolve_device_credentials
 
     db_manager = get_db_manager()
 
@@ -58,16 +58,30 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
             return {"success": False, "error": f"Device {device_id} not found"}
 
         try:
-            # 获取凭证
-            cred_service = CredentialService(db)
-            credentials = cred_service.get_credentials_for_device(device)
+            from app.shared.config import get_config
+            config = get_config()
 
-            # 执行备份（复用现有 NetmikoService）
-            netmiko_svc = NetmikoService()
-            result = netmiko_svc.backup_device(device, credentials, operator)
+            # 获取凭证（与同步接口同一套解析逻辑）
+            credentials = resolve_device_credentials(db, device)
+
+            # 执行备份（模块级函数，NetmikoService 类本身没有 backup_device 方法）
+            result = backup_device_config(device, credentials, config.storage.backup_dir)
 
             # 更新 Job 状态
             if result.get("success"):
+                # 落库备份记录 —— 否则异步备份不会出现在备份列表里
+                db.add(BackupRecord(
+                    device_id=device.id,
+                    device_name=device.name,
+                    backup_file=result.get("file_path"),
+                    file_size=result.get("file_size", 0),
+                    md5_hash=result.get("md5_hash"),
+                    has_change=result.get("has_change", False),
+                    operator=operator,
+                ))
+                device.last_backup_time = datetime.utcnow()
+                db.commit()
+
                 update_job_status(
                     db, job_id, JobStatus.SUCCESS,
                     result=result
@@ -75,12 +89,20 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
                 logger.info(f"Backup job {job_id} completed successfully for device {device.name}")
 
                 # ===== 备份成功后触发 RAG 索引 =====
-                from app.shared.config import get_config
-                config = get_config()
                 if config.database.is_postgresql:
-                    # 异步索引到知识库
+                    # 异步索引到知识库。
+                    # backup_device_config 的返回值里没有 config_content（原代码取
+                    # 该字段永远为空，RAG 索引从未触发），这里从落盘文件读取，
+                    # 避免把整份配置塞进 Job.result 造成行膨胀。
                     from app.tasks.ai_tasks import index_device_config_task
-                    backup_content = result.get("config_content", "")
+                    backup_content = ""
+                    backup_path = result.get("file_path")
+                    if backup_path:
+                        try:
+                            with open(backup_path, "r", encoding="utf-8") as fh:
+                                backup_content = fh.read()
+                        except OSError as read_err:
+                            logger.warning(f"读取备份文件用于 RAG 索引失败: {read_err}")
                     if backup_content:
                         index_device_config_task.delay(
                             device_id=device_id,
@@ -91,9 +113,10 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
                         logger.info(f"RAG indexing task triggered for device {device.name}")
 
             else:
+                # backup_device_config 用 message 承载失败原因，没有 error 字段
                 update_job_status(
                     db, job_id, JobStatus.FAILED,
-                    error_message=result.get("error", "Unknown error")
+                    error_message=result.get("message") or result.get("error") or "Unknown error"
                 )
                 logger.error(f"Backup job {job_id} failed for device {device.name}")
 

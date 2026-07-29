@@ -601,7 +601,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     Returns:
         包含所有管理层 KPI 的字典，每个 KPI 带 value/unit/target/threshold/trend/status
     """
-    from app.shared.models import SystemConfig, SparePartMovement, ServiceSlo, BackupRecord
+    from app.shared.models import ServiceSlo, BackupRecord
     from collections import Counter
 
     # 计算时间范围

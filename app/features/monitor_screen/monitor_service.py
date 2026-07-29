@@ -508,7 +508,6 @@ def get_global_summary(db: Session) -> Dict[str, Any]:
         }
     """
     # 统计所有在管设备（deployment_status='in-use'）
-    from sqlalchemy import func
 
     devices = db.query(Device).filter(Device.deployment_status == 'in-use').all()
 

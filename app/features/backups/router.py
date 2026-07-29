@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pathlib import Path
+from loguru import logger
 import difflib
 from datetime import datetime
 import time
@@ -201,7 +202,6 @@ async def backup_device_async(
         backup_task.delay(job_id=job.id, device_id=device_id, operator=operator or "system")
     except Exception as e:
         # Celery 可能不可用，回退到同步模式
-        from loguru import logger
         logger.warning(f"Celery unavailable, falling back to sync: {e}")
         job.status = JobStatus.FAILED
         job.error_message = f"Celery unavailable: {e}"
