@@ -38,6 +38,23 @@
 
 ## 批次二 · 安全
 
+> **执行计划（2026-07-29 与业主确认）**
+> 认证目标形态：**SSO（Microsoft Entra ID / OIDC）+ 本地账号**双通道，MFA 由 Entra 侧负责。
+> 环境事实：服务器在公司内网，**全公司含异地站点均可访问**，无公网入口；测试环境 `auth_enabled=false`。
+> 因此"内网"不等于"可信"，暴露面是千人量级，先做与 SSO 无关的收口，再等应用注册落地。
+>
+> | 步骤 | 内容 | 状态 |
+> |---|---|---|
+> | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
+> | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
+> | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ⬜ |
+> | 4 | 按危险度给写接口挂权限：deploy → devices → logs → 其余 | ⬜ |
+> | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
+> | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
+>
+> 步骤 5 必须排在步骤 3、4 之后：会话凭证的安全性完全依赖"会话属于谁可信"，
+> 在 `X-User` 可伪造的情况下先做会话凭证会比现状更糟。
+
 - [ ] **P0** `shared/config.py:176` — `auth_enabled` 默认 `False`，此时 `require_permission` / `require_permissions` / `require_superuser`（`shared/dependencies.py:150,190,232`）全部直接 return 放行，整套 RBAC 在默认配置下无效。需明确定位：默认改 `True`，或承认它只是 UI 偏好。`[已复核]`
 - [ ] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
@@ -45,8 +62,29 @@
 - [ ] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[待验证]` 需确认模板来源是否仅限管理员
 - [ ] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
 - [ ] **P1** `auth/router.py:102,110` — passlib 缺失时静默退化为明文存储 + 明文比较，无任何告警。建议缺失即启动失败。`[已复核]`
+  → 部分缓解（步骤 1）：`nas user create-admin` / `reset-password` 会先检查 `PWD_CONTEXT_AVAILABLE`，
+    缺失则拒绝创建并给出安装命令；`tests/test_credentials_no_plaintext.py::test_passlib_is_installed`
+    把它变成测试门禁。运行期的 fail-fast 留到步骤 3 一起做。
+- [x] **P0**（步骤 1 新增）没有创建本地管理员账号的手段 —— 收紧认证前无法确认"自己能登进去"。`[已复核]`
+  → 新增 CLI：`nas user create-admin -u <用户名>`（交互式输入密码、强制 ≥8 位、自动关联 admin 角色）、
+    `nas user reset-password`、`nas user list`
+- [x] **P0**（步骤 2）登录入口只有本地账号一种，SSO 无处挂载。`[已复核]`
+  → 新增 `app/shared/config.py::SSOConfig`（Entra ID / OIDC，默认关闭）与
+    `app/features/auth/sso_router.py` 三个端点（`/status`、`/login`、`/callback`）；
+    前端 `Login.vue` 改成两段式：先选登录方式（企业账号 / 本地账号），再进表单。
+    未开通时 `/status` 返回 `enabled:false`，`/login` 返回 **501 + 缺失配置项清单**（不是 404/500），
+    且 `/status` 绝不回传 client_id / client_secret。
+    等应用注册批下来，只需在 config.yaml 填 tenant_id / client_id / client_secret / redirect_uri。
 - [ ] **P1** `services/adk/config.py:118`、`compliance/router.py:521,564,618` — AI API Key 明文入库（字段名却叫 `api_key_encrypted`），并写进进程级 `os.environ`，跨请求污染。`[已复核]`
-- [ ] **P1** `credentials/router.py:104` — 通过 API 明文返回 SSH 密码；`:41,115` 请求体是裸 `dict`。`[已复核]`
+- [x] **P1** `credentials/router.py:104` — 通过 API 明文返回 SSH 密码；`:41,115` 请求体是裸 `dict`。`[已复核]`
+  → 修复（步骤 1）：详情/列表接口一律不返回密码，只给 `has_password` / `has_enable_password` 标志；
+    前端本来就没用那个字段（`Credentials.vue` 写的是 `password: ''`），所以零功能损失。
+    同时该文件的另三个问题一并解决：四个接口挂上 `credential:*` 权限依赖、请求体换成
+    Pydantic 模型、`db = next(get_db())` 换成 `Depends(get_db)`。
+  → 连带修复：前端不回填密码后，"留空"必须等于"保持不变"，否则每次编辑都会静默清掉已存的
+    enable 密码；清空改为显式 `clear_enable_password`（编辑框下新增勾选项）。
+  → 连带修复：`app/cli.py` 的 `backup run` 命令此前硬编码 `admin/admin/admin`，改为走
+    `resolve_device_credentials()`。
 - [ ] **P1** `credentials/credential_service.py:24-38` — Fernet key 由 `jwt_secret` + 固定盐 `b"nas-salt"` 派生：轮换 JWT 密钥即全部设备凭证不可解密，且 `credentials/router.py:96` 已用 try/except 把解密失败兜成空密码。`[已复核]`
 - [ ] **P1** `alerts/router.py:36-56` — `GET /settings` 无鉴权返回 `dingtalk_secret` / webhook / SMTP 用户名。`[已复核]`
 - [ ] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
@@ -56,6 +94,13 @@
 - [ ] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]`
 
 **完成判定**：`auth_enabled=true` 下跑一遍主要写操作，未授权账号应全部 403；日志文件接口对 `../` 返回 400。
+
+**步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
+`tests/test_credentials_no_plaintext.py`（10 项）与 `tests/test_sso_placeholder.py`（7 项）全过，
+覆盖"接口不含明文""留空不误清空""错误密码返回 401""SSO 状态不泄漏密钥"；
+✅ 全量 pytest 失败集合仍为基线 64 条，通过数 355 → 387。
+**未验证**：前端页面实际渲染（npm 装不上依赖），登录页双入口需你在浏览器里看一眼；
+真实 Entra ID 跳转需等应用注册。
 
 ---
 

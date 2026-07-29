@@ -74,8 +74,16 @@
               v-model="credentialForm.enable_password"
               type="password"
               show-password
-              :placeholder="t('credEnablePasswordPlaceholder')"
+              :disabled="credentialForm.clear_enable_password"
+              :placeholder="editMode && hasEnablePassword ? t('credPasswordEditPlaceholder') : t('credEnablePasswordPlaceholder')"
             />
+            <el-checkbox
+              v-if="editMode && hasEnablePassword"
+              v-model="credentialForm.clear_enable_password"
+              class="clear-enable-checkbox"
+            >
+              {{ t('credClearEnablePassword') }}
+            </el-checkbox>
           </el-form-item>
           <el-form-item>
             <el-alert type="info" :closable="false" class="info-alert">
@@ -126,8 +134,12 @@ const credentialForm = ref({
   description: '',
   username: '',
   password: '',
-  enable_password: ''
+  enable_password: '',
+  clear_enable_password: false
 })
+
+// 编辑时该凭证组是否已设置过 enable 密码（后端只返回标志，不返回内容）
+const hasEnablePassword = ref(false)
 
 const loadCredentials = debounce(async (force = false) => {
   loading.value = true
@@ -152,19 +164,18 @@ const editCredential = async (id) => {
   try {
     const data = await getCredential(id)
     currentCredentialId.value = id
+    // 后端不再返回任何密码明文，两个密码框一律留空 = 保持不变
     credentialForm.value = {
       name: data.name,
       description: data.description,
       username: data.username,
-      password: '',  // 密码不回填，用户需要修改时才输入
-      enable_password: data.enable_password || ''
+      password: '',
+      enable_password: '',
+      clear_enable_password: false
     }
+    hasEnablePassword.value = !!data.has_enable_password
     editMode.value = true
     showAddDialog.value = true
-    // 如果密码解密失败，提示用户需要重新输入
-    if (data.decrypt_warning) {
-      ElMessage.warning(t('credDecryptWarning'))
-    }
   } catch (error) {
     ElMessage.error(t('credGetFailed'))
   }
@@ -208,12 +219,15 @@ const updateCredential = async () => {
       username: credentialForm.value.username
     }
 
-    // 只有当用户输入密码时才更新
+    // 密码类字段：留空表示保持不变，只有真正输入了才提交
     if (credentialForm.value.password) {
       updateData.password = credentialForm.value.password
     }
-    if (credentialForm.value.enable_password !== undefined) {
-      updateData.enable_password = credentialForm.value.enable_password || ''
+    if (credentialForm.value.enable_password) {
+      updateData.enable_password = credentialForm.value.enable_password
+    } else if (credentialForm.value.clear_enable_password) {
+      // 需要清空时必须显式声明，避免"输入框为空"被误当成清空
+      updateData.clear_enable_password = true
     }
 
     await updateCredentialApi(currentCredentialId.value, updateData)
@@ -255,8 +269,10 @@ const resetForm = () => {
     description: '',
     username: '',
     password: '',
-    enable_password: ''
+    enable_password: '',
+    clear_enable_password: false
   }
+  hasEnablePassword.value = false
 }
 
 const openAddDialog = () => {
@@ -521,6 +537,11 @@ onMounted(() => {
 /* 密码输入框 */
 .credential-form :deep(.el-input--password .el-input__wrapper) {
   padding-right: 32px;
+}
+
+/* 清空 enable 密码的勾选项（后端不回传密码，只能显式声明清空） */
+.clear-enable-checkbox {
+  margin-top: 6px;
 }
 
 /* 表单项标签 */

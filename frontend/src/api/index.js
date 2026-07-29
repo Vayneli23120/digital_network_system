@@ -454,6 +454,11 @@ export function deleteMovement(id) {
 export function login(data) {
   return api.post('/auth/login', data)
 }
+
+// SSO（Microsoft Entra ID）开通状态；未开通时登录页把 SSO 入口标为不可用
+export function getSsoStatus() {
+  return api.get('/auth/sso/status')
+}
 export function logout() {
   return api.post('/auth/logout')
 }

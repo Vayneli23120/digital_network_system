@@ -204,6 +204,50 @@ class DatabaseConfig(BaseModel):
         return f"sqlite+aiosqlite:///{self.sqlite_path}"
 
 
+class SSOConfig(BaseModel):
+    """单点登录配置 —— Microsoft Entra ID (OIDC 授权码流)
+
+    默认关闭。等 IT 批下应用注册后，只需在 config.yaml 里填三个值并把
+    enabled 置为 true，前端登录页的 SSO 入口即可用，无需改代码：
+
+        sso:
+          enabled: true
+          tenant_id: "<目录 ID>"
+          client_id: "<应用程序 ID>"
+          client_secret: "${SSO_CLIENT_SECRET}"     # 从环境变量注入，不要写死
+          redirect_uri: "https://<内网主机>/api/auth/sso/callback"
+
+    注意：MFA 由 Entra ID 侧负责，本系统不实现第二因子。
+    另需确认服务器能出站访问 login.microsoftonline.com（换取令牌 + 拉取 JWKS 验签）。
+    """
+    enabled: bool = False
+    provider: str = Field(default="entra", description="身份提供方标识，目前仅支持 entra")
+    display_name: str = Field(default="企业账号登录", description="登录页 SSO 入口的显示名")
+    tenant_id: str = ""
+    client_id: str = ""
+    client_secret: str = ""
+    redirect_uri: str = ""
+    scopes: List[str] = Field(default=["openid", "profile", "email"])
+    # 首次通过 SSO 登录时自动建号，并赋予下面这个角色
+    auto_provision: bool = True
+    default_role: str = Field(default="viewer", description="SSO 新用户的默认角色")
+
+    @property
+    def authority(self) -> str:
+        """Entra ID 的 authority URL"""
+        return f"https://login.microsoftonline.com/{self.tenant_id}" if self.tenant_id else ""
+
+    def missing_fields(self) -> List[str]:
+        """返回启用 SSO 还缺哪些配置项，供 /api/auth/sso/status 自检"""
+        required = {
+            "tenant_id": self.tenant_id,
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "redirect_uri": self.redirect_uri,
+        }
+        return [name for name, value in required.items() if not value]
+
+
 class SecurityConfig(BaseModel):
     auth_enabled: bool = False  # 认证功能开关，默认关闭
     jwt_secret: str = "your-secret-key-change-in-production"
@@ -263,6 +307,7 @@ class Config(BaseModel):
     app: AppConfig = Field(default_factory=AppConfig)
     database: DatabaseConfig = Field(default_factory=DatabaseConfig)
     security: SecurityConfig = Field(default_factory=SecurityConfig)
+    sso: SSOConfig = Field(default_factory=SSOConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)

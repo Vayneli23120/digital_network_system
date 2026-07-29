@@ -8,6 +8,13 @@ export const languages = {
     brandSubtitle: '运维仪表板',
 
     // 登录
+    loginSsoTitle: '企业账号登录',
+    loginSsoDesc: '使用公司邮箱账号登录（含多重认证）。',
+    loginSsoNotReady: '尚未开通',
+    loginSsoNotReadyHint: 'SSO 尚未开通，请先使用本地账号登录',
+    loginLocalTitle: '本地账号登录',
+    loginLocalDesc: '管理员使用系统本地用户名和密码直接登录。',
+    loginBackToMethods: '← 返回选择登录方式',
     loginSubmit: '登录',
     loginUsernamePlaceholder: '请输入用户名',
     loginPasswordPlaceholder: '请输入密码',
@@ -1741,6 +1748,7 @@ export const languages = {
     credPasswordEditPlaceholder: '不修改请留空',
     credEnablePassword: 'Enable 密码',
     credEnablePasswordPlaceholder: '可选，Cisco enable 模式密码',
+    credClearEnablePassword: '清空已保存的 enable 密码',
     credEncryptInfo: '所有密码将使用 AES 加密存储于数据库中。',
     credRequiredInfo: 'SSH 密码必填，Enable 密码用于需要特权模式的设备。',
     credLoadFailed: '加载凭证列表失败',
@@ -3444,6 +3452,13 @@ export const languages = {
     brandSubtitle: 'Operations Dashboard',
 
     // Login
+    loginSsoTitle: 'Corporate Account',
+    loginSsoDesc: 'Sign in with your company email account (multi-factor included).',
+    loginSsoNotReady: 'Not yet available',
+    loginSsoNotReadyHint: 'SSO is not enabled yet, please use a local account',
+    loginLocalTitle: 'Direct Login',
+    loginLocalDesc: 'Administrators sign in with a local username and password.',
+    loginBackToMethods: '← Back to sign-in options',
     loginSubmit: 'Login',
     loginUsernamePlaceholder: 'Enter username',
     loginPasswordPlaceholder: 'Enter password',
@@ -5280,6 +5295,7 @@ export const languages = {
     credPasswordEditPlaceholder: 'Leave empty to keep unchanged',
     credEnablePassword: 'Enable Password',
     credEnablePasswordPlaceholder: 'Optional, for Cisco enable mode',
+    credClearEnablePassword: 'Clear the stored enable password',
     credEncryptInfo: 'All passwords will be encrypted with AES and stored in the database.',
     credRequiredInfo: 'SSH password is required. Enable password is for devices requiring privileged mode.',
     credLoadFailed: 'Failed to load credentials',

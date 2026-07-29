@@ -10,8 +10,34 @@
         <p class="logo-subtitle">{{ t('brandSubtitle') }}</p>
       </div>
 
-      <!-- Login Form -->
+      <!-- 第一步：选择登录方式 -->
+      <div v-if="stage === 'choose'" class="login-methods">
+        <button type="button" class="method-card" @click="handleSsoLogin">
+          <div class="method-body">
+            <h2 class="method-title">{{ ssoDisplayName }}</h2>
+            <p class="method-desc">{{ t('loginSsoDesc') }}</p>
+            <p v-if="!ssoEnabled" class="method-badge">{{ t('loginSsoNotReady') }}</p>
+          </div>
+          <el-icon class="method-arrow"><Right /></el-icon>
+        </button>
+
+        <button type="button" class="method-card" @click="stage = 'local'">
+          <div class="method-body">
+            <h2 class="method-title">{{ t('loginLocalTitle') }}</h2>
+            <p class="method-desc">{{ t('loginLocalDesc') }}</p>
+          </div>
+          <el-icon class="method-arrow"><Right /></el-icon>
+        </button>
+
+        <div class="login-error" v-if="errorMsg">
+          <el-icon><WarningFilled /></el-icon>
+          <span>{{ errorMsg }}</span>
+        </div>
+      </div>
+
+      <!-- 第二步：本地账号登录 -->
       <el-form
+        v-else
         ref="loginFormRef"
         :model="loginForm"
         :rules="loginRules"
@@ -54,6 +80,10 @@
           <el-icon><WarningFilled /></el-icon>
           <span>{{ errorMsg }}</span>
         </div>
+
+        <button type="button" class="back-link" @click="backToChoose">
+          {{ t('loginBackToMethods') }}
+        </button>
       </el-form>
 
       <!-- Footer -->
@@ -68,11 +98,11 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue'
+import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Monitor, WarningFilled } from '@element-plus/icons-vue'
-import { login } from '@/api'
+import { Monitor, WarningFilled, Right } from '@element-plus/icons-vue'
+import { login, getSsoStatus } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -81,6 +111,37 @@ const router = useRouter()
 const loginFormRef = ref(null)
 const loading = ref(false)
 const errorMsg = ref('')
+
+// 'choose' = 选择登录方式，'local' = 本地账号表单
+const stage = ref('choose')
+
+// SSO 状态由后端 /api/auth/sso/status 决定，未开通时入口仍显示但会给出提示
+const ssoStatus = ref({ enabled: false, display_name: '', login_url: '/api/auth/sso/login' })
+const ssoEnabled = computed(() => ssoStatus.value.enabled === true)
+const ssoDisplayName = computed(() => ssoStatus.value.display_name || t('loginSsoTitle'))
+
+onMounted(async () => {
+  try {
+    ssoStatus.value = await getSsoStatus()
+  } catch (e) {
+    // 后端不可用时保持 SSO 入口为"未开通"状态，本地登录仍可用
+    ssoStatus.value = { enabled: false, display_name: '', login_url: '/api/auth/sso/login' }
+  }
+})
+
+const backToChoose = () => {
+  stage.value = 'choose'
+  errorMsg.value = ''
+}
+
+const handleSsoLogin = () => {
+  if (!ssoEnabled.value) {
+    errorMsg.value = t('loginSsoNotReadyHint')
+    return
+  }
+  // 授权码流必须整页跳转到身份提供方，不能用 XHR
+  window.location.href = ssoStatus.value.login_url || '/api/auth/sso/login'
+}
 
 const loginForm = reactive({
   username: '',
@@ -181,6 +242,90 @@ const handleLogin = async () => {
   background: linear-gradient(135deg, #003087 0%, #001F5C 100%);
   position: relative;
   overflow: hidden;
+}
+
+/* ===== 登录方式选择（SSO / 本地账号） ===== */
+.login-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+
+.method-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 18px 20px;
+  border: none;
+  border-radius: 4px;
+  background: #f6b33b;
+  color: #001f5c;
+  text-align: left;
+  cursor: pointer;
+  transition: filter 0.15s ease, transform 0.15s ease;
+}
+
+.method-card:hover {
+  filter: brightness(1.06);
+}
+
+.method-card:active {
+  transform: translateY(1px);
+}
+
+.method-card:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
+.method-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.method-title {
+  margin: 0 0 6px;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.method-desc {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  opacity: 0.85;
+}
+
+.method-badge {
+  margin: 8px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.method-arrow {
+  flex-shrink: 0;
+  font-size: 18px;
+}
+
+.back-link {
+  display: block;
+  width: 100%;
+  margin-top: 4px;
+  padding: 8px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.back-link:hover {
+  color: #fff;
+  text-decoration: underline;
 }
 
 .login-bg-pattern {

@@ -53,6 +53,7 @@ from .features.workflows.router import router as workflow_router
 from .features.notifications.router import router as notifications_router
 from .features.jobs.router import router as jobs_router
 from .features.system_settings.router import router as system_settings_router
+from .features.auth.sso_router import router as sso_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
 
@@ -148,6 +149,7 @@ app.include_router(console_router)
 app.include_router(dashboard_router)
 app.include_router(logs_router)
 app.include_router(auth_router)
+app.include_router(sso_router)
 app.include_router(permissions_router)
 app.include_router(tool_logs_router)
 app.include_router(spare_parts_router)

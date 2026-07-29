@@ -186,8 +186,15 @@ def backup_run(device_name, operator):
 
         click.echo(f"正在备份设备 {device.name} ({device.ip})...")
 
-        # TODO: 从凭证管理获取
-        credentials = {"username": "admin", "password": "admin", "secret": "admin"}
+        # 从凭证管理读取（此前是硬编码的 admin/admin/admin，既连不上真实设备，
+        # 也把一组默认口令留在源码里）
+        from app.features.credentials.credential_service import resolve_device_credentials
+
+        try:
+            credentials = resolve_device_credentials(db, device)
+        except ValueError as exc:
+            click.echo(f"错误：{exc}")
+            sys.exit(1)
 
         result = backup_device_config(device, credentials, config.storage.backup_dir)
 
@@ -381,6 +388,142 @@ def stats():
         click.echo(f"\n  成本统计 (本月):")
         click.echo(f"    维修成本：¥{month_cost:,.2f}")
         click.echo(f"\n{'='*50}\n")
+    finally:
+        db.close()
+
+
+# ============ 用户命令 ============
+
+@cli.group()
+def user():
+    """本地用户管理（SSO 用户由身份提供方管理，不在此处创建）"""
+    pass
+
+
+def _check_password_hashing() -> bool:
+    """确认 passlib 可用
+
+    passlib 缺失时 auth/router.py 会退化成明文存储密码，这里必须挡住，
+    否则会在数据库里留下明文口令。
+    """
+    from app.features.auth.router import PWD_CONTEXT_AVAILABLE
+
+    if not PWD_CONTEXT_AVAILABLE:
+        click.echo("[错误] passlib 未安装，密码将以明文存储。", err=True)
+        click.echo("       请先执行: pip install \"passlib[bcrypt]==1.7.4\" bcrypt==4.0.1", err=True)
+        return False
+    return True
+
+
+@user.command("create-admin")
+@click.option("--username", "-u", required=True, help="登录用户名")
+@click.option("--email", "-e", default=None, help="邮箱（可选）")
+@click.option("--full-name", "-n", default=None, help="显示名（可选）")
+@click.option("--password", "-p", default=None,
+              help="密码；不传则交互式输入（推荐，避免密码进入 shell 历史）")
+def user_create_admin(username, email, full_name, password):
+    """创建超级管理员账号
+
+    用于在启用认证之前先准备好一个可登录的账号，避免把自己锁在外面。
+    """
+    from app.database import get_db_manager
+    from app.features.auth.router import get_password_hash
+    from app.shared.models import Role, User
+
+    if not _check_password_hashing():
+        sys.exit(1)
+
+    if not password:
+        password = click.prompt("请输入密码", hide_input=True, confirmation_prompt=True)
+
+    if len(password) < 8:
+        click.echo("[错误] 密码至少 8 位", err=True)
+        sys.exit(1)
+
+    db = get_db_manager().get_session()
+    try:
+        if db.query(User).filter(User.username == username).first():
+            click.echo(f"[错误] 用户 {username} 已存在，如需改密码请用: nas user reset-password", err=True)
+            sys.exit(1)
+
+        new_user = User(
+            username=username,
+            email=email,
+            full_name=full_name or username,
+            password_hash=get_password_hash(password),
+            is_active=True,
+            is_superuser=True,
+        )
+
+        # 有 admin 角色就一并关联，便于前端按角色渲染菜单
+        admin_role = db.query(Role).filter(Role.name == "admin").first()
+        if admin_role:
+            new_user.roles.append(admin_role)
+        else:
+            click.echo("[提示] 未找到 admin 角色，请在「系统设置 → 角色权限」页面执行一次初始化")
+
+        db.add(new_user)
+        db.commit()
+
+        click.echo(f"超级管理员 {username} 创建成功"
+                   f"{'（已关联 admin 角色）' if admin_role else ''}")
+    finally:
+        db.close()
+
+
+@user.command("reset-password")
+@click.option("--username", "-u", required=True, help="登录用户名")
+@click.option("--password", "-p", default=None, help="新密码；不传则交互式输入")
+def user_reset_password(username, password):
+    """重置本地用户密码"""
+    from app.database import get_db_manager
+    from app.features.auth.router import get_password_hash
+    from app.shared.models import User
+
+    if not _check_password_hashing():
+        sys.exit(1)
+
+    if not password:
+        password = click.prompt("请输入新密码", hide_input=True, confirmation_prompt=True)
+
+    if len(password) < 8:
+        click.echo("[错误] 密码至少 8 位", err=True)
+        sys.exit(1)
+
+    db = get_db_manager().get_session()
+    try:
+        target = db.query(User).filter(User.username == username).first()
+        if not target:
+            click.echo(f"[错误] 用户 {username} 不存在", err=True)
+            sys.exit(1)
+
+        target.password_hash = get_password_hash(password)
+        db.commit()
+        click.echo(f"用户 {username} 的密码已重置")
+    finally:
+        db.close()
+
+
+@user.command("list")
+def user_list():
+    """列出本地用户及其角色"""
+    from app.database import get_db_manager
+    from app.shared.models import User
+
+    db = get_db_manager().get_session()
+    try:
+        users = db.query(User).order_by(User.username).all()
+        if not users:
+            click.echo("还没有任何用户，请先执行: nas user create-admin -u <用户名>")
+            return
+
+        click.echo(f"\n{'用户名':<20} {'超管':<6} {'启用':<6} {'角色'}")
+        click.echo("-" * 70)
+        for u in users:
+            roles = ", ".join(r.name for r in u.roles) or "-"
+            click.echo(f"{u.username:<20} {'是' if u.is_superuser else '否':<6} "
+                       f"{'是' if u.is_active else '否':<6} {roles}")
+        click.echo("")
     finally:
         db.close()
 
