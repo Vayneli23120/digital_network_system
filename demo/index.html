@@ -510,6 +510,159 @@ body.dark .activity-item:hover{background:rgba(30,41,59,.4)}
 @media(max-width:900px){.widget-grid{grid-template-columns:repeat(2,1fr)}.widget.span-3,.widget.span-4{grid-column:span 2}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
 @media(max-width:768px){.sidebar{width:64px}.sidebar .sg-label,.sidebar .mi-label{display:none}.sidebar .mi{justify-content:center;padding:10px}.top-nav{display:none}}
 @media(max-width:640px){.widget-grid{grid-template-columns:1fr}.widget.span-2,.widget.span-3,.widget.span-4{grid-column:span 1}.kpi-grid{grid-template-columns:1fr}.dash-shell,.ops-shell,.simple-shell{padding:12px}}
+
+/* ===== Monitor3D Layout ===== */
+.monitor3d-shell{display:flex;height:calc(100vh - var(--topbar-h) - 48px);gap:0;overflow:hidden}
+.m3d-canvas-area{flex:1;position:relative;background:linear-gradient(135deg,#0a1628 0%,#0d1f3c 50%,#0a1628 100%);border-radius:var(--radius-lg);overflow:hidden;min-width:0}
+.m3d-chart{position:absolute;inset:0}
+.m3d-heat-legend,.m3d-snmp-panel{position:absolute;left:12px;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid var(--glass-border);border-radius:var(--radius-md);font-size:11px;z-index:10;min-width:170px;max-width:260px;overflow:hidden;transition:opacity .2s}
+.m3d-heat-legend{bottom:220px}
+.m3d-snmp-panel{bottom:12px}
+.m3d-legend-head{padding:6px 10px;font-size:11px;font-weight:600;display:flex;align-items:center;gap:6px;cursor:pointer;user-select:none;background:rgba(0,0,0,.06)}
+.m3d-drag-icon{font-size:10px;color:var(--text-muted);cursor:grab}
+.m3d-legend-body{padding:6px 10px}
+.m3d-legend-row{display:flex;align-items:center;gap:6px;padding:2px 0;font-size:10px}
+.m3d-swatch{width:10px;height:10px;border-radius:2px;flex-shrink:0}
+.m3d-legend-foot{font-size:9px;color:var(--text-muted);margin-top:4px;padding-top:4px;border-top:1px solid var(--border-light)}
+.m3d-snmp-kpis{display:flex;flex-wrap:wrap;gap:8px;font-size:10px;margin-bottom:6px}
+.m3d-snmp-kpis span{white-space:nowrap}
+.m3d-snmp-row{padding:4px 0;border-bottom:1px solid var(--border-light);font-size:10px}
+.m3d-snmp-row.stale{opacity:.6}
+.m3d-snmp-row.missing{opacity:.4}
+.m3d-snmp-main{display:flex;gap:8px;font-weight:500}
+.m3d-snmp-dev{color:var(--accent2)}
+.m3d-snmp-meta{display:flex;flex-wrap:wrap;gap:6px;font-size:9px;color:var(--text-muted);margin-top:1px}
+.m3d-snmp-time{font-size:9px;color:var(--text-muted);margin-top:4px}
+.m3d-canvas-tools{position:absolute;right:12px;bottom:12px;display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:flex-end;z-index:10}
+
+/* Side Panel */
+.m3d-side-panel{width:340px;flex-shrink:0;overflow-y:auto;background:var(--glass-bg);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-left:1px solid var(--glass-border);padding:12px;font-size:12px}
+.m3d-panel-header h3{font-size:14px;font-weight:600;margin:0 0 8px 0}
+.m3d-kpi-row{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.m3d-kpi{background:var(--bg-tertiary);border-radius:var(--radius-sm);padding:8px 10px;text-align:center}
+.m3d-kpi span{display:block;font-size:10px;color:var(--text-muted)}
+.m3d-kpi b{font-size:18px;font-weight:700}
+.m3d-kpi b.online{color:var(--accent)}
+.m3d-kpi b.offline{color:var(--danger)}
+
+/* Command Panel */
+.m3d-command{background:var(--bg-tertiary);border-radius:var(--radius-md);padding:10px;margin-bottom:10px}
+.m3d-command-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.m3d-command-head h4{font-size:12px;font-weight:600;margin:0}
+.m3d-command-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:8px}
+.m3d-cmd-card{background:var(--bg-card);border-radius:var(--radius-sm);padding:8px;text-align:center}
+.m3d-cmd-card.danger{border-left:2px solid var(--danger)}
+.m3d-cmd-card.warning{border-left:2px solid var(--warn)}
+.m3d-cmd-card span{display:block;font-size:9px;color:var(--text-muted)}
+.m3d-cmd-card b{font-size:16px;font-weight:700}
+.m3d-cmd-card.danger b{color:var(--danger)}
+.m3d-cmd-card.warning b{color:var(--warn)}
+.m3d-command-substats{display:flex;gap:12px;font-size:10px;color:var(--text-muted);margin-bottom:6px}
+.m3d-cmd-events{display:flex;flex-direction:column;gap:3px;margin-bottom:8px}
+.m3d-cmd-event{padding:4px 6px;background:var(--bg-card);border-radius:var(--radius-sm);cursor:pointer;font-size:10px}
+.m3d-cmd-event:hover{background:var(--bg-hover)}
+.m3d-event-main{display:flex;align-items:center;gap:6px;font-weight:500}
+.m3d-event-sub{color:var(--text-muted);font-size:9px}
+.m3d-section-title{font-size:11px;font-weight:600;margin:6px 0 4px;color:var(--text2)}
+
+/* Severity colors */
+.sev-critical{color:#d63031;text-transform:uppercase;font-size:10px}
+.sev-major{color:#e17055;text-transform:uppercase;font-size:10px}
+.sev-minor{color:#f6b93b;text-transform:uppercase;font-size:10px}
+.sev-info{color:#0984e3;text-transform:uppercase;font-size:10px}
+
+/* Root cause */
+.m3d-root-cause{margin-bottom:8px}
+.m3d-root-item{padding:4px 6px;background:var(--bg-card);border-radius:var(--radius-sm);cursor:pointer;margin-bottom:3px;font-size:10px}
+.m3d-root-item:hover{background:var(--bg-hover)}
+.m3d-root-main{display:flex;align-items:center;gap:6px;font-weight:500}
+.m3d-root-sub{color:var(--text-muted);font-size:9px}
+
+/* Impact scope */
+.m3d-impact{margin-bottom:8px;padding:6px 8px;background:rgba(214,48,49,.06);border-radius:var(--radius-sm);border-left:3px solid var(--danger)}
+.m3d-impact-head{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;margin-bottom:4px}
+.m3d-impact-summary{font-size:10px;color:var(--text2);margin-bottom:4px}
+.m3d-impact-dev,.m3d-path-item{display:flex;justify-content:space-between;align-items:center;padding:2px 0;font-size:10px;cursor:pointer}
+.m3d-path-item{color:var(--text-muted);font-size:9px}
+
+/* Hot links */
+.m3d-hot-links{margin-bottom:8px}
+.m3d-hot-item{padding:4px 6px;background:var(--bg-card);border-radius:var(--radius-sm);cursor:pointer;margin-bottom:3px;font-size:10px}
+.m3d-hot-main{display:flex;align-items:center;gap:6px;font-weight:500}
+.m3d-hot-sub{color:var(--text-muted);font-size:9px}
+
+/* Timeline */
+.m3d-timeline{margin-bottom:8px}
+.m3d-timeline-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.m3d-timeline-head>span{font-size:11px;font-weight:600}
+.m3d-time-window{display:flex;gap:2px}
+.m3d-tw-btn{padding:2px 6px;font-size:9px;border:1px solid var(--border);background:transparent;color:var(--text-muted);border-radius:var(--radius-sm);cursor:pointer}
+.m3d-tw-btn.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+.m3d-timeline-list{max-height:160px;overflow-y:auto}
+.m3d-timeline-item{display:flex;align-items:flex-start;gap:6px;padding:3px 0;cursor:pointer;font-size:10px;border-bottom:1px solid var(--border-light)}
+.m3d-timeline-item:hover{background:var(--bg-hover)}
+.m3d-tl-dot{width:6px;height:6px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.m3d-tl-body{min-width:0}
+.m3d-tl-title{font-weight:500;display:block}
+.m3d-tl-meta{color:var(--text-muted);font-size:9px}
+
+/* Tabs */
+.m3d-tabs{margin-top:8px}
+.m3d-tab-head{display:flex;border-bottom:1px solid var(--border);margin-bottom:8px}
+.m3d-tab-btn{padding:6px 12px;font-size:11px;border:none;background:transparent;color:var(--text-muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .2s}
+.m3d-tab-btn.active{color:var(--accent);border-bottom-color:var(--accent)}
+.m3d-tab-btn:hover{color:var(--text)}
+.m3d-tab-pane{font-size:11px}
+
+/* Filters */
+.m3d-filters{display:flex;gap:6px;margin-bottom:8px}
+.m3d-select{flex:1;padding:4px 8px;font-size:11px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg-card);color:var(--text)}
+
+/* Selected device */
+.m3d-selected-box{background:var(--bg-tertiary);border-radius:var(--radius-md);padding:10px;margin-bottom:8px}
+.m3d-selected-box h4{font-size:13px;font-weight:600;margin:0 0 4px 0}
+.m3d-selected-box p{font-size:10px;margin:2px 0;color:var(--text2)}
+.m3d-incident{background:rgba(214,48,49,.06);border-radius:var(--radius-sm);padding:8px;margin-top:6px}
+.m3d-incident-head{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.m3d-incident-meta{font-size:9px;color:var(--text-muted);margin-bottom:2px}
+.m3d-incident-ai{font-size:9px;margin:4px 0;padding:4px 6px;background:rgba(9,132,227,.08);border-radius:var(--radius-sm)}
+.m3d-ai-label{font-weight:600;color:var(--accent2);margin-right:4px}
+.m3d-incident-actions{display:flex;gap:4px;flex-wrap:wrap;margin-top:6px}
+.m3d-scale-ctrl{display:flex;align-items:center;font-size:10px;margin-top:6px;color:var(--text-muted)}
+.m3d-scale-val{font-size:10px;color:var(--text2);min-width:32px;text-align:right}
+.m3d-selected-actions{display:flex;gap:6px;margin-top:8px}
+
+/* Layer control */
+.m3d-layer-ctrl{margin-bottom:8px}
+.m3d-layer-ctrl h4{font-size:11px;font-weight:600;margin:0 0 4px 0}
+.m3d-check{display:flex;align-items:center;gap:6px;font-size:10px;cursor:pointer;margin:2px 0}
+.m3d-check input[type=checkbox]{accent-color:var(--accent)}
+.m3d-tilt{display:flex;align-items:center;font-size:10px;color:var(--text-muted);margin-top:4px}
+
+/* Alert list */
+.m3d-alerts{margin-bottom:8px}
+.m3d-alert-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.m3d-alert-head h4{font-size:11px;font-weight:600;margin:0;display:flex;align-items:center;gap:6px}
+.m3d-alert-items{max-height:120px;overflow-y:auto}
+.m3d-alert-item{padding:3px 6px;font-size:10px;cursor:pointer;border-radius:var(--radius-sm);display:flex;align-items:center}
+.m3d-alert-item:hover{background:var(--bg-hover)}
+.m3d-no-alert{font-size:10px;color:var(--text-muted);text-align:center;padding:8px}
+
+/* Floor plans */
+.m3d-plan-list{display:flex;flex-direction:column;gap:4px}
+.m3d-plan-item{display:flex;align-items:center;gap:8px;padding:6px 8px;background:var(--bg-tertiary);border-radius:var(--radius-sm);font-size:11px}
+.m3d-plan-item.active{border:1px solid var(--accent)}
+.m3d-plan-name{flex:1;font-weight:500}
+
+/* Device palette */
+.m3d-palette{display:grid;grid-template-columns:repeat(2,1fr);gap:6px;margin-top:8px}
+.m3d-palette-item{display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 8px;background:var(--bg-tertiary);border:1px dashed var(--border);border-radius:var(--radius-md);cursor:grab;font-size:10px;text-align:center;transition:all .2s}
+.m3d-palette-item:hover{background:var(--bg-hover);border-color:var(--accent)}
+.m3d-hint{font-size:10px;color:var(--text-muted);text-align:center;padding:4px}
+.m3d-no-data{font-size:10px;color:var(--text-muted);text-align:center;padding:12px}
+
+@media(max-width:1100px){.m3d-side-panel{width:280px}}
+@media(max-width:860px){.monitor3d-shell{flex-direction:column}.m3d-canvas-area{height:50vh}.m3d-side-panel{width:100%}}
 </style>
 </head>
 <body>
@@ -644,6 +797,37 @@ const i18n = {
     wfCreateRule:'新建规则',wfRunAll:'全部执行',wfExecutionLog:'执行日志',
     wfRuleName:'规则名称',wfTrigger:'触发器',wfAction:'动作',wfTarget:'目标',wfLastRun:'最近执行',
     wfEdit:'编辑',wfDisable:'禁用',wfEnable:'启用',wfEnabledLabel:'已启用',wfDisabledLabel:'已禁用',
+    monitor3dTitle:'3D数字孪生',monitorCommandPanel:'应急指挥面板',monitorFaultRefresh:'刷新',
+    monitorUnacknowledged:'未确认',monitorInProgress:'处理中',
+    monitorTransferMaintenance:'转维修',monitorImpactedDevices:'影响设备',
+    monitorNoActiveFaults:'当前无活跃故障',
+    monitorRootCauseTop3:'根因分析 Top 3',monitorImpactedCount:'影响 {count} 台设备',monitorImpactScope:'影响范围',
+    monitorAffectedCount:'影响 {count} 台设备',
+    monitorHotLinksTitle:'热点故障链路',monitorEventCount:'{count} 个事件',monitorPeerPrefix:'对端',
+    monitorEventStream:'事件流',monitor10min:'10分钟',monitor1hour:'1小时',monitor24hours:'24小时',
+    monitorNoEvents:'暂无事件',monitorTopology:'网络拓扑',
+    filterDeviceType:'设备类型',monitorFilterAllTypes:'全部类型',
+    filterDeviceStatus:'设备状态',filterAllStatus:'全部状态',
+    viewReset:'重置视角',viewTop:'俯视',discoverNeighbors:'邻居发现',enterFullscreen:'全屏',exitFullscreen:'退出全屏',
+    uploadFloorPlan:'上传底图',
+    heatLegendTitle:'流量热力图例',heatLegendHint:'根据端口流量数据实时更新',
+    heatLevelCritical:'严重',heatLevelHigh:'高负载',heatLevelNormal:'正常',heatLevelLow:'低负载',heatLevelDown:'链路中断',heatLevelStale:'数据过期',
+    monitorSnmpHealth:'SNMP 采集健康',
+    snmpStatusFresh:'正常',snmpStatusLagging:'滞后',snmpStatusStale:'过期',snmpStatusMissing:'缺失',snmpStatusDown:'中断',snmpStatusUnknown:'未知',
+    monitorCheck:'检测',monitorTraffic:'流量',monitorCollect:'采集器',monitorNextPoll:'下次轮询',
+    monitorSnmpEmpty:'暂无接口数据',monitorServerTime:'服务器时间',monitorRefreshStatus:'刷新状态',
+    collectorRunning:'运行中',collectorOk:'正常',collectorPartial:'部分',collectorTimeout:'超时',collectorFailed:'失败',collectorCancelled:'已取消',collectorStuck:'卡住',collectorNoResponse:'无响应',collectorNoInterfaces:'无接口',
+    deviceLibrary:'设备库',dragDeviceHint:'从下方拖动设备到画布中放置',
+    deviceTypeRouter:'路由器',deviceTypeFirewall:'防火墙',
+    floorPlans:'底图管理',statusLive:'当前',actionSwitchPlan:'切换',actionDeletePlan:'删除',
+    layerControl:'图层控制',showPhysicalTopology:'显示物理拓扑',showDataLinks:'显示数据链路',showLabels:'显示标签',floorPlanTilt:'底图倾角',
+    alertList:'告警列表',autoFocusOffline:'离线自动聚焦',noOfflineDevices:'无离线设备',
+    deviceTotal:'设备总数',deviceType:'设备类型',deviceStatus:'设备状态',deviceScale:'设备缩放',statusUnknown:'未知',
+    faultAiProbableCause:'AI 根因分析',faultAiRunPrediagnose:'AI 预诊断',
+    monitorFaultConfirm:'确认故障',monitorFaultFalseAlarm:'误报',monitorFaultDetail:'故障详情',
+    monitorEditMode:'编辑模式',monitorViewMode:'查看模式',
+    noData:'暂无数据',
+    monitorScreenPlanName:'底图名称',monitorScreenPlanNamePlaceholder:'例如: A1车间平面图',monitorScreenPlanImage:'底图图片',monitorScreenSelectImage:'选择图片',monitorScreenSelectDevice:'选择设备',
   },
   en: {
     loginTitle:'Network Automation Platform',loginSub:'Network Automation System v2.0',username:'Username',password:'Password',loginBtn:'Sign In',ssoHint:'Enterprise account use',ssoLink:'SSO Login',logoText:'Network Automation System',
@@ -728,12 +912,52 @@ const i18n = {
     wfCreateRule:'Create Rule',wfRunAll:'Run All',wfExecutionLog:'Execution Log',
     wfRuleName:'Rule Name',wfTrigger:'Trigger',wfAction:'Action',wfTarget:'Target',wfLastRun:'Last Run',
     wfEdit:'Edit',wfDisable:'Disable',wfEnable:'Enable',wfEnabledLabel:'Enabled',wfDisabledLabel:'Disabled',
+    monitor3dTitle:'3D Digital Twin',monitorCommandPanel:'Command Panel',monitorFaultRefresh:'Refresh',
+    monitorUnacknowledged:'Unack\'d',monitorInProgress:'In Progress',
+    monitorTransferMaintenance:'To Maint',monitorImpactedDevices:'Impacted Devices',
+    monitorNoActiveFaults:'No active faults',
+    monitorRootCauseTop3:'Root Cause Top 3',monitorImpactedCount:'{count} devices impacted',monitorImpactScope:'Impact Scope',
+    monitorAffectedCount:'{count} devices affected',
+    monitorHotLinksTitle:'Hot Fault Links',monitorEventCount:'{count} events',monitorPeerPrefix:'Peer',
+    monitorEventStream:'Event Stream',monitor10min:'10min',monitor1hour:'1h',monitor24hours:'24h',
+    monitorNoEvents:'No events',monitorTopology:'Topology',
+    filterDeviceType:'Device Type',monitorFilterAllTypes:'All Types',
+    filterDeviceStatus:'Status',filterAllStatus:'All Status',
+    viewReset:'Reset View',viewTop:'Top View',discoverNeighbors:'Discover Neighbors',enterFullscreen:'Fullscreen',exitFullscreen:'Exit Fullscreen',
+    uploadFloorPlan:'Upload Floor Plan',
+    heatLegendTitle:'Traffic Heat Legend',heatLegendHint:'Real-time update based on port traffic',
+    heatLevelCritical:'Critical',heatLevelHigh:'High',heatLevelNormal:'Normal',heatLevelLow:'Low',heatLevelDown:'Link Down',heatLevelStale:'Stale',
+    monitorSnmpHealth:'SNMP Health',
+    snmpStatusFresh:'Fresh',snmpStatusLagging:'Lagging',snmpStatusStale:'Stale',snmpStatusMissing:'Missing',snmpStatusDown:'Down',snmpStatusUnknown:'Unknown',
+    monitorCheck:'Check',monitorTraffic:'Traffic',monitorCollect:'Collector',monitorNextPoll:'Next Poll',
+    monitorSnmpEmpty:'No interface data',monitorServerTime:'Server Time',monitorRefreshStatus:'Refresh',
+    collectorRunning:'Running',collectorOk:'OK',collectorPartial:'Partial',collectorTimeout:'Timeout',collectorFailed:'Failed',collectorCancelled:'Cancelled',collectorStuck:'Stuck',collectorNoResponse:'No Response',collectorNoInterfaces:'No Interfaces',
+    deviceLibrary:'Device Library',dragDeviceHint:'Drag devices from below onto the canvas',
+    deviceTypeRouter:'Router',deviceTypeFirewall:'Firewall',
+    floorPlans:'Floor Plans',statusLive:'Active',actionSwitchPlan:'Switch',actionDeletePlan:'Delete',
+    layerControl:'Layer Control',showPhysicalTopology:'Physical Topology',showDataLinks:'Data Links',showLabels:'Labels',floorPlanTilt:'Tilt Angle',
+    alertList:'Alert List',autoFocusOffline:'Auto-focus Offline',noOfflineDevices:'No offline devices',
+    deviceTotal:'Total Devices',deviceType:'Device Type',deviceStatus:'Device Status',deviceScale:'Device Scale',statusUnknown:'Unknown',
+    faultAiProbableCause:'AI Root Cause',faultAiRunPrediagnose:'AI Pre-diagnose',
+    monitorFaultConfirm:'Confirm',monitorFaultFalseAlarm:'False Alarm',monitorFaultDetail:'Fault Detail',
+    monitorEditMode:'Edit Mode',monitorViewMode:'View Mode',
+    noData:'No Data',
+    monitorScreenPlanName:'Plan Name',monitorScreenPlanNamePlaceholder:'e.g. Workshop A1 Floor Plan',monitorScreenPlanImage:'Plan Image',monitorScreenSelectImage:'Select Image',monitorScreenSelectDevice:'Select Device',
   }
 };
 
 let currentLang='zh',currentTheme='light',currentTopTab='monitor',currentPage='dashboard',charts={},clockTimer=null;
-function t(k){return i18n[currentLang][k]||k}
+function t(k,params){var v=i18n[currentLang][k];if(!v)return k;if(params){Object.keys(params).forEach(function(p){v=v.replace('{'+p+'}',params[p])});}return v}
 function showDemoMsg(){alert(t('demoMsg'))}
+function switchM3dTab(tab,btn){
+  var panes=document.querySelectorAll('.m3d-tab-pane');
+  panes.forEach(function(p){p.style.display='none'});
+  var target=document.getElementById('m3dTab'+tab.charAt(0).toUpperCase()+tab.slice(1));
+  if(target)target.style.display='';
+  var btns=btn.parentElement.querySelectorAll('.m3d-tab-btn');
+  btns.forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+}
 
 function applyI18n(){
   document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)});
@@ -1488,20 +1712,159 @@ function renderRoles(){
 }
 
 function renderMonitor3D(){
-  var topology=[{id:1,from:'SW-Core-01',to:'SW-A1-01',status:'up',bandwidth:'10G',util:34},{id:2,from:'SW-Core-01',to:'SW-A2-01',status:'up',bandwidth:'10G',util:52},{id:3,from:'SW-Core-02',to:'SW-B1-01',status:'up',bandwidth:'10G',util:28},{id:4,from:'SW-Core-02',to:'SW-B2-01',status:'down',bandwidth:'10G',util:0},{id:5,from:'SW-Core-01',to:'SW-Edge-01',status:'up',bandwidth:'40G',util:61},{id:6,from:'SW-Core-02',to:'SW-Edge-02',status:'up',bandwidth:'40G',util:45},{id:7,from:'SW-A1-01',to:'SW-A1-02',status:'up',bandwidth:'1G',util:18},{id:8,from:'SW-B1-01',to:'SW-B1-02',status:'down',bandwidth:'1G',util:0}];
-  var nodes=['SW-Core-01','SW-Core-02','SW-Edge-01','SW-Edge-02','SW-A1-01','SW-A1-02','SW-A2-01','SW-B1-01','SW-B1-02','SW-B2-01'];
-  var heatData=[{zone:t('monitor3dZoneA'),temp:24.5,humidity:48,status:'normal'},{zone:t('monitor3dZoneB'),temp:28.2,humidity:55,status:'warn'},{zone:t('monitor3dZoneEdge'),temp:25.0,humidity:45,status:'normal'},{zone:t('monitor3dZoneC'),temp:22.8,humidity:42,status:'normal'}];
-  return renderModulePage('pageMonitor3D',t('tabMonitor')+' / '+t('pageMonitor3D'),[
-    {label:t('monitor3dTopoNodes'),value:'10',sub:t('monitor3dTopoSub'),accent:'accent'},
-    {label:t('monitor3dTopoLinks'),value:'8',sub:t('monitor3dLinkUp')+' / '+t('monitor3dLinkDown'),accent:'accent2'},
-    {label:t('monitor3dAlarms'),value:'2',sub:t('monitor3dAlarmsSub'),accent:'warn'},
-  ],[
-    '<div class="card-panel"><div class="panel-title"><span class="dot blue" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2)"></span>'+t('monitor3dTopology')+'</div><div class="chart-box" id="chartTopology"></div></div>',
-    '<div class="grid-2" style="margin-top:0">'+
-    '<div class="card-panel"><div class="panel-title"><span class="dot green" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>'+t('monitor3dEnvMonitor')+'</div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('monitor3dZone')+'</th><th>'+t('monitor3dTemp')+'</th><th>'+t('monitor3dHumidity')+'</th><th>'+t('colStatus')+'</th></tr></thead><tbody>'+heatData.map(function(h){var sb=h.status==='normal'?'<span class="badge badge-green">'+t('monitor3dNormal')+'</span>':'<span class="badge badge-orange">'+t('monitor3dWarning')+'</span>';return'<tr><td><strong>'+h.zone+'</strong></td><td class="text-mono">'+h.temp+'°C</td><td class="text-mono">'+h.humidity+'%</td><td>'+sb+'</td></tr>';}).join('')+'</tbody></table></div></div>'+
-    '<div class="card-panel"><div class="panel-title"><span class="dot orange" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--warn)"></span>'+t('monitor3dLinkStatus')+'</div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('monitor3dLink')+'</th><th>'+t('monitor3dBandwidth')+'</th><th>'+t('monitor3dUtil')+'</th><th>'+t('colStatus')+'</th></tr></thead><tbody>'+topology.slice(0,6).map(function(tp){var sb=tp.status==='up'?'<span class="badge badge-green">UP</span>':'<span class="badge badge-red">DOWN</span>';var uc=tp.util>60?'color:var(--warn)':tp.util>40?'color:var(--accent2)':'color:var(--accent)';return'<tr><td><strong>'+tp.from+' → '+tp.to+'</strong></td><td>'+tp.bandwidth+'</td><td class="text-mono"><strong style="'+uc+'">'+tp.util+'%</strong></td><td>'+sb+'</td></tr>';}).join('')+'</tbody></table></div></div>'+
-    '</div>',
-  ]);
+  // ===== Mock data =====
+  var devices=[{id:1,name:'SW-Core-01',ip:'10.88.1.1',type:'core_switch',status:'online',reachability:'reachable'},{id:2,name:'SW-Core-02',ip:'10.88.1.2',type:'core_switch',status:'online',reachability:'reachable'},{id:3,name:'SW-Edge-01',ip:'10.88.2.1',type:'office_switch',status:'online',reachability:'reachable'},{id:4,name:'SW-Edge-02',ip:'10.88.2.2',type:'office_switch',status:'online',reachability:'reachable'},{id:5,name:'SW-A1-01',ip:'10.88.10.1',type:'switch',status:'online',reachability:'reachable'},{id:6,name:'SW-A1-02',ip:'10.88.10.2',type:'switch',status:'online',reachability:'reachable'},{id:7,name:'SW-A2-01',ip:'10.88.20.1',type:'switch',status:'online',reachability:'reachable'},{id:8,name:'SW-A2-03',ip:'10.88.20.3',type:'switch',status:'offline',reachability:'unreachable'},{id:9,name:'SW-B1-01',ip:'10.88.30.1',type:'switch',status:'online',reachability:'reachable'},{id:10,name:'SW-B1-02',ip:'10.88.30.2',type:'switch',status:'degraded',reachability:'reachable'},{id:11,name:'SW-B2-01',ip:'10.88.40.1',type:'switch',status:'offline',reachability:'unreachable'},{id:12,name:'AP-OFF-01',ip:'10.88.100.1',type:'ap',status:'online',reachability:'reachable'}];
+  var onlineCount=devices.filter(function(d){return d.status==='online';}).length;
+  var offlineCount=devices.filter(function(d){return d.status==='offline';}).length;
+
+  // Command panel mock data
+  var commandSummary={p1_count:1,p2_count:2,unacknowledged:1,in_progress:2,transferred:1,impacted_devices:3};
+  var recentEvents=[{id:1,device_name:'SW-B2-01',severity:'critical',source_event:'link_down',status:'open',if_name:'Gi1/0/1'},{id:2,device_name:'SW-A2-03',severity:'major',source_event:'device_unreachable',status:'diagnosing',if_name:''},{id:3,device_name:'SW-B1-02',severity:'minor',source_event:'high_cpu',status:'open',if_name:''}];
+  var rootCauses=[{candidate:'SW-B2-01 光模块故障',confidence:0.85,severity:'critical',impacted_devices:3,evidence:['端口Gi1/0/1 down','光功率异常']},{candidate:'SW-A2-03 电源模块异常',confidence:0.72,severity:'major',impacted_devices:1,evidence:['设备不可达','最后心跳07:42']},{candidate:'SW-B1-02 CPU持续高负载',confidence:0.61,severity:'minor',impacted_devices:0,evidence:['CPU>85%持续15min']}];
+  var impactScope={level:'major',summary:'B2车间网络中断，影响3台接入交换机，12台终端无法连接',impacted_devices:[{device_name:'SW-B2-01',severity:'critical',device_id:11},{device_name:'SW-A2-03',severity:'major',device_id:8},{device_name:'SW-B1-02',severity:'minor',device_id:10}],shared_path_edges:[{edge_id:1,cable_name:'主干光缆-C',affected_devices:3},{edge_id:2,cable_name:'分支光缆-C1',affected_devices:2}]};
+  var hotLinks=[{fault_id:101,device_name:'SW-B2-01',severity:'critical',if_name:'Gi1/0/1',incident_type:'link_down',event_count:5}];
+  var events=[{id:1,title:'端口链路中断',device_name:'SW-B2-01',severity:'critical',occurred_at:new Date(Date.now()-8*60000).toISOString(),event_type:'link_down',if_name:'Gi1/0/1'},{id:2,title:'设备不可达',device_name:'SW-A2-03',severity:'major',occurred_at:new Date(Date.now()-25*60000).toISOString(),event_type:'device_unreachable',if_name:''},{id:3,title:'CPU使用率告警',device_name:'SW-B1-02',severity:'minor',occurred_at:new Date(Date.now()-45*60000).toISOString(),event_type:'threshold',if_name:''},{id:4,title:'配置变更检测',device_name:'SW-Core-01',severity:'info',occurred_at:new Date(Date.now()-120*60000).toISOString(),event_type:'config_change',if_name:''},{id:5,title:'备份完成',device_name:'SW-Edge-01',severity:'info',occurred_at:new Date(Date.now()-180*60000).toISOString(),event_type:'backup_done',if_name:''}];
+  var snmpItems=[{device_name:'SW-Core-01',if_name:'Gi1/0/1',if_index:1,status:'fresh',check_age_seconds:15,sample_age_seconds:8,collector_status:'running',collector_duration_ms:320,collector_next_poll_in_seconds:45},{device_name:'SW-Core-01',if_name:'Gi1/0/2',if_index:2,status:'fresh',check_age_seconds:18,sample_age_seconds:12,collector_status:'ok',collector_duration_ms:280,collector_next_poll_in_seconds:42},{device_name:'SW-A2-03',if_name:'Gi1/0/1',if_index:1,status:'stale',check_age_seconds:380,sample_age_seconds:420,collector_status:'timeout',collector_duration_ms:5100,collector_next_poll_in_seconds:0},{device_name:'SW-B2-01',if_name:'Gi1/0/1',if_index:1,status:'missing',check_age_seconds:null,sample_age_seconds:null,collector_status:'no_response',collector_duration_ms:null,collector_next_poll_in_seconds:null},{device_name:'SW-B1-02',if_name:'Gi1/0/3',if_index:3,status:'lagging',check_age_seconds:180,sample_age_seconds:195,collector_status:'partial',collector_duration_ms:1200,collector_next_poll_in_seconds:30}];
+  var floorPlans=[{id:1,name:'A1车间底图',active:true},{id:2,name:'B2车间底图',active:false},{id:3,name:'核心机房底图',active:false}];
+
+  // Helper functions
+  function sevClass(s){return s==='critical'?'sev-critical':s==='major'?'sev-major':s==='minor'?'sev-minor':'sev-info';}
+  function sevBg(s){return s==='critical'?'#d63031':s==='major'?'#e17055':s==='minor'?'#f6b93b':'#0984e3';}
+  function statusBadge(s){return s==='online'?'<span class="badge badge-green">'+t('statusOnline')+'</span>':s==='offline'?'<span class="badge badge-red">'+t('statusOffline')+'</span>':s==='degraded'?'<span class="badge badge-orange">'+t('statusDegraded')+'</span>':'<span class="badge badge-gray">'+t('statusUnknown')+'</span>';}
+  function formatEventTime(v){if(!v)return'-';var d=new Date(v);return d.toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'});}
+  function formatSnmpAge(s){if(s==null)return'-';if(s<60)return s+'s';var m=Math.floor(s/60);if(m<60)return m+'min';return Math.floor(m/60)+'h'+m%60+'m';}
+  function formatDurationMs(ms){if(ms==null)return'-';if(ms<1000)return ms+'ms';return (ms/1000).toFixed(1)+'s';}
+  function snmpHealthLabel(st){var m={'fresh':t('snmpStatusFresh'),'lagging':t('snmpStatusLagging'),'stale':t('snmpStatusStale'),'missing':t('snmpStatusMissing'),'down':t('snmpStatusDown')};return m[st]||t('snmpStatusUnknown');}
+  function collectorLabel(st){var m={'running':t('collectorRunning'),'ok':t('collectorOk'),'partial':t('collectorPartial'),'timeout':t('collectorTimeout'),'failed':t('collectorFailed'),'cancelled':t('collectorCancelled'),'stuck':t('collectorStuck'),'no_response':t('collectorNoResponse'),'no_interfaces':t('collectorNoInterfaces')};return m[st]||'-';}
+  var snmpSummaryFresh=snmpItems.filter(function(i){return i.status==='fresh'||i.status==='lagging';}).length;
+  var snmpSummaryTotal=snmpItems.length;
+
+  var h='';
+  h+='<div class="monitor3d-shell">';
+
+  // ===== Left: Canvas area =====
+  h+='<div class="m3d-canvas-area">';
+  h+='<div class="chart-box m3d-chart" id="chartTopology"></div>';
+
+  // Heat legend (bottom-left, collapsible)
+  h+='<div class="m3d-heat-legend" id="heatLegend"><div class="m3d-legend-head" onclick="var b=document.getElementById(\'heatLegendBody\');b.style.display=b.style.display===\'none\'?\'\':\'none\'"><span class="m3d-drag-icon">⠿</span> '+t('heatLegendTitle')+' <span style="margin-left:auto;cursor:pointer">▾</span></div>';
+  h+='<div class="m3d-legend-body" id="heatLegendBody"><div class="m3d-legend-row"><span class="m3d-swatch" style="background:#f97316"></span>'+t('heatLevelCritical')+' <span style="color:var(--text-muted)">≥80%</span> <b style="margin-left:auto">0</b></div>';
+  h+='<div class="m3d-legend-row"><span class="m3d-swatch" style="background:#facc15"></span>'+t('heatLevelHigh')+' <span style="color:var(--text-muted)">60-80%</span> <b style="margin-left:auto">2</b></div>';
+  h+='<div class="m3d-legend-row"><span class="m3d-swatch" style="background:#22d3ee"></span>'+t('heatLevelNormal')+' <span style="color:var(--text-muted)">20-60%</span> <b style="margin-left:auto">5</b></div>';
+  h+='<div class="m3d-legend-row"><span class="m3d-swatch" style="background:#22c55e"></span>'+t('heatLevelLow')+' <span style="color:var(--text-muted)">&lt;20%</span> <b style="margin-left:auto">3</b></div>';
+  h+='<div class="m3d-legend-row"><span class="m3d-swatch" style="background:#ef4444"></span>'+t('heatLevelDown')+' <span style="color:var(--text-muted)">link down</span> <b style="margin-left:auto">2</b></div>';
+  h+='<div class="m3d-legend-row"><span class="m3d-swatch" style="background:#64748b"></span>'+t('heatLevelStale')+' <span style="color:var(--text-muted)">&gt;10min</span> <b style="margin-left:auto">1</b></div>';
+  h+='<div class="m3d-legend-foot">'+t('heatLegendHint')+'</div></div></div>';
+
+  // SNMP health panel (bottom-left)
+  h+='<div class="m3d-snmp-panel" id="snmpPanel"><div class="m3d-legend-head" onclick="var b=document.getElementById(\'snmpPanelBody\');b.style.display=b.style.display===\'none\'?\'\':\'none\'"><span class="m3d-drag-icon">⠿</span> '+t('monitorSnmpHealth')+' <span style="font-size:11px;color:var(--text-muted);margin-left:8px">'+snmpSummaryFresh+'/'+snmpSummaryTotal+' '+t('snmpStatusFresh')+'</span><span style="margin-left:auto;cursor:pointer">▾</span></div>';
+  h+='<div class="m3d-legend-body" id="snmpPanelBody"><div class="m3d-snmp-kpis"><span style="color:#22c55e">● '+t('snmpStatusFresh')+' '+snmpSummaryFresh+'</span> <span style="color:#facc15">● '+t('snmpStatusLagging')+' 1</span> <span style="color:#f97316">● '+t('snmpStatusStale')+' 1</span> <span style="color:#ef4444">● '+t('snmpStatusMissing')+' 1</span></div>';
+  snmpItems.slice(0,5).forEach(function(item){
+    h+='<div class="m3d-snmp-row '+item.status+'"><div class="m3d-snmp-main"><span class="m3d-snmp-dev">'+item.device_name+'</span><span class="m3d-snmp-if">'+item.if_name+'</span></div><div class="m3d-snmp-meta"><span>'+snmpHealthLabel(item.status)+'</span><span>'+t('monitorCheck')+' '+formatSnmpAge(item.check_age_seconds)+'</span><span>'+t('monitorTraffic')+' '+formatSnmpAge(item.sample_age_seconds)+'</span><span>'+t('monitorCollect')+' '+collectorLabel(item.collector_status)+'</span>'+formatDurationMs(item.collector_duration_ms)+'</div></div>';
+  });
+  h+='<div class="m3d-snmp-time">'+t('monitorServerTime')+' '+new Date().toLocaleString('zh-CN',{hour12:false})+'</div><button class="btn btn-outline btn-sm" style="width:100%;margin-top:4px" onclick="showDemoMsg()">'+t('monitorRefreshStatus')+'</button></div></div>';
+
+  // Canvas tools (bottom-right)
+  h+='<div class="m3d-canvas-tools"><span class="badge badge-orange" style="margin-right:4px">'+t('monitorEditMode')+'</span><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">'+t('monitorViewMode')+'</button><button class="btn btn-sm" onclick="showDemoMsg()">'+t('viewReset')+'</button><button class="btn btn-sm" onclick="showDemoMsg()">'+t('viewTop')+'</button><button class="btn btn-sm" onclick="showDemoMsg()">'+t('discoverNeighbors')+'</button><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">'+t('uploadFloorPlan')+'</button><button class="btn btn-sm" onclick="showDemoMsg()">'+t('enterFullscreen')+'</button></div>';
+  h+='</div>';
+
+  // ===== Right: Side Panel =====
+  h+='<div class="m3d-side-panel">';
+  h+='<div class="m3d-panel-header"><h3>'+t('monitor3dTitle')+'</h3></div>';
+
+  // KPI row
+  h+='<div class="m3d-kpi-row"><div class="m3d-kpi"><span>'+t('statusOnline')+'</span><b class="online">'+onlineCount+'</b></div><div class="m3d-kpi danger"><span>'+t('statusOffline')+'</span><b class="offline">'+offlineCount+'</b></div><div class="m3d-kpi"><span>'+t('deviceTotal')+'</span><b>'+devices.length+'</b></div></div>';
+
+  // Command panel
+  h+='<div class="m3d-command"><div class="m3d-command-head"><h4>'+t('monitorCommandPanel')+'</h4><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('monitorFaultRefresh')+'</button></div>';
+  h+='<div class="m3d-command-grid"><div class="m3d-cmd-card danger"><span>P1</span><b>'+commandSummary.p1_count+'</b></div><div class="m3d-cmd-card warning"><span>P2</span><b>'+commandSummary.p2_count+'</b></div><div class="m3d-cmd-card"><span>'+t('monitorUnacknowledged')+'</span><b>'+commandSummary.unacknowledged+'</b></div><div class="m3d-cmd-card"><span>'+t('monitorInProgress')+'</span><b>'+commandSummary.in_progress+'</b></div></div>';
+  h+='<div class="m3d-command-substats"><span>'+t('monitorTransferMaintenance')+' '+commandSummary.transferred+'</span><span>'+t('monitorImpactedDevices')+' '+commandSummary.impacted_devices+'</span></div>';
+
+  // Recent events
+  h+='<div class="m3d-cmd-events">';
+  recentEvents.forEach(function(ev){
+    h+='<div class="m3d-cmd-event" onclick="showDemoMsg()"><span class="m3d-event-main"><b class="'+sevClass(ev.severity)+'">'+ev.severity+'</b> '+ev.device_name+'</span><span class="m3d-event-sub">'+ev.source_event+(ev.if_name?' · '+ev.if_name:'')+' · '+ev.status+'</span></div>';
+  });
+  h+='</div>';
+
+  // Root cause
+  h+='<div class="m3d-root-cause"><div class="m3d-section-title">'+t('monitorRootCauseTop3')+'</div>';
+  rootCauses.forEach(function(rc){
+    h+='<div class="m3d-root-item" onclick="showDemoMsg()"><span class="m3d-root-main"><b class="'+sevClass(rc.severity)+'">'+Math.round(rc.confidence*100)+'%</b> '+rc.candidate+'</span><span class="m3d-root-sub">'+t('monitorImpactedCount',{count:rc.impacted_devices})+' · '+rc.evidence.slice(0,2).join(' / ')+'</span></div>';
+  });
+  h+='</div>';
+
+  // Impact scope
+  h+='<div class="m3d-impact"><div class="m3d-impact-head"><span>'+t('monitorImpactScope')+'</span><b class="'+sevClass(impactScope.level)+'">'+impactScope.level+'</b></div><div class="m3d-impact-summary">'+impactScope.summary+'</div><div class="m3d-impact-list">';
+  impactScope.impacted_devices.forEach(function(d){
+    h+='<div class="m3d-impact-dev" onclick="showDemoMsg()"><span>'+d.device_name+'</span><b class="'+sevClass(d.severity)+'">'+d.severity+'</b></div>';
+  });
+  h+='</div><div class="m3d-shared-paths">';
+  impactScope.shared_path_edges.forEach(function(e){
+    h+='<div class="m3d-path-item"><span>'+e.cable_name+'</span><b>'+t('monitorAffectedCount',{count:e.affected_devices})+'</b></div>';
+  });
+  h+='</div></div>';
+
+  // Hot links
+  h+='<div class="m3d-hot-links"><div class="m3d-section-title">'+t('monitorHotLinksTitle')+'</div>';
+  hotLinks.forEach(function(hl){
+    h+='<div class="m3d-hot-item" onclick="showDemoMsg()"><span class="m3d-hot-main"><b class="'+sevClass(hl.severity)+'">'+hl.severity+'</b> '+hl.device_name+' · '+hl.if_name+'</span><span class="m3d-hot-sub">'+hl.incident_type+' · '+t('monitorEventCount',{count:hl.event_count})+'</span></div>';
+  });
+  h+='</div>';
+
+  // Event stream
+  h+='<div class="m3d-timeline"><div class="m3d-timeline-head"><span>'+t('monitorEventStream')+'</span><div class="m3d-time-window"><button class="m3d-tw-btn active" onclick="showDemoMsg()">'+t('monitor10min')+'</button><button class="m3d-tw-btn" onclick="showDemoMsg()">'+t('monitor1hour')+'</button><button class="m3d-tw-btn" onclick="showDemoMsg()">'+t('monitor24hours')+'</button></div></div><div class="m3d-timeline-list">';
+  events.forEach(function(ev){
+    h+='<div class="m3d-timeline-item" onclick="showDemoMsg()"><span class="m3d-tl-dot" style="background:'+sevBg(ev.severity)+'"></span><span class="m3d-tl-body"><span class="m3d-tl-title">'+ev.title+' · '+ev.device_name+'</span><span class="m3d-tl-meta">'+formatEventTime(ev.occurred_at)+' · '+ev.event_type+(ev.if_name?' · '+ev.if_name:'')+'</span></span></div>';
+  });
+  h+='</div></div></div>'; // end command panel
+
+  // Tabs
+  h+='<div class="m3d-tabs"><div class="m3d-tab-head"><button class="m3d-tab-btn active" onclick="switchM3dTab(\'topology\',this)">'+t('monitorTopology')+'</button><button class="m3d-tab-btn" onclick="switchM3dTab(\'plans\',this)">'+t('floorPlans')+'</button><button class="m3d-tab-btn" onclick="switchM3dTab(\'devices\',this)">'+t('deviceLibrary')+'</button></div>';
+
+  // Topology tab
+  h+='<div class="m3d-tab-pane active" id="m3dTabTopology">';
+  h+='<div class="m3d-filters"><select class="m3d-select"><option value="">'+t('monitorFilterAllTypes')+'</option><option value="switch">'+t('deviceTypeSwitch')+'</option><option value="core_switch">'+t('deviceTypeCoreSwitch')+'</option><option value="ap">'+t('deviceTypeAP')+'</option></select><select class="m3d-select"><option value="">'+t('filterAllStatus')+'</option><option value="online">'+t('statusOnline')+'</option><option value="offline">'+t('statusOffline')+'</option></select></div>';
+
+  // Selected device detail
+  h+='<div class="m3d-selected-box"><h4>SW-B2-01</h4><p><strong>IP:</strong> 10.88.40.1</p><p><strong>'+t('deviceType')+':</strong> '+t('deviceTypeSwitch')+'</p><p><strong>'+t('deviceStatus')+':</strong> '+statusBadge('offline')+'</p>';
+  h+='<div class="m3d-incident"><div class="m3d-incident-head"><span>FALT-2026-0042</span><span class="badge badge-red">critical</span></div><div class="m3d-incident-meta">link_down · open</div><div class="m3d-incident-meta">Gi1/0/1 · '+t('monitorEventCount',{count:5})+'</div><div class="m3d-incident-ai"><span class="m3d-ai-label">'+t('faultAiProbableCause')+'</span><span>光模块接收光功率低于阈值，疑似物理层故障</span></div><div class="m3d-incident-actions"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">'+t('monitorFaultConfirm')+'</button><button class="btn btn-warning btn-sm" onclick="showDemoMsg()">'+t('monitorFaultFalseAlarm')+'</button><button class="btn btn-danger btn-sm" onclick="showDemoMsg()">'+t('monitorTransferMaintenance')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('faultAiRunPrediagnose')+'</button></div></div>';
+  h+='<div class="m3d-scale-ctrl"><span>'+t('deviceScale')+':</span><input type="range" min="0.2" max="3" step="0.1" value="1" style="flex:1;margin:0 8px" oninput="this.nextElementSibling.textContent=parseFloat(this.value).toFixed(1)+\'x\'"><span class="m3d-scale-val">1.0x</span></div>';
+  h+='<div class="m3d-selected-actions"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">'+t('viewDetail')+'</button><button class="btn btn-danger btn-sm" onclick="showDemoMsg()">'+t('actionDelete')+'</button></div></div>';
+
+  // Layer control
+  h+='<div class="m3d-layer-ctrl"><h4>'+t('layerControl')+'</h4><label class="m3d-check"><input type="checkbox" checked>'+t('showPhysicalTopology')+'</label><label class="m3d-check"><input type="checkbox" checked>'+t('showDataLinks')+'</label><label class="m3d-check"><input type="checkbox" checked>'+t('showLabels')+'</label><div class="m3d-tilt"><span>'+t('floorPlanTilt')+':</span><input type="range" min="0" max="90" step="5" value="0" style="flex:1;margin:0 8px" oninput="this.nextElementSibling.textContent=this.value+\'°\'"><span>0°</span></div></div>';
+
+  // Alert list
+  h+='<div class="m3d-alerts"><div class="m3d-alert-head"><h4>'+t('alertList')+' <span class="badge badge-red">'+offlineCount+'</span></h4><label class="m3d-check"><input type="checkbox" checked>'+t('autoFocusOffline')+'</label></div><div class="m3d-alert-items">';
+  var offlineDevs=devices.filter(function(d){return d.status==='offline';});
+  offlineDevs.forEach(function(d){
+    h+='<div class="m3d-alert-item" onclick="showDemoMsg()"><span style="color:var(--danger);margin-right:6px">⚠</span>'+d.name+'</div>';
+  });
+  if(offlineDevs.length===0)h+='<div class="m3d-no-alert">'+t('noOfflineDevices')+'</div>';
+  h+='</div></div></div>'; // end topology tab
+
+  // Floor Plans tab
+  h+='<div class="m3d-tab-pane" id="m3dTabPlans" style="display:none">';
+  h+='<button class="btn btn-primary btn-sm" style="width:100%;margin-bottom:8px" onclick="showDemoMsg()">📤 '+t('uploadFloorPlan')+'</button><div class="m3d-plan-list">';
+  floorPlans.forEach(function(p){
+    h+='<div class="m3d-plan-item'+(p.active?' active':'')+'"><span>🖼</span><span class="m3d-plan-name">'+p.name+'</span>'+(p.active?'<span class="badge badge-green" style="margin-left:auto">'+t('statusLive')+'</span>':'<button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('actionSwitchPlan')+'</button>')+'<button class="btn btn-outline btn-sm" style="margin-left:4px;color:var(--danger)" onclick="showDemoMsg()">✕</button></div>';
+  });
+  if(floorPlans.length===0)h+='<div class="m3d-no-data">'+t('noData')+'</div>';
+  h+='</div></div>';
+
+  // Device Library tab
+  h+='<div class="m3d-tab-pane" id="m3dTabDevices" style="display:none">';
+  h+='<div class="m3d-hint"><span>'+t('dragDeviceHint')+'</span></div><div class="m3d-palette">';
+  [{type:'switch',icon:'📦',labelKey:'deviceTypeSwitch'},{type:'ap',icon:'📍',labelKey:'deviceTypeAP'},{type:'router',icon:'🔗',labelKey:'deviceTypeRouter'},{type:'firewall',icon:'🔒',labelKey:'deviceTypeFirewall'}].forEach(function(item){
+    h+='<div class="m3d-palette-item" draggable="true"><span style="font-size:20px">'+item.icon+'</span><span>'+t(item.labelKey)+'</span></div>';
+  });
+  h+='</div></div></div>'; // end tabs
+
+  h+='</div>'; // end side panel
+  h+='</div>'; // end shell
+
+  return h;
 }
 
 function renderHealth(){
@@ -1595,20 +1958,47 @@ function initMonitorCharts(){
   if(topoDom){
     const c=echarts.init(topoDom);
     charts.topology=c;
-    var nodes=[{name:'SW-Core-01',x:300,y:100,symbolSize:28,itemStyle:{color:'#0984e3'}},{name:'SW-Core-02',x:300,y:280,symbolSize:28,itemStyle:{color:'#0984e3'}},{name:'SW-Edge-01',x:100,y:190,symbolSize:24,itemStyle:{color:'#00b894'}},{name:'SW-Edge-02',x:500,y:190,symbolSize:24,itemStyle:{color:'#00b894'}},{name:'SW-A1-01',x:150,y:380,symbolSize:20,itemStyle:{color:'#00b894'}},{name:'SW-A1-02',x:250,y:450,symbolSize:20,itemStyle:{color:'#00b894'}},{name:'SW-A2-01',x:350,y:380,symbolSize:20,itemStyle:{color:'#00b894'}},{name:'SW-B1-01',x:450,y:380,symbolSize:20,itemStyle:{color:isDark?'#636e72':'#bdc3c7'}},{name:'SW-B1-02',x:380,y:460,symbolSize:20,itemStyle:{color:isDark?'#636e72':'#bdc3c7'}},{name:'SW-B2-01',x:500,y:460,symbolSize:20,itemStyle:{color:'#d63031'}}];
-    var links=[{source:'SW-Core-01',target:'SW-A1-01',lineStyle:{color:'#0984e3',width:2}},{source:'SW-Core-01',target:'SW-A2-01',lineStyle:{color:'#0984e3',width:2}},{source:'SW-Core-02',target:'SW-B1-01',lineStyle:{color:'#0984e3',width:2}},{source:'SW-Core-02',target:'SW-B2-01',lineStyle:{color:'#d63031',width:2,type:'dashed'}},{source:'SW-Core-01',target:'SW-Edge-01',lineStyle:{color:'#00b894',width:2.5}},{source:'SW-Core-02',target:'SW-Edge-02',lineStyle:{color:'#00b894',width:2.5}},{source:'SW-A1-01',target:'SW-A1-02',lineStyle:{color:'#00b894',width:1.5}},{source:'SW-B1-01',target:'SW-B1-02',lineStyle:{color:isDark?'#636e72':'#bdc3c7',width:1.5,type:'dashed'}}];
+    // Categories match device types in the real system
+    var categories=[{name:'Core',itemStyle:{color:'#0984e3'}},{name:'Distribution',itemStyle:{color:'#00b894'}},{name:'Access',itemStyle:{color:'#22c55e'}},{name:'Offline',itemStyle:{color:'#d63031'}},{name:'Wireless',itemStyle:{color:'#a855f7'}}];
+    var topoNodes=[
+      {name:'SW-Core-01',category:0,symbolSize:32,value:'Core'},
+      {name:'SW-Core-02',category:0,symbolSize:32,value:'Core'},
+      {name:'SW-Edge-01',category:1,symbolSize:26,value:'Edge'},
+      {name:'SW-Edge-02',category:1,symbolSize:26,value:'Edge'},
+      {name:'SW-A1-01',category:2,symbolSize:22,value:'Access'},
+      {name:'SW-A1-02',category:2,symbolSize:22,value:'Access'},
+      {name:'SW-A2-01',category:2,symbolSize:22,value:'Access'},
+      {name:'SW-A2-03',category:3,symbolSize:22,value:'Offline'},
+      {name:'SW-B1-01',category:2,symbolSize:22,value:'Access'},
+      {name:'SW-B1-02',category:2,symbolSize:22,value:'Access'},
+      {name:'SW-B2-01',category:3,symbolSize:22,value:'Offline'},
+      {name:'AP-OFF-01',category:4,symbolSize:18,value:'AP'},
+    ];
+    var topoLinks=[
+      {source:'SW-Core-01',target:'SW-A1-01',lineStyle:{color:'#0984e3',width:2}},
+      {source:'SW-Core-01',target:'SW-A2-01',lineStyle:{color:'#0984e3',width:2}},
+      {source:'SW-Core-02',target:'SW-B1-01',lineStyle:{color:'#0984e3',width:2}},
+      {source:'SW-Core-02',target:'SW-B2-01',lineStyle:{color:'#d63031',width:2,type:'dashed'}},
+      {source:'SW-Core-01',target:'SW-Edge-01',lineStyle:{color:'#00b894',width:2.5}},
+      {source:'SW-Core-02',target:'SW-Edge-02',lineStyle:{color:'#00b894',width:2.5}},
+      {source:'SW-A1-01',target:'SW-A1-02',lineStyle:{color:'#22c55e',width:1.5}},
+      {source:'SW-B1-01',target:'SW-B1-02',lineStyle:{color:'#22c55e',width:1.5}},
+      {source:'SW-Core-02',target:'SW-A2-03',lineStyle:{color:'#d63031',width:1.5,type:'dashed'}},
+      {source:'SW-A1-01',target:'AP-OFF-01',lineStyle:{color:'#a855f7',width:1,type:'dotted'}},
+    ];
     c.setOption({
-      tooltip:{trigger:'item',formatter:function(p){return p.dataType==='node'?p.name:'<b>'+p.data.source+'</b> → <b>'+p.data.target+'</b>';}},
-      series:[{type:'graph',layout:'force',force:{repulsion:300,edgeLength:[100,280],gravity:0.15},roam:true,data:nodes,links:links,label:{show:true,position:'right',color:textColor,fontSize:10},lineStyle:{curveness:0.15},emphasis:{focus:'adjacency',lineStyle:{width:3}}}]
+      tooltip:{trigger:'item',formatter:function(p){if(p.dataType==='node'){var cat=p.data.category;var label=cat===3?'('+t('statusOffline')+')':cat===0?'('+t('deviceTypeCoreSwitch')+')':cat===4?'(AP)':'';return '<b>'+p.name+'</b> '+label;}return '<b>'+p.data.source+'</b> → <b>'+p.data.target+'</b>';}},
+      legend:{data:categories.map(function(c){return c.name;}),bottom:0,textStyle:{color:axisColor,fontSize:10},itemWidth:10,itemHeight:10},
+      series:[{type:'graph',layout:'force',force:{repulsion:350,edgeLength:[120,300],gravity:0.12},roam:true,data:topoNodes,links:topoLinks,categories:categories,label:{show:true,position:'right',color:textColor,fontSize:10,formatter:function(p){return p.name;}},lineStyle:{curveness:0.15,opacity:0.7},emphasis:{focus:'adjacency',lineStyle:{width:3},itemStyle:{shadowBlur:10,shadowColor:'rgba(0,0,0,0.3)'}}}]
     });
   }
 
   // AI model status chart (ai page)
-  const aiDom=document.getElementById('chartAIModels');
+  var aiDom=document.getElementById('chartAIModels');
   if(aiDom){
-    const c=echarts.init(aiDom);
-    charts.aiModels=c;
-    c.setOption({
+    var ac=echarts.init(aiDom);
+    charts.aiModels=ac;
+    ac.setOption({
       tooltip:{trigger:'axis',backgroundColor:isDark?'rgba(15,23,42,.92)':'rgba(255,255,255,.95)',textStyle:{color:textColor,fontSize:12}},
       legend:{data:[t('aiPredictive'),t('aiDiagnostic'),t('aiAnomaly'),t('aiCompliance')],bottom:0,itemWidth:10,itemHeight:10,textStyle:{color:axisColor,fontSize:10}},
       grid:{left:'3%',right:'4%',bottom:'14%',top:'5%',containLabel:true},
