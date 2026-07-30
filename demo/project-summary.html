@@ -3,961 +3,958 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NAS v2.0 — 网络自动化运维平台 · 项目总览</title>
+<title>NAS v2.0 — Network Automation System</title>
 <style>
 /* ===== Reset & Tokens ===== */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
   --gy:#f6b93b;--gb:#003087;--gb-deep:#001F5C;--accent:#00b894;--accent2:#0984e3;
   --warn:#e17055;--danger:#d63031;--purple:#a855f7;
-  --bg:#f8fafc;--bg-card:#fff;--bg-muted:#f1f5f9;
+  --bg:#e8ecf1;--bg-slide:#fff;--bg-muted:#f1f5f9;
   --text:#0f172a;--text2:#334155;--text3:#64748b;--text-muted:#94a3b8;
   --border:#e2e8f0;--border-light:#f1f5f9;
-  --radius:10px;--radius-lg:16px;--radius-xl:20px;
-  --shadow-sm:0 1px 2px rgba(0,0,0,.05);
-  --shadow:0 4px 16px rgba(0,0,0,.06);
-  --shadow-lg:0 12px 40px rgba(0,0,0,.08);
+  --radius:8px;--radius-lg:14px;--radius-xl:18px;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.06);
+  --shadow:0 4px 20px rgba(0,0,0,.08);
+  --shadow-lg:0 16px 48px rgba(0,0,0,.12);
   --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
   --font-mono:'JetBrains Mono','Fira Code',monospace;
+  --slide-w:min(96vw,1280px);--slide-h:min(94vh,800px);
 }
-body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.65;-webkit-font-smoothing:antialiased}
+body{font-family:var(--font);background:linear-gradient(135deg,#d5dce4 0%,#e8ecf1 30%,#dce3ea 60%,#c8d2dc 100%);color:var(--text);height:100vh;overflow:hidden;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased;user-select:none}
 
-/* ===== Hero ===== */
-.hero{
-  background:linear-gradient(135deg,var(--gb-deep) 0%,#002566 30%,var(--gb) 60%,#00419E 100%);
-  padding:80px 24px 72px;text-align:center;position:relative;overflow:hidden;
+/* ===== Top Bar ===== */
+#topbar{
+  position:fixed;top:0;left:0;right:0;z-index:100;display:flex;
+  align-items:center;justify-content:space-between;padding:8px 20px;
+  background:rgba(255,255,255,.85);backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--border);height:40px;
 }
-.hero::before{
-  content:'';position:absolute;inset:0;
-  background:radial-gradient(ellipse at 70% 20%,rgba(246,185,59,.12) 0%,transparent 50%),
-             radial-gradient(ellipse at 30% 80%,rgba(0,184,148,.08) 0%,transparent 50%),
-             radial-gradient(ellipse at 60% 50%,rgba(168,85,247,.06) 0%,transparent 50%);
+#topbar .logo{font-size:13px;font-weight:700;color:var(--text);letter-spacing:-.01em}
+#topbar .logo span{color:var(--accent2)}
+.progress-bar{position:fixed;top:40px;left:0;height:3px;background:var(--accent2);z-index:101;transition:width .4s cubic-bezier(.4,0,.2,1);border-radius:0 2px 2px 0}
+#langBtn{
+  padding:4px 14px;border-radius:100px;font-size:11px;font-weight:600;
+  cursor:pointer;border:1.5px solid var(--border);background:var(--bg-slide);
+  color:var(--text2);transition:all .2s;letter-spacing:.02em;
 }
-.hero-grid{
-  content:'';position:absolute;inset:0;opacity:.03;
-  background-image:linear-gradient(rgba(255,255,255,.5) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.5) 1px,transparent 1px);
-  background-size:40px 40px;
-}
-.hero-inner{position:relative;max-width:960px;margin:0 auto}
-.hero-badge{
-  display:inline-block;padding:5px 18px;background:rgba(246,185,59,.15);
-  color:var(--gy);border-radius:100px;font-size:12px;font-weight:700;
-  letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px;
-  border:1px solid rgba(246,185,59,.25);
-}
-.hero h1{font-size:clamp(32px,5vw,54px);font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1.12;margin-bottom:6px}
-.hero h1 span{color:var(--gy)}
-.hero .subtitle{font-size:20px;font-weight:600;color:rgba(255,255,255,.8);margin-bottom:16px}
-.hero p{font-size:16px;color:rgba(255,255,255,.55);max-width:640px;margin:0 auto 32px;line-height:1.7}
-.hero-metrics{display:flex;gap:20px;justify-content:center;flex-wrap:wrap}
-.hm{
-  border-radius:var(--radius);background:rgba(255,255,255,.06);
-  backdrop-filter:blur(8px);padding:18px 28px;text-align:center;min-width:110px;
-  border:1px solid rgba(255,255,255,.08);transition:all .25s;
-}
-.hm:hover{background:rgba(255,255,255,.1);transform:translateY(-2px)}
-.hm b{display:block;font-size:30px;font-weight:800;color:var(--gy);font-family:var(--font-mono)}
-.hm span{font-size:11px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.06em}
+#langBtn:hover{background:var(--accent2);color:#fff;border-color:var(--accent2)}
 
-/* ===== Layout ===== */
-.container{max-width:1280px;margin:0 auto;padding:0 24px}
-.section{padding:72px 0}
-.section-header{margin-bottom:48px}
-.section-header h2{font-size:28px;font-weight:700;letter-spacing:-.01em}
-.section-header h2 .accent-dot{color:var(--accent)}
-.section-header p{font-size:15px;color:var(--text3);margin-top:8px;max-width:600px}
+/* ===== Slide Container ===== */
+#stage{position:relative;width:var(--slide-w);height:var(--slide-h);margin-top:20px}
+.slide{
+  position:absolute;inset:0;background:var(--bg-slide);border-radius:var(--radius-xl);
+  box-shadow:var(--shadow-lg);padding:36px 40px;display:flex;flex-direction:column;
+  opacity:0;transform:translateX(60px);transition:opacity .45s cubic-bezier(.4,0,.2,1),transform .45s cubic-bezier(.4,0,.2,1);
+  pointer-events:none;overflow:hidden;
+}
+.slide.active{opacity:1;transform:translateX(0);pointer-events:auto}
+.slide.exit-left{opacity:0;transform:translateX(-60px)}
+.slide.exit-right{opacity:0;transform:translateX(60px)}
+.slide .slide-badge{
+  display:inline-block;padding:3px 12px;border-radius:100px;font-size:10px;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;margin-bottom:12px;width:fit-content;
+}
+.slide .slide-title{font-size:clamp(20px,2.5vw,28px);font-weight:800;letter-spacing:-.02em;line-height:1.2;margin-bottom:4px}
+.slide .slide-subtitle{font-size:13px;color:var(--text3);margin-bottom:20px}
 
-/* ===== Value Props Row ===== */
-.value-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:20px;margin-bottom:0}
+/* Slide layouts */
+.slide.hero-slide{justify-content:center;align-items:center;text-align:center;background:linear-gradient(135deg,var(--gb-deep) 0%,#002566 35%,var(--gb) 65%,#00419E 100%);color:#fff}
+.slide.hero-slide .slide-title{color:#fff;font-size:clamp(28px,3.5vw,48px)}
+.slide.hero-slide .slide-subtitle{color:rgba(255,255,255,.6);font-size:15px}
+.slide.split-slide{flex-direction:row;gap:24px;padding:28px 32px}
+.slide.split-slide .split-left{flex:1;display:flex;flex-direction:column;justify-content:center}
+.slide.split-slide .split-right{flex:1;display:flex;flex-direction:column;justify-content:center}
+
+/* Stagger animation for child elements */
+.slide .anim{opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease}
+.slide.active .anim{opacity:1;transform:translateY(0)}
+.slide.active .anim-d1{transition-delay:.05s}
+.slide.active .anim-d2{transition-delay:.1s}
+.slide.active .anim-d3{transition-delay:.15s}
+.slide.active .anim-d4{transition-delay:.2s}
+.slide.active .anim-d5{transition-delay:.25s}
+.slide.active .anim-d6{transition-delay:.3s}
+.slide.active .anim-d7{transition-delay:.35s}
+.slide.active .anim-d8{transition-delay:.4s}
+.slide.active .anim-d9{transition-delay:.45s}
+.slide.active .anim-d10{transition-delay:.5s}
+
+/* ===== Nav Controls ===== */
+#navPrev,#navNext{
+  position:fixed;top:50%;transform:translateY(-50%);z-index:99;
+  width:44px;height:44px;border-radius:50%;border:1.5px solid var(--border);
+  background:var(--bg-slide);cursor:pointer;display:flex;align-items:center;
+  justify-content:center;font-size:18px;color:var(--text2);
+  transition:all .2s;box-shadow:var(--shadow-sm);opacity:.7;
+}
+#navPrev{left:max(8px,calc((100vw - var(--slide-w))/2 - 52px))}
+#navNext{right:max(8px,calc((100vw - var(--slide-w))/2 - 52px))}
+#navPrev:hover,#navNext:hover{opacity:1;box-shadow:var(--shadow);color:var(--accent2);border-color:var(--accent2)}
+#navPrev:active,#navNext:active{transform:translateY(-50%) scale(.95)}
+
+/* ===== Bottom Bar ===== */
+#bottombar{
+  position:fixed;bottom:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;justify-content:center;gap:12px;
+  padding:8px 20px;height:36px;
+}
+#bottombar .dot{
+  width:9px;height:9px;border-radius:50%;background:var(--border);
+  cursor:pointer;transition:all .3s;
+}
+#bottombar .dot.active{background:var(--accent2);width:24px;border-radius:10px}
+#bottombar .dot:hover{background:var(--text-muted)}
+#slideNum{font-size:10px;color:var(--text-muted);font-family:var(--font-mono);letter-spacing:.04em;min-width:48px;text-align:center}
+
+/* ===== Shared Components ===== */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+.kpi-card{
+  background:var(--bg-muted);border-radius:var(--radius-lg);padding:14px 16px;
+  border-left:3px solid transparent;transition:all .2s;
+}
+.kpi-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.kpi-card.accent{border-left-color:var(--accent)}
+.kpi-card.accent2{border-left-color:var(--accent2)}
+.kpi-card.warn{border-left-color:var(--warn)}
+.kpi-card.danger{border-left-color:var(--danger)}
+.kpi-card.purple{border-left-color:var(--purple)}
+.kpi-card .kv{font-size:24px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
+.kpi-card.accent .kv{color:var(--accent)}
+.kpi-card.accent2 .kv{color:var(--accent2)}
+.kpi-card.warn .kv{color:var(--warn)}
+.kpi-card.danger .kv{color:var(--danger)}
+.kpi-card.purple .kv{color:var(--purple)}
+.kpi-card .kl{font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.03em}
+.kpi-card .ks{font-size:9px;color:var(--text-muted);margin-top:2px}
+
+.value-row{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .value-card{
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:28px 24px;box-shadow:var(--shadow-sm);transition:all .25s;position:relative;overflow:hidden;
+  padding:20px 18px;border-radius:var(--radius-lg);background:var(--bg-muted);
+  border-top:3px solid transparent;transition:all .25s;
 }
 .value-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
-.value-card::after{
-  content:'';position:absolute;top:0;left:0;width:4px;height:100%;
-}
-.value-card.mgmt::after{background:var(--accent2)}
-.value-card.ops::after{background:var(--accent)}
-.value-card.ai::after{background:var(--purple)}
-.value-card .vc-icon{font-size:32px;margin-bottom:14px;display:block}
-.value-card h4{font-size:16px;font-weight:700;margin-bottom:8px}
-.value-card p{font-size:13px;color:var(--text3);line-height:1.6}
+.value-card.mgmt{border-top-color:var(--accent2)}
+.value-card.ops{border-top-color:var(--accent)}
+.value-card.ai{border-top-color:var(--purple)}
+.value-card .vci{font-size:26px;margin-bottom:8px;display:block}
+.value-card h4{font-size:13px;font-weight:700;margin-bottom:4px}
+.value-card p{font-size:11px;color:var(--text3);line-height:1.5}
 
-/* ===== Ops Panorama Stats ===== */
-.panorama-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:32px}
-.ps-card{
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:18px 20px;text-align:center;box-shadow:var(--shadow-sm);transition:all .2s;
+.stat-row{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.stat-item{
+  background:var(--bg-muted);border-radius:var(--radius-lg);padding:12px 14px;text-align:center;transition:all .2s;
 }
-.ps-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
-.ps-card .ps-value{font-size:30px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
-.ps-card .ps-label{font-size:12px;color:var(--text3);margin-top:4px}
-.ps-card .ps-sub{font-size:11px;color:var(--text-muted);margin-top:2px}
-.ps-card.accent .ps-value{color:var(--accent)}
-.ps-card.accent2 .ps-value{color:var(--accent2)}
-.ps-card.warn .ps-value{color:var(--warn)}
-.ps-card.danger .ps-value{color:var(--danger)}
-.ps-card.purple .ps-value{color:var(--purple)}
+.stat-item:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.stat-item .sv{font-size:22px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
+.stat-item .sl{font-size:10px;color:var(--text3);margin-top:2px}
+.stat-item.accent .sv{color:var(--accent)}
+.stat-item.accent2 .sv{color:var(--accent2)}
+.stat-item.warn .sv{color:var(--warn)}
+.stat-item.danger .sv{color:var(--danger)}
+.stat-item.purple .sv{color:var(--purple)}
 
-/* ===== Flow Diagram (Closed Loop) ===== */
-.flow-section{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-xl);padding:40px 32px;box-shadow:var(--shadow-sm);overflow-x:auto}
-.flow-diagram{display:flex;align-items:flex-start;gap:0;min-width:900px;justify-content:center;flex-wrap:wrap}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.three-col{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
+
+.panel{
+  background:var(--bg-muted);border-radius:var(--radius-lg);padding:16px 18px;
+  border:1px solid var(--border-light);
+}
+.panel h5{font-size:12px;font-weight:700;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.panel h5 .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+.flow-row{display:flex;align-items:center;gap:6px;justify-content:center;flex-wrap:wrap}
 .flow-node{
-  text-align:center;padding:16px 20px;border-radius:var(--radius-lg);
-  min-width:130px;position:relative;flex-shrink:0;
+  text-align:center;padding:12px 16px;border-radius:var(--radius-lg);min-width:100px;
+  border:2px solid transparent;transition:all .2s;
 }
-.flow-node .fn-icon{font-size:28px;margin-bottom:8px}
-.flow-node .fn-title{font-size:13px;font-weight:700;margin-bottom:3px}
-.flow-node .fn-desc{font-size:11px;color:var(--text3);line-height:1.4}
-.flow-node.monitor{background:rgba(9,132,227,.06);border:2px solid rgba(9,132,227,.2)}
-.flow-node.fault{background:rgba(214,48,49,.06);border:2px solid rgba(214,48,49,.2)}
-.flow-node.ai-diag{background:rgba(168,85,247,.06);border:2px solid rgba(168,85,247,.2)}
-.flow-node.maint{background:rgba(225,112,85,.06);border:2px solid rgba(225,112,85,.2)}
-.flow-node.spare{background:rgba(246,185,59,.08);border:2px solid rgba(246,185,59,.25)}
-.flow-node.verify{background:rgba(0,184,148,.06);border:2px solid rgba(0,184,148,.2)}
-.flow-arrow{
-  display:flex;align-items:center;justify-content:center;
-  font-size:22px;color:var(--text-muted);padding:0 4px;flex-shrink:0;
-  min-width:36px;margin-top:28px;
-}
-.flow-arrow.auto{color:var(--purple);font-weight:700}
+.flow-node:hover{transform:translateY(-2px)}
+.flow-node .fi{font-size:22px;margin-bottom:4px}
+.flow-node .ft{font-size:11px;font-weight:700}
+.flow-node .fd{font-size:9px;color:var(--text3);line-height:1.3}
+.flow-node.mon{background:rgba(9,132,227,.05);border-color:rgba(9,132,227,.18)}
+.flow-node.flt{background:rgba(214,48,49,.05);border-color:rgba(214,48,49,.18)}
+.flow-node.aid{background:rgba(168,85,247,.05);border-color:rgba(168,85,247,.18)}
+.flow-node.mnt{background:rgba(225,112,85,.05);border-color:rgba(225,112,85,.18)}
+.flow-node.spr{background:rgba(246,185,59,.06);border-color:rgba(246,185,59,.25)}
+.flow-node.vfy{background:rgba(0,184,148,.05);border-color:rgba(0,184,148,.18)}
+.flow-arr{font-size:16px;color:var(--text-muted);font-weight:700;flex-shrink:0}
+.flow-arr.auto{color:var(--purple)}
 
-/* ===== Two Column Layout ===== */
-.two-col{display:grid;grid-template-columns:1fr 1fr;gap:24px}
-@media(max-width:900px){.two-col{grid-template-columns:1fr}}
-
-/* ===== Feature Panel ===== */
-.feat-panel{
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:24px 28px;box-shadow:var(--shadow-sm);
-}
-.feat-panel h4{font-size:16px;font-weight:700;margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.feat-panel h4 .fp-dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-.feat-list{list-style:none;display:flex;flex-direction:column;gap:8px}
-.feat-list li{font-size:13px;color:var(--text2);padding:8px 12px;background:var(--bg-muted);border-radius:var(--radius);line-height:1.5;position:relative;padding-left:28px}
-.feat-list li::before{content:'';position:absolute;left:10px;top:14px;width:6px;height:6px;border-radius:50%}
-.feat-list li.monitor::before{background:var(--accent2)}
-.feat-list li.fault::before{background:var(--danger)}
-.feat-list li.ai::before{background:var(--purple)}
-.feat-list li.maint::before{background:var(--warn)}
-.feat-list li.spare::before{background:var(--gy)}
-.feat-list li.auto::before{background:var(--accent)}
-
-/* ===== Alert Types Grid ===== */
-.alert-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
-.alert-item{
-  padding:14px 16px;border-radius:var(--radius);font-size:12px;
-  display:flex;align-items:flex-start;gap:10px;line-height:1.5;
-}
-.alert-item .ai-sev{width:8px;height:8px;border-radius:50%;margin-top:5px;flex-shrink:0}
-.alert-item.danger{background:rgba(214,48,49,.06);border:1px solid rgba(214,48,49,.12)}
-.alert-item.danger .ai-sev{background:var(--danger)}
-.alert-item.warn{background:rgba(225,112,85,.06);border:1px solid rgba(225,112,85,.12)}
-.alert-item.warn .ai-sev{background:var(--warn)}
-.alert-item.info{background:rgba(9,132,227,.06);border:1px solid rgba(9,132,227,.12)}
-.alert-item.info .ai-sev{background:var(--accent2)}
-.alert-item.success{background:rgba(0,184,148,.06);border:1px solid rgba(0,184,148,.12)}
-.alert-item.success .ai-sev{background:var(--accent)}
-
-/* ===== State Machine ===== */
-.state-flow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:16px 0;justify-content:center}
+.state-flow{display:flex;align-items:center;gap:4px;flex-wrap:wrap;justify-content:center}
 .state-badge{
-  padding:6px 14px;border-radius:100px;font-size:11px;font-weight:600;
-  white-space:nowrap;
+  padding:4px 10px;border-radius:100px;font-size:10px;font-weight:600;white-space:nowrap;
 }
-.state-badge.open{background:rgba(214,48,49,.1);color:var(--danger);border:1px solid rgba(214,48,49,.25)}
-.state-badge.progress{background:rgba(225,112,85,.1);color:var(--warn);border:1px solid rgba(225,112,85,.25)}
-.state-badge.resolve{background:rgba(0,184,148,.1);color:var(--accent);border:1px solid rgba(0,184,148,.25)}
-.state-badge.closed{background:var(--bg-muted);color:var(--text3);border:1px solid var(--border)}
-.state-arrow{color:var(--text-muted);font-size:14px;font-weight:700}
+.state-badge.open{background:rgba(214,48,49,.08);color:var(--danger);border:1px solid rgba(214,48,49,.2)}
+.state-badge.prog{background:rgba(225,112,85,.08);color:var(--warn);border:1px solid rgba(225,112,85,.2)}
+.state-badge.done{background:rgba(0,184,148,.08);color:var(--accent);border:1px solid rgba(0,184,148,.2)}
+.state-badge.end{background:var(--bg-muted);color:var(--text3);border:1px solid var(--border)}
+.state-arr{color:var(--text-muted);font-size:12px;font-weight:700}
 
-/* ===== KPI Grid ===== */
-.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px}
-.kpi-card{
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:18px 20px;box-shadow:var(--shadow-sm);
+.feature-list{list-style:none;display:flex;flex-direction:column;gap:5px}
+.feature-list li{font-size:11px;color:var(--text2);padding:6px 10px;background:var(--bg-slide);border-radius:var(--radius);line-height:1.4;padding-left:22px;position:relative}
+.feature-list li::before{content:'';position:absolute;left:8px;top:11px;width:5px;height:5px;border-radius:50%}
+.feature-list li.c-accent2::before{background:var(--accent2)}
+.feature-list li.c-accent::before{background:var(--accent)}
+.feature-list li.c-danger::before{background:var(--danger)}
+.feature-list li.c-warn::before{background:var(--warn)}
+.feature-list li.c-purple::before{background:var(--purple)}
+.feature-list li.c-gy::before{background:var(--gy)}
+
+.module-row{display:flex;flex-wrap:wrap;gap:5px}
+.module-tag{padding:3px 10px;font-size:10px;border-radius:100px;background:var(--bg-muted);color:var(--text2);font-weight:500;white-space:nowrap;border:1px solid var(--border-light)}
+
+.info-table{width:100%;border-collapse:collapse;font-size:10px}
+.info-table th{text-align:left;padding:6px 10px;font-size:9px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border-bottom:2px solid var(--border);font-weight:700;background:var(--bg-muted)}
+.info-table td{padding:6px 10px;border-bottom:1px solid var(--border-light);color:var(--text2)}
+.info-table .mono{font-family:var(--font-mono);font-size:10px;font-weight:600;color:var(--text)}
+
+.hero-metrics{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:24px}
+.hm{
+  background:rgba(255,255,255,.06);backdrop-filter:blur(8px);
+  border-radius:var(--radius);padding:14px 20px;text-align:center;min-width:90px;
+  border:1px solid rgba(255,255,255,.08);transition:all .25s;
 }
-.kpi-card .kpi-label{font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
-.kpi-card .kpi-value{font-size:26px;font-weight:800;font-family:var(--font-mono)}
-.kpi-card .kpi-target{font-size:11px;color:var(--text-muted);margin-top:4px}
-.kpi-card.accent .kpi-value{color:var(--accent)}
-.kpi-card.accent2 .kpi-value{color:var(--accent2)}
-.kpi-card.warn .kpi-value{color:var(--warn)}
-.kpi-card.danger .kpi-value{color:var(--danger)}
+.hm:hover{background:rgba(255,255,255,.12);transform:translateY(-3px)}
+.hm b{display:block;font-size:24px;font-weight:800;color:var(--gy);font-family:var(--font-mono)}
+.hm span{font-size:9px;color:rgba(255,255,255,.5);text-transform:uppercase;letter-spacing:.05em}
 
-/* ===== AI Agent Cards ===== */
-.agent-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+/* Agent cards */
+.agent-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px}
 .agent-card{
-  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
-  padding:20px;box-shadow:var(--shadow-sm);transition:all .2s;
-  border-top:3px solid var(--purple);
+  padding:14px;border-radius:var(--radius-lg);background:var(--bg-muted);
+  border-top:3px solid var(--purple);transition:all .2s;
 }
-.agent-card:hover{transform:translateY(-2px);box-shadow:var(--shadow-lg)}
-.agent-card h5{font-size:14px;font-weight:700;margin-bottom:6px}
-.agent-card p{font-size:12px;color:var(--text3);line-height:1.5}
+.agent-card:hover{transform:translateY(-2px);box-shadow:var(--shadow)}
+.agent-card h5{font-size:12px;font-weight:700;margin-bottom:3px}
+.agent-card p{font-size:10px;color:var(--text3);line-height:1.4}
 
-/* ===== Workflow Rules ===== */
-.rule-table{width:100%;border-collapse:collapse;font-size:13px}
-.rule-table th{text-align:left;padding:10px 14px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border-bottom:2px solid var(--border);font-weight:700;background:var(--bg-muted)}
-.rule-table td{padding:10px 14px;border-bottom:1px solid var(--border-light);color:var(--text2)}
-.rule-table .rt-trigger{font-family:var(--font-mono);font-size:11px;font-weight:600}
-.rule-table .rt-action{font-family:var(--font-mono);font-size:11px}
-.rule-table .rt-arrow{color:var(--text-muted)}
+/* Alert stripes */
+.alert-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.alert-item{
+  padding:10px 12px;border-radius:var(--radius);font-size:10px;
+  display:flex;align-items:flex-start;gap:8px;line-height:1.4;
+}
+.alert-item .as{width:6px;height:6px;border-radius:50%;margin-top:5px;flex-shrink:0}
+.alert-item.danger{background:rgba(214,48,49,.05);border:1px solid rgba(214,48,49,.1)}
+.alert-item.danger .as{background:var(--danger)}
+.alert-item.warn{background:rgba(225,112,85,.05);border:1px solid rgba(225,112,85,.1)}
+.alert-item.warn .as{background:var(--warn)}
+.alert-item.info{background:rgba(9,132,227,.05);border:1px solid rgba(9,132,227,.1)}
+.alert-item.info .as{background:var(--accent2)}
 
-/* ===== Tech Stack Compact ===== */
-.tech-strip{display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
-.tech-pill{
-  padding:6px 16px;border-radius:100px;font-size:12px;font-weight:500;
-  background:var(--bg-muted);color:var(--text2);border:1px solid var(--border);
-}
+/* Tech word cloud */
+.tech-strip{display:flex;flex-wrap:wrap;gap:6px;justify-content:center}
+.tech-pill{padding:4px 12px;border-radius:100px;font-size:10px;font-weight:500;background:var(--bg-muted);color:var(--text2);border:1px solid var(--border-light)}
 
-/* ===== Module Tags ===== */
-.module-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
-.module-group{
-  background:var(--bg-card);border:1px solid var(--border);
-  border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);
-}
-.module-group-header{
-  padding:14px 18px;font-size:13px;font-weight:700;letter-spacing:.01em;
-  display:flex;align-items:center;gap:10px;border-bottom:1px solid var(--border-light);
-}
-.module-group-header .mg-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
-.mg-monitor .mg-icon{background:rgba(0,184,148,.12);color:var(--accent)}
-.mg-device .mg-icon{background:rgba(9,132,227,.12);color:var(--accent2)}
-.mg-config .mg-icon{background:rgba(246,185,59,.15);color:var(--gy)}
-.mg-spare .mg-icon{background:rgba(225,112,85,.12);color:var(--warn)}
-.mg-system .mg-icon{background:rgba(99,110,114,.12);color:#636e72}
-.module-list{padding:10px 18px 14px;display:flex;flex-wrap:wrap;gap:6px}
-.module-tag{
-  padding:4px 12px;font-size:11px;border-radius:100px;
-  background:var(--bg-muted);color:var(--text2);font-weight:500;
-  white-space:nowrap;
-}
+/* End slide */
+.end-slide{justify-content:center;align-items:center;text-align:center;background:linear-gradient(135deg,var(--gb-deep),var(--gb))}
+.end-slide h2{color:#fff;font-size:clamp(24px,3vw,40px);margin-bottom:8px}
+.end-slide p{color:rgba(255,255,255,.55);font-size:14px}
 
-/* ===== Architecture ===== */
-.arch-diagram{
-  background:var(--bg-card);border:1px solid var(--border);
-  border-radius:var(--radius-xl);padding:36px 32px;overflow-x:auto;box-shadow:var(--shadow-sm);
-}
-.arch-layers{display:flex;flex-direction:column;gap:10px;min-width:640px}
-.arch-layer{display:flex;align-items:center;gap:16px}
-.arch-layer-label{
-  width:90px;text-align:right;font-size:11px;font-weight:700;
-  text-transform:uppercase;letter-spacing:.04em;color:var(--text3);flex-shrink:0;
-}
-.arch-layer-boxes{display:flex;gap:8px;flex-wrap:wrap;flex:1}
-.arch-box{
-  padding:9px 16px;border-radius:var(--radius);font-size:11px;font-weight:600;
-  color:#fff;white-space:nowrap;text-align:center;flex-shrink:0;
-}
-.arch-box.frontend{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
-.arch-box.backend{background:linear-gradient(135deg,#0984e3,#0ea5e9)}
-.arch-box.data{background:linear-gradient(135deg,#00b894,#00cec9)}
-.arch-box.infra{background:linear-gradient(135deg,#e17055,#f97316)}
-.arch-box.ai{background:linear-gradient(135deg,#a855f7,#c084fc)}
-.arch-arrow{text-align:center;color:var(--text-muted);font-size:16px;padding:2px 0}
-
-/* ===== Footer ===== */
-.footer{background:var(--gb-deep);color:rgba(255,255,255,.45);padding:28px 24px;text-align:center;font-size:12px}
-.footer b{color:rgba(255,255,255,.7)}
-
-/* ===== Responsive ===== */
-@media(max-width:768px){
-  .hero{padding:48px 16px 40px}
-  .hero h1{font-size:26px}
-  .hero .subtitle{font-size:16px}
-  .flow-diagram{flex-direction:column;align-items:center;min-width:0}
-  .flow-arrow{transform:rotate(90deg);margin:0}
+/* Responsive */
+@media(max-width:900px){
+  :root{--slide-w:98vw;--slide-h:96vh}
+  .slide{padding:20px 16px}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-row{grid-template-columns:repeat(3,1fr)}
+  .value-row{grid-template-columns:1fr}
   .two-col{grid-template-columns:1fr}
-  .state-flow{gap:4px}
-  .arch-layer-label{width:50px;font-size:10px}
+  .three-col{grid-template-columns:1fr}
+  .agent-grid{grid-template-columns:repeat(2,1fr)}
+  .alert-strip{grid-template-columns:1fr}
+  .slide.split-slide{flex-direction:column}
+  #navPrev,#navNext{display:none}
+  .flow-row{gap:3px}
+  .flow-node{min-width:70px;padding:8px 10px}
+  .flow-node .ft{font-size:10px}
+  .flow-node .fd{display:none}
 }
-
-@media print{
-  .hero{background:#003087!important;-webkit-print-color-adjust:exact}
-  .section{padding:24px 0}
+@media(max-width:600px){
+  .slide{padding:14px 10px;border-radius:0}
+  :root{--slide-w:100vw;--slide-h:100vh}
+  .kpi-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .kpi-card{padding:10px}
+  .kpi-card .kv{font-size:18px}
+  .stat-row{grid-template-columns:repeat(2,1fr);gap:6px}
+  .hero-metrics{gap:8px}
+  .hm{padding:10px 14px;min-width:70px}
+  .hm b{font-size:18px}
 }
 </style>
 </head>
 <body>
 
-<!-- ================================================================== -->
-<!-- HERO -->
-<!-- ================================================================== -->
-<section class="hero">
-  <div class="hero-grid"></div>
-  <div class="hero-inner">
-    <div class="hero-badge">Network Automation System v2.0</div>
-    <h1>网络自动化<span>运维平台</span></h1>
-    <div class="subtitle">智能监控 · 故障闭环 · AI 研判 · 资产追踪</div>
-    <p>面向制造企业网络的全栈智能运维系统。从实时监控、自动发现故障、AI 智能诊断、自动创建维修单，到备件消耗追踪与设备资产闭环管理，覆盖运维全场景。</p>
-    <div class="hero-metrics">
-      <div class="hm"><b>26</b><span>功能模块</span></div>
-      <div class="hm"><b>116</b><span>API 端点</span></div>
-      <div class="hm"><b>36</b><span>前端页面</span></div>
-      <div class="hm"><b>225</b><span>测试用例</span></div>
-      <div class="hm"><b>5</b><span>AI Agent</span></div>
-      <div class="hm"><b>100%</b><span>测试通过率</span></div>
-    </div>
-  </div>
-</section>
+<div id="topbar">
+  <div class="logo">NAS <span>v2.0</span></div>
+  <button id="langBtn" onclick="toggleLang()">EN / 中</button>
+</div>
+<div class="progress-bar" id="progressBar"></div>
 
-<!-- ================================================================== -->
-<!-- 三大视角 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section">
-    <div class="section-header" style="text-align:center">
-      <h2>三大视角，<span class="accent-dot">全维覆盖</span></h2>
-      <p>为不同角色提供专属视图 — 管理层决策、运维人员实战、AI 智能驱动</p>
-    </div>
-    <div class="value-row">
-      <div class="value-card mgmt">
-        <span class="vc-icon">📊</span>
-        <h4>管理层视角 · Dashboard</h4>
-        <p>系统可用性、SLA 合规率、MTTR/MTBF 趋势、月度运维成本、预算偏差、AI 生成的执行摘要与风险简报。自定义 Widget 布局，拖拽式仪表板，一眼掌握全局。</p>
-      </div>
-      <div class="value-card ops">
-        <span class="vc-icon">🔍</span>
-        <h4>运维人员视角 · Operations</h4>
-        <p>实时设备在线状态、多源告警流（离线/高温/故障/备份逾期）、故障时间线堆叠图、Top 故障设备排名、备件库存预警。NOC 风格大屏，30 秒自动刷新。</p>
-      </div>
-      <div class="value-card ai">
-        <span class="vc-icon">🧠</span>
-        <h4>AI 智能驱动 · AI Analysis</h4>
-        <p>Google ADK 多智能体协作：故障自动分诊、根因推断、处置建议、合规审计、健康预测。RAG 知识库检索设备手册与历史案例。AI 自动生成维修单，减少人工研判时间。</p>
-      </div>
-    </div>
-  </div>
+<div id="stage"></div>
+
+<button id="navPrev" onclick="goSlide(current-1)" title="Previous">◀</button>
+<button id="navNext" onclick="goSlide(current+1)" title="Next">▶</button>
+
+<div id="bottombar">
+  <span id="slideNum">1 / 10</span>
+  <div id="dotsContainer"></div>
 </div>
 
-<!-- ================================================================== -->
-<!-- 运维全景 - 给管理层看的 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>运维全景 <span style="font-size:14px;color:var(--text-muted);font-weight:400">— 管理层驾驶舱</span></h2>
-      <p>核心运维 KPI 一览：系统可用性、故障趋势、SLA 合规、成本管控、备件保障</p>
-    </div>
+<script>
+// ===================================================================
+// i18n
+// ===================================================================
+const I18N = {
+zh: {
+  badge:'Network Automation System v2.0',
+  heroTitle:'网络自动化运维平台',
+  heroSub:'智能监控 · 故障闭环 · AI 研判 · 资产追踪',
+  heroDesc:'面向制造企业网络的全栈智能运维系统。从实时监控、自动发现故障、AI 智能诊断、自动创建维修单，到备件消耗追踪与设备资产闭环管理，覆盖运维全场景。',
+  hm1:'功能模块',hm2:'API 端点',hm3:'前端页面',hm4:'测试用例',hm5:'AI Agent',hm6:'测试通过率',
 
-    <!-- Executive KPIs -->
-    <div class="kpi-grid">
-      <div class="kpi-card accent">
-        <div class="kpi-label">系统可用性</div>
-        <div class="kpi-value">99.7%</div>
-        <div class="kpi-target">目标 99.5% · 阈值 98%</div>
-      </div>
-      <div class="kpi-card danger">
-        <div class="kpi-label">活跃故障数</div>
-        <div class="kpi-value">3</div>
-        <div class="kpi-target">Critical 1 · Major 2</div>
-      </div>
-      <div class="kpi-card accent2">
-        <div class="kpi-label">SLA 合规率</div>
-        <div class="kpi-value">96.8%</div>
-        <div class="kpi-target">目标 95% · 阈值 90%</div>
-      </div>
-      <div class="kpi-card warn">
-        <div class="kpi-label">MTTR (平均修复时间)</div>
-        <div class="kpi-value">3.2h</div>
-        <div class="kpi-target">目标 4h · 阈值 8h</div>
-      </div>
-      <div class="kpi-card accent2">
-        <div class="kpi-label">MTBF (平均故障间隔)</div>
-        <div class="kpi-value">78d</div>
-        <div class="kpi-target">趋势 ↑ 12% vs 上季度</div>
-      </div>
-      <div class="kpi-card warn">
-        <div class="kpi-label">月度运维成本</div>
-        <div class="kpi-value">¥42.8k</div>
-        <div class="kpi-target">预算 ¥40k · 偏差 +7%</div>
-      </div>
-      <div class="kpi-card danger">
-        <div class="kpi-label">故障复发率</div>
-        <div class="kpi-value">12.5%</div>
-        <div class="kpi-target">目标 15% · 阈值 25%</div>
-      </div>
-      <div class="kpi-card accent">
-        <div class="kpi-label">备件保障天数</div>
-        <div class="kpi-value">34d</div>
-        <div class="kpi-target">目标 30d · 阈值 14d</div>
-      </div>
-    </div>
-  </div>
-</div>
+  s1Title:'三大视角，全维覆盖',
+  s1Sub:'为不同角色提供专属视图 — 管理层决策、运维人员实战、AI 智能驱动',
+  s1c1t:'管理层视角 · Dashboard',
+  s1c1d:'系统可用性、SLA 合规率、MTTR/MTBF 趋势、月度运维成本、预算偏差、AI 执行摘要与风险简报。自定义 Widget 布局，拖拽式仪表板，一眼掌握全局。',
+  s1c2t:'运维人员视角 · Operations',
+  s1c2d:'实时设备在线状态、多源告警流（离线/高温/故障/备份逾期）、故障时间线堆叠图、Top 故障设备排名、备件库存预警。NOC 风格大屏，30 秒自动刷新。',
+  s1c3t:'AI 智能驱动 · AI Analysis',
+  s1c3d:'Google ADK 多智能体协作：故障自动分诊、根因推断、处置建议、合规审计、健康预测。RAG 知识库检索设备手册与历史案例，AI 自动生成维修单。',
 
-<!-- ================================================================== -->
-<!-- 实时现场状态 - 给运维人员看的 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>实时现场状态 <span style="font-size:14px;color:var(--text-muted);font-weight:400">— 运维人员作战室</span></h2>
-      <p>秒级设备状态、多源告警聚合、3D 数字孪生、故障时间线，一切尽在掌控</p>
-    </div>
+  s2Title:'运维全景 — 管理层驾驶舱',
+  s2Sub:'核心运维 KPI 一览：系统可用性、故障趋势、SLA 合规、成本管控、备件保障',
+  s2k1v:'99.7%',s2k1l:'系统可用性',s2k1s:'目标 99.5% · 阈值 98%',
+  s2k2v:'3',s2k2l:'活跃故障数',s2k2s:'Critical 1 · Major 2',
+  s2k3v:'96.8%',s2k3l:'SLA 合规率',s2k3s:'目标 95% · 阈值 90%',
+  s2k4v:'3.2h',s2k4l:'MTTR 平均修复时间',s2k4s:'目标 4h · 阈值 8h',
+  s2k5v:'78d',s2k5l:'MTBF 平均故障间隔',s2k5s:'趋势 ↑ 12% vs 上季度',
+  s2k6v:'¥42.8k',s2k6l:'月度运维成本',s2k6s:'预算 ¥40k · 偏差 +7%',
+  s2k7v:'12.5%',s2k7l:'故障复发率',s2k7s:'目标 15% · 阈值 25%',
+  s2k8v:'34d',s2k8l:'备件保障天数',s2k8s:'目标 30d · 阈值 14d',
 
-    <!-- Real-time Stats -->
-    <div class="panorama-stats">
-      <div class="ps-card accent2"><div class="ps-value">1,247</div><div class="ps-label">设备总数</div><div class="ps-sub">已部署在网</div></div>
-      <div class="ps-card accent"><div class="ps-value">1,198</div><div class="ps-label">在线设备</div><div class="ps-sub">可达 · 96.1%</div></div>
-      <div class="ps-card danger"><div class="ps-value">36</div><div class="ps-label">离线设备</div><div class="ps-sub">不可达 · 2.9%</div></div>
-      <div class="ps-card warn"><div class="ps-value">13</div><div class="ps-label">维护中</div><div class="ps-sub">计划内 · 1.0%</div></div>
-      <div class="ps-card accent"><div class="ps-value">92.4</div><div class="ps-label">全网健康分</div><div class="ps-sub">综合评分 / 100</div></div>
-      <div class="ps-card purple"><div class="ps-value">8</div><div class="ps-label">活跃告警</div><div class="ps-sub">危险 2 · 警告 6</div></div>
-    </div>
+  s3Title:'实时现场状态 — 运维人员作战室',
+  s3Sub:'秒级设备状态、多源告警聚合、3D 数字孪生、故障时间线，一切尽在掌控',
+  s3st1v:'1,247',s3st1l:'设备总数',s3st2v:'1,198',s3st2l:'在线设备',s3st3v:'36',s3st3l:'离线设备',
+  s3st4v:'13',s3st4l:'维护中',s3st5v:'92.4',s3st5l:'全网健康分',s3st6v:'8',s3st6l:'活跃告警',
+  s3alt:'多源告警聚合',
+  s3a1:'设备离线告警',s3a1d:'ICMP/SSH 不可达，自动触发故障单',
+  s3a2:'高危故障告警',s3a2d:'Critical/Major 级别未解决故障',
+  s3a3:'高温告警',s3a3d:'设备温度 ≥ 70°C 峰值',
+  s3a4:'备份逾期告警',s3a4d:'超过 30 天未备份设备配置',
+  s3a5:'SNMP Trap 事件',s3a5d:'linkDown / linkUp 实时接收',
+  s3a6:'Prometheus 指标',s3a6d:'snmp_exporter 轮询采集异常',
+  s33dt:'3D 数字孪生 · Monitor3D',
+  s33d1:'Three.js 3D 可视化引擎，设备拖拽放置、光纤拓扑布线',
+  s33d2:'实时流量热力图渲染，SNMP 采集健康面板 (fresh/lagging/stale)',
+  s33d3:'P1/P2 故障命令面板，根因 Top 3 推断，影响范围评估',
+  s33d4:'事件流时间线（10m/1h/24h 切换），关联设备一键定位',
+  s33d5:'楼层平面图管理，设备模板库（拖拽式部署）',
+  s33d6:'链路共享路径分析，热点链路自动识别',
 
-    <!-- Alert Sources -->
-    <div class="two-col">
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--danger)"></span> 多源告警聚合</h4>
-        <div class="alert-grid">
-          <div class="alert-item danger">
-            <span class="ai-sev"></span>
-            <div><b>设备离线告警</b><br>ICMP/SSH 不可达，自动触发故障单</div>
-          </div>
-          <div class="alert-item danger">
-            <span class="ai-sev"></span>
-            <div><b>高危故障告警</b><br>Critical/Major 级别未解决故障</div>
-          </div>
-          <div class="alert-item warn">
-            <span class="ai-sev"></span>
-            <div><b>高温告警</b><br>设备温度 ≥ 70°C (1h 峰值)</div>
-          </div>
-          <div class="alert-item warn">
-            <span class="ai-sev"></span>
-            <div><b>备份逾期告警</b><br>超过 30 天未备份设备配置</div>
-          </div>
-          <div class="alert-item info">
-            <span class="ai-sev"></span>
-            <div><b>SNMP Trap 事件</b><br>linkDown / linkUp 实时接收</div>
-          </div>
-          <div class="alert-item info">
-            <span class="ai-sev"></span>
-            <div><b>Prometheus 指标</b><br>snmp_exporter 轮询采集异常</div>
-          </div>
-        </div>
-      </div>
+  s4Title:'故障闭环管理 — 自动发现 → 自动创建 → 自动修复验证',
+  s4Sub:'从监控告警到故障单、AI 诊断、维修执行、备件消耗、验证关闭的全流程闭环',
+  s4fn1t:'监控发现',s4fn1d:'SNMP Trap · ICMP 探测 · Prometheus 指标 · 阈值触发',
+  s4fn2t:'自动创建故障单',s4fn2d:'INC-YYYYMMDD-XXXX · 去重 · 分级 · 分类 · Workflow 规则引擎',
+  s4fn3t:'AI 智能诊断',s4fn3d:'ADK Agent 分诊 · 根因推断 · 处置建议 · RAG 案例检索',
+  s4fn4t:'自动创建维修单',s4fn4d:'MAINT-YYYYMMDD-XXXX · 派工 · SLA 倒计时 · 备件出库关联',
+  s4fn5t:'备件消耗追踪',s4fn5d:'扫码出库 · 序列号追踪 · 设备-备件关联',
+  s4fn6t:'验证闭环',s4fn6d:'维修完成验证 · 故障自动关闭 · 健康分回升 · Workflow 触发',
+  s4sm:'故障单状态机',
+  s4st1:'open 新建',s4st2:'assigned 已分配',s4st3:'diagnosing 诊断中',
+  s4st4:'transferred 已转维修',s4st5:'resolved 已解决',s4st6:'closed 已关闭',
+  s4sla:'维修单同步：created → repairing → verifying → completed | SLA：Critical 4h · Major 24h · Minor 72h · Warning 168h',
+  s4auto:'三种自动创建路径',
+  s4a1:'Workflow 规则触发：fault_created + severity=critical → 自动创建 emergency 维修单',
+  s4a2:'AI 分析建议：ADK Agent 分析后 auto_create_maintenance=True → 自动创建维修单',
+  s4a3:'手动转单：运维人员 transfer-to-maintenance → 原子双向关联',
+  s4a4:'去重保护：source_key 机制防止同一事件重复建单；原子事务防并发双重创建',
+  s4close:'闭环验证机制',
+  s4c1:'维修完成 verify-pass → 故障单自动 resolved',
+  s4c2:'maintenance_completed 触发器 → 设备健康分 +10',
+  s4c3:'Workflow 自动创建 PM 巡检任务（3 天后）',
+  s4c4:'健康分持续监控 → 低于阈值重新触发告警',
+  s4c5:'管理员 review 机制：自动建单需人工审核，防止误报',
 
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--accent2)"></span> 3D 数字孪生 · Monitor3D</h4>
-        <ul class="feat-list">
-          <li class="monitor">Three.js 3D 可视化引擎，设备拖拽放置、光纤拓扑布线</li>
-          <li class="monitor">实时流量热力图渲染，SNMP 采集健康面板（fresh/lagging/stale）</li>
-          <li class="monitor">P1/P2 故障命令面板，根因 Top 3 推断，影响范围评估</li>
-          <li class="monitor">事件流时间线（10m / 1h / 24h 切换），关联设备一键定位</li>
-          <li class="monitor">楼层平面图管理，设备模板库（拖拽式部署）</li>
-          <li class="monitor">链路共享路径分析，热点链路自动识别</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</div>
+  s5Title:'设备资产闭环 — 详情 · 备件 · 维修 · 故障一体化',
+  s5Sub:'从设备上线到退役的全生命周期追踪，备件序列号级管理，维修-故障-备件三向关联',
+  s5lt:'设备全生命周期',
+  s5l1:'设备档案：SNMP 配置、SSH 凭证组、固件版本、序列号、采购信息、维保到期',
+  s5l2:'健康评分：多因子模型 — 温度 + 故障频率 + 使用年限 + 维修频率 + 日志异常',
+  s5l3:'配置管理：自动备份、变更检测 (diff)、合规扫描、模板部署、配置回滚',
+  s5l4:'端口与流量：接口状态、流量采样、带宽利用率、错误包统计',
+  s5l5:'拓扑关系：LLDP 邻居发现、光纤链路追踪、设备路径计算',
+  s5rt:'备件闭环追踪',
+  s5r1:'序列号级追踪：每个备件独立实例，从入库到报废全程可查',
+  s5r2:'扫码枪集成：QR 码扫描查询备件全历史 — 哪次维修、装到哪台设备、何时拆下',
+  s5r3:'维修关联：out_to_maintenance FK → 哪个维修单消耗了哪个备件',
+  s5r4:'设备关联：DeviceSpareRelation 记录设备-备件安装位置、操作人、操作时间',
+  s5r5:'库存预警：quantity ≤ min_quantity 自动触发低库存告警',
+  s5r6:'报废管理：inuse → pending_scrap → scrapped 完整报废状态机',
+  s5chain:'资产可追溯链',
+  s5c1t:'采购入库',s5c1d:'PO 编号 · 序列号 · 批次码',
+  s5c2t:'库存管理',s5c2d:'in_stock · 库位 · 低库存预警',
+  s5c3t:'维修出库',s5c3d:'关联 MaintenanceRecord · 安装到设备',
+  s5c4t:'在网使用',s5c4d:'DeviceSpareRelation · 安装位置 · 操作人',
+  s5c5t:'拆回/报废',s5c5d:'removed_from_device · pending_scrap → scrapped',
+  s5cq:'任意时刻可回答：该备件在哪台设备上？由哪次维修安装？谁操作的？何时拆下？去了哪里？',
 
-<!-- ================================================================== -->
-<!-- 故障闭环 - 自动创故障单 - 核心流程 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>故障闭环管理 <span style="font-size:14px;color:var(--text-muted);font-weight:400">— 自动发现 → 自动创建 → 自动修复验证</span></h2>
-      <p>从监控告警到故障单、AI 诊断、维修执行、备件消耗、验证关闭的全流程闭环</p>
-    </div>
+  s6Title:'AI 智能分析引擎 — 集合所有数据，分析研判',
+  s6Sub:'Google ADK 多智能体框架 + RAG 知识库 + LiteLLM 多模型路由，AI 贯穿运维全流程',
+  s6a1t:'Fault Triage Agent',s6a1d:'故障自动分诊：根据设备类型、故障症状、历史案例，判定严重级别与故障类型',
+  s6a2t:'Root Cause Agent',s6a2d:'根因诊断：综合分析 SNMP 指标、日志、拓扑变更、配置 diff，推断故障根本原因',
+  s6a3t:'Compliance Audit Agent',s6a3d:'合规审计：自动检查设备配置是否符合基线模板，标记偏离项，生成整改建议',
+  s6a4t:'Health Prediction Agent',s6a4d:'健康预测：基于历史故障、性能趋势、设备年限，预测设备健康风险并提前预警',
+  s6a5t:'Executive Summary Agent',s6a5d:'管理层摘要：自动生成运维周报/月报，提炼关键风险、成本趋势、改进建议',
+  s6ait:'AI 分析能力矩阵',
+  s6ai1:'故障 AI 预诊断：Critical/Major 故障创建时自动后台 AI 分析，推断根因与推荐方案',
+  s6ai2:'AI 自动创建维修单：分析后可选自动创建维修单，直接进入维修流程',
+  s6ai3:'故障升级建议：AI 根据事件频率和影响范围，建议升级故障级别',
+  s6ai4:'RAG 语义检索：pgvector 向量库检索设备手册、SOP 文档、历史故障案例',
+  s6ai5:'多模型路由：LiteLLM 统一调度 Kimi / Claude / 本地模型，按任务选择最优模型',
+  s6ai6:'运维建议流：Operations 页面 AI 推荐条 — 优先级排序的运维行动建议',
+  s6wft:'Workflow 自动化规则',
+  s6wf1t:'fault_created (severity=critical)',s6wf1a:'create_maintenance (emergency · urgent)',
+  s6wf2t:'device_health_low (health < 60)',s6wf2a:'create_pm_task (3天后巡检)',
+  s6wf3t:'maintenance_completed (verify_passed)',s6wf3a:'update_health_score (健康分 +10)',
+  s6wf4t:'device_health_low (risk=critical)',s6wf4a:'send_alert (紧急告警通知)',
+  s6wff:'支持 and/or/not 逻辑组合，field 比较（< <= > >= = != in contains），可扩展自定义触发器和动作',
 
-    <!-- Closed-Loop Flow -->
-    <div class="flow-section">
-      <div class="flow-diagram">
-        <div class="flow-node monitor">
-          <div class="fn-icon">📡</div>
-          <div class="fn-title">监控发现</div>
-          <div class="fn-desc">SNMP Trap<br>ICMP 探测<br>Prometheus 指标<br>阈值触发</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node fault">
-          <div class="fn-icon">🚨</div>
-          <div class="fn-title">自动创建故障单</div>
-          <div class="fn-desc">INC-20260730-0001<br>去重 · 分级 · 分类<br>Workflow 规则引擎</div>
-        </div>
-        <div class="flow-arrow auto">→</div>
-        <div class="flow-node ai-diag">
-          <div class="fn-icon">🧠</div>
-          <div class="fn-title">AI 智能诊断</div>
-          <div class="fn-desc">ADK Agent 分诊<br>根因推断 · 处置建议<br>RAG 案例检索</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node maint">
-          <div class="fn-icon">🔧</div>
-          <div class="fn-title">自动创建维修单</div>
-          <div class="fn-desc">MAINT-20260730-0001<br>派工 · SLA 倒计时<br>备件出库关联</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node spare">
-          <div class="fn-icon">📦</div>
-          <div class="fn-title">备件消耗追踪</div>
-          <div class="fn-desc">扫码出库<br>序列号追踪<br>设备-备件关联</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node verify">
-          <div class="fn-icon">✅</div>
-          <div class="fn-title">验证闭环</div>
-          <div class="fn-desc">维修完成验证<br>故障自动关闭<br>健康分回升<br>Workflow 触发</div>
-        </div>
-      </div>
-    </div>
+  s7Title:'26 个功能模块 + 技术架构',
+  s7Sub:'Feature-first 架构，按业务域分组：监控 · 设备 · 配置 · 备件 · 系统',
+  s7m1:'运维监控 Monitoring',s7m2:'设备与运维 Devices & Ops',s7m3:'配置与部署 Config & Deploy',
+  s7m4:'备品备件 Spare Parts',s7m5:'系统与权限 System',
+  s7t1:'Dashboard 仪表板',s7t2:'Operations 运维总览',s7t3:'Monitor3D 数字孪生',
+  s7t4:'Device Health 设备健康',s7t5:'AI Analysis AI 分析',s7t6:'Workflows 自动化工作流',
+  s7t7:'Devices 设备列表',s7t8:'Discovery 设备发现',s7t9:'Backups 备份管理',
+  s7t10:'Faults 故障管理',s7t11:'Maintenance 维修管理',s7t12:'Planned Ops 计划性运维',
+  s7t13:'Console 串口控制台',s7t14:'Deploy 配置部署',s7t15:'Templates 配置模板',
+  s7t16:'Credentials SSH 凭证',s7t17:'Compliance 配置合规',s7t18:'Tool Logs 工具日志',
+  s7t19:'Spare Parts 备件库存',s7t20:'Movements 出入库',s7t21:'Scrap 报废管理',
+  s7t22:'Users 用户管理',s7t23:'Permissions 角色权限',s7t24:'Notifications 通知中心',
+  s7t25:'Alert Settings 告警设置',s7t26:'System Settings 系统设置',
+  s7arch:'系统架构 — 前后端分离 · 多层服务解耦 · Docker 容器化部署',
+  s7tech:'技术栈',
 
-    <!-- Fault State Machine -->
-    <div style="text-align:center;margin-top:28px">
-      <p style="font-size:12px;color:var(--text3);margin-bottom:12px;font-weight:600">故障单状态机 · Fault State Machine</p>
-      <div class="state-flow">
-        <span class="state-badge open">open 新建</span>
-        <span class="state-arrow">→</span>
-        <span class="state-badge progress">assigned 已分配</span>
-        <span class="state-arrow">→</span>
-        <span class="state-badge progress">diagnosing 诊断中</span>
-        <span class="state-arrow">→</span>
-        <span class="state-badge progress">transferred 已转维修</span>
-        <span class="state-arrow">→</span>
-        <span class="state-badge resolve">resolved 已解决</span>
-        <span class="state-arrow">→</span>
-        <span class="state-badge closed">closed 已关闭</span>
-      </div>
-      <p style="font-size:11px;color:var(--text-muted);margin-top:10px">
-        维修单同步状态：created → repairing → verifying → completed &nbsp;|&nbsp;
-        SLA 分级：Critical 4h · Major 24h · Minor 72h · Warning 168h
-      </p>
-    </div>
+  s8Title:'核心数据模型 + 测试覆盖',
+  s8Sub:'~40 个 SQLAlchemy ORM 模型 · 225 个测试用例 · 100% 通过率',
+  s8d:'测试文件',s8d2:'测试用例',s8d3:'通过率',s8d4:'测试框架',
 
-    <!-- Auto-Create Mechanisms -->
-    <div class="two-col" style="margin-top:28px">
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--purple)"></span> 三种自动创建路径</h4>
-        <ul class="feat-list">
-          <li class="auto"><b>Workflow 规则触发</b>：fault_created 事件 + severity=critical → 自动创建 emergency 维修单</li>
-          <li class="auto"><b>AI 分析建议</b>：ADK Agent 分析后 auto_create_maintenance=True → 自动创建维修单</li>
-          <li class="auto"><b>手动转单</b>：运维人员 transfer-to-maintenance → 创建维修单并原子双向关联</li>
-          <li class="auto"><b>去重保护</b>：source_key 机制防止同一事件重复建单；原子事务防并发双重创建</li>
-        </ul>
-      </div>
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--accent)"></span> 闭环验证机制</h4>
-        <ul class="feat-list">
-          <li class="monitor">维修完成 verify-pass → 故障单自动 resolved</li>
-          <li class="monitor">maintenance_completed 触发器 → 设备健康分 +10</li>
-          <li class="monitor">Workflow 自动创建 PM 巡检任务（3 天后）</li>
-          <li class="monitor">健康分持续监控 → 低于阈值重新触发告警</li>
-          <li class="monitor">管理员 review 机制：自动建单需人工审核，防止误报</li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</div>
+  s9Title:'谢谢',
+  s9Sub:'Network Automation System v2.0',
+  s9Desc:'智能监控 · 故障闭环 · AI 研判 · 资产追踪',
+  s9Foot:'FastAPI + Vue 3 + React 18 | Google ADK + RAG + LiteLLM | PostgreSQL + Redis + Docker',
 
-<!-- ================================================================== -->
-<!-- 设备全生命周期 - 资产闭环可追踪 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>设备资产闭环 <span style="font-size:14px;color:var(--text-muted);font-weight:400">— 详情 · 备件 · 维修 · 故障一体化</span></h2>
-      <p>从设备上线到退役的全生命周期追踪，备件序列号级管理，维修-故障-备件三向关联</p>
-    </div>
+  prev:'上一页',next:'下一页',of:'/'
+},
+en: {
+  badge:'Network Automation System v2.0',
+  heroTitle:'Network Automation Platform',
+  heroSub:'Intelligent Monitoring · Fault Closed-Loop · AI Analysis · Asset Tracking',
+  heroDesc:'A full-stack intelligent operations system for enterprise networks. From real-time monitoring, automatic fault detection, AI-powered diagnosis, and auto-created maintenance tickets, to spare parts tracking and device asset lifecycle management — covering the entire operations spectrum.',
+  hm1:'Feature Modules',hm2:'API Endpoints',hm3:'Frontend Pages',hm4:'Test Cases',hm5:'AI Agents',hm6:'Test Pass Rate',
 
-    <div class="two-col">
-      <!-- Device Lifecycle -->
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--accent2)"></span> 设备全生命周期</h4>
-        <ul class="feat-list">
-          <li class="monitor"><b>设备档案</b>：SNMP 配置、SSH 凭证组、固件版本、序列号、采购信息、维保到期</li>
-          <li class="monitor"><b>健康评分</b>：多因子模型 — 温度 + 故障频率 + 使用年限 + 维修频率 + 日志异常</li>
-          <li class="monitor"><b>配置管理</b>：自动备份、变更检测 (diff)、合规扫描、模板部署、配置回滚</li>
-          <li class="monitor"><b>端口与流量</b>：接口状态、流量采样、带宽利用率、错误包统计</li>
-          <li class="monitor"><b>拓扑关系</b>：LLDP 邻居发现、光纤链路追踪、设备路径计算</li>
-        </ul>
-      </div>
+  s1Title:'Three Perspectives, Full Coverage',
+  s1Sub:'Dedicated views for different roles — Management decisions, Operator actions, AI-driven intelligence',
+  s1c1t:'Management View · Dashboard',
+  s1c1d:'System availability, SLA compliance, MTTR/MTBF trends, monthly OpEx, budget variance, AI executive summaries and risk briefings. Custom widget layout with drag-and-drop dashboard.',
+  s1c2t:'Operator View · Operations',
+  s1c2d:'Real-time device status, multi-source alert aggregation (offline/high-temp/fault/backup-overdue), fault timeline stacked chart, top fault devices, spare parts inventory alerts. NOC-style display with 30s auto-refresh.',
+  s1c3t:'AI-Driven · AI Analysis',
+  s1c3d:'Google ADK multi-agent collaboration: automatic fault triage, root cause inference, remediation recommendations, compliance auditing, health prediction. RAG knowledge base for device manuals and historical cases.',
 
-      <!-- Spare Parts Tracking -->
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--gy)"></span> 备件闭环追踪</h4>
-        <ul class="feat-list">
-          <li class="spare"><b>序列号级追踪</b>：每个备件独立实例 (SparePartInstance)，从入库到报废全程可查</li>
-          <li class="spare"><b>扫码枪集成</b>：QR 码扫描查询备件全历史 — 哪次维修、装到哪台设备、何时拆下</li>
-          <li class="spare"><b>维修关联</b>：out_to_maintenance FK → 哪个维修单消耗了哪个备件</li>
-          <li class="spare"><b>设备关联</b>：DeviceSpareRelation 记录设备-备件安装位置、操作人、操作时间</li>
-          <li class="spare"><b>库存预警</b>：quantity_in_stock ≤ min_quantity 自动触发低库存告警</li>
-          <li class="spare"><b>报废管理</b>：inuse → pending_scrap → scrapped 完整报废状态机</li>
-        </ul>
-      </div>
-    </div>
+  s2Title:'Operations Panorama — Executive Cockpit',
+  s2Sub:'Core operations KPIs: System Availability, Fault Trends, SLA Compliance, Cost Control, Spare Parts Coverage',
+  s2k1v:'99.7%',s2k1l:'System Availability',s2k1s:'Target 99.5% · Threshold 98%',
+  s2k2v:'3',s2k2l:'Active Faults',s2k2s:'Critical 1 · Major 2',
+  s2k3v:'96.8%',s2k3l:'SLA Compliance',s2k3s:'Target 95% · Threshold 90%',
+  s2k4v:'3.2h',s2k4l:'MTTR',s2k4s:'Target 4h · Threshold 8h',
+  s2k5v:'78d',s2k5l:'MTBF',s2k5s:'Trend ↑ 12% vs last Q',
+  s2k6v:'¥42.8k',s2k6l:'Monthly OpEx',s2k6s:'Budget ¥40k · Variance +7%',
+  s2k7v:'12.5%',s2k7l:'Recurring Fault Rate',s2k7s:'Target 15% · Threshold 25%',
+  s2k8v:'34d',s2k8l:'Spare Days Cover',s2k8s:'Target 30d · Threshold 14d',
 
-    <!-- Asset Traceability Chain -->
-    <div class="flow-section" style="margin-top:24px">
-      <p style="text-align:center;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:20px">资产可追溯链 · Asset Traceability Chain</p>
-      <div class="flow-diagram" style="min-width:700px">
-        <div class="flow-node spare">
-          <div class="fn-icon">📥</div>
-          <div class="fn-title">采购入库</div>
-          <div class="fn-desc">PO 编号 · 序列号<br>批次码 session_code</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node spare">
-          <div class="fn-icon">📋</div>
-          <div class="fn-title">库存管理</div>
-          <div class="fn-desc">in_stock 状态<br>库位 · 数量 · 低库存预警</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node maint">
-          <div class="fn-icon">🔧</div>
-          <div class="fn-title">维修出库</div>
-          <div class="fn-desc">关联 MaintenanceRecord<br>安装到 target_device_id</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node monitor">
-          <div class="fn-icon">🖧</div>
-          <div class="fn-title">在网使用</div>
-          <div class="fn-desc">DeviceSpareRelation<br>安装位置 · 操作人</div>
-        </div>
-        <div class="flow-arrow">→</div>
-        <div class="flow-node verify">
-          <div class="fn-icon">🔄</div>
-          <div class="fn-title">拆回/报废</div>
-          <div class="fn-desc">removed_from_device_id<br>pending_scrap → scrapped</div>
-        </div>
-      </div>
-      <p style="text-align:center;font-size:11px;color:var(--text-muted);margin-top:16px">
-        任意时刻可回答：该备件在哪台设备上？由哪次维修安装？谁操作的？何时拆下？去了哪里？
-      </p>
-    </div>
-  </div>
-</div>
+  s3Title:'Real-Time Field Status — Operator Command Center',
+  s3Sub:'Sub-second device status, multi-source alert aggregation, 3D digital twin, fault timeline — everything under control',
+  s3st1v:'1,247',s3st1l:'Total Devices',s3st2v:'1,198',s3st2l:'Online',s3st3v:'36',s3st3l:'Offline',
+  s3st4v:'13',s3st4l:'Maintenance',s3st5v:'92.4',s3st5l:'Health Score',s3st6v:'8',s3st6l:'Active Alerts',
+  s3alt:'Multi-Source Alert Aggregation',
+  s3a1:'Device Offline',s3a1d:'ICMP/SSH unreachable, auto-trigger fault ticket',
+  s3a2:'Critical Faults',s3a2d:'Unresolved Critical/Major severity faults',
+  s3a3:'High Temperature',s3a3d:'Device temperature ≥ 70°C peak',
+  s3a4:'Backup Overdue',s3a4d:'Configuration not backed up for 30+ days',
+  s3a5:'SNMP Trap Events',s3a5d:'Real-time linkDown/linkUp reception',
+  s3a6:'Prometheus Metrics',s3a6d:'snmp_exporter polling anomaly detection',
+  s33dt:'3D Digital Twin · Monitor3D',
+  s33d1:'Three.js 3D visualization engine, drag-and-drop device placement, fiber topology cabling',
+  s33d2:'Real-time traffic heat map rendering, SNMP health panel (fresh/lagging/stale)',
+  s33d3:'P1/P2 fault command panel, root cause Top 3 inference, impact scope assessment',
+  s33d4:'Event timeline (10m/1h/24h toggle), one-click device location',
+  s33d5:'Floor plan management, device template library (drag-and-drop deployment)',
+  s33d6:'Shared path analysis, automatic hotspot link identification',
 
-<!-- ================================================================== -->
-<!-- AI 智能分析引擎 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>AI 智能分析引擎 <span style="font-size:14px;color:var(--text-muted);font-weight:400">— 集合所有数据，分析研判</span></h2>
-      <p>Google ADK 多智能体框架 + RAG 知识库 + LiteLLM 多模型路由，让 AI 贯穿运维全流程</p>
-    </div>
+  s4Title:'Fault Closed-Loop — Auto-Detect → Auto-Create → Auto-Verify',
+  s4Sub:'Full closed-loop from monitoring alerts to fault tickets, AI diagnosis, repair execution, spare parts consumption, and verification',
+  s4fn1t:'Monitor & Detect',s4fn1d:'SNMP Trap · ICMP Probe · Prometheus · Thresholds',
+  s4fn2t:'Auto-Create Fault',s4fn2d:'INC-YYYYMMDD-XXXX · Dedup · Classify · Workflow Engine',
+  s4fn3t:'AI Diagnosis',s4fn3d:'ADK Agent Triage · Root Cause · Recommendations · RAG',
+  s4fn4t:'Auto-Create Repair',s4fn4d:'MAINT-YYYYMMDD-XXXX · Dispatch · SLA · Spare Parts Link',
+  s4fn5t:'Spare Parts Tracking',s4fn5d:'QR Scan · Serial Tracking · Device-Part Linking',
+  s4fn6t:'Verify & Close',s4fn6d:'Repair Verified · Auto-Close Fault · Health Score Recovery · Workflow Trigger',
+  s4sm:'Fault State Machine',
+  s4st1:'open',s4st2:'assigned',s4st3:'diagnosing',
+  s4st4:'transferred',s4st5:'resolved',s4st6:'closed',
+  s4sla:'Maintenance sync: created → repairing → verifying → completed | SLA: Critical 4h · Major 24h · Minor 72h · Warning 168h',
+  s4auto:'Three Auto-Creation Paths',
+  s4a1:'Workflow trigger: fault_created + severity=critical → auto-create emergency maintenance ticket',
+  s4a2:'AI recommendation: ADK Agent analysis with auto_create_maintenance=True',
+  s4a3:'Manual transfer: Operator transfer-to-maintenance → atomic bidirectional linking',
+  s4a4:'Dedup protection: source_key mechanism + atomic transaction to prevent double-creation',
+  s4close:'Closed-Loop Verification',
+  s4c1:'Repair verify-pass → fault auto-set to resolved',
+  s4c2:'maintenance_completed trigger → device health score +10',
+  s4c3:'Workflow auto-creates PM inspection task (3 days later)',
+  s4c4:'Continuous health monitoring → re-trigger alert if below threshold',
+  s4c5:'Admin review: auto-created faults require human approval to prevent false positives',
 
-    <!-- 5 AI Agents -->
-    <div class="agent-grid">
-      <div class="agent-card">
-        <h5>🔍 Fault Triage Agent</h5>
-        <p>故障自动分诊：根据设备类型、故障症状、历史案例，判定严重级别与故障类型，推荐处置方案</p>
-      </div>
-      <div class="agent-card">
-        <h5>🔬 Root Cause Agent</h5>
-        <p>根因诊断：综合分析 SNMP 指标、日志、拓扑变更、配置 diff，推断故障根本原因及置信度</p>
-      </div>
-      <div class="agent-card">
-        <h5>📋 Compliance Audit Agent</h5>
-        <p>合规审计：自动检查设备配置是否符合基线模板，标记偏离项，生成整改建议</p>
-      </div>
-      <div class="agent-card">
-        <h5>📈 Health Prediction Agent</h5>
-        <p>健康预测：基于历史故障、性能趋势、设备年限，预测设备健康风险并提前预警</p>
-      </div>
-      <div class="agent-card">
-        <h5>📝 Executive Summary Agent</h5>
-        <p>管理层摘要：自动生成运维周报/月报，提炼关键风险、成本趋势、改进建议</p>
+  s5Title:'Device Asset Closed-Loop — Details · Spare Parts · Repair · Faults Unified',
+  s5Sub:'Full lifecycle tracking from device onboarding to retirement, serial-level spare parts management, tri-directional linking',
+  s5lt:'Device Lifecycle Management',
+  s5l1:'Device Profile: SNMP config, SSH credentials, firmware version, serial number, procurement info, warranty expiry',
+  s5l2:'Health Scoring: Multi-factor model — temperature + fault frequency + age + repair frequency + log anomalies',
+  s5l3:'Config Management: Auto backup, change detection (diff), compliance scan, template deployment, config rollback',
+  s5l4:'Ports & Traffic: Interface status, traffic sampling, bandwidth utilization, error packet statistics',
+  s5l5:'Topology: LLDP neighbor discovery, fiber link tracing, device path calculation',
+  s5rt:'Spare Parts Closed-Loop Tracking',
+  s5r1:'Serial-level tracking: Each spare part instance traceable from inbound to scrap',
+  s5r2:'QR scanner integration: Scan to view full history — which repair, which device, when removed',
+  s5r3:'Repair linkage: out_to_maintenance FK → which repair consumed which spare part',
+  s5r4:'Device linkage: DeviceSpareRelation records install location, operator, timestamp',
+  s5r5:'Low stock alert: quantity ≤ min_quantity auto-triggers alert',
+  s5r6:'Scrap management: inuse → pending_scrap → scrapped state machine',
+  s5chain:'Asset Traceability Chain',
+  s5c1t:'Procurement',s5c1d:'PO Number · Serial · Batch Code',
+  s5c2t:'Inventory',s5c2d:'in_stock · Location · Low Stock Alert',
+  s5c3t:'Repair Checkout',s5c3d:'Linked to Maintenance · Installed to Device',
+  s5c4t:'In-Network Use',s5c4d:'DeviceSpareRelation · Position · Operator',
+  s5c5t:'Removal/Scrap',s5c5d:'removed_from_device · pending_scrap → scrapped',
+  s5cq:'Always answerable: Which device is this part on? Which repair installed it? Who operated? When removed? Where did it go?',
+
+  s6Title:'AI Analysis Engine — All Data, Intelligent Insights',
+  s6Sub:'Google ADK multi-agent framework + RAG knowledge base + LiteLLM multi-model routing, AI throughout the operations lifecycle',
+  s6a1t:'Fault Triage Agent',s6a1d:'Automatic fault triage: determines severity and type based on device type, symptoms, and historical cases',
+  s6a2t:'Root Cause Agent',s6a2d:'Root cause diagnosis: analyzes SNMP metrics, logs, topology changes, config diffs to infer root cause',
+  s6a3t:'Compliance Audit Agent',s6a3d:'Compliance auditing: checks device config against baseline templates, flags deviations, generates remediation',
+  s6a4t:'Health Prediction Agent',s6a4d:'Health prediction: forecasts device health risks based on fault history, performance trends, and device age',
+  s6a5t:'Executive Summary Agent',s6a5d:'Management summaries: auto-generates weekly/monthly ops reports with key risks, cost trends, and recommendations',
+  s6ait:'AI Capability Matrix',
+  s6ai1:'AI Pre-diagnosis: Background AI analysis on Critical/Major fault creation, inferring root cause and recommendations',
+  s6ai2:'AI Auto-Create Repair: Optionally auto-create maintenance ticket from AI analysis, directly entering repair workflow',
+  s6ai3:'Escalation Suggestions: AI suggests fault severity upgrade based on event frequency and impact scope',
+  s6ai4:'RAG Semantic Search: pgvector-powered retrieval of device manuals, SOPs, and historical fault cases',
+  s6ai5:'Multi-Model Routing: LiteLLM unified scheduling of Kimi/Claude/local models, selecting optimal model per task',
+  s6ai6:'Ops Recommendation Feed: Operations page AI recommendation bar with priority-sorted action items',
+  s6wft:'Workflow Automation Rules',
+  s6wf1t:'fault_created (severity=critical)',s6wf1a:'create_maintenance (emergency · urgent)',
+  s6wf2t:'device_health_low (health < 60)',s6wf2a:'create_pm_task (inspect in 3 days)',
+  s6wf3t:'maintenance_completed (verify_passed)',s6wf3a:'update_health_score (health +10)',
+  s6wf4t:'device_health_low (risk=critical)',s6wf4a:'send_alert (critical notification)',
+  s6wff:'Supports and/or/not logic combinators, field comparisons (< <= > >= = != in contains), extensible custom triggers and actions',
+
+  s7Title:'26 Feature Modules + Tech Architecture',
+  s7Sub:'Feature-first architecture by domain: Monitoring · Devices · Config · Spare Parts · System',
+  s7m1:'Monitoring',s7m2:'Devices & Ops',s7m3:'Config & Deploy',
+  s7m4:'Spare Parts',s7m5:'System',
+  s7t1:'Dashboard',s7t2:'Operations',s7t3:'Monitor3D',
+  s7t4:'Device Health',s7t5:'AI Analysis',s7t6:'Workflows',
+  s7t7:'Devices',s7t8:'Discovery',s7t9:'Backups',
+  s7t10:'Faults',s7t11:'Maintenance',s7t12:'Planned Ops',
+  s7t13:'Console',s7t14:'Deploy',s7t15:'Templates',
+  s7t16:'Credentials',s7t17:'Compliance',s7t18:'Tool Logs',
+  s7t19:'Spare Parts',s7t20:'Movements',s7t21:'Scrap',
+  s7t22:'Users',s7t23:'Permissions',s7t24:'Notifications',
+  s7t25:'Alert Settings',s7t26:'System Settings',
+  s7arch:'System Architecture — Decoupled Frontend/Backend · Multi-layer Services · Docker Containerized',
+  s7tech:'Tech Stack',
+
+  s8Title:'Core Data Models + Test Coverage',
+  s8Sub:'~40 SQLAlchemy ORM Models · 225 Test Cases · 100% Pass Rate',
+  s8d:'Test Files',s8d2:'Test Cases',s8d3:'Pass Rate',s8d4:'Test Framework',
+
+  s9Title:'Thank You',
+  s9Sub:'Network Automation System v2.0',
+  s9Desc:'Intelligent Monitoring · Fault Closed-Loop · AI Analysis · Asset Tracking',
+  s9Foot:'FastAPI + Vue 3 + React 18 | Google ADK + RAG + LiteLLM | PostgreSQL + Redis + Docker',
+
+  prev:'Prev',next:'Next',of:'/'
+}
+};
+
+let lang='zh';
+let current=0;
+const totalSlides=10;
+let transitionsEnabled=true;
+
+function t(key){return (I18N[lang]&&I18N[lang][key])||I18N['zh'][key]||key;}
+
+function toggleLang(){
+  lang=lang==='zh'?'en':'zh';
+  document.getElementById('langBtn').textContent=lang==='zh'?'EN / 中':'中 / EN';
+  renderAllSlides();
+  goSlide(current,false);
+}
+
+// ===================================================================
+// Render slides
+// ===================================================================
+function renderAllSlides(){
+  const stage=document.getElementById('stage');
+  stage.innerHTML=`
+    <!-- Slide 0: Hero -->
+    <div class="slide hero-slide" data-index="0">
+      <div class="anim anim-d1"><div class="slide-badge" style="background:rgba(246,185,59,.15);color:var(--gy);border:1px solid rgba(246,185,59,.25)">${t('badge')}</div></div>
+      <h1 class="slide-title anim anim-d2">${t('heroTitle')}</h1>
+      <div class="slide-subtitle anim anim-d3">${t('heroSub')}</div>
+      <p class="anim anim-d4" style="font-size:14px;color:rgba(255,255,255,.5);max-width:600px;margin:0 auto;line-height:1.6">${t('heroDesc')}</p>
+      <div class="hero-metrics anim anim-d5">
+        <div class="hm"><b>26</b><span>${t('hm1')}</span></div>
+        <div class="hm"><b>116</b><span>${t('hm2')}</span></div>
+        <div class="hm"><b>36</b><span>${t('hm3')}</span></div>
+        <div class="hm"><b>225</b><span>${t('hm4')}</span></div>
+        <div class="hm"><b>5</b><span>${t('hm5')}</span></div>
+        <div class="hm"><b>100%</b><span>${t('hm6')}</span></div>
       </div>
     </div>
 
-    <!-- AI Features -->
-    <div class="two-col" style="margin-top:24px">
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--purple)"></span> AI 分析能力矩阵</h4>
-        <ul class="feat-list">
-          <li class="ai"><b>故障 AI 预诊断</b>：Critical/Major 故障创建时自动后台 AI 分析，推断根因与推荐方案</li>
-          <li class="ai"><b>AI 自动创建维修单</b>：分析后可选自动创建维修单，直接进入维修流程</li>
-          <li class="ai"><b>故障升级建议</b>：AI 根据事件频率和影响范围，建议升级故障级别</li>
-          <li class="ai"><b>RAG 语义检索</b>：pgvector 向量库检索设备手册、SOP 文档、历史故障案例</li>
-          <li class="ai"><b>多模型路由</b>：LiteLLM 统一调度 Kimi / Claude / 本地模型，按任务选择最优模型</li>
-          <li class="ai"><b>运维建议流</b>：Operations 页面 AI 推荐条 — 优先级排序的运维行动建议</li>
-        </ul>
-      </div>
-      <div class="feat-panel">
-        <h4><span class="fp-dot" style="background:var(--accent)"></span> Workflow 自动化规则</h4>
-        <table class="rule-table">
-          <thead>
-            <tr><th>触发器</th><th></th><th>动作</th></tr>
-          </thead>
-          <tbody>
-            <tr>
-              <td class="rt-trigger">fault_created<br><span style="color:var(--text-muted)">severity=critical</span></td>
-              <td class="rt-arrow">→</td>
-              <td class="rt-action">create_maintenance<br><span style="color:var(--text-muted)">emergency · urgent</span></td>
-            </tr>
-            <tr>
-              <td class="rt-trigger">device_health_low<br><span style="color:var(--text-muted)">health_score &lt; 60</span></td>
-              <td class="rt-arrow">→</td>
-              <td class="rt-action">create_pm_task<br><span style="color:var(--text-muted)">3天后巡检</span></td>
-            </tr>
-            <tr>
-              <td class="rt-trigger">maintenance_completed<br><span style="color:var(--text-muted)">verify_passed=true</span></td>
-              <td class="rt-arrow">→</td>
-              <td class="rt-action">update_health_score<br><span style="color:var(--text-muted)">健康分 +10</span></td>
-            </tr>
-            <tr>
-              <td class="rt-trigger">device_health_low<br><span style="color:var(--text-muted)">risk_level=critical</span></td>
-              <td class="rt-arrow">→</td>
-              <td class="rt-action">send_alert<br><span style="color:var(--text-muted)">紧急告警通知</span></td>
-            </tr>
-          </tbody>
-        </table>
-        <p style="font-size:11px;color:var(--text-muted);margin-top:12px">
-          支持 and / or / not 逻辑组合，field 比较（&lt; &lt;= &gt; &gt;= = != in contains），扩展自定义触发器和动作
-        </p>
-      </div>
-    </div>
-  </div>
-</div>
-
-<!-- ================================================================== -->
-<!-- 26 功能模块 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>26 个功能模块</h2>
-      <p>Feature-first 架构，按业务域分组：监控 · 设备 · 配置 · 备件 · 系统</p>
-    </div>
-    <div class="module-grid">
-      <div class="module-group mg-monitor">
-        <div class="module-group-header"><div class="mg-icon">📊</div>运维监控 Monitoring</div>
-        <div class="module-list">
-          <span class="module-tag">Dashboard 仪表板</span>
-          <span class="module-tag">Operations 运维总览</span>
-          <span class="module-tag">Monitor3D 数字孪生</span>
-          <span class="module-tag">Device Health 设备健康</span>
-          <span class="module-tag">AI Analysis AI 分析</span>
-          <span class="module-tag">Workflows 自动化工作流</span>
+    <!-- Slide 1: Three Perspectives -->
+    <div class="slide" data-index="1">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s1Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s1Sub')}</p></div>
+      <div class="value-row" style="flex:1;align-content:center">
+        <div class="value-card mgmt anim anim-d3">
+          <span class="vci">📊</span><h4>${t('s1c1t')}</h4><p>${t('s1c1d')}</p>
         </div>
-      </div>
-      <div class="module-group mg-device">
-        <div class="module-group-header"><div class="mg-icon">🖧</div>设备与运维 Devices & Ops</div>
-        <div class="module-list">
-          <span class="module-tag">Devices 设备列表</span>
-          <span class="module-tag">Discovery 设备发现</span>
-          <span class="module-tag">Backups 备份管理</span>
-          <span class="module-tag">Faults 故障管理</span>
-          <span class="module-tag">Maintenance 维修管理</span>
-          <span class="module-tag">Planned Ops 计划性运维</span>
+        <div class="value-card ops anim anim-d4">
+          <span class="vci">🔍</span><h4>${t('s1c2t')}</h4><p>${t('s1c2d')}</p>
         </div>
-      </div>
-      <div class="module-group mg-config">
-        <div class="module-group-header"><div class="mg-icon">⚙</div>配置与部署 Config & Deploy</div>
-        <div class="module-list">
-          <span class="module-tag">Console 串口控制台</span>
-          <span class="module-tag">Deploy 配置部署</span>
-          <span class="module-tag">Templates 配置模板</span>
-          <span class="module-tag">Credentials SSH 凭证</span>
-          <span class="module-tag">Compliance 配置合规</span>
-          <span class="module-tag">Tool Logs 工具日志</span>
-        </div>
-      </div>
-      <div class="module-group mg-spare">
-        <div class="module-group-header"><div class="mg-icon">📦</div>备品备件 Spare Parts</div>
-        <div class="module-list">
-          <span class="module-tag">Spare Parts 备件库存</span>
-          <span class="module-tag">Movements 出入库历史</span>
-          <span class="module-tag">Scrap 报废管理</span>
-        </div>
-      </div>
-      <div class="module-group mg-system">
-        <div class="module-group-header"><div class="mg-icon">🔧</div>系统与权限 System</div>
-        <div class="module-list">
-          <span class="module-tag">Users 用户管理</span>
-          <span class="module-tag">Permissions 角色权限</span>
-          <span class="module-tag">Notifications 通知中心</span>
-          <span class="module-tag">Alert Settings 告警设置</span>
-          <span class="module-tag">System Settings 系统设置</span>
-          <span class="module-tag">System Help 系统帮助</span>
-          <span class="module-tag">System Logs 系统日志</span>
-          <span class="module-tag">Scanner 扫码枪</span>
+        <div class="value-card ai anim anim-d5">
+          <span class="vci">🧠</span><h4>${t('s1c3t')}</h4><p>${t('s1c3d')}</p>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- ================================================================== -->
-<!-- 技术架构 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>技术架构</h2>
-      <p>前后端分离 · Feature-first 模块化 · 多层服务解耦 · Docker 容器化部署</p>
+    <!-- Slide 2: Executive KPIs -->
+    <div class="slide" data-index="2">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s2Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s2Sub')}</p></div>
+      <div class="kpi-grid anim anim-d3" style="flex:1;align-content:center">
+        <div class="kpi-card accent"><div class="kv">${t('s2k1v')}</div><div class="kl">${t('s2k1l')}</div><div class="ks">${t('s2k1s')}</div></div>
+        <div class="kpi-card danger"><div class="kv">${t('s2k2v')}</div><div class="kl">${t('s2k2l')}</div><div class="ks">${t('s2k2s')}</div></div>
+        <div class="kpi-card accent2"><div class="kv">${t('s2k3v')}</div><div class="kl">${t('s2k3l')}</div><div class="ks">${t('s2k3s')}</div></div>
+        <div class="kpi-card warn"><div class="kv">${t('s2k4v')}</div><div class="kl">${t('s2k4l')}</div><div class="ks">${t('s2k4s')}</div></div>
+        <div class="kpi-card accent2"><div class="kv">${t('s2k5v')}</div><div class="kl">${t('s2k5l')}</div><div class="ks">${t('s2k5s')}</div></div>
+        <div class="kpi-card warn"><div class="kv">${t('s2k6v')}</div><div class="kl">${t('s2k6l')}</div><div class="ks">${t('s2k6s')}</div></div>
+        <div class="kpi-card danger"><div class="kv">${t('s2k7v')}</div><div class="kl">${t('s2k7l')}</div><div class="ks">${t('s2k7s')}</div></div>
+        <div class="kpi-card accent"><div class="kv">${t('s2k8v')}</div><div class="kl">${t('s2k8l')}</div><div class="ks">${t('s2k8s')}</div></div>
+      </div>
     </div>
 
-    <!-- Tech Stack -->
-    <div class="tech-strip" style="margin-bottom:28px">
-      <span class="tech-pill">FastAPI 0.133</span>
-      <span class="tech-pill">SQLAlchemy 2.0</span>
-      <span class="tech-pill">Celery</span>
-      <span class="tech-pill">Vue 3.4 + Element Plus</span>
-      <span class="tech-pill">React 18 + Ant Design</span>
-      <span class="tech-pill">ECharts 5</span>
-      <span class="tech-pill">Three.js</span>
-      <span class="tech-pill">Google ADK</span>
-      <span class="tech-pill">LiteLLM</span>
-      <span class="tech-pill">LangChain</span>
-      <span class="tech-pill">pgvector</span>
-      <span class="tech-pill">Prometheus</span>
-      <span class="tech-pill">Grafana</span>
-      <span class="tech-pill">Netmiko 4.3</span>
-      <span class="tech-pill">NAPALM 4.1</span>
-      <span class="tech-pill">Redis 7</span>
-      <span class="tech-pill">PostgreSQL 15</span>
-      <span class="tech-pill">Docker Compose</span>
-      <span class="tech-pill">Nginx</span>
-      <span class="tech-pill">Alembic</span>
-      <span class="tech-pill">Pydantic v2</span>
-    </div>
-
-    <!-- Architecture Diagram -->
-    <div class="arch-diagram">
-      <div class="arch-layers">
-        <div class="arch-layer">
-          <div class="arch-layer-label">Frontend</div>
-          <div class="arch-layer-boxes">
-            <div class="arch-box frontend">Vue 3 + Element Plus</div>
-            <div class="arch-box frontend">React 18 + Ant Design</div>
-            <div class="arch-box frontend">ECharts / Three.js</div>
-            <div class="arch-box frontend">Pinia / Zustand</div>
+    <!-- Slide 3: Real-time Field Status -->
+    <div class="slide" data-index="3">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s3Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s3Sub')}</p></div>
+      <div class="stat-row anim anim-d3">
+        <div class="stat-item accent2"><div class="sv">${t('s3st1v')}</div><div class="sl">${t('s3st1l')}</div></div>
+        <div class="stat-item accent"><div class="sv">${t('s3st2v')}</div><div class="sl">${t('s3st2l')}</div></div>
+        <div class="stat-item danger"><div class="sv">${t('s3st3v')}</div><div class="sl">${t('s3st3l')}</div></div>
+        <div class="stat-item warn"><div class="sv">${t('s3st4v')}</div><div class="sl">${t('s3st4l')}</div></div>
+        <div class="stat-item accent"><div class="sv">${t('s3st5v')}</div><div class="sl">${t('s3st5l')}</div></div>
+        <div class="stat-item purple"><div class="sv">${t('s3st6v')}</div><div class="sl">${t('s3st6l')}</div></div>
+      </div>
+      <div class="two-col anim anim-d4" style="margin-top:14px;flex:1">
+        <div class="panel">
+          <h5><span class="dot" style="background:var(--danger)"></span>${t('s3alt')}</h5>
+          <div class="alert-strip">
+            <div class="alert-item danger"><span class="as"></span><div><b>${t('s3a1')}</b><br>${t('s3a1d')}</div></div>
+            <div class="alert-item danger"><span class="as"></span><div><b>${t('s3a2')}</b><br>${t('s3a2d')}</div></div>
+            <div class="alert-item warn"><span class="as"></span><div><b>${t('s3a3')}</b><br>${t('s3a3d')}</div></div>
+            <div class="alert-item warn"><span class="as"></span><div><b>${t('s3a4')}</b><br>${t('s3a4d')}</div></div>
+            <div class="alert-item info"><span class="as"></span><div><b>${t('s3a5')}</b><br>${t('s3a5d')}</div></div>
+            <div class="alert-item info"><span class="as"></span><div><b>${t('s3a6')}</b><br>${t('s3a6d')}</div></div>
           </div>
         </div>
-        <div class="arch-arrow">⬇ REST + WebSocket + SSE</div>
-        <div class="arch-layer">
-          <div class="arch-layer-label">Backend</div>
-          <div class="arch-layer-boxes">
-            <div class="arch-box backend">FastAPI + 26 Modules</div>
-            <div class="arch-box backend">JWT + RBAC</div>
-            <div class="arch-box backend">Rate Limiter</div>
-            <div class="arch-box backend">Cache Service</div>
-          </div>
+        <div class="panel">
+          <h5><span class="dot" style="background:var(--accent2)"></span>${t('s33dt')}</h5>
+          <ul class="feature-list">
+            <li class="c-accent2">${t('s33d1')}</li><li class="c-accent2">${t('s33d2')}</li>
+            <li class="c-accent2">${t('s33d3')}</li><li class="c-accent2">${t('s33d4')}</li>
+            <li class="c-accent2">${t('s33d5')}</li><li class="c-accent2">${t('s33d6')}</li>
+          </ul>
         </div>
-        <div class="arch-arrow">⬇ Async Tasks + Service Layer</div>
-        <div class="arch-layer">
-          <div class="arch-layer-label">Services</div>
-          <div class="arch-layer-boxes">
-            <div class="arch-box ai">AI Triage / ADK Agents</div>
-            <div class="arch-box ai">RAG Engine + pgvector</div>
-            <div class="arch-box infra">Workflow Rule Engine</div>
-            <div class="arch-box infra">Prometheus Connector</div>
-            <div class="arch-box infra">SNMP Trap Receiver</div>
-            <div class="arch-box infra">Reachability Monitor</div>
-            <div class="arch-box infra">Notification (SMTP/WeChat/DingTalk)</div>
-          </div>
+      </div>
+    </div>
+
+    <!-- Slide 4: Fault Closed-Loop -->
+    <div class="slide" data-index="4">
+      <div class="anim anim-d1"><h2 class="slide-title" style="font-size:22px">${t('s4Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s4Sub')}</p></div>
+      <div class="flow-row anim anim-d3">
+        <div class="flow-node mon"><div class="fi">📡</div><div class="ft">${t('s4fn1t')}</div><div class="fd">${t('s4fn1d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node flt"><div class="fi">🚨</div><div class="ft">${t('s4fn2t')}</div><div class="fd">${t('s4fn2d')}</div></div>
+        <div class="flow-arr auto">→</div>
+        <div class="flow-node aid"><div class="fi">🧠</div><div class="ft">${t('s4fn3t')}</div><div class="fd">${t('s4fn3d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node mnt"><div class="fi">🔧</div><div class="ft">${t('s4fn4t')}</div><div class="fd">${t('s4fn4d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node spr"><div class="fi">📦</div><div class="ft">${t('s4fn5t')}</div><div class="fd">${t('s4fn5d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node vfy"><div class="fi">✅</div><div class="ft">${t('s4fn6t')}</div><div class="fd">${t('s4fn6d')}</div></div>
+      </div>
+      <div class="anim anim-d4" style="text-align:center;margin-top:12px">
+        <p style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600">${t('s4sm')}</p>
+        <div class="state-flow">
+          <span class="state-badge open">${t('s4st1')}</span><span class="state-arr">→</span>
+          <span class="state-badge prog">${t('s4st2')}</span><span class="state-arr">→</span>
+          <span class="state-badge prog">${t('s4st3')}</span><span class="state-arr">→</span>
+          <span class="state-badge prog">${t('s4st4')}</span><span class="state-arr">→</span>
+          <span class="state-badge done">${t('s4st5')}</span><span class="state-arr">→</span>
+          <span class="state-badge end">${t('s4st6')}</span>
         </div>
-        <div class="arch-arrow">⬇ ORM + Connection Pool</div>
-        <div class="arch-layer">
-          <div class="arch-layer-label">Data</div>
-          <div class="arch-layer-boxes">
-            <div class="arch-box data">PostgreSQL 15 + pgvector</div>
-            <div class="arch-box data">Redis 7 Cache</div>
-            <div class="arch-box data">SQLite (Dev)</div>
-            <div class="arch-box data">Alembic Migrations</div>
-          </div>
+        <p style="font-size:9px;color:var(--text-muted);margin-top:4px">${t('s4sla')}</p>
+      </div>
+      <div class="two-col anim anim-d5" style="margin-top:12px">
+        <div class="panel"><h5><span class="dot" style="background:var(--purple)"></span>${t('s4auto')}</h5><ul class="feature-list"><li class="c-purple">${t('s4a1')}</li><li class="c-purple">${t('s4a2')}</li><li class="c-purple">${t('s4a3')}</li><li class="c-purple">${t('s4a4')}</li></ul></div>
+        <div class="panel"><h5><span class="dot" style="background:var(--accent)"></span>${t('s4close')}</h5><ul class="feature-list"><li class="c-accent">${t('s4c1')}</li><li class="c-accent">${t('s4c2')}</li><li class="c-accent">${t('s4c3')}</li><li class="c-accent">${t('s4c4')}</li><li class="c-accent">${t('s4c5')}</li></ul></div>
+      </div>
+    </div>
+
+    <!-- Slide 5: Device Asset Closed-Loop -->
+    <div class="slide" data-index="5">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s5Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s5Sub')}</p></div>
+      <div class="two-col anim anim-d3" style="flex:1;margin-bottom:8px">
+        <div class="panel"><h5><span class="dot" style="background:var(--accent2)"></span>${t('s5lt')}</h5><ul class="feature-list"><li class="c-accent2">${t('s5l1')}</li><li class="c-accent2">${t('s5l2')}</li><li class="c-accent2">${t('s5l3')}</li><li class="c-accent2">${t('s5l4')}</li><li class="c-accent2">${t('s5l5')}</li></ul></div>
+        <div class="panel"><h5><span class="dot" style="background:var(--gy)"></span>${t('s5rt')}</h5><ul class="feature-list"><li class="c-gy">${t('s5r1')}</li><li class="c-gy">${t('s5r2')}</li><li class="c-gy">${t('s5r3')}</li><li class="c-gy">${t('s5r4')}</li><li class="c-gy">${t('s5r5')}</li><li class="c-gy">${t('s5r6')}</li></ul></div>
+      </div>
+      <div class="anim anim-d4" style="text-align:center;margin-bottom:4px"><p style="font-size:10px;font-weight:700;color:var(--text2)">${t('s5chain')}</p></div>
+      <div class="flow-row anim anim-d5">
+        <div class="flow-node spr"><div class="fi">📥</div><div class="ft">${t('s5c1t')}</div><div class="fd">${t('s5c1d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node spr"><div class="fi">📋</div><div class="ft">${t('s5c2t')}</div><div class="fd">${t('s5c2d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node mnt"><div class="fi">🔧</div><div class="ft">${t('s5c3t')}</div><div class="fd">${t('s5c3d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node mon"><div class="fi">🖧</div><div class="ft">${t('s5c4t')}</div><div class="fd">${t('s5c4d')}</div></div>
+        <div class="flow-arr">→</div>
+        <div class="flow-node vfy"><div class="fi">🔄</div><div class="ft">${t('s5c5t')}</div><div class="fd">${t('s5c5d')}</div></div>
+      </div>
+      <p class="anim anim-d6" style="text-align:center;font-size:10px;color:var(--text-muted);margin-top:8px">${t('s5cq')}</p>
+    </div>
+
+    <!-- Slide 6: AI Analysis Engine -->
+    <div class="slide" data-index="6">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s6Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s6Sub')}</p></div>
+      <div class="agent-grid anim anim-d3">
+        <div class="agent-card"><h5>🔍 ${t('s6a1t')}</h5><p>${t('s6a1d')}</p></div>
+        <div class="agent-card"><h5>🔬 ${t('s6a2t')}</h5><p>${t('s6a2d')}</p></div>
+        <div class="agent-card"><h5>📋 ${t('s6a3t')}</h5><p>${t('s6a3d')}</p></div>
+        <div class="agent-card"><h5>📈 ${t('s6a4t')}</h5><p>${t('s6a4d')}</p></div>
+        <div class="agent-card"><h5>📝 ${t('s6a5t')}</h5><p>${t('s6a5d')}</p></div>
+      </div>
+      <div class="two-col anim anim-d4" style="margin-top:14px;flex:1">
+        <div class="panel"><h5><span class="dot" style="background:var(--purple)"></span>${t('s6ait')}</h5><ul class="feature-list"><li class="c-purple">${t('s6ai1')}</li><li class="c-purple">${t('s6ai2')}</li><li class="c-purple">${t('s6ai3')}</li><li class="c-purple">${t('s6ai4')}</li><li class="c-purple">${t('s6ai5')}</li><li class="c-purple">${t('s6ai6')}</li></ul></div>
+        <div class="panel"><h5><span class="dot" style="background:var(--accent)"></span>${t('s6wft')}</h5>
+          <table class="info-table"><thead><tr><th>${lang==='zh'?'触发器':'Trigger'}</th><th></th><th>${lang==='zh'?'动作':'Action'}</th></tr></thead><tbody>
+            <tr><td class="mono">${t('s6wf1t')}</td><td style="color:var(--text-muted)">→</td><td class="mono">${t('s6wf1a')}</td></tr>
+            <tr><td class="mono">${t('s6wf2t')}</td><td style="color:var(--text-muted)">→</td><td class="mono">${t('s6wf2a')}</td></tr>
+            <tr><td class="mono">${t('s6wf3t')}</td><td style="color:var(--text-muted)">→</td><td class="mono">${t('s6wf3a')}</td></tr>
+            <tr><td class="mono">${t('s6wf4t')}</td><td style="color:var(--text-muted)">→</td><td class="mono">${t('s6wf4a')}</td></tr>
+          </tbody></table>
+          <p style="font-size:9px;color:var(--text-muted);margin-top:6px">${t('s6wff')}</p>
         </div>
-        <div class="arch-arrow">⬇ Infrastructure</div>
-        <div class="arch-layer">
-          <div class="arch-layer-label">Infra</div>
-          <div class="arch-layer-boxes">
-            <div class="arch-box infra">Prometheus + snmp_exporter</div>
-            <div class="arch-box infra">Grafana Dashboards</div>
-            <div class="arch-box infra">Docker Compose</div>
-            <div class="arch-box infra">Nginx Reverse Proxy</div>
+      </div>
+    </div>
+
+    <!-- Slide 7: Modules + Tech Architecture -->
+    <div class="slide" data-index="7">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s7Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s7Sub')}</p></div>
+      <div class="two-col anim anim-d3" style="flex:1">
+        <div style="display:flex;flex-direction:column;gap:8px;overflow-y:auto">
+          <div class="panel"><h5 style="color:var(--accent)">📊 ${t('s7m1')}</h5><div class="module-row">${['s7t1','s7t2','s7t3','s7t4','s7t5','s7t6'].map(k=>`<span class="module-tag">${t(k)}</span>`).join('')}</div></div>
+          <div class="panel"><h5 style="color:var(--accent2)">🖧 ${t('s7m2')}</h5><div class="module-row">${['s7t7','s7t8','s7t9','s7t10','s7t11','s7t12'].map(k=>`<span class="module-tag">${t(k)}</span>`).join('')}</div></div>
+          <div class="panel"><h5 style="color:var(--gy)">⚙ ${t('s7m3')}</h5><div class="module-row">${['s7t13','s7t14','s7t15','s7t16','s7t17','s7t18'].map(k=>`<span class="module-tag">${t(k)}</span>`).join('')}</div></div>
+          <div class="panel"><h5 style="color:var(--warn)">📦 ${t('s7m4')}</h5><div class="module-row">${['s7t19','s7t20','s7t21'].map(k=>`<span class="module-tag">${t(k)}</span>`).join('')}</div></div>
+          <div class="panel"><h5 style="color:#636e72">🔧 ${t('s7m5')}</h5><div class="module-row">${['s7t22','s7t23','s7t24','s7t25','s7t26'].map(k=>`<span class="module-tag">${t(k)}</span>`).join('')}</div></div>
+        </div>
+        <div>
+          <p style="font-size:11px;font-weight:700;color:var(--text2);margin-bottom:8px">${t('s7arch')}</p>
+          <div style="display:flex;flex-direction:column;gap:6px;font-size:10px">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:60px;text-align:right;color:var(--text3);font-weight:600;font-size:9px">Frontend</span><span style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">Vue 3 + React 18</span><span style="background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">ECharts / Three.js</span></div>
+            <div style="text-align:center;color:var(--text-muted);font-size:9px">⬇ REST + WebSocket</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:60px;text-align:right;color:var(--text3);font-weight:600;font-size:9px">Backend</span><span style="background:linear-gradient(135deg,#0984e3,#0ea5e9);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">FastAPI + 26 Modules</span><span style="background:linear-gradient(135deg,#0984e3,#0ea5e9);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">JWT + RBAC</span></div>
+            <div style="text-align:center;color:var(--text-muted);font-size:9px">⬇ Celery + Services</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:60px;text-align:right;color:var(--text3);font-weight:600;font-size:9px">Services</span><span style="background:linear-gradient(135deg,#a855f7,#c084fc);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">AI Triage</span><span style="background:linear-gradient(135deg,#a855f7,#c084fc);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">RAG Engine</span><span style="background:linear-gradient(135deg,#e17055,#f97316);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">Workflow</span></div>
+            <div style="text-align:center;color:var(--text-muted);font-size:9px">⬇ ORM + Pool</div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:60px;text-align:right;color:var(--text3);font-weight:600;font-size:9px">Data</span><span style="background:linear-gradient(135deg,#00b894,#00cec9);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">PostgreSQL + pgvector</span><span style="background:linear-gradient(135deg,#00b894,#00cec9);color:#fff;padding:4px 10px;border-radius:100px;font-size:9px">Redis 7</span></div>
+          </div>
+          <p style="font-size:10px;font-weight:700;color:var(--text2);margin-top:10px;margin-bottom:4px">${t('s7tech')}</p>
+          <div class="tech-strip">
+            <span class="tech-pill">FastAPI</span><span class="tech-pill">SQLAlchemy 2.0</span><span class="tech-pill">Celery</span><span class="tech-pill">Vue 3.4</span><span class="tech-pill">React 18</span><span class="tech-pill">ECharts 5</span><span class="tech-pill">Three.js</span><span class="tech-pill">Google ADK</span><span class="tech-pill">LiteLLM</span><span class="tech-pill">pgvector</span><span class="tech-pill">Prometheus</span><span class="tech-pill">Grafana</span><span class="tech-pill">Netmiko 4.3</span><span class="tech-pill">NAPALM 4.1</span><span class="tech-pill">Redis 7</span><span class="tech-pill">PostgreSQL 15</span><span class="tech-pill">Docker</span><span class="tech-pill">Nginx</span>
           </div>
         </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- ================================================================== -->
-<!-- 核心数据模型 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>核心数据模型</h2>
-      <p>~40 个 SQLAlchemy ORM 模型，覆盖设备、故障、维修、备件、配置、合规、AI 全业务域</p>
-    </div>
-    <div class="arch-diagram">
-      <div style="overflow-x:auto">
-        <table class="rule-table">
-          <thead>
-            <tr><th>模型</th><th>表名</th><th>核心用途</th></tr>
-          </thead>
-          <tbody>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">Device</td><td>devices</td><td>设备主表：SNMP 配置、健康评分、风险等级、生命周期状态</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">FaultRecord</td><td>fault_records</td><td>故障单：状态机、AI 诊断结果、去重键、维修单关联</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">MaintenanceRecord</td><td>maintenance_records</td><td>维修单：状态机、备件消耗、SLA 倒计时、验证结果</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">SparePart / Instance</td><td>spare_parts / instances</td><td>备件模型 + 序列号级实例追踪</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">SparePartMovement</td><td>spare_part_movements</td><td>出入库流水：类型、设备关联、批次码、PO 编号</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">DeviceSpareRelation</td><td>device_spare_relations</td><td>设备-备件安装关系：位置、操作人、维修单关联</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">WorkflowRule</td><td>workflow_rules</td><td>自动化规则：触发器、条件表达式、动作配置</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">MaintenanceEvent</td><td>maintenance_events</td><td>维修事件时间线：状态变更 + 工作日志</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">DeviceHealthScore</td><td>device_health_scores</td><td>健康评分历史：多因子评分快照</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">DeviceMetricSample</td><td>device_metric_samples</td><td>设备指标采样：温度、CPU、内存、流量</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">BackupRecord</td><td>backup_records</td><td>配置备份快照：哈希、差异检测</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">ConfigTemplate</td><td>config_templates</td><td>Jinja2 配置模板：变量定义、设备类型</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">ComplianceRule / AuditLog</td><td>compliance_rules / audit_logs</td><td>合规规则 + AI 审计追踪</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">FloorPlan / DeviceNode / TopoEdge</td><td>floor_plans / device_nodes / topo_edges</td><td>3D 数字孪生：平面图 + 设备节点 + 拓扑边</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">User / Role / Permission</td><td>users / roles / permissions</td><td>用户认证 + RBAC 权限矩阵</td></tr>
-            <tr><td style="font-family:var(--font-mono);font-size:12px;font-weight:600">AIAnalysisRecord</td><td>ai_analysis_records</td><td>AI 分析调用日志：模型、延迟、结果</td></tr>
-          </tbody>
-        </table>
+    <!-- Slide 8: Data Models + Testing -->
+    <div class="slide" data-index="8">
+      <div class="anim anim-d1"><h2 class="slide-title">${t('s8Title')}</h2></div>
+      <div class="anim anim-d2"><p class="slide-subtitle">${t('s8Sub')}</p></div>
+      <div class="stat-row anim anim-d3">
+        <div class="stat-item accent"><div class="sv">43</div><div class="sl">${t('s8d')}</div></div>
+        <div class="stat-item accent2"><div class="sv">225</div><div class="sl">${t('s8d2')}</div></div>
+        <div class="stat-item accent"><div class="sv">100%</div><div class="sl">${t('s8d3')}</div></div>
+        <div class="stat-item purple"><div class="sv">pytest</div><div class="sl">${t('s8d4')}</div></div>
+      </div>
+      <div class="two-col anim anim-d4" style="margin-top:14px;flex:1">
+        <div class="panel" style="overflow-y:auto">
+          <h5>${lang==='zh'?'核心数据模型':'Core Data Models'}</h5>
+          <table class="info-table"><thead><tr><th>${lang==='zh'?'模型':'Model'}</th><th>${lang==='zh'?'表名':'Table'}</th><th>${lang==='zh'?'用途':'Purpose'}</th></tr></thead><tbody>
+            <tr><td class="mono">Device</td><td>devices</td><td>${lang==='zh'?'设备主表：SNMP、健康评分、风险等级':'Device master: SNMP, health score, risk level'}</td></tr>
+            <tr><td class="mono">FaultRecord</td><td>fault_records</td><td>${lang==='zh'?'故障单：状态机、AI 诊断、去重':'Fault tickets: state machine, AI diagnosis, dedup'}</td></tr>
+            <tr><td class="mono">MaintenanceRecord</td><td>maintenance_records</td><td>${lang==='zh'?'维修单：状态机、备件消耗、SLA':'Repair orders: state machine, spare parts, SLA'}</td></tr>
+            <tr><td class="mono">SparePart / Instance</td><td>spare_parts / instances</td><td>${lang==='zh'?'备件模型 + 序列号级追踪':'Spare part model + serial-level tracking'}</td></tr>
+            <tr><td class="mono">WorkflowRule</td><td>workflow_rules</td><td>${lang==='zh'?'自动化规则：触发器 + 条件 + 动作':'Automation rules: trigger + conditions + action'}</td></tr>
+            <tr><td class="mono">DeviceSpareRelation</td><td>device_spare_relations</td><td>${lang==='zh'?'设备-备件安装关系':'Device-spare part install relations'}</td></tr>
+            <tr><td class="mono">DeviceHealthScore</td><td>device_health_scores</td><td>${lang==='zh'?'多因子健康评分历史':'Multi-factor health score history'}</td></tr>
+            <tr><td class="mono">BackupRecord</td><td>backup_records</td><td>${lang==='zh'?'配置备份快照 + 差异检测':'Config backup snapshots + diff detection'}</td></tr>
+            <tr><td class="mono">ConfigTemplate</td><td>config_templates</td><td>${lang==='zh'?'Jinja2 配置模板':'Jinja2 configuration templates'}</td></tr>
+            <tr><td class="mono">ComplianceRule</td><td>compliance_rules</td><td>${lang==='zh'?'合规规则 + AI 审计追踪':'Compliance rules + AI audit trail'}</td></tr>
+            <tr><td class="mono">FloorPlan / DeviceNode</td><td>floor_plans / device_nodes</td><td>${lang==='zh'?'3D 数字孪生：平面图 + 拓扑':'3D digital twin: floor plans + topology'}</td></tr>
+            <tr><td class="mono">User / Role / Permission</td><td>users / roles / permissions</td><td>${lang==='zh'?'用户认证 + RBAC 权限':'User auth + RBAC permissions'}</td></tr>
+            <tr><td class="mono">AIAnalysisRecord</td><td>ai_analysis_records</td><td>${lang==='zh'?'AI 分析调用日志':'AI analysis call logs'}</td></tr>
+          </tbody></table>
+        </div>
+        <div class="panel">
+          <h5>${lang==='zh'?'测试覆盖':'Test Coverage'}</h5>
+          <div class="tech-strip" style="justify-content:flex-start">
+            <span class="tech-pill">Device Service</span><span class="tech-pill">Backup Service</span><span class="tech-pill">Fault Service</span><span class="tech-pill">Maintenance Service</span><span class="tech-pill">Spare Part Service</span><span class="tech-pill">AI Triage</span><span class="tech-pill">Health Calculator</span><span class="tech-pill">Prometheus Connector</span><span class="tech-pill">Workflow Idempotency</span><span class="tech-pill">Incident Automation</span><span class="tech-pill">PostgreSQL Concurrency</span><span class="tech-pill">Rate Limiter</span><span class="tech-pill">Auth / SSO</span><span class="tech-pill">Batch Regressions</span><span class="tech-pill">Dashboard Service</span><span class="tech-pill">Compliance Service</span><span class="tech-pill">Console Service</span><span class="tech-pill">Discovery Service</span><span class="tech-pill">Vendor Adapter</span><span class="tech-pill">Cache / Redis</span>
+          </div>
+          <p style="font-size:10px;color:var(--text-muted);margin-top:12px;line-height:1.5">${lang==='zh'?'覆盖全部核心业务模块、AI 引擎、工作流自动化、基础设施层，确保系统稳定可靠。':'Covers all core business modules, AI engine, workflow automation, and infrastructure layer, ensuring system stability and reliability.'}</p>
+        </div>
       </div>
     </div>
-  </div>
-</div>
 
-<!-- ================================================================== -->
-<!-- 测试与质量 -->
-<!-- ================================================================== -->
-<div class="container">
-  <div class="section" style="padding-top:0">
-    <div class="section-header">
-      <h2>测试覆盖与质量保障</h2>
-      <p>43 个测试文件 · 225 个测试用例 · 100% 通过率 · pytest + CI</p>
+    <!-- Slide 9: End -->
+    <div class="slide end-slide" data-index="9">
+      <div class="anim anim-d2"><h2>${t('s9Title')}</h2></div>
+      <div class="anim anim-d3"><h2 style="color:var(--gy);font-size:clamp(20px,2.5vw,32px)">${t('s9Sub')}</h2></div>
+      <div class="anim anim-d4"><p>${t('s9Desc')}</p></div>
+      <div class="anim anim-d5"><p style="margin-top:24px;font-size:12px">${t('s9Foot')}</p></div>
     </div>
-    <div class="panorama-stats">
-      <div class="ps-card accent"><div class="ps-value">43</div><div class="ps-label">测试文件</div></div>
-      <div class="ps-card accent2"><div class="ps-value">225</div><div class="ps-label">测试用例</div></div>
-      <div class="ps-card accent"><div class="ps-value">100%</div><div class="ps-label">通过率</div></div>
-      <div class="ps-card purple"><div class="ps-value">pytest</div><div class="ps-label">测试框架</div></div>
-    </div>
-    <div class="tech-strip">
-      <span class="tech-pill">Device Service</span>
-      <span class="tech-pill">Backup Service</span>
-      <span class="tech-pill">Fault Service</span>
-      <span class="tech-pill">Maintenance Service</span>
-      <span class="tech-pill">Spare Part Service</span>
-      <span class="tech-pill">AI Triage</span>
-      <span class="tech-pill">Health Calculator</span>
-      <span class="tech-pill">Prometheus Connector</span>
-      <span class="tech-pill">Workflow Idempotency</span>
-      <span class="tech-pill">Incident Automation</span>
-      <span class="tech-pill">PostgreSQL Concurrency</span>
-      <span class="tech-pill">Rate Limiter</span>
-      <span class="tech-pill">Auth / SSO</span>
-      <span class="tech-pill">Batch Regressions</span>
-    </div>
-  </div>
-</div>
+  `;
+}
 
-<!-- ================================================================== -->
-<!-- Footer -->
-<!-- ================================================================== -->
-<footer class="footer">
-  <p><b>Network Automation System v2.0</b> &nbsp;·&nbsp; 智能监控 · 故障闭环 · AI 研判 · 资产追踪</p>
-  <p style="margin-top:4px">FastAPI + Vue 3 + React 18 &nbsp;|&nbsp; Google ADK + RAG + LiteLLM &nbsp;|&nbsp; PostgreSQL + Redis + Docker</p>
-</footer>
+// ===================================================================
+// Navigation
+// ===================================================================
+function goSlide(idx,animate=true){
+  if(idx<0||idx>=totalSlides)return;
+  const prevSlide=document.querySelector('.slide.active');
+  const nextSlide=document.querySelector(`.slide[data-index="${idx}"]`);
+  if(!nextSlide||prevSlide===nextSlide)return;
+
+  if(prevSlide&&animate&&transitionsEnabled){
+    const dir=idx>current?'exit-left':'exit-right';
+    prevSlide.classList.remove('active');
+    prevSlide.classList.add(dir);
+    setTimeout(()=>{prevSlide.classList.remove(dir);},450);
+  }else if(prevSlide){
+    prevSlide.classList.remove('active');
+  }
+
+  if(animate&&transitionsEnabled){
+    nextSlide.style.transform=idx>current?'translateX(60px)':'translateX(-60px)';
+    nextSlide.style.opacity='0';
+    nextSlide.classList.add('active');
+    requestAnimationFrame(()=>{
+      nextSlide.style.transform='translateX(0)';
+      nextSlide.style.opacity='1';
+    });
+  }else{
+    nextSlide.classList.add('active');
+    nextSlide.style.transform='';
+    nextSlide.style.opacity='';
+  }
+
+  current=idx;
+  updateUI();
+}
+
+function updateUI(){
+  document.getElementById('slideNum').textContent=`${current+1} ${t('of')} ${totalSlides}`;
+  document.getElementById('progressBar').style.width=`${((current+1)/totalSlides)*100}%`;
+  document.querySelectorAll('#bottombar .dot').forEach((d,i)=>{
+    d.classList.toggle('active',i===current);
+  });
+}
+
+function initDots(){
+  const container=document.getElementById('dotsContainer');
+  for(let i=0;i<totalSlides;i++){
+    const dot=document.createElement('span');
+    dot.className='dot'+(i===0?' active':'');
+    dot.onclick=()=>goSlide(i);
+    container.appendChild(dot);
+  }
+}
+
+// ===================================================================
+// Keyboard + Touch
+// ===================================================================
+let touchStartX=0,touchStartY=0;
+document.addEventListener('keydown',e=>{
+  if(e.key==='ArrowRight'||e.key==='ArrowDown'||e.key===' '){e.preventDefault();goSlide(current+1);}
+  if(e.key==='ArrowLeft'||e.key==='ArrowUp'){e.preventDefault();goSlide(current-1);}
+  if(e.key==='Home'){e.preventDefault();goSlide(0);}
+  if(e.key==='End'){e.preventDefault();goSlide(totalSlides-1);}
+});
+document.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX;touchStartY=e.touches[0].clientY;});
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  const dy=e.changedTouches[0].clientY-touchStartY;
+  if(Math.abs(dx)>Math.abs(dy)&&Math.abs(dx)>50){
+    if(dx<0)goSlide(current+1);else goSlide(current-1);
+  }
+});
+// Mouse wheel
+let wheelTimeout;
+document.addEventListener('wheel',e=>{
+  if(wheelTimeout)return;
+  wheelTimeout=setTimeout(()=>{wheelTimeout=null;},800);
+  if(Math.abs(e.deltaX)>Math.abs(e.deltaY)){
+    if(e.deltaX>30)goSlide(current+1);
+    else if(e.deltaX<-30)goSlide(current-1);
+  }else{
+    if(e.deltaY>30)goSlide(current+1);
+    else if(e.deltaY<-30)goSlide(current-1);
+  }
+},{passive:true});
+
+// ===================================================================
+// Init
+// ===================================================================
+function init(){
+  initDots();
+  renderAllSlides();
+  goSlide(0,false);
+  updateUI();
+}
+init();
+</script>
 
 </body>
 </html>
