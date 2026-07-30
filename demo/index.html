@@ -604,6 +604,26 @@ const i18n = {
     searchDevice:'搜索设备名称或IP...',searchBackup:'搜索设备...',searchFault:'搜索故障...',
     btnImport:'导入',btnExport:'导出',btnAdd:'新增',btnBatchBackup:'批量备份',btnViewDiff:'查看差异',btnDiagnose:'AI诊断',btnAssign:'指派',btnClose:'关闭',deviceDetail:'详情',
     demoMsg:'演示模式：此功能需连接后端 API',
+    pageDiscovery:'设备发现',pageMaintenance:'维修管理',pagePlanned:'计划性运维',pageConsole:'Console配置',pageDeploy:'配置部署',pageTemplates:'配置模板',pageCredentials:'SSH凭证',pageCompliance:'配置合规',pageToolLogs:'工具执行日志',pageSpareParts:'备件库存',pageMovements:'出入库历史',pageScrap:'报废库存',pageNotifications:'通知中心',pageLogs:'系统日志',pageAlerts:'告警通知',pageSettings:'通用设置',pageHelp:'系统帮助',pageUsers:'用户管理',pageRoles:'角色权限',
+    discoveryScanned:'已扫描',discoveryNew:'新发现',discoveryRanges:'网段数',discoveryLastScan:'上次扫描',discoveryUnmanaged:'未纳管设备',discoveryActiveRanges:'活跃扫描网段',discoveryStart:'开始扫描',discoveryAddRange:'添加网段',discoveryScanRanges:'扫描网段',discoveryRange:'网段',discoveryHosts:'主机数',discoveryResponding:'响应',discoveryLastResult:'最近结果',discoveryCompleted:'完成',discoveryEmpty:'无响应',
+    consoleActiveSessions:'活跃会话',consoleBaudRates:'波特率',consoleNewSession:'新建会话',consoleDetect:'自动检测端口',consolePort:'串口',consoleBaud:'波特率',consoleUser:'用户',consoleLastActive:'最近活跃',consoleConnected:'已连接',consoleDisconnected:'已断开',consoleConnect:'连接',consoleDisconnect:'断开',
+    deployTotal:'部署总数',deployLast7d:'近7天',deploySuccess:'成功',deployRollbacks:'回滚',deployNew:'新建部署',deployPreview:'预览渲染',deployTemplate:'模板',deployTarget:'目标设备',deployUser:'操作人',deployTime:'部署时间',deploySuccessLabel:'成功',deployFailedLabel:'失败',deployRolledBack:'已回滚',
+    templatesTotal:'模板总数',templatesJinja2:'Jinja2格式',templatesUsed:'累计使用',templatesDeployCount:'次部署',templatesCreate:'新建模板',templatesPreview:'预览',templatesName:'模板名称',templatesType:'设备类型',templatesVars:'变量数',templatesUpdated:'更新时间',templatesUsedCol:'使用次数',templatesEdit:'编辑',templatesRender:'渲染预览',
+    credsTotal:'凭证组',credsDevices:'覆盖设备',credsGroups:'个凭证组',credsAssigned:'台设备已分配',credsAdd:'添加凭证组',credsTest:'测试连接',credsName:'凭证组名称',credsType:'连接方式',credsDeviceCount:'关联设备',credsUpdated:'更新时间',credsActive:'生效中',credsExpired:'已过期',credsEdit:'编辑',
+    compOverall:'综合得分',compAcrossDevices:'覆盖 148 台设备',compPassRate:'通过率',compPassRateSub:'整体通过率',compRules:'规则数',compActiveRules:'条活跃规则',compRunScan:'执行扫描',compAiAudit:'AI 审核',compRuleName:'规则名称',compCategory:'类别',compPass:'通过',compFail:'未通过',compScore:'得分',compRuleAAA:'AAA认证配置',compRuleNTP:'NTP时间同步',compRuleLogging:'日志记录配置',compRuleSNMP:'SNMP安全配置',compRuleBanner:'登录横幅配置',compRuleACL:'ACL访问控制',compRuleVTY:'VTY线路安全',compCatAuth:'认证授权',compCatTime:'时间管理',compCatLog:'日志审计',compCatMon:'监控管理',compCatSec:'安全加固',compCatAccess:'访问控制',
+    toolLogsTotal:'执行总数',toolLogsLast7d:'近7天执行',toolLogsSuccess:'成功率',toolLogsRate:'总体成功率',toolLogsSearch:'搜索工具日志...',toolLogsClear:'清理日志',toolLogsTool:'工具',toolLogsAction:'操作',toolLogsTime:'执行时间',toolLogsDuration:'耗时',
+    maintOpen:'待处理',maintCompleted:'已完成',maintMonthCost:'本月成本',maintPendingDesc:'个维修单',maintMonthTotal:'本月累计',maintAvgCost:'均单成本',maintCreate:'创建维修单',maintFault:'关联故障',maintType:'维修类型',maintEngineer:'工程师',maintCost:'成本',maintTypeHW:'硬件更换',maintTypePower:'电源维修',maintTypeLine:'线路排查',maintTypeConfig:'配置修复',
+    plannedTotal:'计划总数',plannedActive:'个活跃计划',plannedDevices:'涉及设备',plannedAffected:'台设备受影响',plannedThisMonth:'本月执行',plannedThisMonthSub:'个计划',plannedCreate:'新建计划',plannedCalendar:'维护日历',plannedPlan:'维护计划',plannedTask:'任务名称',plannedWindow:'维护窗口',plannedDevicesCol:'设备数',plannedOwner:'负责人',plannedScheduled:'已排期',plannedInProgress:'执行中',plannedRecurring:'定期循环',plannedPending:'待审批',plannedQuarterly:'季度维护',plannedCoreUpgrade:'核心层升级',plannedMonthly:'月度维护',plannedBackupVerify:'备份验证',plannedAOP:'年度规划',plannedA2Refresh:'A2车间设备更新',plannedEmergency:'紧急维护',plannedB2Restore:'B2车间网络恢复',
+    spareModels:'型号数',spareTotalQty:'总库存',spareLowStock:'低库存',spareModelsSub:'种备件型号',spareTotalQtySub:'件备件库存',spareLowStockSub:'种低于安全库存',spareSearch:'搜索备件型号或名称...',spareAdd:'新增备件',spareStockIn:'入库',spareStockOut:'出库',spareModel:'型号',spareName:'名称',spareQty:'库存量',spareLowStockThres:'安全库存',spareLocation:'存放位置',spareSerial:'序列号',spareNetworkModule:'网络模块',spareCoreSwitch:'核心交换机',sparePowerSupply:'电源模块',spareSFPModule:'SFP光模块',spareAccessSwitch:'接入交换机',spareFanTray:'风扇模块',
+    movTotal:'出入库记录',movThisMonth:'本月记录',movOut:'出库',movIn:'入库',movOutDesc:'件本月出库',movInDesc:'件本月入库',movSearch:'搜索备件或批次...',movExport:'导出报表',movPart:'备件型号',movType:'类型',movQty:'数量',movOperator:'操作人',movTime:'时间',movDevice:'关联设备',movInLabel:'入库',movOutLabel:'出库',
+    pageScrap:'报废库存',scrapTotal:'报废总数',scrapItemCount:'件已申请',scrapPending:'待审批',scrapPendingDesc:'件待审批',scrapValue:'原始价值',scrapOrigValue:'采购原值',scrapAdd:'申请报废',scrapApprove:'批量审批',scrapModel:'型号',scrapName:'名称',scrapQty:'数量',scrapReason:'报废原因',scrapDate:'申请日期',scrapPendingApproval:'待审批',scrapApproved:'已批准',scrapDisposed:'已处置',scrapOldSwitch:'旧型交换机',scrapOldPSU:'旧型电源',scrapOldSFP:'百兆SFP',scrapEOL:'设备EOL',scrapFailed:'设备故障',scrapUpgraded:'技术升级',
+    notifUnread:'未读',notifTotal:'全部通知',notifUnreadSub:'条未读通知',notifTotalSub:'条历史通知',notifMarkAll:'全部已读',notifClear:'清空通知',notifTitle:'标题',notifContent:'内容',notifTime:'时间',notifLevel:'级别',notifSysUpdate:'系统更新通知',notifSysUpdateContent:'NAS v2.0.1 已发布，新增配置合规 AI 审核功能。',notifBackupDone:'备份完成通知',notifBackupDoneContent:'07-30 每日自动备份完成: 10/12 台成功。',notifFaultAlert:'故障告警通知',notifFaultAlertContent:'SW-B2-01 设备离线，B2车间网络中断。',notifCompliance:'合规扫描通知',notifComplianceContent:'合规扫描完成: 87/100，4项不合规。',notifScheduled:'计划维护提醒',notifScheduledContent:'8月15日计划核心层升级维护，涉及2台设备。',
+    logsToday:'今日日志',logsTodaySub:'条日志',logsErrors:'错误',logsErrorsSub:'条错误日志',logsSearch:'搜索日志内容...',logsClear:'清理日志',
+    alertChannels:'通知渠道',alertSent:'已发送',alertChannelsActive:'个渠道活跃',alertSentThisMonth:'条本月发送',alertAddChannel:'添加渠道',alertTest:'发送测试',alertChannelName:'渠道名称',alertChannelType:'类型',alertChannelConfig:'配置',alertUpdated:'更新时间',alertEnabled:'已启用',alertDisabled:'已禁用',alertEdit:'编辑',alertWework:'企业微信告警',alertWeworkType:'企业微信机器人',alertWeworkConfig:'Webhook: https://qyapi.weixin.qq.com/***',alertDingtalk:'钉钉告警',alertDingtalkType:'钉钉机器人',alertDingtalkConfig:'Webhook: https://oapi.dingtalk.com/***',alertEmail:'邮件告警',alertEmailType:'SMTP邮件',alertEmailConfig:'smtp.company.com:587',alertSMS:'短信告警',alertSMSType:'短信网关',
+    settingsTitle:'系统配置项',settingsKey:'配置项',settingsValue:'当前值',settingsDesc:'说明',settingsEdit:'修改',settingsBackupSchedule:'自动备份时间',settingsDaily:'每日',settingsBackupDesc:'每日凌晨自动备份所有设备配置',settingsRetentionDays:'备份保留天数',settingsDays:'天',settingsRetentionDesc:'超过保留期的备份自动清理',settingsPollInterval:'设备轮询间隔',settingsPollDesc:'设备可达性检测和 SNMP 采集间隔',settingsMaxLogSize:'日志文件上限',settingsLogSizeDesc:'单个日志文件最大容量',settingsSessionTimeout:'会话超时',settingsSessionDesc:'Web会话无操作自动登出',
+    helpArch:'系统架构',helpTechStack:'技术栈',helpBackend:'后端',helpFrontend:'前端',helpNetwork:'网络通信',helpMonitor:'监控采集',helpAI:'AI引擎',helpAuth:'认证授权',
+    usersTotal:'用户总数',usersActive:'活跃用户',usersTotalSub:'个用户',usersActiveSub:'个活跃用户',usersAdd:'新增用户',usersName:'用户名',usersRole:'角色',usersEmail:'邮箱',usersLastLogin:'最后登录',usersActiveLabel:'活跃',usersDisabled:'已禁用',usersEdit:'编辑',usersResetPwd:'重置密码',userAdmin:'系统管理员',userEngineerZhang:'张工',userEngineerLi:'李工',userEngineerWang:'王工',userEngineerZhao:'赵工',userViewer:'浏览者',userEngineer:'网络工程师',userSeniorEngineer:'高级工程师',userViewerRole:'只读浏览',
+    rolesTotal:'角色总数',rolesUsers:'角色用户',rolesTotalSub:'个角色',rolesUsersSub:'个用户已分配',rolesAdd:'新增角色',rolesClone:'克隆角色',rolesName:'角色名称',rolesUserCount:'用户数',rolesPermissions:'权限描述',rolesUpdated:'更新时间',rolesEdit:'编辑权限',roleAdmin:'系统管理员',roleSeniorEngineer:'高级工程师',roleEngineer:'网络工程师',roleViewer:'只读用户',roleAdminDesc:'全部权限：设备、配置、用户管理、系统设置',roleSeniorDesc:'设备管理、配置部署、故障管理、备份管理',roleEngineerDesc:'设备查看、备份执行、故障处理、Console操作',roleViewerDesc:'只读：查看仪表板、设备列表、备份记录',
   },
   en: {
     loginTitle:'Network Automation Platform',loginSub:'Network Automation System v2.0',username:'Username',password:'Password',loginBtn:'Sign In',ssoHint:'Enterprise account use',ssoLink:'SSO Login',logoText:'Network Automation System',
@@ -648,6 +668,26 @@ const i18n = {
     searchDevice:'Search device name or IP...',searchBackup:'Search device...',searchFault:'Search fault...',
     btnImport:'Import',btnExport:'Export',btnAdd:'Add',btnBatchBackup:'Batch Backup',btnViewDiff:'View Diff',btnDiagnose:'AI Diagnose',btnAssign:'Assign',btnClose:'Close',deviceDetail:'Details',
     demoMsg:'Demo mode: This feature requires backend API connection',
+    pageDiscovery:'Device Discovery',pageMaintenance:'Maintenance',pagePlanned:'Planned Ops',pageConsole:'Console Config',pageDeploy:'Config Deploy',pageTemplates:'Config Templates',pageCredentials:'SSH Credentials',pageCompliance:'Compliance',pageToolLogs:'Tool Logs',pageSpareParts:'Spare Parts',pageMovements:'Movements',pageScrap:'Scrap Inventory',pageNotifications:'Notifications',pageLogs:'System Logs',pageAlerts:'Alert Settings',pageSettings:'Settings',pageHelp:'System Help',pageUsers:'Users',pageRoles:'Roles',
+    discoveryScanned:'Scanned',discoveryNew:'New Found',discoveryRanges:'Ranges',discoveryLastScan:'Last Scan',discoveryUnmanaged:'Unmanaged',discoveryActiveRanges:'Active Ranges',discoveryStart:'Start Scan',discoveryAddRange:'Add Range',discoveryScanRanges:'Scan Ranges',discoveryRange:'Subnet',discoveryHosts:'Hosts',discoveryResponding:'Responding',discoveryLastResult:'Last Result',discoveryCompleted:'Done',discoveryEmpty:'No Response',
+    consoleActiveSessions:'Active Sessions',consoleBaudRates:'Baud Rates',consoleNewSession:'New Session',consoleDetect:'Auto Detect',consolePort:'Port',consoleBaud:'Baud',consoleUser:'User',consoleLastActive:'Last Active',consoleConnected:'Connected',consoleDisconnected:'Disconnected',consoleConnect:'Connect',consoleDisconnect:'Disconnect',
+    deployTotal:'Total Deploys',deployLast7d:'Last 7 days',deploySuccess:'Success',deployRollbacks:'Rollbacks',deployNew:'New Deploy',deployPreview:'Preview',deployTemplate:'Template',deployTarget:'Target',deployUser:'Operator',deployTime:'Deploy Time',deploySuccessLabel:'Success',deployFailedLabel:'Failed',deployRolledBack:'Rolled Back',
+    templatesTotal:'Total',templatesJinja2:'Jinja2 format',templatesUsed:'Total Uses',templatesDeployCount:'deployments',templatesCreate:'Create',templatesPreview:'Preview',templatesName:'Name',templatesType:'Device Type',templatesVars:'Variables',templatesUpdated:'Updated',templatesUsedCol:'Uses',templatesEdit:'Edit',templatesRender:'Render',
+    credsTotal:'Groups',credsDevices:'Devices',credsGroups:'groups',credsAssigned:'devices assigned',credsAdd:'Add Group',credsTest:'Test',credsName:'Group Name',credsType:'Method',credsDeviceCount:'Devices',credsUpdated:'Updated',credsActive:'Active',credsExpired:'Expired',credsEdit:'Edit',
+    compOverall:'Overall',compAcrossDevices:'across 148 devices',compPassRate:'Pass Rate',compPassRateSub:'Overall pass rate',compRules:'Rules',compActiveRules:'active rules',compRunScan:'Run Scan',compAiAudit:'AI Audit',compRuleName:'Rule Name',compCategory:'Category',compPass:'Pass',compFail:'Fail',compScore:'Score',compRuleAAA:'AAA Authentication',compRuleNTP:'NTP Sync',compRuleLogging:'Logging Config',compRuleSNMP:'SNMP Security',compRuleBanner:'Login Banner',compRuleACL:'ACL Rules',compRuleVTY:'VTY Security',compCatAuth:'Authentication',compCatTime:'Time Mgmt',compCatLog:'Log Audit',compCatMon:'Monitoring',compCatSec:'Security',compCatAccess:'Access Control',
+    toolLogsTotal:'Total Runs',toolLogsLast7d:'Last 7 days',toolLogsSuccess:'Success Rate',toolLogsRate:'Overall rate',toolLogsSearch:'Search tool logs...',toolLogsClear:'Clear',toolLogsTool:'Tool',toolLogsAction:'Action',toolLogsTime:'Time',toolLogsDuration:'Duration',
+    maintOpen:'Open',maintCompleted:'Completed',maintMonthCost:'Monthly Cost',maintPendingDesc:'tickets',maintMonthTotal:'this month',maintAvgCost:'Avg Cost',maintCreate:'Create Ticket',maintFault:'Linked Fault',maintType:'Type',maintEngineer:'Engineer',maintCost:'Cost',maintTypeHW:'HW Replacement',maintTypePower:'Power Repair',maintTypeLine:'Line Check',maintTypeConfig:'Config Fix',
+    plannedTotal:'Total Plans',plannedActive:'active',plannedDevices:'Devices',plannedAffected:'devices affected',plannedThisMonth:'This Month',plannedThisMonthSub:'plans',plannedCreate:'Create Plan',plannedCalendar:'Calendar',plannedPlan:'Plan',plannedTask:'Task',plannedWindow:'Window',plannedDevicesCol:'Devices',plannedOwner:'Owner',plannedScheduled:'Scheduled',plannedInProgress:'In Progress',plannedRecurring:'Recurring',plannedPending:'Pending',plannedQuarterly:'Quarterly',plannedCoreUpgrade:'Core Upgrade',plannedMonthly:'Monthly',plannedBackupVerify:'Backup Verify',plannedAOP:'Annual Plan',plannedA2Refresh:'A2 Refresh',plannedEmergency:'Emergency',plannedB2Restore:'B2 Restore',
+    spareModels:'Models',spareTotalQty:'Total Qty',spareLowStock:'Low Stock',spareModelsSub:'models',spareTotalQtySub:'items in stock',spareLowStockSub:'below threshold',spareSearch:'Search model or name...',spareAdd:'Add',spareStockIn:'Stock In',spareStockOut:'Stock Out',spareModel:'Model',spareName:'Name',spareQty:'Qty',spareLowStockThres:'Min Stock',spareLocation:'Location',spareSerial:'Serial',spareNetworkModule:'Network Module',spareCoreSwitch:'Core Switch',sparePowerSupply:'Power Supply',spareSFPModule:'SFP Module',spareAccessSwitch:'Access Switch',spareFanTray:'Fan Tray',
+    movTotal:'Records',movThisMonth:'this month',movOut:'Checkout',movIn:'Checkin',movOutDesc:'checked out',movInDesc:'checked in',movSearch:'Search part or batch...',movExport:'Export',movPart:'Part',movType:'Type',movQty:'Qty',movOperator:'Operator',movTime:'Time',movDevice:'Device',movInLabel:'IN',movOutLabel:'OUT',
+    scrapTotal:'Scrapped',scrapItemCount:'items',scrapPending:'Pending',scrapPendingDesc:'pending approval',scrapValue:'Orig Value',scrapOrigValue:'purchase value',scrapAdd:'Request',scrapApprove:'Approve',scrapModel:'Model',scrapName:'Name',scrapQty:'Qty',scrapReason:'Reason',scrapDate:'Date',scrapPendingApproval:'Pending',scrapApproved:'Approved',scrapDisposed:'Disposed',scrapOldSwitch:'Legacy Switch',scrapOldPSU:'Legacy PSU',scrapOldSFP:'100M SFP',scrapEOL:'End of Life',scrapFailed:'Hardware Failed',scrapUpgraded:'Tech Upgrade',
+    notifUnread:'Unread',notifTotal:'Total',notifUnreadSub:'unread',notifTotalSub:'notifications',notifMarkAll:'Mark All Read',notifClear:'Clear All',notifTitle:'Title',notifContent:'Content',notifTime:'Time',notifLevel:'Level',notifSysUpdate:'System Update',notifSysUpdateContent:'NAS v2.0.1 released with AI compliance audit.',notifBackupDone:'Backup Done',notifBackupDoneContent:'Daily backup completed: 10/12 success.',notifFaultAlert:'Fault Alert',notifFaultAlertContent:'SW-B2-01 offline, B2 workshop network down.',notifCompliance:'Compliance Scan',notifComplianceContent:'Compliance scan: 87/100, 4 non-compliant.',notifScheduled:'Maintenance Reminder',notifScheduledContent:'Aug 15 core upgrade window, 2 devices affected.',
+    logsToday:'Today',logsTodaySub:'entries',logsErrors:'Errors',logsErrorsSub:'error entries',logsSearch:'Search logs...',logsClear:'Clear',
+    alertChannels:'Channels',alertSent:'Sent',alertChannelsActive:'active',alertSentThisMonth:'this month',alertAddChannel:'Add Channel',alertTest:'Test',alertChannelName:'Name',alertChannelType:'Type',alertChannelConfig:'Config',alertUpdated:'Updated',alertEnabled:'Enabled',alertDisabled:'Disabled',alertEdit:'Edit',alertWework:'WeChat Work Alert',alertWeworkType:'WeChat Bot',alertWeworkConfig:'Webhook: https://qyapi.weixin.qq.com/***',alertDingtalk:'DingTalk Alert',alertDingtalkType:'DingTalk Bot',alertDingtalkConfig:'Webhook: https://oapi.dingtalk.com/***',alertEmail:'Email Alert',alertEmailType:'SMTP',alertEmailConfig:'smtp.company.com:587',alertSMS:'SMS Alert',alertSMSType:'SMS Gateway',
+    settingsTitle:'System Configuration',settingsKey:'Key',settingsValue:'Value',settingsDesc:'Description',settingsEdit:'Edit',settingsBackupSchedule:'Auto Backup Time',settingsDaily:'Daily',settingsBackupDesc:'Daily auto backup for all devices',settingsRetentionDays:'Backup Retention',settingsDays:'days',settingsRetentionDesc:'Auto-clean backups beyond retention',settingsPollInterval:'Poll Interval',settingsPollDesc:'Device reachability check interval',settingsMaxLogSize:'Max Log Size',settingsLogSizeDesc:'Max size per log file',settingsSessionTimeout:'Session Timeout',settingsSessionDesc:'Auto logout after inactivity',
+    helpArch:'System Architecture',helpTechStack:'Technology Stack',helpBackend:'Backend',helpFrontend:'Frontend',helpNetwork:'Network',helpMonitor:'Monitoring',helpAI:'AI Engine',helpAuth:'Auth',
+    usersTotal:'Total Users',usersActive:'Active',usersTotalSub:'users',usersActiveSub:'active users',usersAdd:'Add User',usersName:'Username',usersRole:'Role',usersEmail:'Email',usersLastLogin:'Last Login',usersActiveLabel:'Active',usersDisabled:'Disabled',usersEdit:'Edit',usersResetPwd:'Reset Pwd',userAdmin:'Admin',userEngineerZhang:'Zhang',userEngineerLi:'Li',userEngineerWang:'Wang',userEngineerZhao:'Zhao',userViewer:'Viewer',userEngineer:'Engineer',userSeniorEngineer:'Sr Engineer',userViewerRole:'Read Only',
+    rolesTotal:'Total Roles',rolesUsers:'Users',rolesTotalSub:'roles',rolesUsersSub:'users assigned',rolesAdd:'Add Role',rolesClone:'Clone',rolesName:'Role Name',rolesUserCount:'Users',rolesPermissions:'Permissions',rolesUpdated:'Updated',rolesEdit:'Edit',roleAdmin:'System Admin',roleSeniorEngineer:'Sr Engineer',roleEngineer:'Engineer',roleViewer:'Viewer',roleAdminDesc:'All: devices, config, users, system',roleSeniorDesc:'Device mgmt, deploy, faults, backups',roleEngineerDesc:'View devices, run backups, handle faults, console',roleViewerDesc:'Read-only: dashboard, devices, backups',
   }
 };
 
@@ -1208,6 +1248,205 @@ function renderFaults(){
     </div></div>`;
 }
 
+// ==================== Module Pages ====================
+function renderModulePage(titleKey, breadcrumb, stats, panels){
+  var h='<div class="simple-shell"><div class="page-header"><div class="breadcrumb">'+breadcrumb+'</div><h2>'+t(titleKey)+'</h2></div>';
+  if(stats){h+='<div class="stats-row">'+stats.map(function(s){return'<div class="stat-card'+(s.accent?' '+s.accent:'')+'"><div class="stat-label">'+s.label+'</div><div class="stat-value">'+s.value+'</div><div class="stat-sub">'+s.sub+'</div></div>';}).join('')+'</div>';}
+  if(panels){panels.forEach(function(p){h+=p;});}
+  h+='</div>';return h;
+}
+
+function renderDiscovery(){
+  var ips=['10.88.0.0/16','10.88.10.0/24','10.88.20.0/24','10.88.30.0/24','192.168.1.0/24'];
+  return renderModulePage('pageDiscovery',t('tabDevices')+' / '+t('pageDiscovery'),[
+    {label:t('discoveryScanned'),value:'148',sub:t('discoveryLastScan')+': 07-30 06:00',accent:'accent'},
+    {label:t('discoveryNew'),value:'3',sub:t('discoveryUnmanaged'),accent:'accent2'},
+    {label:t('discoveryRanges'),value:'5',sub:t('discoveryActiveRanges'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">🔍 '+t('discoveryStart')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">+ '+t('discoveryAddRange')+'</button></div><div class="panel-title" style="margin-top:12px"><span class="dot blue" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2)"></span>'+t('discoveryScanRanges')+'</div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('discoveryRange')+'</th><th>'+t('discoveryHosts')+'</th><th>'+t('discoveryResponding')+'</th><th>'+t('discoveryLastResult')+'</th><th>'+t('colStatus')+'</th></tr></thead><tbody>'+ips.map(function(ip,i){var hosts=[256,256,256,256,256][i];var resp=[148,24,20,8,2][i];return'<tr><td class="text-mono"><strong>'+ip+'</strong></td><td>'+hosts+'</td><td>'+resp+'</td><td class="text-mono">07-30 06:0'+(i+1)+'</td><td>'+(resp>0?'<span class="badge badge-green">'+t('discoveryCompleted')+'</span>':'<span class="badge badge-gray">'+t('discoveryEmpty')+'</span>')+'</td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderConsole(){
+  var sessions=[{device:'SW-A1-02',port:'COM3',baud:'9600',status:'connected',user:'admin',time:'07-30 08:30'},{device:'SW-B2-01',port:'COM5',baud:'115200',status:'disconnected',user:'-',time:'07-29 16:00'},{device:'SW-Edge-01',port:'COM1',baud:'9600',status:'connected',user:'admin',time:'07-30 07:00'}];
+  return renderModulePage('pageConsole',t('tabConfig')+' / '+t('pageConsole'),[
+    {label:t('consoleActiveSessions'),value:'2',sub:t('consoleBaudRates'),accent:'accent'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('consoleNewSession')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🔌 '+t('consoleDetect')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('colName')+'</th><th>'+t('consolePort')+'</th><th>'+t('consoleBaud')+'</th><th>'+t('colStatus')+'</th><th>'+t('consoleUser')+'</th><th>'+t('consoleLastActive')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+sessions.map(function(s){return'<tr><td><strong>'+s.device+'</strong></td><td class="text-mono">'+s.port+'</td><td>'+s.baud+'</td><td>'+(s.status==='connected'?'<span class="badge badge-green">'+t('consoleConnected')+'</span>':'<span class="badge badge-gray">'+t('consoleDisconnected')+'</span>')+'</td><td>'+s.user+'</td><td class="text-mono">'+s.time+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+(s.status==='connected'?t('consoleDisconnect'):t('consoleConnect'))+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderDeploy(){
+  var deploys=[{template:'access-switch-v3',target:'SW-A2-01',user:'张工',time:'07-30 07:15',status:'success'},{template:'core-routing-base',target:'SW-Core-02',user:'赵工',time:'07-29 22:00',status:'success'},{template:'edge-bgp',target:'SW-Edge-01',user:'赵工',time:'07-29 21:30',status:'rolled_back'},{template:'access-switch-v3',target:'SW-B1-03',user:'张工',time:'07-28 14:20',status:'success'},{template:'vlan-database',target:'SW-A1-02',user:'李工',time:'07-27 10:00',status:'failed'}];
+  return renderModulePage('pageDeploy',t('tabConfig')+' / '+t('pageDeploy'),[
+    {label:t('deployTotal'),value:'5',sub:t('deployLast7d'),accent:'accent'},
+    {label:t('deploySuccess'),value:'3',sub:'60%',accent:'accent2'},
+    {label:t('deployRollbacks'),value:'1',sub:'20%',accent:'warn'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('deployNew')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📋 '+t('deployPreview')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('deployTemplate')+'</th><th>'+t('deployTarget')+'</th><th>'+t('deployUser')+'</th><th>'+t('deployTime')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+deploys.map(function(d){var sb='';if(d.status==='success')sb='<span class="badge badge-green">'+t('deploySuccessLabel')+'</span>';else if(d.status==='failed')sb='<span class="badge badge-red">'+t('deployFailedLabel')+'</span>';else sb='<span class="badge badge-orange">'+t('deployRolledBack')+'</span>';return'<tr><td><strong>'+d.template+'</strong></td><td>'+d.target+'</td><td>'+d.user+'</td><td class="text-mono">'+d.time+'</td><td>'+sb+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('btnViewDiff')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderTemplates(){
+  var tmpls=[{name:'access-switch-v3',type:'Cisco IOS',vars:12,updated:'07-28',used:8},{name:'core-routing-base',type:'Cisco IOS-XE',vars:18,updated:'07-25',used:3},{name:'edge-bgp',type:'Cisco IOS-XR',vars:22,updated:'07-20',used:2},{name:'vlan-database',type:'Cisco IOS',vars:6,updated:'07-15',used:15},{name:'firewall-pa-base',type:'PaloAlto PAN-OS',vars:14,updated:'07-10',used:4}];
+  return renderModulePage('pageTemplates',t('tabConfig')+' / '+t('pageTemplates'),[
+    {label:t('templatesTotal'),value:'5',sub:t('templatesJinja2'),accent:'accent'},
+    {label:t('templatesUsed'),value:'32',sub:t('templatesDeployCount'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('templatesCreate')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">👁 '+t('templatesPreview')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('templatesName')+'</th><th>'+t('templatesType')+'</th><th>'+t('templatesVars')+'</th><th>'+t('templatesUpdated')+'</th><th>'+t('templatesUsedCol')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+tmpls.map(function(tm){return'<tr><td><strong>'+tm.name+'</strong></td><td>'+tm.type+'</td><td class="text-mono">'+tm.vars+'</td><td>'+tm.updated+'</td><td class="text-mono">'+tm.used+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('templatesEdit')+'</button> <button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('templatesRender')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderCredentials(){
+  var creds=[{name:'生产环境凭证组',type:'SSH',devices:86,updated:'07-25',status:'active'},{name:'测试环境凭证组',type:'SSH',devices:24,updated:'07-20',status:'active'},{name:'边界设备凭证组',type:'SSH+Key',devices:6,updated:'07-15',status:'active'},{name:'旧设备凭证组',type:'Telnet',devices:12,updated:'06-01',status:'expired'}];
+  return renderModulePage('pageCredentials',t('tabConfig')+' / '+t('pageCredentials'),[
+    {label:t('credsTotal'),value:'4',sub:t('credsGroups'),accent:'accent'},
+    {label:t('credsDevices'),value:'128',sub:t('credsAssigned'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('credsAdd')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🔑 '+t('credsTest')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('credsName')+'</th><th>'+t('credsType')+'</th><th>'+t('credsDeviceCount')+'</th><th>'+t('credsUpdated')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+creds.map(function(c){return'<tr><td><strong>'+c.name+'</strong></td><td>'+c.type+'</td><td class="text-mono">'+c.devices+'</td><td>'+c.updated+'</td><td>'+(c.status==='active'?'<span class="badge badge-green">'+t('credsActive')+'</span>':'<span class="badge badge-red">'+t('credsExpired')+'</span>')+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('credsEdit')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderCompliance(){
+  var rules=[{id:'C01',name:t('compRuleAAA'),category:t('compCatAuth'),pass:142,fail:6,score:95},{id:'C02',name:t('compRuleNTP'),category:t('compCatTime'),pass:148,fail:0,score:100},{id:'C03',name:t('compRuleLogging'),category:t('compCatLog'),pass:140,fail:8,score:94},{id:'C04',name:t('compRuleSNMP'),category:t('compCatMon'),pass:135,fail:13,score:91},{id:'C05',name:t('compRuleBanner'),category:t('compCatSec'),pass:120,fail:28,score:81},{id:'C06',name:t('compRuleACL'),category:t('compCatSec'),pass:138,fail:10,score:93},{id:'C07',name:t('compRuleVTY'),category:t('compCatAccess'),pass:145,fail:3,score:98}];
+  return renderModulePage('pageCompliance',t('tabConfig')+' / '+t('pageCompliance'),[
+    {label:t('compOverall'),value:'87/100',sub:t('compAcrossDevices'),accent:'accent'},
+    {label:t('compPassRate'),value:'93.2%',sub:t('compPassRateSub'),accent:'accent2'},
+    {label:t('compRules'),value:'7',sub:t('compActiveRules'),accent:'warn'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">🔄 '+t('compRunScan')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🤖 '+t('compAiAudit')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>ID</th><th>'+t('compRuleName')+'</th><th>'+t('compCategory')+'</th><th>'+t('compPass')+'</th><th>'+t('compFail')+'</th><th>'+t('compScore')+'</th></tr></thead><tbody>'+rules.map(function(r){var sc=r.score>=95?'color:var(--accent)':r.score>=85?'color:var(--warn)':'color:var(--danger)';return'<tr><td class="text-mono">'+r.id+'</td><td><strong>'+r.name+'</strong></td><td>'+r.category+'</td><td class="text-mono">'+r.pass+'</td><td class="text-mono" style="'+(r.fail>0?'color:var(--danger)':'')+'">'+r.fail+'</td><td class="text-mono"><strong style="'+sc+'">'+r.score+'</strong></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderToolLogs(){
+  var logs=[{tool:'Netmiko',action:'backup',device:'SW-Core-01',time:'07-30 02:00',status:'success',duration:'2.3s'},{tool:'Netmiko',action:'backup',device:'SW-A2-01',time:'07-30 02:10',status:'success',duration:'1.8s'},{tool:'Netmiko',action:'backup',device:'SW-B1-02',time:'07-30 02:11',status:'failed',duration:'30.0s'},{tool:'NAPALM',action:'config_get',device:'SW-Edge-01',time:'07-29 22:00',status:'success',duration:'0.9s'},{tool:'Netmiko',action:'command',device:'SW-A1-01',time:'07-29 16:30',status:'success',duration:'1.2s'},{tool:'pyserial',action:'console_config',device:'SW-A1-02',time:'07-30 08:30',status:'success',duration:'45.0s'}];
+  return renderModulePage('pageToolLogs',t('tabConfig')+' / '+t('pageToolLogs'),[
+    {label:t('toolLogsTotal'),value:'128',sub:t('toolLogsLast7d'),accent:'accent'},
+    {label:t('toolLogsSuccess'),value:'96.1%',sub:t('toolLogsRate'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><input class="search-input" placeholder="'+t('toolLogsSearch')+'"><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🗑 '+t('toolLogsClear')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('toolLogsTool')+'</th><th>'+t('toolLogsAction')+'</th><th>'+t('colName')+'</th><th>'+t('toolLogsTime')+'</th><th>'+t('colStatus')+'</th><th>'+t('toolLogsDuration')+'</th></tr></thead><tbody>'+logs.map(function(l){return'<tr><td><strong>'+l.tool+'</strong></td><td>'+l.action+'</td><td>'+l.device+'</td><td class="text-mono">'+l.time+'</td><td>'+(l.status==='success'?'<span class="badge badge-green">'+t('backupSuccess')+'</span>':'<span class="badge badge-red">'+t('backupFailed')+'</span>')+'</td><td class="text-mono">'+l.duration+'</td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderMaintenance(){
+  var records=[{device:'SW-A2-03',fault:'温度传感器告警',type:t('maintTypeHW'),status:'in_progress',engineer:'王工',cost:1200,time:'07-29 10:05'},{device:'SW-B1-01',fault:'PoE 供电异常',type:t('maintTypePower'),status:'completed',engineer:'李工',cost:3500,time:'07-28 15:12'},{device:'SW-A1-02',fault:'端口翻动',type:t('maintTypeLine'),status:'pending',engineer:'张工',cost:0,time:'07-30 08:15'},{device:'SW-Edge-01',fault:'BGP 邻居震荡',type:t('maintTypeConfig'),status:'completed',engineer:'赵工',cost:800,time:'07-28 22:30'}];
+  return renderModulePage('pageMaintenance',t('tabDevices')+' / '+t('pageMaintenance'),[
+    {label:t('maintOpen'),value:'2',sub:t('maintPendingDesc'),accent:'warn'},
+    {label:t('maintCompleted'),value:'15',sub:t('maintMonthTotal'),accent:'accent'},
+    {label:t('maintMonthCost'),value:'¥18,500',sub:t('maintAvgCost')+' ¥1,233',accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('maintCreate')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('colName')+'</th><th>'+t('maintFault')+'</th><th>'+t('maintType')+'</th><th>'+t('maintEngineer')+'</th><th>'+t('maintCost')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+records.map(function(r){var sb='';if(r.status==='completed')sb='<span class="badge badge-green">'+t('faultResolved')+'</span>';else if(r.status==='in_progress')sb='<span class="badge badge-blue">'+t('faultDiagnosing')+'</span>';else sb='<span class="badge badge-orange">'+t('faultOpen')+'</span>';return'<tr><td><strong>'+r.device+'</strong></td><td>'+r.fault+'</td><td>'+r.type+'</td><td>'+r.engineer+'</td><td class="text-mono">¥'+r.cost.toLocaleString()+'</td><td>'+sb+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('deviceDetail')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderPlanned(){
+  var tasks=[{plan:t('plannedQuarterly'),task:t('plannedCoreUpgrade'),window:'08-15~08-16',devices:2,owner:'赵工',status:'scheduled'},{plan:t('plannedMonthly'),task:t('plannedBackupVerify'),window:'08-01',devices:148,owner:'李工',status:'recurring'},{plan:t('plannedAOP'),task:t('plannedA2Refresh'),window:'09-01~09-07',devices:24,owner:'张工',status:'pending'},{plan:t('plannedEmergency'),task:t('plannedB2Restore'),window:'07-30~07-31',devices:1,owner:'王工',status:'in_progress'}];
+  return renderModulePage('pagePlanned',t('tabDevices')+' / '+t('pagePlanned'),[
+    {label:t('plannedTotal'),value:'4',sub:t('plannedActive'),accent:'accent'},
+    {label:t('plannedDevices'),value:'175',sub:t('plannedAffected'),accent:'accent2'},
+    {label:t('plannedThisMonth'),value:'2',sub:t('plannedThisMonthSub'),accent:'warn'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('plannedCreate')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📅 '+t('plannedCalendar')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('plannedPlan')+'</th><th>'+t('plannedTask')+'</th><th>'+t('plannedWindow')+'</th><th>'+t('plannedDevicesCol')+'</th><th>'+t('plannedOwner')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+tasks.map(function(tk){var sb='';if(tk.status==='scheduled')sb='<span class="badge badge-blue">'+t('plannedScheduled')+'</span>';else if(tk.status==='in_progress')sb='<span class="badge badge-orange">'+t('plannedInProgress')+'</span>';else if(tk.status==='recurring')sb='<span class="badge badge-green">'+t('plannedRecurring')+'</span>';else sb='<span class="badge badge-gray">'+t('plannedPending')+'</span>';return'<tr><td><strong>'+tk.plan+'</strong></td><td>'+tk.task+'</td><td class="text-mono">'+tk.window+'</td><td class="text-mono">'+tk.devices+'</td><td>'+tk.owner+'</td><td>'+sb+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('deviceDetail')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderSpareParts(){
+  var parts=[{model:'C9300-NM-8X',name:t('spareNetworkModule'),qty:8,lowStock:2,location:'A栋仓库-A3',serial:'FOC2345XXXX'},{model:'C9500-48Y4C',name:t('spareCoreSwitch'),qty:2,lowStock:1,location:'A栋仓库-A1',serial:'FOC2234XXXX'},{model:'PWR-C1-1100WAC',name:t('sparePowerSupply'),qty:24,lowStock:5,location:'A栋仓库-B2',serial:'LIT2345XXXX'},{model:'SFP-10G-LR',name:t('spareSFPModule'),qty:120,lowStock:20,location:'A栋仓库-C1',serial:'FBN2345XXXX'},{model:'C9200-48P',name:t('spareAccessSwitch'),qty:6,lowStock:2,location:'A栋仓库-A2',serial:'FOC2456XXXX'},{model:'FAN-C9K-T2',name:t('spareFanTray'),qty:16,lowStock:4,location:'A栋仓库-B3',serial:'LIT2456XXXX'}];
+  return renderModulePage('pageSpareParts',t('tabAssets')+' / '+t('pageSpareParts'),[
+    {label:t('spareModels'),value:'32',sub:t('spareModelsSub'),accent:'accent'},
+    {label:t('spareTotalQty'),value:'486',sub:t('spareTotalQtySub'),accent:'accent2'},
+    {label:t('spareLowStock'),value:'5',sub:t('spareLowStockSub'),accent:'warn'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><input class="search-input" placeholder="'+t('spareSearch')+'"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('spareAdd')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📥 '+t('spareStockIn')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📤 '+t('spareStockOut')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('spareModel')+'</th><th>'+t('spareName')+'</th><th>'+t('spareQty')+'</th><th>'+t('spareLowStockThres')+'</th><th>'+t('spareLocation')+'</th><th>'+t('spareSerial')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+parts.map(function(p){var qc=p.qty<=p.lowStock?'color:var(--danger)':'';return'<tr><td class="text-mono"><strong>'+p.model+'</strong></td><td>'+p.name+'</td><td class="text-mono"><strong style="'+qc+'">'+p.qty+'</strong></td><td class="text-mono">'+p.lowStock+'</td><td>'+p.location+'</td><td class="text-mono">'+p.serial+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('deviceDetail')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderMovements(){
+  var movs=[{part:'SFP-10G-LR',type:'out',qty:4,operator:'张工',time:'07-30 08:00',device:'SW-A1-02'},{part:'PWR-C1-1100WAC',type:'in',qty:8,operator:'李工',time:'07-29 14:00',device:'-'},{part:'C9200-48P',type:'out',qty:1,operator:'王工',time:'07-29 10:30',device:'SW-B2-01'},{part:'FAN-C9K-T2',type:'out',qty:2,operator:'赵工',time:'07-28 16:00',device:'SW-Core-02'},{part:'SFP-10G-LR',type:'in',qty:20,operator:'张工',time:'07-28 09:00',device:'-'}];
+  return renderModulePage('pageMovements',t('tabAssets')+' / '+t('pageMovements'),[
+    {label:t('movTotal'),value:'48',sub:t('movThisMonth'),accent:'accent'},
+    {label:t('movOut'),value:'18',sub:t('movOutDesc'),accent:'warn'},
+    {label:t('movIn'),value:'30',sub:t('movInDesc'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><input class="search-input" placeholder="'+t('movSearch')+'"><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📤 '+t('movExport')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('movPart')+'</th><th>'+t('movType')+'</th><th>'+t('movQty')+'</th><th>'+t('movOperator')+'</th><th>'+t('movTime')+'</th><th>'+t('movDevice')+'</th></tr></thead><tbody>'+movs.map(function(m){var tb=m.type==='in'?'<span class="badge badge-green">'+t('movInLabel')+'</span>':'<span class="badge badge-orange">'+t('movOutLabel')+'</span>';return'<tr><td class="text-mono"><strong>'+m.part+'</strong></td><td>'+tb+'</td><td class="text-mono"><strong>'+(m.type==='in'?'+':'')+m.qty+'</strong></td><td>'+m.operator+'</td><td class="text-mono">'+m.time+'</td><td>'+(m.device==='-'?'<span style="color:var(--text-muted)">—</span>':'<strong>'+m.device+'</strong>')+'</td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderScrap(){
+  var items=[{model:'WS-C2960X-48TS-L',name:t('scrapOldSwitch'),qty:3,reason:t('scrapEOL'),date:'07-15',status:'pending_approval'},{model:'PWR-C1-350WAC',name:t('scrapOldPSU'),qty:5,reason:t('scrapFailed'),date:'07-10',status:'approved'},{model:'SFP-1G-SX',name:t('scrapOldSFP'),qty:12,reason:t('scrapUpgraded'),date:'06-28',status:'disposed'}];
+  return renderModulePage('pageScrap',t('tabAssets')+' / '+t('pageScrap'),[
+    {label:t('scrapTotal'),value:'20',sub:t('scrapItemCount'),accent:'warn'},
+    {label:t('scrapPending'),value:'3',sub:t('scrapPendingDesc'),accent:'accent2'},
+    {label:t('scrapValue'),value:'¥15,800',sub:t('scrapOrigValue'),accent:'accent'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('scrapAdd')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📋 '+t('scrapApprove')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('scrapModel')+'</th><th>'+t('scrapName')+'</th><th>'+t('scrapQty')+'</th><th>'+t('scrapReason')+'</th><th>'+t('scrapDate')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+items.map(function(it){var sb='';if(it.status==='pending_approval')sb='<span class="badge badge-orange">'+t('scrapPendingApproval')+'</span>';else if(it.status==='approved')sb='<span class="badge badge-blue">'+t('scrapApproved')+'</span>';else sb='<span class="badge badge-gray">'+t('scrapDisposed')+'</span>';return'<tr><td class="text-mono"><strong>'+it.model+'</strong></td><td>'+it.name+'</td><td class="text-mono">'+it.qty+'</td><td>'+it.reason+'</td><td>'+it.date+'</td><td>'+sb+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('deviceDetail')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderNotifications(){
+  var notifs=[{title:t('notifSysUpdate'),content:t('notifSysUpdateContent'),time:'07-30 06:00',read:false,level:'info'},{title:t('notifBackupDone'),content:t('notifBackupDoneContent'),time:'07-30 02:15',read:true,level:'success'},{title:t('notifFaultAlert'),content:t('notifFaultAlertContent'),time:'07-30 08:42',read:false,level:'danger'},{title:t('notifCompliance'),content:t('notifComplianceContent'),time:'07-29 18:00',read:true,level:'warn'},{title:t('notifScheduled'),content:t('notifScheduledContent'),time:'07-29 10:00',read:false,level:'info'}];
+  return renderModulePage('pageNotifications',t('tabSystem')+' / '+t('pageNotifications'),[
+    {label:t('notifUnread'),value:'3',sub:t('notifUnreadSub'),accent:'warn'},
+    {label:t('notifTotal'),value:'128',sub:t('notifTotalSub'),accent:'accent'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">✓ '+t('notifMarkAll')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🗑 '+t('notifClear')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th style="width:30px"></th><th>'+t('notifTitle')+'</th><th>'+t('notifContent')+'</th><th>'+t('notifTime')+'</th><th>'+t('notifLevel')+'</th></tr></thead><tbody>'+notifs.map(function(n){var dot=n.read?'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--text-muted)"></span>':'<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2);animation:rt-pulse 1.4s infinite"></span>';var lb='';if(n.level==='danger')lb='<span class="badge badge-red">'+t('severityCritical')+'</span>';else if(n.level==='warn')lb='<span class="badge badge-orange">'+t('severityMajor')+'</span>';else if(n.level==='success')lb='<span class="badge badge-green">'+t('backupSuccess')+'</span>';else lb='<span class="badge badge-blue">'+t('severityInfo')+'</span>';return'<tr style="'+(n.read?'':'font-weight:700')+'"><td>'+dot+'</td><td>'+n.title+'</td><td style="max-width:300px;overflow:hidden;text-overflow:ellipsis">'+n.content+'</td><td class="text-mono">'+n.time+'</td><td>'+lb+'</td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderLogs(){
+  var logs=['2026-07-30 08:42:15 [WARN] 设备离线检测: SW-B2-01 (10.88.21.1) ping 不可达','2026-07-30 08:15:30 [WARN] 端口翻动: SW-A1-02 Gi1/0/15 (第5次/24h)','2026-07-30 07:58:00 [WARN] CPU 阈值告警: SW-A1-01 CPU=87%','2026-07-30 07:30:00 [INFO] 每日备份任务完成: 10/12 成功','2026-07-30 06:00:00 [INFO] 合规扫描完成: 87/100 (7项规则)','2026-07-30 02:15:22 [INFO] SSH 备份成功: SW-Edge-01 (52.3 KB)','2026-07-30 02:11:45 [ERROR] SSH 备份失败: SW-B1-02 (连接超时)','2026-07-29 22:30:00 [WARN] BGP 邻居震荡恢复: SW-Edge-01'];
+  return renderModulePage('pageLogs',t('tabSystem')+' / '+t('pageLogs'),[
+    {label:t('logsToday'),value:'8',sub:t('logsTodaySub'),accent:'accent'},
+    {label:t('logsErrors'),value:'1',sub:t('logsErrorsSub'),accent:'danger'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><input class="search-input" placeholder="'+t('logsSearch')+'"><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">🗑 '+t('logsClear')+'</button></div><div style="background:var(--bg-hover);border-radius:var(--radius-md);padding:12px 16px;max-height:400px;overflow-y:auto;font-family:var(--font-mono);font-size:12px;line-height:1.8">'+logs.map(function(l){var c='var(--text2)';if(l.indexOf('[ERROR]')>-1)c='var(--danger)';else if(l.indexOf('[WARN]')>-1)c='var(--warn)';return'<div style="color:'+c+'">'+l+'</div>';}).join('')+'</div></div>',
+  ]);
+}
+
+function renderAlertSettings(){
+  var channels=[{name:t('alertWework'),type:t('alertWeworkType'),status:'active',config:t('alertWeworkConfig'),updated:'07-25'},{name:t('alertDingtalk'),type:t('alertDingtalkType'),status:'active',config:t('alertDingtalkConfig'),updated:'07-20'},{name:t('alertEmail'),type:t('alertEmailType'),status:'active',config:t('alertEmailConfig'),updated:'07-15'},{name:t('alertSMS'),type:t('alertSMSType'),status:'disabled',config:'—',updated:'06-01'}];
+  return renderModulePage('pageAlerts',t('tabSystem')+' / '+t('pageAlerts'),[
+    {label:t('alertChannels'),value:'3',sub:t('alertChannelsActive'),accent:'accent'},
+    {label:t('alertSent'),value:'48',sub:t('alertSentThisMonth'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('alertAddChannel')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📤 '+t('alertTest')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('alertChannelName')+'</th><th>'+t('alertChannelType')+'</th><th>'+t('alertChannelConfig')+'</th><th>'+t('colStatus')+'</th><th>'+t('alertUpdated')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+channels.map(function(ch){return'<tr><td><strong>'+ch.name+'</strong></td><td>'+ch.type+'</td><td>'+ch.config+'</td><td>'+(ch.status==='active'?'<span class="badge badge-green">'+t('alertEnabled')+'</span>':'<span class="badge badge-gray">'+t('alertDisabled')+'</span>')+'</td><td>'+ch.updated+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('alertEdit')+'</button> <button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('alertTest')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderSystemSettings(){
+  var configs=[{key:t('settingsBackupSchedule'),value:'02:00 '+t('settingsDaily'),desc:t('settingsBackupDesc')},{key:t('settingsRetentionDays'),value:'90 '+t('settingsDays'),desc:t('settingsRetentionDesc')},{key:t('settingsPollInterval'),value:'30s',desc:t('settingsPollDesc')},{key:t('settingsMaxLogSize'),value:'100 MB',desc:t('settingsLogSizeDesc')},{key:t('settingsSessionTimeout'),value:'8h',desc:t('settingsSessionDesc')}];
+  return renderModulePage('pageSettings',t('tabSystem')+' / '+t('pageSettings'),null,[
+    '<div class="card-panel"><div class="panel-title"><span class="dot blue" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2)"></span>'+t('settingsTitle')+'</div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('settingsKey')+'</th><th>'+t('settingsValue')+'</th><th>'+t('settingsDesc')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+configs.map(function(cf){return'<tr><td><strong>'+cf.key+'</strong></td><td class="text-mono">'+cf.value+'</td><td>'+cf.desc+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('settingsEdit')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderSystemHelp(){
+  return renderModulePage('pageHelp',t('tabSystem')+' / '+t('pageHelp'),null,[
+    '<div class="card-panel"><div class="panel-title"><span class="dot blue" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent2)"></span>'+t('helpArch')+'</div><p style="font-size:13px;color:var(--text2);line-height:1.8;margin-bottom:16px">'+(currentLang==='zh'?'网络自动化运维平台 (NAS) v2.0 采用 Feature-first 架构，基于 FastAPI + Vue 3 + Element Plus 构建。支持 Cisco IOS/IOS-XE/XR、PaloAlto PAN-OS 设备管理，提供配置备份、合规审计、故障管理、AI 智能诊断、3D 数字孪生等核心能力。':'Network Automation System (NAS) v2.0 uses Feature-first architecture, built on FastAPI + Vue 3 + Element Plus. Supports Cisco IOS/IOS-XE/XR and PaloAlto PAN-OS, providing config backup, compliance audit, fault management, AI diagnostics, 3D digital twin and more.')+'</p></div>',
+    '<div class="card-panel" style="margin-top:16px"><div class="panel-title"><span class="dot green" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--accent)"></span>'+t('helpTechStack')+'</div><div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px;margin-top:12px">'+[{layer:t('helpBackend'),tech:'FastAPI + SQLAlchemy + Celery'},{layer:t('helpFrontend'),tech:'Vue 3 + Vite + Element Plus + ECharts'},{layer:t('helpNetwork'),tech:'Netmiko + NAPALM + pyserial'},{layer:t('helpMonitor'),tech:'Prometheus + SNMP + Syslog'},{layer:t('helpAI'),tech:'Kimi Code API / LiteLLM'},{layer:t('helpAuth'),tech:'JWT + RBAC + SSO'}].map(function(s){return'<div style="padding:12px;border-radius:var(--radius-md);background:var(--bg-hover)"><div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">'+s.layer+'</div><div style="font-size:13px;font-weight:600;color:var(--text)">'+s.tech+'</div></div>';}).join('')+'</div></div>',
+  ]);
+}
+
+function renderUsers(){
+  var users=[{name:'Admin',role:t('userAdmin'),email:'admin@company.com',lastLogin:'07-30 08:00',status:'active'},{name:t('userEngineerZhang'),role:t('userEngineer'),email:'zhang@company.com',lastLogin:'07-30 07:30',status:'active'},{name:t('userEngineerLi'),role:t('userEngineer'),email:'li@company.com',lastLogin:'07-29 16:30',status:'active'},{name:t('userEngineerWang'),role:t('userEngineer'),email:'wang@company.com',lastLogin:'07-29 10:05',status:'active'},{name:t('userEngineerZhao'),role:t('userSeniorEngineer'),email:'zhao@company.com',lastLogin:'07-29 21:00',status:'active'},{name:t('userViewer'),role:t('userViewerRole'),email:'viewer@company.com',lastLogin:'07-28 14:00',status:'disabled'}];
+  return renderModulePage('pageUsers',t('tabSystem')+' / '+t('pageUsers'),[
+    {label:t('usersTotal'),value:'6',sub:t('usersTotalSub'),accent:'accent'},
+    {label:t('usersActive'),value:'5',sub:t('usersActiveSub'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('usersAdd')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('usersName')+'</th><th>'+t('usersRole')+'</th><th>'+t('usersEmail')+'</th><th>'+t('usersLastLogin')+'</th><th>'+t('colStatus')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+users.map(function(u){return'<tr><td><strong>'+u.name+'</strong></td><td>'+u.role+'</td><td>'+u.email+'</td><td class="text-mono">'+u.lastLogin+'</td><td>'+(u.status==='active'?'<span class="badge badge-green">'+t('usersActiveLabel')+'</span>':'<span class="badge badge-gray">'+t('usersDisabled')+'</span>')+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('usersEdit')+'</button> <button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('usersResetPwd')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
+function renderRoles(){
+  var roles=[{name:t('roleAdmin'),users:1,permissions:t('roleAdminDesc'),updated:'07-01'},{name:t('roleSeniorEngineer'),users:1,permissions:t('roleSeniorDesc'),updated:'07-01'},{name:t('roleEngineer'),users:3,permissions:t('roleEngineerDesc'),updated:'07-01'},{name:t('roleViewer'),users:1,permissions:t('roleViewerDesc'),updated:'07-01'}];
+  return renderModulePage('pageRoles',t('tabSystem')+' / '+t('pageRoles'),[
+    {label:t('rolesTotal'),value:'4',sub:t('rolesTotalSub'),accent:'accent'},
+    {label:t('rolesUsers'),value:'6',sub:t('rolesUsersSub'),accent:'accent2'},
+  ],[
+    '<div class="card-panel"><div class="toolbar"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">+ '+t('rolesAdd')+'</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📋 '+t('rolesClone')+'</button></div><div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>'+t('rolesName')+'</th><th>'+t('rolesUserCount')+'</th><th>'+t('rolesPermissions')+'</th><th>'+t('rolesUpdated')+'</th><th>'+t('colAction')+'</th></tr></thead><tbody>'+roles.map(function(r){return'<tr><td><strong>'+r.name+'</strong></td><td class="text-mono">'+r.users+'</td><td>'+r.permissions+'</td><td>'+r.updated+'</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">'+t('rolesEdit')+'</button></td></tr>';}).join('')+'</tbody></table></div></div>',
+  ]);
+}
+
 // ==================== Charts ====================
 function initOperationsCharts(){
   const isDark=currentTheme==='dark';
@@ -1270,8 +1509,27 @@ function renderAll(){
     case'dashboard':html=renderDashboard();break;
     case'operations':html=renderOperations();break;
     case'devices':html=renderDevices();break;
+    case'discovery':html=renderDiscovery();break;
     case'backups':html=renderBackups();break;
     case'faults':html=renderFaults();break;
+    case'maintenance':html=renderMaintenance();break;
+    case'planned':html=renderPlanned();break;
+    case'console':html=renderConsole();break;
+    case'deploy':html=renderDeploy();break;
+    case'templates':html=renderTemplates();break;
+    case'credentials':html=renderCredentials();break;
+    case'compliance':html=renderCompliance();break;
+    case'toollogs':html=renderToolLogs();break;
+    case'spareparts':html=renderSpareParts();break;
+    case'movements':html=renderMovements();break;
+    case'scrap':html=renderScrap();break;
+    case'notifications':html=renderNotifications();break;
+    case'logs':html=renderLogs();break;
+    case'alerts':html=renderAlertSettings();break;
+    case'settings':html=renderSystemSettings();break;
+    case'help':html=renderSystemHelp();break;
+    case'users':html=renderUsers();break;
+    case'roles':html=renderRoles();break;
     default:
       var title=getPageTitle(currentPage);
       html='<div class="simple-shell"><div class="page-header"><h2>'+title+'</h2></div><div class="card-panel" style="text-align:center;padding:60px;color:var(--text-muted);"><div style="font-size:48px;margin-bottom:16px;">🚧</div><p>'+(currentLang==='zh'?'演示页面 — 完整功能请运行后端系统':'Demo page — run the full system for complete features')+'</p></div></div>';
