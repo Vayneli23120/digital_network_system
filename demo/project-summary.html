@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAS v2.0 — Network Automation System · Project Summary</title>
+<style>
+/* ===== Reset & Tokens ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gy:#f6b93b;--gb:#003087;--gb-deep:#001F5C;--accent:#00b894;--accent2:#0984e3;
+  --warn:#e17055;--danger:#d63031;
+  --bg:#f8fafc;--bg-card:#fff;--bg-muted:#f1f5f9;
+  --text:#0f172a;--text2:#334155;--text3:#64748b;--text-muted:#94a3b8;
+  --border:#e2e8f0;--border-light:#f1f5f9;
+  --radius:10px;--radius-lg:16px;--radius-xl:20px;
+  --shadow-sm:0 1px 2px rgba(0,0,0,.05);
+  --shadow:0 4px 16px rgba(0,0,0,.06);
+  --shadow-lg:0 12px 40px rgba(0,0,0,.08);
+  --font:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'JetBrains Mono','Fira Code',monospace;
+}
+body{font-family:var(--font);background:var(--bg);color:var(--text);line-height:1.65;-webkit-font-smoothing:antialiased}
+
+/* ===== Hero ===== */
+.hero{
+  background:linear-gradient(135deg,var(--gb-deep) 0%,var(--gb) 50%,#00419E 100%);
+  padding:80px 24px 64px;text-align:center;position:relative;overflow:hidden;
+}
+.hero::before{
+  content:'';position:absolute;inset:0;
+  background:radial-gradient(ellipse at 70% 20%,rgba(246,185,59,.15) 0%,transparent 60%),
+             radial-gradient(ellipse at 30% 80%,rgba(0,184,148,.1) 0%,transparent 60%);
+}
+.hero-inner{position:relative;max-width:900px;margin:0 auto}
+.hero-badge{
+  display:inline-block;padding:4px 16px;background:rgba(246,185,59,.18);
+  color:var(--gy);border-radius:100px;font-size:12px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px;
+}
+.hero h1{font-size:clamp(32px,5vw,52px);font-weight:800;color:#fff;letter-spacing:-.02em;line-height:1.15;margin-bottom:16px}
+.hero h1 span{color:var(--gy)}
+.hero p{font-size:17px;color:rgba(255,255,255,.65);max-width:620px;margin:0 auto 28px;line-height:1.7}
+.hero-metrics{display:flex;gap:24px;justify-content:center;flex-wrap:wrap}
+.hm{border-radius:var(--radius);background:rgba(255,255,255,.08);backdrop-filter:blur(8px);padding:16px 24px;text-align:center;min-width:100px}
+.hm b{display:block;font-size:28px;font-weight:800;color:var(--gy);font-family:var(--font-mono)}
+.hm span{font-size:11px;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:.06em}
+
+/* ===== Layout ===== */
+.container{max-width:1280px;margin:0 auto;padding:0 24px}
+.section{padding:64px 0}
+.section-header{text-align:center;margin-bottom:48px}
+.section-header h2{font-size:28px;font-weight:700;letter-spacing:-.01em}
+.section-header p{font-size:15px;color:var(--text3);margin-top:8px;max-width:560px;margin-left:auto;margin-right:auto}
+
+/* ===== Tech Stack Grid ===== */
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.tech-card{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;transition:all .25s;box-shadow:var(--shadow-sm)}
+.tech-card:hover{transform:translateY(-3px);box-shadow:var(--shadow-lg)}
+.tech-card .tc-icon{width:44px;height:44px;border-radius:var(--radius);display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px}
+.tech-card h4{font-size:15px;font-weight:700;margin-bottom:6px}
+.tech-card p{font-size:13px;color:var(--text3);line-height:1.6}
+.tech-card .tc-stack{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.tech-card .tc-tag{padding:2px 10px;font-size:11px;font-family:var(--font-mono);border-radius:100px;background:var(--bg-muted);color:var(--text2)}
+
+/* ===== Architecture ===== */
+.arch-diagram{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius-xl);padding:40px;overflow-x:auto;box-shadow:var(--shadow-sm);
+}
+.arch-layers{display:flex;flex-direction:column;gap:12px;min-width:700px}
+.arch-layer{display:flex;align-items:center;gap:20px}
+.arch-layer-label{
+  width:100px;text-align:right;font-size:12px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em;color:var(--text3);flex-shrink:0;
+}
+.arch-layer-boxes{display:flex;gap:10px;flex-wrap:wrap;flex:1}
+.arch-box{
+  padding:10px 18px;border-radius:var(--radius);font-size:12px;font-weight:600;
+  color:#fff;white-space:nowrap;text-align:center;flex-shrink:0;
+}
+.arch-box.frontend{background:linear-gradient(135deg,#6366f1,#8b5cf6)}
+.arch-box.backend{background:linear-gradient(135deg,#0984e3,#0ea5e9)}
+.arch-box.data{background:linear-gradient(135deg,#00b894,#00cec9)}
+.arch-box.infra{background:linear-gradient(135deg,#e17055,#f97316)}
+.arch-box.ai{background:linear-gradient(135deg,#a855f7,#c084fc)}
+.arch-arrow{text-align:center;color:var(--text-muted);font-size:18px;padding:2px 0}
+
+/* ===== Module Grid ===== */
+.module-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:20px}
+.module-group{
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow-sm);
+}
+.module-group-header{
+  padding:16px 20px;font-size:13px;font-weight:700;letter-spacing:.01em;
+  display:flex;align-items:center;gap:10px;
+}
+.module-group-header .mg-icon{width:28px;height:28px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.mg-monitor .mg-icon{background:rgba(0,184,148,.12);color:var(--accent)}
+.mg-device .mg-icon{background:rgba(9,132,227,.12);color:var(--accent2)}
+.mg-config .mg-icon{background:rgba(246,185,59,.15);color:var(--gy)}
+.mg-spare .mg-icon{background:rgba(225,112,85,.12);color:var(--warn)}
+.mg-system .mg-icon{background:rgba(99,110,114,.12);color:#636e72}
+.module-list{padding:0 20px 16px;display:flex;flex-wrap:wrap;gap:6px}
+.module-tag{
+  padding:4px 12px;font-size:11px;border-radius:100px;
+  background:var(--bg-muted);color:var(--text2);font-weight:500;
+  white-space:nowrap;transition:all .15s;
+}
+.module-tag:hover{background:var(--accent);color:#fff}
+
+/* ===== Stats Bar ===== */
+.stats-bar{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:16px;margin-bottom:48px}
+.stat-item{background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);padding:24px;text-align:center;box-shadow:var(--shadow-sm)}
+.stat-item .si-value{font-size:32px;font-weight:800;font-family:var(--font-mono);line-height:1}
+.stat-item .si-label{font-size:12px;color:var(--text3);margin-top:6px;text-transform:uppercase;letter-spacing:.04em}
+.stat-item.accent .si-value{color:var(--accent)}
+.stat-item.accent2 .si-value{color:var(--accent2)}
+.stat-item.warn .si-value{color:var(--warn)}
+.stat-item.gold .si-value{color:var(--gy)}
+
+/* ===== Data Models Table ===== */
+.models-table-wrap{overflow-x:auto}
+.models-table{width:100%;border-collapse:collapse;font-size:13px}
+.models-table th{text-align:left;padding:10px 16px;font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--text3);border-bottom:2px solid var(--border);font-weight:700}
+.models-table td{padding:10px 16px;border-bottom:1px solid var(--border-light);color:var(--text2)}
+.models-table tr:hover td{background:var(--bg-muted)}
+.models-table .mt-model{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--text)}
+.models-table .mt-count{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+
+/* ===== Service Cards ===== */
+.service-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:16px}
+.service-card{
+  background:var(--bg-card);border:1px solid var(--border);border-radius:var(--radius-lg);
+  padding:20px 24px;display:flex;gap:16px;align-items:flex-start;box-shadow:var(--shadow-sm);transition:all .2s;
+}
+.service-card:hover{box-shadow:var(--shadow-lg);transform:translateY(-2px)}
+.service-card .sc-icon{
+  width:40px;height:40px;border-radius:var(--radius);display:flex;
+  align-items:center;justify-content:center;font-size:18px;flex-shrink:0;
+  background:var(--bg-muted);
+}
+.service-card h5{font-size:14px;font-weight:700;margin-bottom:3px}
+.service-card p{font-size:12px;color:var(--text3);line-height:1.5}
+
+/* ===== Footer ===== */
+.footer{background:var(--gb-deep);color:rgba(255,255,255,.5);padding:32px 24px;text-align:center;font-size:12px}
+.footer b{color:rgba(255,255,255,.75)}
+
+/* ===== Responsive ===== */
+@media(max-width:768px){
+  .hero{padding:48px 16px 40px}
+  .hero h1{font-size:28px}
+  .arch-layer-label{width:60px;font-size:10px}
+  .module-grid{grid-template-columns:1fr}
+  .service-grid{grid-template-columns:1fr}
+  .stats-bar{grid-template-columns:repeat(2,1fr)}
+}
+
+/* ===== Print ===== */
+@media print{
+  .hero{background:#003087!important;-webkit-print-color-adjust:exact}
+  .section{padding:24px 0}
+}
+</style>
+</head>
+<body>
+
+<!-- ===== Hero ===== -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">Network Automation System v2.0</div>
+    <h1>网络自动化<span>运维平台</span></h1>
+    <p>面向制造企业网络的全栈自动化运维系统 — 覆盖设备发现、配置备份与部署、故障全生命周期管理、AI 智能诊断、3D 数字孪生及年度运维规划的完整闭环。</p>
+    <div class="hero-metrics">
+      <div class="hm"><b>26</b><span>功能模块</span></div>
+      <div class="hm"><b>116</b><span>API 端点</span></div>
+      <div class="hm"><b>36</b><span>前端页面</span></div>
+      <div class="hm"><b>~40</b><span>数据模型</span></div>
+      <div class="hm"><b>225</b><span>测试用例</span></div>
+      <div class="hm"><b>~640</b><span>源文件</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Key Stats ===== -->
+<div class="container">
+  <div class="section" style="padding-bottom:0">
+    <div class="stats-bar">
+      <div class="stat-item accent"><div class="si-value">FastAPI</div><div class="si-label">后端框架</div></div>
+      <div class="stat-item accent2"><div class="si-value">Vue 3</div><div class="si-label">主前端</div></div>
+      <div class="stat-item gold"><div class="si-value">React 18</div><div class="si-label">第二前端</div></div>
+      <div class="stat-item warn"><div class="si-value">SQLite + PG</div><div class="si-label">双数据库</div></div>
+      <div class="stat-item accent"><div class="si-value">Celery</div><div class="si-label">任务队列</div></div>
+      <div class="stat-item accent2"><div class="si-value">Docker</div><div class="si-label">容器编排</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Architecture ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>系统架构</h2><p>前后端分离 + Feature-first 模块化 + 多层服务解耦</p></div>
+    <div class="arch-diagram">
+      <div class="arch-layers">
+        <div class="arch-layer">
+          <div class="arch-layer-label">Frontend</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box frontend">Vue 3 + Element Plus</div>
+            <div class="arch-box frontend">React 18 + Ant Design</div>
+            <div class="arch-box frontend">ECharts / Three.js</div>
+            <div class="arch-box frontend">Pinia / Zustand</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇ REST + WebSocket + SSE</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">Backend</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box backend">FastAPI 0.133</div>
+            <div class="arch-box backend">26 Feature Modules</div>
+            <div class="arch-box backend">JWT + RBAC</div>
+            <div class="arch-box backend">Rate Limiter</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇ Async Tasks + Service Layer</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">Services</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box ai">AI Triage / ADK</div>
+            <div class="arch-box ai">RAG Engine</div>
+            <div class="arch-box infra">Workflow Engine</div>
+            <div class="arch-box infra">Reachability Monitor</div>
+            <div class="arch-box infra">SNMP Trap Receiver</div>
+            <div class="arch-box infra">Prometheus Connector</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇ ORM + Connection Pool</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">Data</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box data">PostgreSQL + pgvector</div>
+            <div class="arch-box data">Redis 7</div>
+            <div class="arch-box data">SQLite (Dev)</div>
+            <div class="arch-box data">Alembic Migrations</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Tech Stack ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>技术栈</h2><p>全栈覆盖：后端 · 前端 · AI · 网络自动化 · 监控 · 部署</p></div>
+    <div class="tech-grid">
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(9,132,227,.12);color:var(--accent2)">⚙</div>
+        <h4>Backend Core</h4>
+        <p>FastAPI 异步 Web 框架，SQLAlchemy 2.0 ORM，Celery 分布式任务队列，JWT 认证 + RBAC 权限</p>
+        <div class="tc-stack"><span class="tc-tag">FastAPI</span><span class="tc-tag">SQLAlchemy 2.0</span><span class="tc-tag">Celery</span><span class="tc-tag">Alembic</span><span class="tc-tag">Pydantic v2</span><span class="tc-tag">Loguru</span></div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(99,102,241,.12);color:#6366f1">🖥</div>
+        <h4>Frontend (Vue)</h4>
+        <p>Vue 3 Composition API + Vite + Element Plus + ECharts + Three.js 3D 引擎 + Pinia 状态管理</p>
+        <div class="tc-stack"><span class="tc-tag">Vue 3.4</span><span class="tc-tag">Element Plus</span><span class="tc-tag">ECharts 5</span><span class="tc-tag">Three.js</span><span class="tc-tag">Pinia</span></div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(0,216,155,.12);color:#00d89b">⚛</div>
+        <h4>Frontend (React)</h4>
+        <p>React 18 + TypeScript + Ant Design 5 + React Query + Zustand，为 v2.0 前瞻构建</p>
+        <div class="tc-stack"><span class="tc-tag">React 18</span><span class="tc-tag">TypeScript</span><span class="tc-tag">Ant Design 5</span><span class="tc-tag">React Query</span><span class="tc-tag">Zustand</span></div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(168,85,247,.12);color:#a855f7">🧠</div>
+        <h4>AI Engine</h4>
+        <p>Google ADK 智能体框架、RAG 语义检索、LiteLLM 多模型路由、Kimi/Claude API 集成</p>
+        <div class="tc-stack"><span class="tc-tag">Google ADK</span><span class="tc-tag">LiteLLM</span><span class="tc-tag">LangChain</span><span class="tc-tag">RAG</span><span class="tc-tag">pgvector</span></div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(246,185,59,.15);color:var(--gy)">🌐</div>
+        <h4>Network Automation</h4>
+        <p>Netmiko SSH 多厂商适配、NAPALM 配置管理、pyserial 串口控制台、SNMP 采集与 Trap</p>
+        <div class="tc-stack"><span class="tc-tag">Netmiko 4.3</span><span class="tc-tag">NAPALM 4.1</span><span class="tc-tag">pyserial</span><span class="tc-tag">SNMP</span></div>
+      </div>
+      <div class="tech-card">
+        <div class="tc-icon" style="background:rgba(225,112,85,.12);color:var(--warn)">📊</div>
+        <h4>Monitoring & Infra</h4>
+        <p>Prometheus SNMP 指标采集、Grafana 预置仪表板、Docker Compose 多服务编排、Redis 缓存</p>
+        <div class="tc-stack"><span class="tc-tag">Prometheus</span><span class="tc-tag">Grafana</span><span class="tc-tag">Docker</span><span class="tc-tag">Redis</span><span class="tc-tag">Nginx</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== 26 Feature Modules ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>26 个功能模块</h2><p>按业务域分组的 Feature-first 架构，每个模块独立路由、服务和数据模型</p></div>
+    <div class="module-grid">
+
+      <div class="module-group mg-monitor">
+        <div class="module-group-header"><div class="mg-icon">📊</div>运维监控 (Monitoring)</div>
+        <div class="module-list">
+          <span class="module-tag">Dashboard 仪表板</span>
+          <span class="module-tag">Operations 运维总览</span>
+          <span class="module-tag">Monitor3D 数字孪生</span>
+          <span class="module-tag">Device Health 设备健康</span>
+          <span class="module-tag">AI Analysis AI分析</span>
+          <span class="module-tag">Workflows 自动化工作流</span>
+        </div>
+      </div>
+
+      <div class="module-group mg-device">
+        <div class="module-group-header"><div class="mg-icon">🖧</div>设备与运维 (Devices & Ops)</div>
+        <div class="module-list">
+          <span class="module-tag">Devices 设备列表</span>
+          <span class="module-tag">Discovery 设备发现</span>
+          <span class="module-tag">Backups 备份管理</span>
+          <span class="module-tag">Faults 故障管理</span>
+          <span class="module-tag">Maintenance 维修管理</span>
+          <span class="module-tag">Planned Ops 计划性运维</span>
+        </div>
+      </div>
+
+      <div class="module-group mg-config">
+        <div class="module-group-header"><div class="mg-icon">⚙</div>配置与部署 (Config & Deploy)</div>
+        <div class="module-list">
+          <span class="module-tag">Console 串口控制台</span>
+          <span class="module-tag">Deploy 配置部署</span>
+          <span class="module-tag">Templates 配置模板</span>
+          <span class="module-tag">Credentials SSH凭证</span>
+          <span class="module-tag">Compliance 配置合规</span>
+          <span class="module-tag">Tool Logs 工具日志</span>
+        </div>
+      </div>
+
+      <div class="module-group mg-spare">
+        <div class="module-group-header"><div class="mg-icon">📦</div>备品备件 (Spare Parts)</div>
+        <div class="module-list">
+          <span class="module-tag">Spare Parts 备件库存</span>
+          <span class="module-tag">Movements 出入库历史</span>
+          <span class="module-tag">Scrap 报废库存</span>
+        </div>
+      </div>
+
+      <div class="module-group mg-system">
+        <div class="module-group-header"><div class="mg-icon">🔧</div>系统与权限 (System)</div>
+        <div class="module-list">
+          <span class="module-tag">Users 用户管理</span>
+          <span class="module-tag">Permissions 角色权限</span>
+          <span class="module-tag">Notifications 通知中心</span>
+          <span class="module-tag">Alert Settings 告警设置</span>
+          <span class="module-tag">System Settings 系统设置</span>
+          <span class="module-tag">System Help 系统帮助</span>
+          <span class="module-tag">System Logs 系统日志</span>
+          <span class="module-tag">Scanner 扫码枪</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Services ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>核心服务层</h2><p>25+ 跨领域服务模块，支撑 AI、自动化、监控与通知</p></div>
+    <div class="service-grid">
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(168,85,247,.12);color:#a855f7">🤖</div>
+        <div>
+          <h5>AI Triage + ADK Agents</h5>
+          <p>故障智能分诊、运营研判、管理层摘要生成。Google ADK 驱动的合规审计、健康预测、根因诊断等 5 个专业 Agent</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(9,132,227,.12);color:var(--accent2)">🧠</div>
+        <div>
+          <h5>RAG Engine</h5>
+          <p>基于知识库文档的向量语义检索，pgvector 存储，支持设备手册、故障案例、SOP 文档的智能检索</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(0,184,148,.12);color:var(--accent)">⚡</div>
+        <div>
+          <h5>Workflow Engine</h5>
+          <p>规则引擎 + 触发器 + 动作执行器。支持定时备份、离线告警、自动创建工单、CPU 限流、合规扫描等自动化规则</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(246,185,59,.15);color:var(--gy)">📡</div>
+        <div>
+          <h5>Prometheus Connector + SNMP</h5>
+          <p>对接 Prometheus SNMP Exporter 拉取设备指标，SNMP Trap 实时接收 linkDown/linkUp 事件</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(225,112,85,.12);color:var(--warn)">🔍</div>
+        <div>
+          <h5>Reachability + Health Monitor</h5>
+          <p>ICMP/SSH 持续可达性探测，多因子设备健康评分（温度、故障频率、使用年限、维修频率、日志异常）</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(99,102,241,.12);color:#6366f1">📢</div>
+        <div>
+          <h5>Notification Services</h5>
+          <p>多渠道告警分发：SMTP 邮件、企业微信 Webhook、钉钉 Webhook、系统通知中心。统一通知服务编排</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(99,110,114,.12);color:#636e72">📐</div>
+        <div>
+          <h5>Monitor3D + Floor Plan</h5>
+          <p>Three.js 3D 数字孪生引擎，设备拖拽放置、光纤拓扑布线、流量热力图渲染、SNMP 采集健康面板</p>
+        </div>
+      </div>
+
+      <div class="service-card">
+        <div class="sc-icon" style="background:rgba(0,184,148,.12);color:var(--accent)">🔄</div>
+        <div>
+          <h5>Incident Automation + Insights</h5>
+          <p>故障自动处置引擎，事件关联分析、热点链路识别、根因 Top3 推断、影响范围评估</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Database Models ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>数据模型</h2><p>~40 个 SQLAlchemy ORM 模型，涵盖设备、配置、故障、备件、合规、AI 全部业务域</p></div>
+    <div class="arch-diagram">
+      <div class="models-table-wrap">
+        <table class="models-table">
+          <thead>
+            <tr><th>模型</th><th>表名</th><th>用途</th></tr>
+          </thead>
+          <tbody>
+            <tr><td class="mt-model">Device</td><td>devices</td><td>核心设备信息（指标、SNMP 配置、生命周期、健康评分）</td></tr>
+            <tr><td class="mt-model">BackupRecord</td><td>backup_records</td><td>配置备份快照（哈希、差异、历史）</td></tr>
+            <tr><td class="mt-model">FaultRecord</td><td>fault_records</td><td>故障单全生命周期（含 AI 诊断、自动化字段）</td></tr>
+            <tr><td class="mt-model">MaintenanceRecord</td><td>maintenance_records</td><td>维修单状态机（SLA、诊断、动作）</td></tr>
+            <tr><td class="mt-model">ConfigTemplate</td><td>config_templates</td><td>Jinja2 配置模板（变量定义、设备类型）</td></tr>
+            <tr><td class="mt-model">CredentialGroup</td><td>credential_groups</td><td>SSH 凭证组（加密存储）</td></tr>
+            <tr><td class="mt-model">User / Role / Permission</td><td>users / roles / permissions</td><td>用户认证 + RBAC 权限矩阵</td></tr>
+            <tr><td class="mt-model">SparePart / Instance / Movement</td><td>spare_parts / instances / movements</td><td>备件库存 + 单件追踪 + 出入库</td></tr>
+            <tr><td class="mt-model">FloorPlan / DeviceNode / TopoEdge</td><td>floor_plans / device_nodes / topo_edges</td><td>3D 监控大屏平面图与拓扑</td></tr>
+            <tr><td class="mt-model">DeviceHealthScore</td><td>device_health_scores</td><td>多因子健康评分历史</td></tr>
+            <tr><td class="mt-model">InterfaceTrafficSample</td><td>interface_traffic_samples</td><td>接口流量时序采样</td></tr>
+            <tr><td class="mt-model">WorkflowRule</td><td>workflow_rules</td><td>自动化工作流规则定义</td></tr>
+            <tr><td class="mt-model">MaintenancePlan / Task</td><td>maintenance_plans / tasks</td><td>计划性运维 + 任务分解</td></tr>
+            <tr><td class="mt-model">AopProgram / Project</td><td>aop_programs / aop_projects</td><td>年度运维规划 (AOP)</td></tr>
+            <tr><td class="mt-model">ComplianceRule / AuditLog</td><td>compliance_rules / audit_logs</td><td>AI 合规规则 + 审计追踪</td></tr>
+            <tr><td class="mt-model">AIAnalysisRecord</td><td>ai_analysis_records</td><td>AI 分析调用日志</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Testing ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>测试覆盖</h2><p>43 个测试文件 · 225 个测试用例 · 100% 通过率</p></div>
+    <div class="stats-bar">
+      <div class="stat-item accent"><div class="si-value">43</div><div class="si-label">测试文件</div></div>
+      <div class="stat-item accent2"><div class="si-value">225</div><div class="si-label">测试用例</div></div>
+      <div class="stat-item gold"><div class="si-value">100%</div><div class="si-label">通过率</div></div>
+      <div class="stat-item warn"><div class="si-value">pytest</div><div class="si-label">测试框架</div></div>
+    </div>
+    <div class="module-grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">
+      <div class="module-group">
+        <div class="module-group-header">🔧 核心服务测试</div>
+        <div class="module-list">
+          <span class="module-tag">Device Service</span>
+          <span class="module-tag">Backup Service</span>
+          <span class="module-tag">Dashboard Service</span>
+          <span class="module-tag">Spare Part Service</span>
+          <span class="module-tag">Log Service</span>
+          <span class="module-tag">Template Service</span>
+          <span class="module-tag">Credential Service</span>
+          <span class="module-tag">Deploy Service</span>
+          <span class="module-tag">Compliance Service</span>
+          <span class="module-tag">Console Service</span>
+          <span class="module-tag">Discovery Service</span>
+          <span class="module-tag">Email Service</span>
+          <span class="module-tag">Notification Service</span>
+        </div>
+      </div>
+      <div class="module-group">
+        <div class="module-group-header">🧠 AI / 监控 / 工作流测试</div>
+        <div class="module-list">
+          <span class="module-tag">AI Triage</span>
+          <span class="module-tag">AI i18n</span>
+          <span class="module-tag">Health Calculator</span>
+          <span class="module-tag">Monitor3D Traffic Heat</span>
+          <span class="module-tag">Monitor3D Command Summary</span>
+          <span class="module-tag">Prometheus Metric Facts</span>
+          <span class="module-tag">Workflow Idempotency</span>
+          <span class="module-tag">Incident Automation</span>
+          <span class="module-tag">AOP Planning</span>
+        </div>
+      </div>
+      <div class="module-group">
+        <div class="module-group-header">🏗 基础设施与回归测试</div>
+        <div class="module-list">
+          <span class="module-tag">Cache / Redis Cache</span>
+          <span class="module-tag">Rate Limiter</span>
+          <span class="module-tag">Auth / SSO</span>
+          <span class="module-tag">Git Config</span>
+          <span class="module-tag">Credentials Security</span>
+          <span class="module-tag">Metric Retention</span>
+          <span class="module-tag">PostgreSQL Concurrency</span>
+          <span class="module-tag">Vendor Adapter</span>
+          <span class="module-tag">AP Discovery</span>
+          <span class="module-tag">Batch Regressions</span>
+          <span class="module-tag">Fault Transfer Idempotency</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Deployment ===== -->
+<div class="container">
+  <div class="section">
+    <div class="section-header"><h2>部署架构</h2><p>Docker Compose 多服务编排 + 物理机混合部署</p></div>
+    <div class="arch-diagram">
+      <div class="arch-layers" style="min-width:0">
+        <div class="arch-layer">
+          <div class="arch-layer-label">边缘层</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box infra">Nginx Reverse Proxy</div>
+            <div class="arch-box infra">SSL Termination</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">应用层</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box backend">FastAPI Backend</div>
+            <div class="arch-box frontend">Vue Frontend</div>
+            <div class="arch-box frontend">React Frontend</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">任务层</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box warn">Celery Worker</div>
+            <div class="arch-box warn">Celery Beat Scheduler</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">数据层</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box data">PostgreSQL 15 + pgvector</div>
+            <div class="arch-box data">Redis 7 Cache</div>
+          </div>
+        </div>
+        <div class="arch-arrow">⬇</div>
+        <div class="arch-layer">
+          <div class="arch-layer-label">监控层</div>
+          <div class="arch-layer-boxes">
+            <div class="arch-box ai">Prometheus</div>
+            <div class="arch-box ai">snmp_exporter</div>
+            <div class="arch-box ai">Grafana</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Footer ===== -->
+<footer class="footer">
+  <p><b>Network Automation System v2.0</b> · FastAPI + Vue 3 + React 18 · SQLAlchemy 2.0 + Celery + Redis</p>
+  <p style="margin-top:6px">Feature-first Architecture · Dual Database (SQLite / PostgreSQL) · AI-powered Diagnostics · 3D Digital Twin</p>
+</footer>
+
+</body>
+</html>
