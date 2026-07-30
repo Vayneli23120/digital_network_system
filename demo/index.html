@@ -214,6 +214,22 @@ body.dark .dash-bg{background:radial-gradient(circle at top left,rgba(9,132,227,
 .kpi-stat .ks-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
 .kpi-stat .ks-value{font-size:26px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
 .kpi-stat .ks-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
+
+/* Module page stats cards - mirrors kpi-grid/kpi-stat style */
+.stats-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:20px}
+.stat-card{padding:14px 16px;border-radius:var(--radius-lg);background:var(--bg-card);border:1px solid var(--border-light);box-shadow:var(--shadow-sm);cursor:pointer;transition:all var(--transition)}
+.stat-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.stat-card.accent{border-left:3px solid var(--accent)}
+.stat-card.accent2{border-left:3px solid var(--accent2)}
+.stat-card.warn{border-left:3px solid var(--warn)}
+.stat-card.danger{border-left:3px solid var(--danger)}
+.stat-card .stat-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.stat-card .stat-value{font-size:26px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
+.stat-card.accent .stat-value{color:var(--accent)}
+.stat-card.accent2 .stat-value{color:var(--accent2)}
+.stat-card.warn .stat-value{color:var(--warn)}
+.stat-card.danger .stat-value{color:var(--danger)}
+.stat-card .stat-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
 .ks-trend{font-size:11px;font-weight:600}
 .ks-trend.up{color:var(--accent)}
 .ks-trend.down{color:var(--danger)}
