@@ -867,27 +867,36 @@ function goSlide(idx,animate=true){
   const nextSlide=document.querySelector(`.slide[data-index="${idx}"]`);
   if(!nextSlide||prevSlide===nextSlide)return;
 
+  const fwd=idx>current;
+
+  // ── Animate out previous slide ──
   if(prevSlide&&animate&&transitionsEnabled){
-    const dir=idx>current?'exit-left':'exit-right';
+    // clear leftover inline styles so CSS exit class wins
+    prevSlide.style.transform='';
+    prevSlide.style.opacity='';
     prevSlide.classList.remove('active');
-    prevSlide.classList.add(dir);
-    setTimeout(()=>{prevSlide.classList.remove(dir);},450);
+    prevSlide.classList.add(fwd?'exit-left':'exit-right');
+    setTimeout(()=>{prevSlide.classList.remove('exit-left','exit-right');},450);
   }else if(prevSlide){
     prevSlide.classList.remove('active');
   }
 
+  // ── Animate in next slide ──
+  // Always clear any stale inline styles first
+  nextSlide.style.transform='';
+  nextSlide.style.opacity='';
+
   if(animate&&transitionsEnabled){
-    nextSlide.style.transform=idx>current?'translateX(60px)':'translateX(-60px)';
+    // Set inline start position, then force reflow
+    nextSlide.style.transform=fwd?'translateX(60px)':'translateX(-60px)';
     nextSlide.style.opacity='0';
+    nextSlide.offsetHeight; // force reflow ─ commits the start position
     nextSlide.classList.add('active');
-    requestAnimationFrame(()=>{
-      nextSlide.style.transform='translateX(0)';
-      nextSlide.style.opacity='1';
-    });
-  }else{
-    nextSlide.classList.add('active');
+    // Remove inline styles → CSS transition from start → .active position
     nextSlide.style.transform='';
     nextSlide.style.opacity='';
+  }else{
+    nextSlide.classList.add('active');
   }
 
   current=idx;
