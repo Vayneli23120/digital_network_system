@@ -6,317 +6,515 @@
 <title>NAS - 网络自动化运维平台 Demo</title>
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
 <style>
-/* ===== Reset & Base ===== */
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-:root {
-  --gy: #f6b93b; --gy-pale: #FFF9D6;
-  --gb: #003087; --gb-deep: #001F5C; --gb-mid: #00419E;
-  --accent: #00b894; --accent2: #0984e3; --warn: #e17055; --danger: #d63031;
-  --radius-sm: 6px; --radius-md: 8px; --radius-lg: 12px; --radius-xl: 16px;
-  --topbar-h: 56px; --sidebar-w: 240px;
-  --font-body: 'Geist', 'Satoshi', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'Geist Mono', 'JetBrains Mono', 'Fira Code', monospace;
-  --bg: #f0f4fa; --bg-card: #fff; --bg-hover: #f1f5f9;
-  --text: #0D1B2A; --text2: #3A4A5C; --text3: #6B7A8D; --text-muted: #9BAABB;
-  --border: #E2E8F2; --border-light: #EEF2F6;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.06); --shadow-md: 0 4px 12px rgba(0,0,0,.08);
-  --shadow-lg: 0 8px 30px rgba(0,0,0,.10);
-  --transition: 0.25s cubic-bezier(.4,0,.2,1);
+/* ===== Reset & Design Tokens ===== */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --gy:#f6b93b;--gy-pale:#FFF9D6;--gb:#003087;--gb-deep:#001F5C;--gb-mid:#00419E;
+  --accent:#00b894;--accent2:#0984e3;--warn:#e17055;--danger:#d63031;
+  --radius-sm:6px;--radius-md:8px;--radius-lg:12px;--radius-xl:16px;--radius-2xl:18px;
+  --topbar-h:56px;--sidebar-w:240px;
+  --font-body:'Geist','Satoshi',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --font-mono:'Geist Mono','JetBrains Mono','Fira Code',monospace;
+  --bg:#f0f4fa;--bg-card:#fff;--bg-hover:#f1f5f9;--bg-tertiary:#f7f9fc;
+  --text:#0D1B2A;--text2:#3A4A5C;--text3:#6B7A8D;--text-muted:#9BAABB;
+  --border:#E2E8F2;--border-light:#EEF2F6;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.06);--shadow-md:0 4px 12px rgba(0,0,0,.08);
+  --shadow-lg:0 8px 30px rgba(0,0,0,.10);--shadow-xl:0 12px 40px rgba(15,23,42,.06);
+  --glass-bg:rgba(255,255,255,.84);--glass-border:rgba(255,255,255,.72);
+  --transition:.25s cubic-bezier(.4,0,.2,1);
 }
-body.dark {
-  --bg: #0d1117; --bg-card: #161b22; --bg-hover: #1c2333;
-  --text: #e6edf3; --text2: #c9d1d9; --text3: #8b949e; --text-muted: #6e7681;
-  --border: #30363d; --border-light: #21262d;
-  --shadow-sm: 0 1px 3px rgba(0,0,0,.3); --shadow-md: 0 4px 12px rgba(0,0,0,.4);
-  --shadow-lg: 0 8px 30px rgba(0,0,0,.5);
+body.dark{
+  --bg:#0d1117;--bg-card:#161b22;--bg-hover:#1c2333;--bg-tertiary:#1a1f2b;
+  --text:#e6edf3;--text2:#c9d1d9;--text3:#8b949e;--text-muted:#6e7681;
+  --border:#30363d;--border-light:#21262d;
+  --shadow-sm:0 1px 3px rgba(0,0,0,.3);--shadow-md:0 4px 12px rgba(0,0,0,.4);
+  --shadow-lg:0 8px 30px rgba(0,0,0,.5);--shadow-xl:0 16px 48px rgba(2,6,23,.3);
+  --glass-bg:rgba(15,23,42,.72);--glass-border:rgba(71,85,105,.28);
 }
-body { font-family: var(--font-body); background: var(--bg); color: var(--text); line-height: 1.6; min-height: 100vh; transition: background var(--transition), color var(--transition); }
+body{font-family:var(--font-body);background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;transition:background var(--transition),color var(--transition);overflow:hidden}
 
-/* ===== Login Overlay ===== */
-.login-overlay {
-  position: fixed; inset: 0; z-index: 9999;
-  background: linear-gradient(135deg, var(--gb-deep) 0%, var(--gb) 40%, var(--gb-mid) 100%);
-  display: flex; align-items: center; justify-content: center;
-  transition: opacity .5s, visibility .5s;
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ===== Login ===== */
+.login-overlay{
+  position:fixed;inset:0;z-index:9999;
+  background:linear-gradient(135deg,var(--gb-deep) 0%,var(--gb) 40%,var(--gb-mid) 100%);
+  display:flex;align-items:center;justify-content:center;transition:opacity .5s,visibility .5s;
 }
-.login-overlay.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
-.login-card {
-  background: #fff; border-radius: var(--radius-xl); padding: 48px 40px;
-  width: 420px; box-shadow: 0 20px 60px rgba(0,0,0,.3);
-}
-.login-card .logo-area { text-align: center; margin-bottom: 32px; }
-.login-card .logo-icon {
-  width: 56px; height: 56px; border-radius: 14px;
-  background: linear-gradient(135deg, var(--gb), var(--gb-deep));
-  display: inline-flex; align-items: center; justify-content: center;
-  color: #fff; font-size: 28px; margin-bottom: 12px;
-}
-.login-card h1 { font-size: 22px; color: var(--gb); font-weight: 700; }
-.login-card .sub { font-size: 13px; color: #6B7A8D; margin-top: 4px; }
-.login-card .field { margin-bottom: 20px; }
-.login-card label { display: block; font-size: 13px; font-weight: 600; color: #3A4A5C; margin-bottom: 6px; }
-.login-card input {
-  width: 100%; height: 44px; border: 1.5px solid #E2E8F2; border-radius: var(--radius-md);
-  padding: 0 14px; font-size: 14px; outline: none; transition: border var(--transition);
-}
-.login-card input:focus { border-color: var(--gb-mid); }
-.login-card .btn-login {
-  width: 100%; height: 46px; border: none; border-radius: var(--radius-md);
-  background: linear-gradient(135deg, var(--gb), var(--gb-deep));
-  color: #fff; font-size: 15px; font-weight: 700; cursor: pointer;
-  transition: opacity var(--transition); margin-top: 8px;
-}
-.login-card .btn-login:hover { opacity: 0.9; }
-.login-card .sso-hint { text-align: center; margin-top: 16px; font-size: 12px; color: #9BAABB; }
-.login-card .sso-hint a { color: var(--gb-mid); cursor: pointer; font-weight: 600; }
+.login-overlay.hidden{opacity:0;visibility:hidden;pointer-events:none}
+.login-card{background:#fff;border-radius:var(--radius-xl);padding:48px 40px;width:420px;box-shadow:0 20px 60px rgba(0,0,0,.3)}
+.login-card .logo-area{text-align:center;margin-bottom:32px}
+.login-card .logo-icon{width:56px;height:56px;border-radius:14px;background:linear-gradient(135deg,var(--gb),var(--gb-deep));display:inline-flex;align-items:center;justify-content:center;color:#fff;font-size:28px;margin-bottom:12px}
+.login-card h1{font-size:22px;color:var(--gb);font-weight:700}
+.login-card .sub{font-size:13px;color:#6B7A8D;margin-top:4px}
+.login-card .field{margin-bottom:20px}
+.login-card label{display:block;font-size:13px;font-weight:600;color:#3A4A5C;margin-bottom:6px}
+.login-card input{width:100%;height:44px;border:1.5px solid #E2E8F2;border-radius:var(--radius-md);padding:0 14px;font-size:14px;outline:none;transition:border var(--transition)}
+.login-card input:focus{border-color:var(--gb-mid)}
+.login-card .btn-login{width:100%;height:46px;border:none;border-radius:var(--radius-md);background:linear-gradient(135deg,var(--gb),var(--gb-deep));color:#fff;font-size:15px;font-weight:700;cursor:pointer;transition:opacity var(--transition);margin-top:8px}
+.login-card .btn-login:hover{opacity:.9}
+.login-card .sso-hint{text-align:center;margin-top:16px;font-size:12px;color:#9BAABB}
+.login-card .sso-hint a{color:var(--gb-mid);cursor:pointer;font-weight:600}
 
 /* ===== App Shell ===== */
-.app-shell { display: none; height: 100vh; flex-direction: column; }
-.app-shell.visible { display: flex; }
+.app-shell{display:none;height:100vh;flex-direction:column}
+.app-shell.visible{display:flex}
 
 /* ===== Topbar ===== */
-.topbar {
-  height: var(--topbar-h); background: linear-gradient(135deg, var(--gb) 0%, var(--gb-deep) 100%);
-  color: #fff; display: flex; flex-direction: column; flex-shrink: 0; position: relative; z-index: 100;
-}
-.topbar.dark { background: linear-gradient(135deg, #0d1117 0%, #161b22 100%); border-bottom: 1px solid var(--border); }
-.topbar-inner { display: flex; align-items: center; height: 53px; padding: 0 20px; gap: 24px; }
-.topbar-logo { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
-.logo-oval {
-  width: 32px; height: 32px; border-radius: 9px;
-  background: rgba(255,255,255,.18); display: flex; align-items: center; justify-content: center;
-  font-size: 18px;
-}
-.logo-text { font-size: 16px; font-weight: 700; letter-spacing: .3px; white-space: nowrap; }
-.top-nav { display: flex; gap: 4px; }
-.tn {
-  background: none; border: none; color: rgba(255,255,255,.75);
-  padding: 6px 16px; border-radius: 6px; font-size: 13.5px; font-weight: 600;
-  cursor: pointer; transition: all var(--transition); white-space: nowrap;
-}
-.tn:hover { color: #fff; background: rgba(255,255,255,.1); }
-.tn.active { color: #fff; background: rgba(255,255,255,.18); }
-.topbar.dark .tn { color: var(--text3); }
-.topbar.dark .tn:hover { color: var(--text); background: var(--bg-hover); }
-.topbar.dark .tn.active { color: var(--accent); background: rgba(0,184,148,.12); }
-.topbar-right { display: flex; align-items: center; gap: 8px; margin-left: auto; }
-.icon-btn {
-  width: 34px; height: 34px; border-radius: 8px; border: none;
-  background: rgba(255,255,255,.1); color: rgba(255,255,255,.8);
-  display: flex; align-items: center; justify-content: center;
-  cursor: pointer; font-size: 16px; transition: all var(--transition);
-}
-.icon-btn:hover { background: rgba(255,255,255,.2); color: #fff; }
-.topbar.dark .icon-btn { background: var(--bg-hover); color: var(--text3); }
-.topbar.dark .icon-btn:hover { color: var(--accent); }
-.lang-label { font-size: 12px; font-weight: 700; }
-.user-chip {
-  display: flex; align-items: center; gap: 8px; padding: 4px 12px 4px 4px;
-  border-radius: 20px; background: rgba(255,255,255,.1); cursor: pointer;
-  font-size: 13px; transition: background var(--transition);
-}
-.user-chip:hover { background: rgba(255,255,255,.2); }
-.user-avatar {
-  width: 28px; height: 28px; border-radius: 50%; background: var(--accent);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; color: #fff;
-}
-.topbar-underline { height: 3px; background: var(--gy); }
-.topbar.dark .topbar-underline { background: var(--accent); }
+.topbar{height:var(--topbar-h);background:linear-gradient(135deg,var(--gb) 0%,var(--gb-deep) 100%);color:#fff;display:flex;flex-direction:column;flex-shrink:0;position:relative;z-index:100}
+.topbar.dark{background:linear-gradient(135deg,#0d1117 0%,#161b22 100%);border-bottom:1px solid var(--border)}
+.topbar-inner{display:flex;align-items:center;height:53px;padding:0 20px;gap:24px}
+.topbar-logo{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.logo-oval{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.18);display:flex;align-items:center;justify-content:center;font-size:18px}
+.logo-text{font-size:16px;font-weight:700;letter-spacing:.3px;white-space:nowrap}
+.top-nav{display:flex;gap:4px}
+.tn{background:none;border:none;color:rgba(255,255,255,.75);padding:6px 16px;border-radius:6px;font-size:13.5px;font-weight:600;cursor:pointer;transition:all var(--transition);white-space:nowrap}
+.tn:hover{color:#fff;background:rgba(255,255,255,.1)}
+.tn.active{color:#fff;background:rgba(255,255,255,.18)}
+.topbar.dark .tn{color:var(--text3)}
+.topbar.dark .tn:hover{color:var(--text);background:var(--bg-hover)}
+.topbar.dark .tn.active{color:var(--accent);background:rgba(0,184,148,.12)}
+.topbar-right{display:flex;align-items:center;gap:8px;margin-left:auto}
+.icon-btn{width:34px;height:34px;border-radius:8px;border:none;background:rgba(255,255,255,.1);color:rgba(255,255,255,.8);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;transition:all var(--transition)}
+.icon-btn:hover{background:rgba(255,255,255,.2);color:#fff}
+.topbar.dark .icon-btn{background:var(--bg-hover);color:var(--text3)}
+.topbar.dark .icon-btn:hover{color:var(--accent)}
+.lang-label{font-size:12px;font-weight:700}
+.user-chip{display:flex;align-items:center;gap:8px;padding:4px 12px 4px 4px;border-radius:20px;background:rgba(255,255,255,.1);cursor:pointer;font-size:13px;transition:background var(--transition)}
+.user-chip:hover{background:rgba(255,255,255,.2)}
+.user-avatar{width:28px;height:28px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.topbar-underline{height:3px;background:var(--gy)}
+.topbar.dark .topbar-underline{background:var(--accent)}
 
 /* ===== Layout Body ===== */
-.layout-body { display: flex; flex: 1; overflow: hidden; }
+.layout-body{display:flex;flex:1;overflow:hidden}
 
 /* ===== Sidebar ===== */
-.sidebar {
-  width: var(--sidebar-w); flex-shrink: 0;
-  background: rgba(255,255,255,.72); backdrop-filter: blur(12px);
-  border-right: 1px solid var(--border); padding: 12px;
-  overflow-y: auto; transition: width var(--transition);
-}
-.sidebar.collapsed { width: 64px; }
-.sidebar.collapsed .sg-label, .sidebar.collapsed .mi-label { display: none; }
-.sidebar.collapsed .mi { justify-content: center; padding: 10px; }
-.sidebar.collapsed .sg-header { padding: 8px 4px; }
-body.dark .sidebar { background: rgba(22,27,34,.82); }
-.sidebar-group { margin-bottom: 4px; }
-.sg-header {
-  display: flex; align-items: center; gap: 8px; padding: 8px 10px;
-  font-size: 11px; font-weight: 700; text-transform: uppercase;
-  color: var(--text-muted); letter-spacing: .5px;
-}
-.sg-header .sg-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-muted); }
-.mi {
-  display: flex; align-items: center; gap: 10px; padding: 9px 12px;
-  border-radius: var(--radius-md); cursor: pointer; font-size: 13.5px;
-  color: var(--text2); transition: all var(--transition); text-decoration: none;
-  margin-bottom: 2px;
-}
-.mi:hover { background: var(--bg-hover); color: var(--text); }
-.mi.active { background: rgba(0,184,148,.12); color: var(--accent); font-weight: 700; }
-.mi .mi-icon { font-size: 18px; width: 20px; text-align: center; flex-shrink: 0; }
-body.dark .mi.active { background: rgba(0,184,148,.15); }
-.collapse-btn {
-  display: flex; align-items: center; justify-content: center;
-  padding: 8px; margin-top: 8px; border-top: 1px solid var(--border-light);
-  cursor: pointer; color: var(--text-muted); font-size: 14px;
-  transition: color var(--transition);
-}
-.collapse-btn:hover { color: var(--text2); }
+.sidebar{width:var(--sidebar-w);flex-shrink:0;background:rgba(255,255,255,.72);backdrop-filter:blur(12px);border-right:1px solid var(--border);padding:12px;overflow-y:auto;transition:width var(--transition)}
+.sidebar.collapsed{width:64px}
+.sidebar.collapsed .sg-label,.sidebar.collapsed .mi-label{display:none}
+.sidebar.collapsed .mi{justify-content:center;padding:10px}
+.sidebar.collapsed .sg-header{padding:8px 4px}
+body.dark .sidebar{background:rgba(22,27,34,.82)}
+.sidebar-group{margin-bottom:4px}
+.sg-header{display:flex;align-items:center;gap:8px;padding:8px 10px;font-size:11px;font-weight:700;text-transform:uppercase;color:var(--text-muted);letter-spacing:.5px}
+.sg-header .sg-dot{width:6px;height:6px;border-radius:50%;background:var(--text-muted)}
+.mi{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:var(--radius-md);cursor:pointer;font-size:13.5px;color:var(--text2);transition:all var(--transition);text-decoration:none;margin-bottom:2px}
+.mi:hover{background:var(--bg-hover);color:var(--text)}
+.mi.active{background:rgba(0,184,148,.12);color:var(--accent);font-weight:700}
+.mi .mi-icon{font-size:18px;width:20px;text-align:center;flex-shrink:0}
+body.dark .mi.active{background:rgba(0,184,148,.15)}
+.collapse-btn{display:flex;align-items:center;justify-content:center;padding:8px;margin-top:8px;border-top:1px solid var(--border-light);cursor:pointer;color:var(--text-muted);font-size:14px;transition:color var(--transition)}
+.collapse-btn:hover{color:var(--text2)}
 
 /* ===== Main Content ===== */
-.main-content { flex: 1; overflow-y: auto; padding: 24px; }
-.page { display: none; }
-.page.active { display: block; }
+.main-content{flex:1;overflow-y:auto}
+.page{display:none}
+.page.active{display:block}
 
 /* ===== Common Components ===== */
-.page-header { margin-bottom: 24px; }
-.page-header h2 { font-size: 22px; font-weight: 700; color: var(--text); }
-.page-header .breadcrumb { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
-.page-header .breadcrumb span { color: var(--accent2); }
+.badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700;line-height:1.8}
+.badge-green{background:rgba(0,184,148,.12);color:#009973}
+.badge-blue{background:rgba(9,132,227,.12);color:#0870c0}
+.badge-orange{background:rgba(225,112,85,.12);color:#c95130}
+.badge-red{background:rgba(214,48,49,.12);color:#b52020}
+.badge-gray{background:rgba(108,117,125,.12);color:#666}
+body.dark .badge-green{background:rgba(0,184,148,.18);color:#00b894}
+body.dark .badge-blue{background:rgba(9,132,227,.18);color:#4da6ff}
+body.dark .badge-orange{background:rgba(225,112,85,.18);color:#ff8a6f}
+body.dark .badge-red{background:rgba(214,48,49,.18);color:#ff5555}
+body.dark .badge-gray{background:rgba(139,148,158,.18);color:#aaa}
+.dot{width:8px;height:8px;border-radius:50%}
+.dot.critical{background:var(--danger)}
+.dot.major{background:var(--warn)}
+.dot.minor{background:var(--accent2)}
 
-/* Stats Row */
-.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-.stat-card {
-  background: var(--bg-card); border-radius: var(--radius-lg); padding: 20px 24px;
-  box-shadow: var(--shadow-sm); border: 1px solid var(--border-light);
-  transition: all var(--transition); position: relative; overflow: hidden;
-}
-.stat-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
-.stat-card .stat-label { font-size: 12px; color: var(--text3); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-.stat-card .stat-value { font-size: 32px; font-weight: 800; color: var(--text); font-family: var(--font-mono); }
-.stat-card .stat-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
-.stat-card .stat-icon {
-  position: absolute; right: 20px; top: 20px; font-size: 36px; opacity: .12;
-}
-.stat-card.accent { border-left: 3px solid var(--accent); }
-.stat-card.accent2 { border-left: 3px solid var(--accent2); }
-.stat-card.warn { border-left: 3px solid var(--warn); }
-.stat-card.danger { border-left: 3px solid var(--danger); }
-.stat-card .stat-change { font-size: 12px; font-weight: 600; }
-.stat-change.up { color: var(--accent); }
-.stat-change.down { color: var(--danger); }
+/* ===== Dashboard Page ===== */
+.dash-bg{background:radial-gradient(circle at top left,rgba(9,132,227,.08),transparent 28%),radial-gradient(circle at top right,rgba(0,184,148,.08),transparent 24%),linear-gradient(180deg,#f0f4fa 0%,#f7f9fc 48%,#f0f4fa 100%);min-height:100%}
+body.dark .dash-bg{background:radial-gradient(circle at top left,rgba(9,132,227,.1),transparent 28%),radial-gradient(circle at top right,rgba(0,184,148,.08),transparent 24%),linear-gradient(180deg,#070b14 0%,#0a0e14 48%,#070b14 100%)}
+.dash-shell{padding:24px;display:flex;flex-direction:column;gap:24px;max-width:1600px;margin:0 auto}
+.dash-toolbar{display:flex;align-items:center;justify-content:space-between}
+.dash-title{font-size:18px;font-weight:700}
+.dash-actions{display:flex;gap:8px}
+.btn{padding:0 16px;height:34px;border-radius:var(--radius-md);font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid transparent;transition:all var(--transition);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn-sm{height:28px;padding:0 10px;font-size:12px}
+.btn-primary{background:var(--accent2);color:#fff;border-color:var(--accent2)}
+.btn-primary:hover{opacity:.85}
+.btn-outline{border-color:var(--border);background:var(--bg-card);color:var(--text2)}
+.btn-outline:hover{border-color:var(--accent2);color:var(--accent2)}
 
-/* Card Panel */
-.card-panel {
-  background: var(--bg-card); border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-sm); border: 1px solid var(--border-light);
-  padding: 20px 24px; margin-bottom: 20px;
-}
-.card-panel .panel-title {
-  font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 16px;
-  padding-bottom: 12px; border-bottom: 1px solid var(--border-light);
-  display: flex; align-items: center; gap: 8px;
-}
-.panel-title .dot { width: 8px; height: 8px; border-radius: 50%; }
-.panel-title .dot.green { background: var(--accent); }
-.panel-title .dot.blue { background: var(--accent2); }
-.panel-title .dot.orange { background: var(--warn); }
+/* Widget Grid */
+.widget-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}
+.widget{grid-column:span 4;position:relative;min-height:0}
+.widget.span-1{grid-column:span 1}
+.widget.span-2{grid-column:span 2}
+.widget.span-3{grid-column:span 3}
+.widget.span-4{grid-column:span 4}
+.widget.h-1 .widget-body{min-height:90px}
+.widget.h-2 .widget-body{min-height:220px}
+.widget.h-3 .widget-body{min-height:340px}
+.widget-body{height:100%}
 
-/* Grid Layout */
-.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px; }
-.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
+/* Realtime Status Strip */
+.realtime-strip{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:14px 18px;border-radius:var(--radius-lg);background:var(--bg-card);border:1px solid var(--border);border-left:4px solid #22c55e}
+.realtime-strip.yellow{border-left-color:#facc15}
+.realtime-strip.red{border-left-color:#ef4444}
+.rt-headline{display:flex;align-items:center;gap:8px;font-weight:600}
+.rt-title{font-size:14px;color:var(--text)}
+.rt-dot{width:10px;height:10px;border-radius:50%;background:#22c55e}
+.rt-dot.yellow{background:#facc15}
+.rt-dot.red{background:#ef4444;animation:rt-pulse 1.4s infinite}
+@keyframes rt-pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.rt-metrics{display:flex;gap:24px;flex-wrap:wrap;flex:1}
+.rt-item{display:flex;flex-direction:column}
+.rt-num{font-size:20px;font-weight:700;color:var(--text);line-height:1.1;font-family:var(--font-mono)}
+.rt-label{font-size:12px;color:var(--text-muted)}
+.rt-item.warning .rt-num{color:#d97706}
+.rt-item.danger .rt-num{color:#ef4444}
+.rt-link{font-size:13px;font-weight:600;color:var(--accent2);text-decoration:none;white-space:nowrap}
+.rt-link:hover{text-decoration:underline}
 
-/* Table */
-.data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.data-table th {
-  text-align: left; padding: 10px 14px; font-size: 11px; font-weight: 700;
-  color: var(--text3); text-transform: uppercase; letter-spacing: .5px;
-  border-bottom: 2px solid var(--border); white-space: nowrap;
-}
-.data-table td {
-  padding: 10px 14px; border-bottom: 1px solid var(--border-light);
-  color: var(--text2); white-space: nowrap;
-}
-.data-table tbody tr { transition: background var(--transition); }
-.data-table tbody tr:hover { background: var(--bg-hover); }
-.data-table .text-mono { font-family: var(--font-mono); font-size: 12px; }
+/* Sites Breakdown */
+.site-breakdown{display:flex;flex-direction:column;gap:8px}
+.site-title{font-size:13px;font-weight:600;color:var(--text2)}
+.site-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.site-card{padding:10px 12px;border-radius:var(--radius-md);background:var(--bg-card);border:1px solid var(--border);border-top:3px solid #22c55e}
+.site-card.yellow{border-top-color:#facc15}
+.site-card.red{border-top-color:#ef4444}
+.site-head{display:flex;align-items:center;gap:6px}
+.site-dot{width:8px;height:8px;border-radius:50%;background:#22c55e}
+.site-dot.yellow{background:#facc15}
+.site-dot.red{background:#ef4444}
+.site-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.site-avail{font-size:22px;font-weight:700;color:var(--text);margin:2px 0;font-family:var(--font-mono)}
+.site-meta{font-size:12px;color:var(--text-muted)}
+.site-meta .off{color:#ef4444}
+.site-meta .flt{color:#d97706}
 
-/* Badges */
-.badge {
-  display: inline-block; padding: 2px 10px; border-radius: 20px;
-  font-size: 11px; font-weight: 700; line-height: 1.8;
-}
-.badge-green { background: rgba(0,184,148,.12); color: #009973; }
-.badge-blue { background: rgba(9,132,227,.12); color: #0870c0; }
-.badge-orange { background: rgba(225,112,85,.12); color: #c95130; }
-.badge-red { background: rgba(214,48,49,.12); color: #b52020; }
-.badge-gray { background: rgba(108,117,125,.12); color: #666; }
-body.dark .badge-green { background: rgba(0,184,148,.18); color: #00b894; }
-body.dark .badge-blue { background: rgba(9,132,227,.18); color: #4da6ff; }
-body.dark .badge-orange { background: rgba(225,112,85,.18); color: #ff8a6f; }
-body.dark .badge-red { background: rgba(214,48,49,.18); color: #ff5555; }
-body.dark .badge-gray { background: rgba(139,148,158,.18); color: #aaa; }
+/* Summary Bar */
+.summary-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;border-radius:var(--radius-lg);background:var(--bg-card);border:1px solid var(--border)}
+.summary-bar.risk{background:rgba(239,68,68,.1);border-color:rgba(239,68,68,.3)}
+.summary-bar.warning{background:rgba(245,158,11,.1);border-color:rgba(245,158,11,.3)}
+.summary-bar.stable{background:rgba(16,185,129,.1);border-color:rgba(16,185,129,.3)}
+.summary-icon{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:var(--radius-md);background:var(--bg-tertiary)}
+.summary-bar.risk .summary-icon{background:rgba(239,68,68,.2);color:#ef4444}
+.summary-bar.warning .summary-icon{background:rgba(245,158,11,.2);color:#f59e0b}
+.summary-bar.stable .summary-icon{background:rgba(16,185,129,.2);color:#10b981}
+.summary-text{font-size:14px;font-weight:500;color:var(--text);flex:1;min-width:0}
+.summary-range{font-size:11px;color:var(--text-muted);padding:2px 8px;background:var(--bg-tertiary);border-radius:var(--radius-sm);white-space:nowrap}
+.summary-ai-badge{font-size:10px;color:#fff;padding:1px 7px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#0ea5e9);white-space:nowrap}
 
-/* AI Insight Bar */
-.ai-insight {
-  background: linear-gradient(135deg, rgba(0,184,148,.08), rgba(9,132,227,.08));
-  border: 1px solid rgba(0,184,148,.2); border-radius: var(--radius-lg);
-  padding: 14px 20px; display: flex; align-items: center; gap: 12px;
-  margin-bottom: 24px; font-size: 13.5px;
-}
-.ai-insight .ai-icon {
-  font-size: 20px; flex-shrink: 0;
-}
-.ai-insight .ai-text { color: var(--text2); flex: 1; }
-.ai-insight .ai-text strong { color: var(--accent); }
+/* KPI Stats Grid */
+.kpi-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.kpi-stat{padding:14px 16px;border-radius:var(--radius-lg);background:var(--bg-card);border:1px solid var(--border-light);box-shadow:var(--shadow-sm);cursor:pointer;transition:all var(--transition)}
+.kpi-stat:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.kpi-stat .ks-label{font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px}
+.kpi-stat .ks-value{font-size:26px;font-weight:800;font-family:var(--font-mono);line-height:1.1}
+.kpi-stat .ks-sub{font-size:11px;color:var(--text-muted);margin-top:4px}
+.ks-trend{font-size:11px;font-weight:600}
+.ks-trend.up{color:var(--accent)}
+.ks-trend.down{color:var(--danger)}
 
-/* Chart Container */
-.chart-box { width: 100%; height: 300px; }
+/* MTTR Funnel */
+.mttr-funnel{padding:8px 0}
+.mttr-funnel .mttr-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:12px}
+.mttr-stage{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.mttr-stage .mttr-name{width:80px;font-size:12px;color:var(--text2);text-align:right;flex-shrink:0}
+.mttr-stage .mttr-bar-wrap{flex:1;height:24px;background:var(--bg-hover);border-radius:4px;overflow:hidden}
+.mttr-stage .mttr-bar{height:100%;border-radius:4px;transition:width .5s ease;display:flex;align-items:center;padding-left:8px}
+.mttr-stage .mttr-bar-label{font-size:11px;color:#fff;font-weight:600;font-family:var(--font-mono)}
 
-/* Alert Stream */
-.alert-list { list-style: none; max-height: 260px; overflow-y: auto; }
-.alert-list li {
-  display: flex; align-items: flex-start; gap: 10px; padding: 10px 0;
-  border-bottom: 1px solid var(--border-light); font-size: 13px;
-}
-.alert-list li:last-child { border-bottom: none; }
-.alert-list .alert-dot {
-  width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex-shrink: 0;
-}
-.alert-list .alert-time { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+/* Pareto Chart */
+.pareto-wrap{display:flex;flex-direction:column;gap:8px}
+.pareto-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.pareto-row{display:flex;align-items:center;gap:10px}
+.pareto-row .p-name{width:100px;font-size:12px;color:var(--text2);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0}
+.pareto-row .p-bar-wrap{flex:1;height:20px;background:var(--bg-hover);border-radius:4px;overflow:hidden}
+.pareto-row .p-bar{height:100%;border-radius:4px;transition:width .5s ease}
+.pareto-row .p-val{font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-mono);width:36px;text-align:right;flex-shrink:0}
 
-/* Toolbar */
-.toolbar {
-  display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
-}
-.toolbar .search-input {
-  height: 36px; border: 1.5px solid var(--border); border-radius: var(--radius-md);
-  padding: 0 12px; font-size: 13px; width: 260px; outline: none;
-  background: var(--bg-card); color: var(--text); transition: border var(--transition);
-}
-.toolbar .search-input:focus { border-color: var(--accent2); }
-.btn {
-  height: 36px; padding: 0 18px; border-radius: var(--radius-md); font-size: 13px;
-  font-weight: 600; cursor: pointer; border: 1.5px solid transparent;
-  transition: all var(--transition); display: inline-flex; align-items: center; gap: 6px;
-  white-space: nowrap;
-}
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover { opacity: .85; }
-.btn-outline { border-color: var(--border); background: var(--bg-card); color: var(--text2); }
-.btn-outline:hover { border-color: var(--accent2); color: var(--accent2); }
+/* SLO Error Budget */
+.slo-wrap{display:flex;flex-direction:column;gap:10px}
+.slo-title{font-size:13px;font-weight:700;color:var(--text);margin-bottom:4px}
+.slo-row{display:flex;align-items:center;gap:12px}
+.slo-row .slo-name{width:100px;font-size:12px;color:var(--text2);text-align:right;flex-shrink:0}
+.slo-row .slo-bar-wrap{flex:1;height:10px;background:var(--bg-hover);border-radius:5px;overflow:hidden}
+.slo-row .slo-bar{height:100%;border-radius:5px;transition:width .5s ease}
+.slo-row .slo-bar.burnt{background:var(--danger)}
+.slo-row .slo-bar.remaining{background:var(--accent)}
+.slo-row .slo-pct{font-size:12px;font-weight:600;color:var(--text);font-family:var(--font-mono);width:48px;text-align:right;flex-shrink:0}
+
+/* Change-Fault Correlation */
+.change-corr{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.change-corr .cc-item{display:flex;flex-direction:column;align-items:center;padding:8px 16px;border-radius:var(--radius-md);background:var(--bg-tertiary)}
+.change-corr .cc-num{font-size:24px;font-weight:700;font-family:var(--font-mono)}
+.change-corr .cc-label{font-size:11px;color:var(--text3)}
+
+/* Dashboard Footer */
+.dash-footer{display:flex;justify-content:space-between;align-items:center;padding:14px 24px;border-radius:var(--radius-xl);background:rgba(15,23,42,.92);border:1px solid rgba(255,255,255,.06);color:rgba(203,213,225,.35);font-size:12px;font-family:var(--font-mono)}
+
+/* ===== Operations Page ===== */
+.ops-shell{padding:24px;display:flex;flex-direction:column;gap:24px;max-width:1600px;margin:0 auto;min-height:100%}
+
+/* AI Recommendations */
+.ai-reco-strip{border:1px solid var(--border);border-radius:10px;background:var(--bg-card);padding:14px 16px}
+.ai-reco-head{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.ai-reco-title{font-size:14px;font-weight:700}
+.ai-reco-count{min-width:20px;height:20px;padding:0 6px;border-radius:10px;background:#ef4444;color:#fff;font-size:12px;line-height:20px;text-align:center}
+.ai-reco-badge{padding:1px 8px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#0ea5e9);color:#fff;font-size:11px;line-height:18px;white-space:nowrap}
+.ai-reco-pending{display:inline-flex;align-items:center;gap:5px;font-size:11px;color:var(--text2);white-space:nowrap}
+.ai-reco-dot{width:7px;height:7px;border-radius:50%;background:#6366f1;animation:aiRecoPulse 1s ease-in-out infinite}
+@keyframes aiRecoPulse{0%,100%{opacity:.3;transform:scale(.8)}50%{opacity:1;transform:scale(1.1)}}
+.ai-briefing{margin-bottom:12px;padding:10px 12px;border-radius:8px;background:rgba(99,102,241,.06);border:1px solid rgba(99,102,241,.18)}
+.ai-briefing-text{margin:0;font-size:13px;font-weight:600;color:var(--text)}
+.ai-briefing-priorities{margin:6px 0 0;padding-left:18px;font-size:12px;color:var(--text2)}
+.ai-briefing-priorities li{margin:2px 0}
+.ai-briefing-insight{margin:6px 0 0;font-size:12px;font-style:italic;color:var(--text2)}
+.ai-reco-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px}
+.ai-reco-card{display:flex;flex-direction:column;gap:4px;text-align:left;padding:10px 12px;border:1px solid var(--border);border-left-width:4px;border-radius:8px;background:var(--bg-card);cursor:pointer;transition:box-shadow .15s}
+.ai-reco-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08)}
+.ai-reco-card.critical{border-left-color:var(--danger)}
+.ai-reco-card.high{border-left-color:var(--warn)}
+.ai-reco-card.medium{border-left-color:#f59e0b}
+.ai-reco-card.low{border-left-color:var(--accent2)}
+.ai-reco-cat{font-size:11px;color:var(--text2);text-transform:uppercase}
+.ai-reco-card-title{font-size:13px;color:var(--text);font-weight:700}
+.ai-reco-detail{font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Section Heading */
+.section-heading{display:flex;justify-content:space-between;align-items:end;gap:18px;margin-bottom:16px}
+.section-title{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.03em}
+.section-desc{max-width:460px;font-size:13px;line-height:1.6;color:var(--text3);text-align:right}
+
+/* Ops KPI Cards */
+.ops-kpi-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}
+.ops-kpi-card{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:var(--radius-2xl);box-shadow:var(--shadow-xl);backdrop-filter:blur(14px);padding:20px;transition:all .25s ease;cursor:pointer}
+.ops-kpi-card:hover{transform:translateY(-3px);box-shadow:0 18px 48px rgba(9,132,227,.1)}
+.ops-kpi-card.span-row{grid-row:span 2}
+
+.kpi-header{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.kpi-icon{width:36px;height:36px;display:flex;align-items:center;justify-content:center;border-radius:10px;flex-shrink:0}
+.kpi-icon svg{width:16px;height:16px}
+.kpi-icon.devices{background:rgba(9,132,227,.12);color:var(--accent2)}
+.kpi-icon.faults{background:rgba(214,48,49,.12);color:var(--danger)}
+.kpi-icon.cost{background:rgba(225,112,85,.12);color:var(--warn)}
+.kpi-icon.inventory{background:rgba(46,139,87,.12);color:#2e8b57}
+.kpi-icon.has-alert{animation:pulse-warning 2s infinite}
+@keyframes pulse-warning{0%,100%{opacity:1}50%{opacity:.7}}
+.kpi-title{font-size:12px;font-weight:600;color:var(--text2);letter-spacing:.03em}
+.trend-badge{margin-left:auto;padding:3px 10px;border-radius:999px;background:rgba(0,184,148,.08);color:#059669;font-size:11px;font-weight:600}
+.trend-badge.alert{background:rgba(214,48,49,.12);color:var(--danger);border:1px solid rgba(214,48,49,.3)}
+.device-health-score{margin-left:auto;font-family:var(--font-mono);font-size:14px;font-weight:700;padding:4px 10px;border-radius:999px}
+.device-health-score.healthy{background:rgba(0,184,148,.12);color:var(--accent)}
+.device-health-score.warning{background:rgba(245,158,11,.12);color:#f59e0b}
+.device-health-score.critical{background:rgba(239,68,68,.12);color:#ef4444}
+body.dark .device-health-score.healthy{background:rgba(0,184,148,.15);color:#55efc4}
+body.dark .device-health-score.warning{background:rgba(245,158,11,.15);color:#fbbf24}
+body.dark .device-health-score.critical{background:rgba(239,68,68,.15);color:#f87171}
+
+/* NOC Device Panel */
+.noc-device-panel{display:flex;flex-direction:column;gap:16px}
+.noc-top-section{display:flex;align-items:center;gap:16px;padding-bottom:14px;border-bottom:1px solid rgba(148,163,184,.1)}
+.noc-health-gauge{position:relative;width:80px;height:80px;flex-shrink:0}
+.noc-ring{width:100%;height:100%;transform:rotate(-90deg)}
+.noc-ring-bg{fill:none;stroke:rgba(148,163,184,.12);stroke-width:8}
+.noc-ring-progress{fill:none;stroke-width:8;stroke-linecap:round;transition:stroke-dashoffset .6s ease}
+.noc-ring-progress.healthy{stroke:var(--accent)}
+.noc-ring-progress.warning{stroke:#f59e0b}
+.noc-ring-progress.critical{stroke:#ef4444}
+.noc-health-center{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);display:flex;flex-direction:column;align-items:center;gap:2px}
+.noc-health-value{font-family:var(--font-mono);font-size:22px;font-weight:700;color:var(--text);line-height:1}
+.noc-health-label{font-size:9px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.08em}
+.noc-quick-stats{flex:1;display:flex;gap:8px}
+.noc-stat-box{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 6px;border-radius:10px;background:rgba(248,250,252,.92)}
+body.dark .noc-stat-box{background:rgba(30,41,59,.5)}
+.noc-stat-value{font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text)}
+.noc-stat-value.reachability{color:var(--accent)}
+.noc-stat-value.warning{color:#f59e0b}
+.noc-stat-label{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+.noc-layers{display:flex;flex-direction:column;gap:12px}
+.noc-layer{display:flex;flex-direction:column;gap:6px}
+.noc-layer-header{display:flex;justify-content:space-between;align-items:center}
+.noc-layer-name{font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em}
+.noc-layer-count{font-family:var(--font-mono);font-size:11px;font-weight:600;color:var(--text-muted)}
+.noc-layer-bar{height:6px;border-radius:3px;overflow:hidden;background:rgba(148,163,184,.1);display:flex}
+.noc-segment{transition:width .4s ease}
+.noc-segment.reachable{background:var(--accent)}
+.noc-segment.unreachable{background:#ef4444}
+.noc-segment.maintenance{background:#f59e0b}
+.noc-layer-types{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px}
+.noc-type-pill{display:inline-flex;align-items:center;gap:5px;padding:4px 10px;border-radius:999px;background:rgba(248,250,252,.92);font-size:11px;opacity:.4}
+body.dark .noc-type-pill{background:rgba(30,41,59,.5)}
+.noc-type-pill.active{opacity:1}
+.noc-type-pill.alert{background:rgba(239,68,68,.08)}
+.noc-type-dot{width:6px;height:6px;border-radius:50%}
+.noc-type-dot.ok{background:var(--accent)}
+.noc-type-dot.warn{background:#f59e0b}
+.noc-type-dot.alert{background:#ef4444}
+.noc-type-dot.empty{background:#94a3b8}
+.noc-type-name{color:var(--text2)}
+.noc-type-num{font-family:var(--font-mono);font-weight:600;color:var(--text)}
+.noc-compliance{background:rgba(9,132,227,.04);border:1px solid rgba(9,132,227,.1);border-radius:10px;padding:10px 12px}
+.noc-compliance-header{display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:var(--accent2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px}
+.noc-compliance-grid{display:flex;flex-direction:column;gap:6px}
+.noc-compliance-item{display:flex;align-items:center;gap:8px;font-size:11px}
+.noc-compliance-bar{width:60px;height:4px;border-radius:2px;background:rgba(148,163,184,.1);overflow:hidden}
+.noc-compliance-fill{height:100%;border-radius:2px;background:var(--accent)}
+.noc-compliance-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.noc-compliance-dot.changed{background:#f59e0b}
+.noc-compliance-dot.issue{background:#ef4444}
+.noc-compliance-label{color:var(--text3);flex:1}
+.noc-compliance-value{font-family:var(--font-mono);font-weight:600;color:var(--text)}
+
+/* Fault Events Card */
+.big-number{font-family:var(--font-mono);font-size:32px;font-weight:700;color:var(--text);letter-spacing:-.03em;margin-bottom:2px}
+.big-number.danger{color:var(--danger)}
+.big-number.success{color:var(--accent)}
+.fault-active-section{text-align:center;margin-bottom:8px}
+.fault-active-section.has-active{background:rgba(214,48,49,.04);border-radius:8px;padding:8px}
+.active-label{font-size:11px;color:var(--text3);margin-top:2px}
+.severity-row{display:flex;gap:10px;justify-content:center}
+.severity-tag{display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:8px;background:rgba(248,250,252,.92)}
+body.dark .severity-tag{background:rgba(30,41,59,.6)}
+.severity-label{font-size:12px;font-weight:500;color:var(--text2)}
+.severity-num{font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--text)}
+.fault-resolved-section{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:6px;padding:4px 8px;background:rgba(0,184,148,.06);border-radius:6px}
+.resolved-label{font-size:11px;color:var(--text3)}
+.resolved-num{font-size:12px;font-weight:600;color:var(--accent)}
+.resolved-period{font-size:10px;color:var(--text-muted)}
+.fault-maintenance-footer{display:flex;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid rgba(148,163,184,.1)}
+.maint-label{font-size:10px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.06em}
+.maint-item{font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;background:rgba(248,250,252,.6)}
+.maint-item.warn{color:#d97706}
+.maint-item.active{color:var(--accent2)}
+.maint-item.success{color:#059669}
+
+/* Cost Card */
+.cost-split{display:flex;gap:12px;margin:8px 0}
+.cost-item-label{display:flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;background:rgba(248,250,252,.92);font-size:12px;color:var(--text2)}
+body.dark .cost-item-label{background:rgba(30,41,59,.6)}
+.cost-dot{width:8px;height:8px;border-radius:3px;flex-shrink:0}
+.cost-dot.parts{background:rgba(225,112,85,.9)}
+.cost-dot.labor{background:rgba(9,132,227,.9)}
+.cost-bar-chart{height:70px;margin-top:4px}
+.bar-group{display:flex;align-items:flex-end;justify-content:space-around;height:56px;padding:0 2px;gap:4px}
+.cost-bar-item{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.cost-bar-track{width:100%;height:50px;position:relative;background:rgba(148,163,184,.08);border-radius:4px;overflow:hidden}
+.cost-bar-fill{position:absolute;bottom:0;left:0;width:100%;border-radius:4px;transition:height .4s ease}
+.cost-bar-fill.parts{background:rgba(225,112,85,.7)}
+.cost-bar-fill.labor{background:rgba(9,132,227,.7)}
+.cost-bar-label{font-size:9px;color:var(--text-muted);font-family:var(--font-mono);white-space:nowrap}
+
+/* Spare Row */
+.spare-row{display:flex;gap:8px}
+.spare-stat{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;padding:10px;border-radius:10px;background:rgba(248,250,252,.92);font-size:11px;color:var(--text3);text-align:center}
+body.dark .spare-stat{background:rgba(30,41,59,.5)}
+.spare-num{font-family:var(--font-mono);font-size:18px;font-weight:700;color:var(--text)}
+.spare-num.warning{color:#d97706}
+
+/* Top 5 List */
+.top5-list{display:flex;flex-direction:column;gap:6px}
+.top5-item{display:grid;grid-template-columns:18px 1fr 28px;align-items:center;gap:6px;padding:4px 8px;border-radius:8px;background:rgba(248,250,252,.92);transition:background .15s}
+body.dark .top5-item{background:rgba(30,41,59,.5)}
+.top5-item:hover{background:rgba(148,163,184,.12)}
+.top5-rank{font-family:var(--font-mono);font-size:11px;font-weight:700;color:var(--text-muted);text-align:center}
+.top5-name{font-size:12px;font-weight:500;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.top5-count{font-family:var(--font-mono);font-size:12px;font-weight:600;color:var(--danger);text-align:right}
+
+/* Charts Section */
+.charts-split{display:grid;grid-template-columns:2fr 1fr;gap:16px}
+.chart-panel,.risk-panel,.activity-panel{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:var(--radius-2xl);box-shadow:var(--shadow-xl);backdrop-filter:blur(14px);overflow:hidden}
+.chart-panel.emphasis{background:linear-gradient(180deg,rgba(255,255,255,.92),rgba(243,248,252,.92))}
+body.dark .chart-panel.emphasis{background:linear-gradient(180deg,rgba(15,23,42,.86),rgba(13,17,23,.82))}
+.panel-header{display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid rgba(148,163,184,.12)}
+.panel-title{font-size:14px;font-weight:700;color:var(--text)}
+.panel-body{padding:20px}
+.link-btn{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--accent2);background:transparent;border:none;cursor:pointer;transition:color .2s}
+.link-btn:hover{color:#0b6ec2}
+.pill-tabs{display:flex;gap:4px;padding:3px;background:rgba(148,163,184,.1);border-radius:10px}
+.pill-tab{padding:5px 12px;font-size:11px;font-weight:600;color:var(--text3);background:transparent;border:none;border-radius:8px;cursor:pointer;transition:all .2s;font-family:var(--font-mono)}
+.pill-tab:hover{color:var(--text)}
+.pill-tab.active{background:var(--bg-card);color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.date-input{padding:5px 8px;font-size:11px;background:rgba(255,255,255,.92);border:1px solid rgba(148,163,184,.2);border-radius:8px;color:#334155;font-family:var(--font-mono);width:110px}
+body.dark .date-input{background:rgba(30,41,59,.7);border-color:rgba(71,85,105,.3);color:#e2e8f0}
+.date-separator{color:var(--text3);font-size:11px}
+.line-chart-container{height:300px}
+.alert-badge{display:inline-flex;align-items:center;justify-content:center;min-width:18px;height:18px;padding:2px 6px;font-size:11px;font-weight:600;color:#fff;background:var(--danger);border-radius:999px}
+
+/* Backup Panel */
+.backup-panel-list{display:flex;flex-direction:column;gap:0}
+.backup-panel-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid rgba(148,163,184,.1);font-size:12px}
+.backup-panel-item:last-child{border-bottom:none}
+.backup-panel-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.backup-panel-dot.changed{background:#f59e0b}
+.backup-panel-name{flex:1;color:var(--text);font-weight:500}
+.backup-panel-time{font-family:var(--font-mono);font-size:11px;color:var(--text-muted)}
+
+/* Event Stream */
+.event-item{display:flex;gap:12px;padding:14px 20px;transition:background .2s;cursor:pointer}
+.event-item:hover{background:rgba(248,250,252,.6)}
+body.dark .event-item:hover{background:rgba(30,41,59,.4)}
+.event-timeline-marker{display:flex;flex-direction:column;align-items:center;gap:0;padding-top:4px}
+.event-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.event-dot.danger{background:var(--danger)}
+.event-dot.warn{background:var(--warn)}
+.event-dot.info{background:var(--accent2)}
+.event-dot.success{background:var(--accent)}
+.event-line{width:2px;flex:1;background:rgba(148,163,184,.15);margin-top:4px}
+.event-item:last-child .event-line{display:none}
+.event-content{display:flex;flex-direction:column;gap:2px;flex:1}
+.event-title{font-size:13px;font-weight:600;color:var(--text)}
+.event-summary{font-size:12px;color:var(--text3)}
+.event-time{font-size:11px;font-family:var(--font-mono);color:var(--text-muted)}
+.event-empty{padding:32px 20px;text-align:center;color:var(--text-muted);font-size:13px}
+
+/* Activity Feed */
+.activity-item{display:flex;gap:12px;padding:14px 20px;transition:background .2s;cursor:pointer}
+.activity-item:hover{background:rgba(248,250,252,.6)}
+body.dark .activity-item:hover{background:rgba(30,41,59,.4)}
+.activity-icon{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.activity-icon.backup{background:rgba(0,184,148,.1);color:#059669}
+.activity-icon.fault{background:rgba(214,48,49,.1);color:var(--danger)}
+.activity-icon.maintenance{background:rgba(245,158,11,.1);color:#d97706}
+.activity-icon.health{background:rgba(71,85,105,.08);color:var(--text2)}
+.activity-body{display:flex;flex-direction:column;gap:2px;flex:1}
+.activity-text{font-size:13px;color:var(--text);line-height:1.4}
+.activity-time{font-size:11px;font-family:var(--font-mono);color:var(--text-muted)}
+
+/* Activity Grid */
+.activity-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+
+/* ===== Simple Pages (Devices, Backups, Faults) ===== */
+.simple-shell{padding:24px;max-width:1600px;margin:0 auto}
+.page-header{margin-bottom:24px}
+.page-header h2{font-size:22px;font-weight:700}
+.page-header .breadcrumb{font-size:12px;color:var(--text-muted);margin-bottom:4px}
+.page-header .breadcrumb span{color:var(--accent2)}
+.card-panel{background:var(--bg-card);border-radius:var(--radius-lg);box-shadow:var(--shadow-sm);border:1px solid var(--border-light);padding:20px 24px;margin-bottom:20px}
+.toolbar{display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.toolbar .search-input{height:36px;border:1.5px solid var(--border);border-radius:var(--radius-md);padding:0 12px;font-size:13px;width:260px;outline:none;background:var(--bg-card);color:var(--text);transition:border var(--transition)}
+.toolbar .search-input:focus{border-color:var(--accent2)}
+.data-table{width:100%;border-collapse:collapse;font-size:13px}
+.data-table th{text-align:left;padding:10px 14px;font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid var(--border);white-space:nowrap}
+.data-table td{padding:10px 14px;border-bottom:1px solid var(--border-light);color:var(--text2);white-space:nowrap}
+.data-table tbody tr{transition:background var(--transition)}
+.data-table tbody tr:hover{background:var(--bg-hover)}
+.text-mono{font-family:var(--font-mono);font-size:12px}
 
 /* ===== Responsive ===== */
-@media (max-width: 1024px) { .grid-2, .grid-2-1, .grid-3 { grid-template-columns: 1fr; } }
-@media (max-width: 768px) {
-  .sidebar { width: 64px; }
-  .sidebar .sg-label, .sidebar .mi-label { display: none; }
-  .sidebar .mi { justify-content: center; padding: 10px; }
-  .top-nav { display: none; }
-  .stats-row { grid-template-columns: repeat(2, 1fr); }
-}
-
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+@media(max-width:1200px){.kpi-grid{grid-template-columns:repeat(3,1fr)}.ops-kpi-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.ops-kpi-card.span-row{grid-row:span 1}}
+@media(max-width:1024px){.charts-split,.activity-grid{grid-template-columns:1fr}.ops-kpi-grid{grid-template-columns:1fr}}
+@media(max-width:900px){.widget-grid{grid-template-columns:repeat(2,1fr)}.widget.span-3,.widget.span-4{grid-column:span 2}.kpi-grid{grid-template-columns:repeat(2,1fr)}}
+@media(max-width:768px){.sidebar{width:64px}.sidebar .sg-label,.sidebar .mi-label{display:none}.sidebar .mi{justify-content:center;padding:10px}.top-nav{display:none}}
+@media(max-width:640px){.widget-grid{grid-template-columns:1fr}.widget.span-2,.widget.span-3,.widget.span-4{grid-column:span 1}.kpi-grid{grid-template-columns:1fr}.dash-shell,.ops-shell,.simple-shell{padding:12px}}
 </style>
 </head>
 <body>
 
-<!-- ===== Login Overlay ===== -->
+<!-- Login Overlay -->
 <div class="login-overlay" id="loginOverlay">
   <div class="login-card">
     <div class="logo-area">
@@ -337,10 +535,8 @@ body.dark .badge-gray { background: rgba(139,148,158,.18); color: #aaa; }
   </div>
 </div>
 
-<!-- ===== App Shell ===== -->
+<!-- App Shell -->
 <div class="app-shell" id="appShell">
-
-  <!-- Topbar -->
   <header class="topbar" id="topbar">
     <div class="topbar-inner">
       <div class="topbar-logo">
@@ -349,641 +545,728 @@ body.dark .badge-gray { background: rgba(139,148,158,.18); color: #aaa; }
       </div>
       <nav class="top-nav" id="topNav"></nav>
       <div class="topbar-right">
-        <button class="icon-btn lang-btn" onclick="toggleLang()" title="切换语言">
-          <span class="lang-label" id="langLabel">中</span>
-        </button>
+        <button class="icon-btn lang-btn" onclick="toggleLang()" title="切换语言"><span class="lang-label" id="langLabel">中</span></button>
         <button class="icon-btn" onclick="toggleTheme()" title="切换主题" id="themeBtn">&#x263D;</button>
-        <div class="user-chip">
-          <div class="user-avatar">A</div>
-          <span>Admin</span>
-        </div>
+        <div class="user-chip"><div class="user-avatar">A</div><span>Admin</span></div>
       </div>
     </div>
     <div class="topbar-underline"></div>
   </header>
-
-  <!-- Layout Body -->
   <div class="layout-body">
-    <!-- Sidebar -->
     <aside class="sidebar" id="sidebar"></aside>
-
-    <!-- Main Content -->
-    <main class="main-content" id="mainContent">
-      <!-- Pages rendered by JS -->
-    </main>
+    <main class="main-content" id="mainContent"></main>
   </div>
 </div>
 
 <script>
-// ===== i18n Data =====
+// ==================== i18n ====================
 const i18n = {
   zh: {
-    loginTitle: '网络自动化运维平台', loginSub: 'Network Automation System v2.0',
-    username: '用户名', password: '密码', loginBtn: '登 录',
-    ssoHint: '企业账号请使用', ssoLink: 'SSO 单点登录',
-    logoText: '网络自动化运维平台',
-    tabMonitor: '运维监控', tabDevices: '设备管理', tabConfig: '配置管理', tabAssets: '资产管理', tabSystem: '系统设置',
-    groupMonitor: '监控与分析', groupDevice: '设备与运维', groupConfig: '配置与部署', groupSpare: '备品备件', groupSystem: '系统与权限',
-    miDashboard: '仪表板', miOperations: '运维总览', mi3D: '3D数字孪生', miHealth: '设备健康', miAI: 'AI分析中心', miWorkflow: '自动化工作流',
-    miDeviceList: '设备列表', miDiscovery: '设备发现', miBackups: '备份管理', miFaults: '故障管理', miMaintenance: '维修管理', miPlanned: '计划性运维',
-    miConsole: 'Console配置', miDeploy: '配置部署', miTemplates: '配置模板', miCredentials: 'SSH凭证', miCompliance: '配置合规', miToolLogs: '工具执行日志',
-    miSpareParts: '备件库存', miMovements: '出入库历史', miScrap: '报废库存',
-    miNotifications: '通知中心', miLogs: '系统日志', miAlerts: '告警通知', miSettings: '通用设置', miHelp: '系统帮助', miUsers: '用户管理', miRoles: '角色权限',
-    pageDashboard: '仪表板', pageDevices: '设备列表', pageBackups: '备份管理', pageFaults: '故障管理',
-    dashTitle: '运维仪表板', dashBreadcrumb: '运维监控 / 仪表板',
-    kpiAvailability: '网络可用率', kpiActiveFaults: '活跃故障', kpiMTTR: '平均修复时间', kpiBackupCoverage: '备份覆盖率', kpiCompliance: '合规得分', kpiCostTrend: '成本趋势(月)',
-    aiInsightTitle: 'AI 运营研判',
-    aiInsightText: '检测到 <strong>3台</strong> 接入层交换机 CPU 使用率超过 80%，建议检查是否存在广播风暴。设备 <strong>SW-A2-03</strong> 在过去 24 小时内出现 5 次端口翻动，建议安排现场巡检。',
-    panelDeviceStatus: '设备状态分布', panelFaultTrend: '故障趋势 (近7天)', panelAlertStream: '实时告警流', panelTopFaults: 'Top 故障设备',
-    colName: '设备名称', colIP: '管理IP', colModel: '型号', colLocation: '位置', colStatus: '状态', colHealth: '健康评分', colReachable: '可达性', colAction: '操作',
-    colBackupTime: '备份时间', colBackupMethod: '方式', colBackupSize: '大小', colBackupStatus: '结果',
-    colFaultTitle: '故障标题', colFaultDevice: '关联设备', colFaultLevel: '严重程度', colFaultStatus: '状态', colFaultTime: '发现时间', colAssignee: '处理人',
-    statusOnline: '在线', statusOffline: '离线', statusDegraded: '降级', statusMaintenance: '维护中',
-    reachable: '可达', unreachable: '不可达',
-    backupSuccess: '成功', backupFailed: '失败',
-    severityCritical: '严重', severityMajor: '主要', severityMinor: '次要', severityInfo: '信息',
-    faultOpen: '待处理', faultDiagnosing: '诊断中', faultResolved: '已解决', faultClosed: '已关闭',
-    searchDevice: '搜索设备名称或IP...', searchBackup: '搜索设备...', searchFault: '搜索故障...',
-    btnImport: '导入', btnExport: '导出', btnAdd: '新增', btnBatchBackup: '批量备份', btnViewDiff: '查看差异',
-    btnDiagnose: 'AI诊断', btnAssign: '指派', btnClose: '关闭',
-    deviceDetail: '详情', backupDetail: '详情',
-    exportReady: '演示模式：导出功能需连接后端 API',
+    loginTitle:'网络自动化运维平台',loginSub:'Network Automation System v2.0',username:'用户名',password:'密码',loginBtn:'登 录',ssoHint:'企业账号请使用',ssoLink:'SSO 单点登录',logoText:'网络自动化运维平台',
+    tabMonitor:'运维监控',tabDevices:'设备管理',tabConfig:'配置管理',tabAssets:'资产管理',tabSystem:'系统设置',
+    groupMonitor:'监控与分析',groupDevice:'设备与运维',groupConfig:'配置与部署',groupSpare:'备品备件',groupSystem:'系统与权限',
+    miDashboard:'仪表板',miOperations:'运维总览',miDeviceList:'设备列表',miBackups:'备份管理',miFaults:'故障管理',
+    dashTitle:'仪表板',dashCustomize:'自定义',dashDone:'完成',dashReset:'重置布局',dashVersion:'版本',dashLastSync:'最后同步',
+    rtTitle:'实时网络状态',rtOnline:'在线',rtOffline:'离线',rtOnlineRate:'在线率',rtActiveFaults:'活跃故障',rtCritical:'严重',rtLiveScreen:'查看数字孪生',rtSiteTitle:'各区域状态',rtSiteOnline:'在线',rtSiteOffline:'离线',rtSiteFault:'故障',
+    summaryTitle:'AI 运营研判',summaryNone:'当前网络运行平稳，无异常告警。',summaryRisk:'检测到潜在风险，建议关注。',
+    kpiAvailability:'网络可用率',kpiActiveFaults:'活跃故障',kpiSlaRate:'SLA 达标率',kpiMttr:'MTTR',kpiMonthCost:'月度成本',kpiBudgetVariance:'预算偏差',kpiRecurringRate:'故障复发率',kpiSpareLowStock:'低库存备件',kpiDaysCover:'备件保障天数',kpiMtbf:'MTBF',
+    mttrTitle:'MTTR 拆解 (均值)',paretoTitle:'根因帕累托',sloTitle:'SLO 错误预算',changeTitle:'变更-故障关联',
+    changeTotalChanges:'总变更数',changeFaultLinked:'关联故障',changeLinkRate:'关联率',
+    aiRecoTitle:'AI 运营建议',aiRecoAiBadge:'AI 研判',aiRecoGenerating:'AI 简报生成中...',
+    aiRecoCat_device:'设备',aiRecoCat_fault:'故障',aiRecoCat_config:'配置',aiRecoCat_compliance:'合规',
+    dashHeroTitle:'运维总览',dashSectionMetricsDesc:'汇聚设备、故障、成本、备件等核心运营指标，一页知全网。',
+    dashNetworkDevices:'网络设备总览',dashHealthScore:'健康分',dashReachability:'可达率',dashUnreachable:'不可达',dashTotalDevices:'总计',
+    deviceLayerCore:'核心层',deviceLayerFirewall:'防火墙',deviceLayerWiFi:'无线网络',deviceLayerAccess:'接入层',
+    deviceTypeCoreSwitch:'核心交换',deviceTypeServerSwitch:'服务器交换',deviceTypeRouter:'路由器',deviceTypePA:'PaloAlto',deviceTypeFTD:'FTD',deviceTypeAP:'AP',deviceTypeWLC:'WLC',deviceTypeUCE:'UCE',deviceTypeOfficeSwitch:'办公交换',
+    dashConfigCompliance:'配置合规',dashBackupCoverage:'备份覆盖率',dashUnbackedDevices:'未备份设备',dashConfigChanges7d:'近7天配置变更',
+    dashFaultEvents:'故障事件',dashActive:'有活跃',dashAllResolved:'全部解决',dashActiveFaults:'活跃故障',dashCritical:'严重',dashMajor:'主要',dashMinor:'次要',dashResolvedFaults:'已解决故障',dashDays30:'近30天',
+    dashMaintenance:'维修',dashMaintenancePending:'待处理',dashMaintenanceInProgress:'处理中',dashMaintenanceCompleted:'已完成',
+    dashMonthlyOpEx:'月度运维成本',dashHardware:'硬件',dashLabor:'人工',dashTopFaultDevices:'故障设备 Top 5',dashSpareInventory:'备件库存',dashSpareModels:'型号',dashSpareTotalQty:'总库存',dashSpareLowStock:'低库存',dashNoEvents:'暂无数据',
+    dashSectionAnalyticsTitle:'故障分析',dashSectionAnalyticsDesc:'故障趋势、时间线分析与近期备份变更记录。',
+    dashFaultTimeline:'故障时间线',dashConfigBackups:'近期备份',dashViewAll:'查看全部',dashModified:'有变更',dashClean:'未变更',
+    dashSectionActivityTitle:'活动日志',dashSectionActivityDesc:'实时告警事件流与系统操作审计记录。',
+    dashEventStream:'告警事件流',dashRecentActivity:'操作记录',
+    dashLoadFailed:'数据加载失败',dashDataRefreshed:'数据已刷新',dashFaultTrendFailed:'故障趋势加载失败',
+    dashNoAreaData:'暂无区域数据',
+    alertDeviceOffline:'设备离线告警',alertTemperatureHigh:'温度过高告警',alertFault:'故障告警',alertBackupOverdue:'备份逾期',alertSystemHealthy:'系统正常',alertUnknownDevice:'未知设备',alertDeviceUnreachable:'ping 不可达',alertPeakTemperature:'峰值温度',alertNoDescription:'暂无详情',alertDaysNoBackup:'天未备份',alertAllNormal:'所有设备运行正常',
+    pageDevices:'设备列表',pageBackups:'备份管理',pageFaults:'故障管理',
+    colName:'设备名称',colIP:'管理IP',colModel:'型号',colLocation:'位置',colStatus:'状态',colHealth:'健康评分',colReachable:'可达性',colAction:'操作',
+    colBackupTime:'备份时间',colBackupMethod:'方式',colBackupSize:'大小',colBackupStatus:'结果',
+    colFaultTitle:'故障标题',colFaultDevice:'关联设备',colFaultLevel:'严重程度',colFaultStatus:'状态',colFaultTime:'发现时间',colAssignee:'处理人',
+    statusOnline:'在线',statusOffline:'离线',statusDegraded:'降级',statusMaintenance:'维护中',reachable:'可达',unreachable:'不可达',
+    backupSuccess:'成功',backupFailed:'失败',
+    severityCritical:'严重',severityMajor:'主要',severityMinor:'次要',severityInfo:'信息',
+    faultOpen:'待处理',faultDiagnosing:'诊断中',faultResolved:'已解决',faultClosed:'已关闭',
+    searchDevice:'搜索设备名称或IP...',searchBackup:'搜索设备...',searchFault:'搜索故障...',
+    btnImport:'导入',btnExport:'导出',btnAdd:'新增',btnBatchBackup:'批量备份',btnViewDiff:'查看差异',btnDiagnose:'AI诊断',btnAssign:'指派',btnClose:'关闭',deviceDetail:'详情',
+    demoMsg:'演示模式：此功能需连接后端 API',
   },
   en: {
-    loginTitle: 'Network Automation Platform', loginSub: 'Network Automation System v2.0',
-    username: 'Username', password: 'Password', loginBtn: 'Sign In',
-    ssoHint: 'Enterprise account use', ssoLink: 'SSO Login',
-    logoText: 'Network Automation System',
-    tabMonitor: 'Monitoring', tabDevices: 'Devices', tabConfig: 'Configuration', tabAssets: 'Assets', tabSystem: 'System',
-    groupMonitor: 'Monitoring & Analysis', groupDevice: 'Devices & Ops', groupConfig: 'Config & Deploy', groupSpare: 'Spare Parts', groupSystem: 'System & Permissions',
-    miDashboard: 'Dashboard', miOperations: 'Operations', mi3D: '3D Digital Twin', miHealth: 'Device Health', miAI: 'AI Analysis', miWorkflow: 'Workflows',
-    miDeviceList: 'Device List', miDiscovery: 'Discovery', miBackups: 'Backups', miFaults: 'Faults', miMaintenance: 'Maintenance', miPlanned: 'Planned Ops',
-    miConsole: 'Console Config', miDeploy: 'Deploy', miTemplates: 'Templates', miCredentials: 'SSH Credentials', miCompliance: 'Compliance', miToolLogs: 'Tool Logs',
-    miSpareParts: 'Spare Parts', miMovements: 'Movements', miScrap: 'Scrap Inventory',
-    miNotifications: 'Notifications', miLogs: 'System Logs', miAlerts: 'Alert Settings', miSettings: 'Settings', miHelp: 'Help', miUsers: 'Users', miRoles: 'Roles',
-    pageDashboard: 'Dashboard', pageDevices: 'Device List', pageBackups: 'Backup Management', pageFaults: 'Fault Management',
-    dashTitle: 'Operations Dashboard', dashBreadcrumb: 'Monitoring / Dashboard',
-    kpiAvailability: 'Network Availability', kpiActiveFaults: 'Active Faults', kpiMTTR: 'MTTR', kpiBackupCoverage: 'Backup Coverage', kpiCompliance: 'Compliance Score', kpiCostTrend: 'Cost Trend (Monthly)',
-    aiInsightTitle: 'AI Operations Insight',
-    aiInsightText: 'Detected <strong>3</strong> access-layer switches with CPU usage above 80%, check for broadcast storms. Device <strong>SW-A2-03</strong> had 5 port flaps in the last 24 hours, recommend on-site inspection.',
-    panelDeviceStatus: 'Device Status Distribution', panelFaultTrend: 'Fault Trend (7 Days)', panelAlertStream: 'Real-time Alert Stream', panelTopFaults: 'Top Fault Devices',
-    colName: 'Device Name', colIP: 'Management IP', colModel: 'Model', colLocation: 'Location', colStatus: 'Status', colHealth: 'Health Score', colReachable: 'Reachable', colAction: 'Actions',
-    colBackupTime: 'Backup Time', colBackupMethod: 'Method', colBackupSize: 'Size', colBackupStatus: 'Result',
-    colFaultTitle: 'Title', colFaultDevice: 'Device', colFaultLevel: 'Severity', colFaultStatus: 'Status', colFaultTime: 'Detected', colAssignee: 'Assignee',
-    statusOnline: 'Online', statusOffline: 'Offline', statusDegraded: 'Degraded', statusMaintenance: 'Maintenance',
-    reachable: 'Reachable', unreachable: 'Unreachable',
-    backupSuccess: 'Success', backupFailed: 'Failed',
-    severityCritical: 'Critical', severityMajor: 'Major', severityMinor: 'Minor', severityInfo: 'Info',
-    faultOpen: 'Open', faultDiagnosing: 'Diagnosing', faultResolved: 'Resolved', faultClosed: 'Closed',
-    searchDevice: 'Search device name or IP...', searchBackup: 'Search device...', searchFault: 'Search fault...',
-    btnImport: 'Import', btnExport: 'Export', btnAdd: 'Add', btnBatchBackup: 'Batch Backup', btnViewDiff: 'View Diff',
-    btnDiagnose: 'AI Diagnose', btnAssign: 'Assign', btnClose: 'Close',
-    deviceDetail: 'Details', backupDetail: 'Details',
-    exportReady: 'Demo mode: Export requires backend API connection',
+    loginTitle:'Network Automation Platform',loginSub:'Network Automation System v2.0',username:'Username',password:'Password',loginBtn:'Sign In',ssoHint:'Enterprise account use',ssoLink:'SSO Login',logoText:'Network Automation System',
+    tabMonitor:'Monitoring',tabDevices:'Devices',tabConfig:'Configuration',tabAssets:'Assets',tabSystem:'System',
+    groupMonitor:'Monitoring & Analysis',groupDevice:'Devices & Ops',groupConfig:'Config & Deploy',groupSpare:'Spare Parts',groupSystem:'System & Permissions',
+    miDashboard:'Dashboard',miOperations:'Operations',miDeviceList:'Device List',miBackups:'Backups',miFaults:'Faults',
+    dashTitle:'Dashboard',dashCustomize:'Customize',dashDone:'Done',dashReset:'Reset Layout',dashVersion:'Version',dashLastSync:'Last Sync',
+    rtTitle:'Real-time Network Status',rtOnline:'Online',rtOffline:'Offline',rtOnlineRate:'Online Rate',rtActiveFaults:'Active Faults',rtCritical:'Critical',rtLiveScreen:'Live Screen',rtSiteTitle:'Site Status',rtSiteOnline:'Online',rtSiteOffline:'Offline',rtSiteFault:'Faults',
+    summaryTitle:'AI Operations Insight',summaryNone:'Network is stable with no abnormal alerts.',summaryRisk:'Potential risks detected, attention recommended.',
+    kpiAvailability:'Availability',kpiActiveFaults:'Active Faults',kpiSlaRate:'SLA Rate',kpiMttr:'MTTR',kpiMonthCost:'Monthly Cost',kpiBudgetVariance:'Budget Variance',kpiRecurringRate:'Recurring Rate',kpiSpareLowStock:'Low Stock',kpiDaysCover:'Days Cover',kpiMtbf:'MTBF',
+    mttrTitle:'MTTR Breakdown (Avg)',paretoTitle:'Root Cause Pareto',sloTitle:'SLO Error Budget',changeTitle:'Change-Fault Correlation',
+    changeTotalChanges:'Total Changes',changeFaultLinked:'Fault-Linked',changeLinkRate:'Link Rate',
+    aiRecoTitle:'AI Recommendations',aiRecoAiBadge:'AI Analysis',aiRecoGenerating:'Generating AI briefing...',
+    aiRecoCat_device:'Device',aiRecoCat_fault:'Fault',aiRecoCat_config:'Config',aiRecoCat_compliance:'Compliance',
+    dashHeroTitle:'Operations Overview',dashSectionMetricsDesc:'Core operational metrics across devices, faults, costs, and spares.',
+    dashNetworkDevices:'Network Device Overview',dashHealthScore:'Health',dashReachability:'Reachable',dashUnreachable:'Unreachable',dashTotalDevices:'Total',
+    deviceLayerCore:'Core Layer',deviceLayerFirewall:'Firewall',deviceLayerWiFi:'Wireless',deviceLayerAccess:'Access Layer',
+    deviceTypeCoreSwitch:'Core Switch',deviceTypeServerSwitch:'Server Switch',deviceTypeRouter:'Router',deviceTypePA:'PaloAlto',deviceTypeFTD:'FTD',deviceTypeAP:'AP',deviceTypeWLC:'WLC',deviceTypeUCE:'UCE',deviceTypeOfficeSwitch:'Office Switch',
+    dashConfigCompliance:'Config Compliance',dashBackupCoverage:'Backup Coverage',dashUnbackedDevices:'Unbacked Devices',dashConfigChanges7d:'Config Changes (7d)',
+    dashFaultEvents:'Fault Events',dashActive:'Active',dashAllResolved:'All Resolved',dashActiveFaults:'Active Faults',dashCritical:'Critical',dashMajor:'Major',dashMinor:'Minor',dashResolvedFaults:'Resolved Faults',dashDays30:'30 Days',
+    dashMaintenance:'Maintenance',dashMaintenancePending:'Pending',dashMaintenanceInProgress:'In Progress',dashMaintenanceCompleted:'Completed',
+    dashMonthlyOpEx:'Monthly OpEx',dashHardware:'Hardware',dashLabor:'Labor',dashTopFaultDevices:'Top 5 Fault Devices',dashSpareInventory:'Spare Inventory',dashSpareModels:'Models',dashSpareTotalQty:'Total Qty',dashSpareLowStock:'Low Stock',dashNoEvents:'No data',
+    dashSectionAnalyticsTitle:'Fault Analysis',dashSectionAnalyticsDesc:'Fault trends, timeline analysis and recent backup changes.',
+    dashFaultTimeline:'Fault Timeline',dashConfigBackups:'Recent Backups',dashViewAll:'View All',dashModified:'Modified',dashClean:'Unchanged',
+    dashSectionActivityTitle:'Activity Log',dashSectionActivityDesc:'Real-time alert event stream and system audit records.',
+    dashEventStream:'Alert Event Stream',dashRecentActivity:'Activity Feed',
+    dashLoadFailed:'Failed to load data',dashDataRefreshed:'Data refreshed',dashFaultTrendFailed:'Failed to load fault trend',
+    dashNoAreaData:'No area data',
+    alertDeviceOffline:'Device Offline Alert',alertTemperatureHigh:'High Temperature Alert',alertFault:'Fault Alert',alertBackupOverdue:'Backup Overdue',alertSystemHealthy:'System Normal',alertUnknownDevice:'Unknown Device',alertDeviceUnreachable:'ping unreachable',alertPeakTemperature:'Peak temp',alertNoDescription:'No description',alertDaysNoBackup:'days no backup',alertAllNormal:'All devices operating normally',
+    pageDevices:'Device List',pageBackups:'Backup Management',pageFaults:'Fault Management',
+    colName:'Device Name',colIP:'Management IP',colModel:'Model',colLocation:'Location',colStatus:'Status',colHealth:'Health Score',colReachable:'Reachable',colAction:'Actions',
+    colBackupTime:'Backup Time',colBackupMethod:'Method',colBackupSize:'Size',colBackupStatus:'Result',
+    colFaultTitle:'Title',colFaultDevice:'Device',colFaultLevel:'Severity',colFaultStatus:'Status',colFaultTime:'Detected',colAssignee:'Assignee',
+    statusOnline:'Online',statusOffline:'Offline',statusDegraded:'Degraded',statusMaintenance:'Maintenance',reachable:'Reachable',unreachable:'Unreachable',
+    backupSuccess:'Success',backupFailed:'Failed',
+    severityCritical:'Critical',severityMajor:'Major',severityMinor:'Minor',severityInfo:'Info',
+    faultOpen:'Open',faultDiagnosing:'Diagnosing',faultResolved:'Resolved',faultClosed:'Closed',
+    searchDevice:'Search device name or IP...',searchBackup:'Search device...',searchFault:'Search fault...',
+    btnImport:'Import',btnExport:'Export',btnAdd:'Add',btnBatchBackup:'Batch Backup',btnViewDiff:'View Diff',btnDiagnose:'AI Diagnose',btnAssign:'Assign',btnClose:'Close',deviceDetail:'Details',
+    demoMsg:'Demo mode: This feature requires backend API connection',
   }
 };
 
-let currentLang = 'zh';
-let currentTheme = 'light';
-let currentTopTab = 'monitor';
-let currentPage = 'dashboard';
-let charts = {};
+let currentLang='zh',currentTheme='light',currentTopTab='monitor',currentPage='dashboard',charts={},clockTimer=null;
+function t(k){return i18n[currentLang][k]||k}
+function showDemoMsg(){alert(t('demoMsg'))}
 
-function t(key) { return i18n[currentLang][key] || key; }
-
-// ===== Render Functions =====
-function applyI18n() {
-  document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n); });
-  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
-  document.getElementById('langLabel').textContent = currentLang === 'zh' ? '中' : 'EN';
+function applyI18n(){
+  document.querySelectorAll('[data-i18n]').forEach(el=>{el.textContent=t(el.dataset.i18n)});
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el=>{el.placeholder=t(el.dataset.i18nPlaceholder)});
+  document.getElementById('langLabel').textContent=currentLang==='zh'?'中':'EN';
   renderAll();
 }
-
-function toggleLang() {
-  currentLang = currentLang === 'zh' ? 'en' : 'zh';
-  applyI18n();
+function toggleLang(){currentLang=currentLang==='zh'?'en':'zh';applyI18n()}
+function toggleTheme(){
+  currentTheme=currentTheme==='light'?'dark':'light';
+  document.body.classList.toggle('dark',currentTheme==='dark');
+  document.getElementById('topbar').classList.toggle('dark',currentTheme==='dark');
+  document.getElementById('themeBtn').innerHTML=currentTheme==='dark'?'&#x2600;':'&#x263D;';
+  Object.values(charts).forEach(c=>{try{c.dispose()}catch(e){}});charts={};
+  if(currentPage==='dashboard')setTimeout(initDashboardCharts,100);
+  if(currentPage==='operations')setTimeout(initOperationsCharts,100);
 }
+function doLogin(){document.getElementById('loginOverlay').classList.add('hidden');document.getElementById('appShell').classList.add('visible');renderAll();clockTimer=setInterval(updateClock,1000)}
 
-function toggleTheme() {
-  currentTheme = currentTheme === 'light' ? 'dark' : 'light';
-  document.body.classList.toggle('dark', currentTheme === 'dark');
-  document.getElementById('topbar').classList.toggle('dark', currentTheme === 'dark');
-  document.getElementById('themeBtn').innerHTML = currentTheme === 'dark' ? '&#x2600;' : '&#x263D;';
-  // Dispose and re-render charts on theme change
-  Object.values(charts).forEach(c => { try { c.dispose(); } catch(e){} });
-  charts = {};
-  if (currentPage === 'dashboard') { setTimeout(initDashboardCharts, 100); }
-}
-
-function doLogin() {
-  document.getElementById('loginOverlay').classList.add('hidden');
-  document.getElementById('appShell').classList.add('visible');
-  renderAll();
-}
-
-// ===== Top Nav Tabs =====
-const topTabs = [
-  { key: 'monitor', zh: '运维监控', en: 'Monitoring' },
-  { key: 'devices', zh: '设备管理', en: 'Devices' },
-  { key: 'config', zh: '配置管理', en: 'Configuration' },
-  { key: 'assets', zh: '资产管理', en: 'Assets' },
-  { key: 'system', zh: '系统设置', en: 'System' },
+// ==================== Top Nav & Sidebar ====================
+const topTabs=[
+  {key:'monitor',zh:'运维监控',en:'Monitoring'},{key:'devices',zh:'设备管理',en:'Devices'},
+  {key:'config',zh:'配置管理',en:'Configuration'},{key:'assets',zh:'资产管理',en:'Assets'},{key:'system',zh:'系统设置',en:'System'},
 ];
-
-const sidebarGroups = {
-  monitor: [
-    { label: 'groupMonitor', items: [
-      { key: 'dashboard', icon: '📊', i18n: 'miDashboard' },
-      { key: 'operations', icon: '📋', i18n: 'miOperations' },
-      { key: 'monitor3d', icon: '🌐', i18n: 'mi3D' },
-      { key: 'health', icon: '💚', i18n: 'miHealth' },
-      { key: 'ai', icon: '🤖', i18n: 'miAI' },
-      { key: 'workflow', icon: '⚡', i18n: 'miWorkflow' },
-    ]},
-  ],
-  devices: [
-    { label: 'groupDevice', items: [
-      { key: 'devices', icon: '🖥️', i18n: 'miDeviceList' },
-      { key: 'discovery', icon: '🔍', i18n: 'miDiscovery' },
-      { key: 'backups', icon: '💾', i18n: 'miBackups' },
-      { key: 'faults', icon: '⚠️', i18n: 'miFaults' },
-      { key: 'maintenance', icon: '🔧', i18n: 'miMaintenance' },
-      { key: 'planned', icon: '📅', i18n: 'miPlanned' },
-    ]},
-  ],
-  config: [
-    { label: 'groupConfig', items: [
-      { key: 'console', icon: '⌨️', i18n: 'miConsole' },
-      { key: 'deploy', icon: '🚀', i18n: 'miDeploy' },
-      { key: 'templates', icon: '📄', i18n: 'miTemplates' },
-      { key: 'credentials', icon: '🔑', i18n: 'miCredentials' },
-      { key: 'compliance', icon: '✅', i18n: 'miCompliance' },
-      { key: 'toollogs', icon: '📝', i18n: 'miToolLogs' },
-    ]},
-  ],
-  assets: [
-    { label: 'groupSpare', items: [
-      { key: 'spareparts', icon: '📦', i18n: 'miSpareParts' },
-      { key: 'movements', icon: '📋', i18n: 'miMovements' },
-      { key: 'scrap', icon: '🗑️', i18n: 'miScrap' },
-    ]},
-  ],
-  system: [
-    { label: 'groupSystem', items: [
-      { key: 'notifications', icon: '🔔', i18n: 'miNotifications' },
-      { key: 'logs', icon: '📜', i18n: 'miLogs' },
-      { key: 'alerts', icon: '📢', i18n: 'miAlerts' },
-      { key: 'settings', icon: '⚙️', i18n: 'miSettings' },
-      { key: 'help', icon: '❓', i18n: 'miHelp' },
-      { key: 'users', icon: '👥', i18n: 'miUsers' },
-      { key: 'roles', icon: '🛡️', i18n: 'miRoles' },
-    ]},
-  ],
+const sidebarGroups={
+  monitor:[{label:'groupMonitor',items:[
+    {key:'dashboard',icon:'📊',i18n:'miDashboard'},{key:'operations',icon:'📋',i18n:'miOperations'},
+  ]}],
+  devices:[{label:'groupDevice',items:[
+    {key:'devices',icon:'🖥️',i18n:'miDeviceList'},{key:'backups',icon:'💾',i18n:'miBackups'},{key:'faults',icon:'⚠️',i18n:'miFaults'},
+  ]}],
 };
-
-function renderTopNav() {
-  const nav = document.getElementById('topNav');
-  nav.innerHTML = topTabs.map(t => {
-    const label = currentLang === 'zh' ? t.zh : t.en;
-    const active = t.key === currentTopTab ? ' active' : '';
-    return `<button class="tn${active}" onclick="switchTopTab('${t.key}')">${label}</button>`;
+function renderTopNav(){
+  document.getElementById('topNav').innerHTML=topTabs.map(tb=>{
+    const label=currentLang==='zh'?tb.zh:tb.en;
+    return `<button class="tn${tb.key===currentTopTab?' active':''}" onclick="switchTopTab('${tb.key}')">${label}</button>`;
   }).join('');
 }
-
-function renderSidebar() {
-  const sidebar = document.getElementById('sidebar');
-  const groups = sidebarGroups[currentTopTab] || [];
-  sidebar.innerHTML = groups.map(g => {
-    const gLabel = t(g.label);
-    const itemsHtml = g.items.map(mi => {
-      const active = mi.key === currentPage ? ' active' : '';
-      const label = t(mi.i18n);
-      return `<div class="mi${active}" onclick="switchPage('${mi.key}')">
-        <span class="mi-icon">${mi.icon}</span>
-        <span class="mi-label">${label}</span>
-      </div>`;
+function renderSidebar(){
+  const groups=sidebarGroups[currentTopTab]||[];
+  document.getElementById('sidebar').innerHTML=groups.map(g=>{
+    const gLabel=t(g.label);
+    const itemsHtml=g.items.map(mi=>{
+      const active=mi.key===currentPage?' active':'';
+      return `<div class="mi${active}" onclick="switchPage('${mi.key}')"><span class="mi-icon">${mi.icon}</span><span class="mi-label">${t(mi.i18n)}</span></div>`;
     }).join('');
-    return `<div class="sidebar-group">
-      <div class="sg-header"><span class="sg-dot"></span><span class="sg-label">${gLabel}</span></div>
-      ${itemsHtml}
-    </div>`;
-  }).join('') + `<div class="collapse-btn" onclick="toggleSidebar()">◀</div>`;
+    return `<div class="sidebar-group"><div class="sg-header"><span class="sg-dot"></span><span class="sg-label">${gLabel}</span></div>${itemsHtml}</div>`;
+  }).join('')+`<div class="collapse-btn" onclick="document.getElementById('sidebar').classList.toggle('collapsed')">◀</div>`;
 }
-
-function toggleSidebar() {
-  document.getElementById('sidebar').classList.toggle('collapsed');
+function switchTopTab(key){
+  currentTopTab=key;
+  const groups=sidebarGroups[key]||[];
+  currentPage=(groups[0]&&groups[0].items[0])?groups[0].items[0].key:'dashboard';
+  destroyCharts();renderAll();
 }
+function switchPage(key){currentPage=key;destroyCharts();renderAll()}
+function destroyCharts(){Object.values(charts).forEach(c=>{try{c.dispose()}catch(e){}});charts={}}
 
-function switchTopTab(key) {
-  currentTopTab = key;
-  const firstPage = (sidebarGroups[key] && sidebarGroups[key][0] && sidebarGroups[key][0].items[0]) ? sidebarGroups[key][0].items[0].key : 'dashboard';
-  if (['devices','backups','faults','dashboard'].includes(firstPage) || true) {
-    currentPage = firstPage;
-  }
-  // Dispose charts before re-render
-  Object.values(charts).forEach(c => { try { c.dispose(); } catch(e){} });
-  charts = {};
-  renderAll();
-}
+// ==================== Mock Data ====================
+const mockRealtime={
+  overall_status:'green',online:142,total:148,offline:2,online_pct:95.9,active_faults:4,active_critical:1,
+  sites:[
+    {site:'A栋中心机房',status:'green',availability_pct:100,online:12,total:12,offline:0,active_faults:0},
+    {site:'A1车间',status:'green',availability_pct:100,online:24,total:24,offline:0,active_faults:0},
+    {site:'A2车间',status:'yellow',availability_pct:95.8,online:23,total:24,offline:0,active_faults:2},
+    {site:'B1车间',status:'green',availability_pct:100,online:20,total:20,offline:0,active_faults:0},
+    {site:'B2车间',status:'red',availability_pct:90.0,online:18,total:20,offline:1,active_faults:1},
+    {site:'边界机房',status:'green',availability_pct:100,online:6,total:6,offline:0,active_faults:0},
+    {site:'C栋仓库',status:'green',availability_pct:100,online:8,total:8,offline:0,active_faults:0},
+    {site:'研发楼',status:'yellow',availability_pct:97.2,online:31,total:32,offline:0,active_faults:1},
+  ]
+};
+const mockKpis={
+  availability:{value:99.87,unit:'%',trend:0.12,trend_dir:'up'},
+  active_faults:{value:4,trend:-2,trend_dir:'down'},
+  sla_rate:{value:98.5,unit:'%',trend:0.3,trend_dir:'up'},
+  mttr_hours:{value:2.3,unit:'h',trend:0.5,trend_dir:'up'},
+  month_cost:{value:28300,unit:'¥',trend:-12,trend_dir:'down'},
+  budget_variance:{value:-3.2,unit:'%',trend:2.1,trend_dir:'up'},
+  recurring_rate:{value:6.8,unit:'%',trend:-1.5,trend_dir:'down'},
+  spare_low_stock:{value:5,trend:2,trend_dir:'up'},
+  spare_days_cover:{value:45,unit:'d',trend:5,trend_dir:'up'},
+  mtbf_days:{value:128,unit:'d',trend:12,trend_dir:'up'},
+};
 
-function switchPage(key) {
-  currentPage = key;
-  Object.values(charts).forEach(c => { try { c.dispose(); } catch(e){} });
-  charts = {};
-  renderAll();
-}
+// ==================== Page: Dashboard ====================
+function renderDashboard(){
+  let html=`
+  <div class="dash-bg">
+    <div class="dash-shell">
+      <div class="dash-toolbar">
+        <span class="dash-title">${t('dashTitle')}</span>
+        <div class="dash-actions">
+          <button class="btn btn-outline btn-sm">${t('dashCustomize')}</button>
+        </div>
+      </div>
+      <div class="widget-grid">`;
 
-// ===== Mock Data =====
-const mockDevices = [
-  { name:'SW-Core-01', ip:'10.88.1.1', model:'Cisco C9500-24Y4C', location:'A栋中心机房', status:'online', health:98, reachable:true },
-  { name:'SW-Core-02', ip:'10.88.1.2', model:'Cisco C9500-24Y4C', location:'A栋中心机房', status:'online', health:95, reachable:true },
-  { name:'SW-A1-01', ip:'10.88.10.1', model:'Cisco C9300-48P', location:'A1车间', status:'online', health:88, reachable:true },
-  { name:'SW-A1-02', ip:'10.88.10.2', model:'Cisco C9300-48P', location:'A1车间', status:'degraded', health:72, reachable:true },
-  { name:'SW-A2-01', ip:'10.88.11.1', model:'Cisco C9200-48P', location:'A2车间', status:'online', health:91, reachable:true },
-  { name:'SW-A2-02', ip:'10.88.11.2', model:'Cisco C9200-48P', location:'A2车间', status:'online', health:85, reachable:true },
-  { name:'SW-A2-03', ip:'10.88.11.3', model:'Cisco C9200-24P', location:'A2车间', status:'online', health:76, reachable:true },
-  { name:'SW-B1-01', ip:'10.88.20.1', model:'Cisco C9300-48U', location:'B1车间', status:'online', health:93, reachable:true },
-  { name:'SW-B1-02', ip:'10.88.20.2', model:'Cisco C9300-48U', location:'B1车间', status:'maintenance', health:80, reachable:false },
-  { name:'SW-B2-01', ip:'10.88.21.1', model:'Cisco C9200-48P', location:'B2车间', status:'offline', health:0, reachable:false },
-  { name:'SW-Edge-01', ip:'10.88.254.1', model:'Cisco C8500-12X', location:'边界机房', status:'online', health:97, reachable:true },
-  { name:'SW-Edge-02', ip:'10.88.254.2', model:'Cisco C8500-12X', location:'边界机房', status:'online', health:96, reachable:true },
-];
-
-const mockBackups = [
-  { device:'SW-Core-01', time:'2026-07-30 02:00:05', method:'SSH (Netmiko)', size:'48.2 KB', status:'success' },
-  { device:'SW-Core-02', time:'2026-07-30 02:01:12', method:'SSH (Netmiko)', size:'47.8 KB', status:'success' },
-  { device:'SW-A1-01', time:'2026-07-30 02:05:33', method:'SSH (Netmiko)', size:'32.1 KB', status:'success' },
-  { device:'SW-A1-02', time:'2026-07-30 02:06:18', method:'SSH (Netmiko)', size:'31.5 KB', status:'success' },
-  { device:'SW-A2-01', time:'2026-07-30 02:10:01', method:'SSH (Netmiko)', size:'28.9 KB', status:'success' },
-  { device:'SW-B1-02', time:'2026-07-30 02:11:45', method:'SSH (Netmiko)', size:'-', status:'failed' },
-  { device:'SW-B2-01', time:'2026-07-30 02:12:03', method:'SSH (Netmiko)', size:'-', status:'failed' },
-  { device:'SW-Edge-01', time:'2026-07-30 02:15:22', method:'SSH (Netmiko)', size:'52.3 KB', status:'success' },
-];
-
-const mockFaults = [
-  { title:'SW-A1-02 端口 Gi1/0/15 频繁翻动', device:'SW-A1-02', severity:'major', status:'diagnosing', time:'2026-07-30 08:15', assignee:'张工' },
-  { title:'SW-B2-01 设备离线告警', device:'SW-B2-01', severity:'critical', status:'open', time:'2026-07-30 07:42', assignee:'-' },
-  { title:'SW-A1-01 CPU 使用率持续超过85%', device:'SW-A1-01', severity:'minor', status:'diagnosing', time:'2026-07-29 16:30', assignee:'李工' },
-  { title:'SW-Core-02 上联端口 CRC 错误增长', device:'SW-Core-02', severity:'major', status:'open', time:'2026-07-29 14:20', assignee:'-' },
-  { title:'SW-A2-03 温度传感器告警', device:'SW-A2-03', severity:'minor', status:'resolved', time:'2026-07-29 10:05', assignee:'王工' },
-  { title:'SW-Edge-01 BGP 邻居震荡', device:'SW-Edge-01', severity:'critical', status:'resolved', time:'2026-07-28 22:30', assignee:'赵工' },
-  { title:'SW-B1-01 PoE 供电异常', device:'SW-B1-01', severity:'minor', status:'closed', time:'2026-07-28 15:12', assignee:'李工' },
-];
-
-// ===== Page Renderers =====
-function renderDashboard() {
-  const sel = t('dashBreadcrumb');
-  return `
-    <div class="page-header">
-      <div class="breadcrumb">${sel}</div>
-      <h2>${t('dashTitle')}</h2>
-    </div>
-
-    <div class="ai-insight">
-      <span class="ai-icon">🤖</span>
-      <span class="ai-text">${t('aiInsightText')}</span>
-    </div>
-
-    <div class="stats-row">
-      <div class="stat-card accent">
-        <div class="stat-label">${t('kpiAvailability')}</div>
-        <div class="stat-value">99.87<span style="font-size:16px">%</span></div>
-        <div class="stat-sub"><span class="stat-change up">▲ 0.12%</span> vs 上月</div>
-        <div class="stat-icon">📶</div>
-      </div>
-      <div class="stat-card danger">
-        <div class="stat-label">${t('kpiActiveFaults')}</div>
-        <div class="stat-value">4</div>
-        <div class="stat-sub"><span class="stat-change down">▼ 2</span> vs 上周</div>
-        <div class="stat-icon">⚠️</div>
-      </div>
-      <div class="stat-card accent2">
-        <div class="stat-label">${t('kpiMTTR')}</div>
-        <div class="stat-value">2.3<span style="font-size:16px">h</span></div>
-        <div class="stat-sub"><span class="stat-change up">▲ 0.5h</span> vs 上月</div>
-        <div class="stat-icon">⏱️</div>
-      </div>
-      <div class="stat-card accent">
-        <div class="stat-label">${t('kpiBackupCoverage')}</div>
-        <div class="stat-value">94.2<span style="font-size:16px">%</span></div>
-        <div class="stat-sub"><span class="stat-change up">▲ 2.1%</span> vs 上月</div>
-        <div class="stat-icon">💾</div>
-      </div>
-      <div class="stat-card accent2">
-        <div class="stat-label">${t('kpiCompliance')}</div>
-        <div class="stat-value">87<span style="font-size:16px">/100</span></div>
-        <div class="stat-sub"><span class="stat-change up">▲ 3</span> vs 上月</div>
-        <div class="stat-icon">✅</div>
-      </div>
-      <div class="stat-card warn">
-        <div class="stat-label">${t('kpiCostTrend')}</div>
-        <div class="stat-value">¥2.8<span style="font-size:16px">万</span></div>
-        <div class="stat-sub"><span class="stat-change down">▼ 12%</span> vs 上月</div>
-        <div class="stat-icon">💰</div>
-      </div>
-    </div>
-
-    <div class="grid-2-1">
-      <div class="card-panel">
-        <div class="panel-title"><span class="dot blue"></span>${t('panelFaultTrend')}</div>
-        <div class="chart-box" id="chartFaultTrend"></div>
-      </div>
-      <div class="card-panel">
-        <div class="panel-title"><span class="dot orange"></span>${t('panelAlertStream')}</div>
-        <ul class="alert-list" id="alertStream"></ul>
-      </div>
-    </div>
-
-    <div class="grid-2">
-      <div class="card-panel">
-        <div class="panel-title"><span class="dot green"></span>${t('panelDeviceStatus')}</div>
-        <div class="chart-box" id="chartDeviceStatus"></div>
-      </div>
-      <div class="card-panel">
-        <div class="panel-title"><span class="dot blue"></span>${t('panelTopFaults')}</div>
-        <div class="chart-box" id="chartTopFaults"></div>
-      </div>
-    </div>
-  `;
-}
-
-function renderDevices() {
-  let rows = mockDevices.map(d => {
-    const statusBadge = {
-      online: `<span class="badge badge-green">${t('statusOnline')}</span>`,
-      offline: `<span class="badge badge-red">${t('statusOffline')}</span>`,
-      degraded: `<span class="badge badge-orange">${t('statusDegraded')}</span>`,
-      maintenance: `<span class="badge badge-blue">${t('statusMaintenance')}</span>`,
-    }[d.status] || '';
-    const healthColor = d.health >= 90 ? 'color:var(--accent)' : d.health >= 70 ? 'color:var(--warn)' : 'color:var(--danger)';
-    const reachBadge = d.reachable ? `<span class="badge badge-green">${t('reachable')}</span>` : `<span class="badge badge-red">${t('unreachable')}</span>`;
-    return `<tr>
-      <td><strong>${d.name}</strong></td>
-      <td class="text-mono">${d.ip}</td>
-      <td>${d.model}</td>
-      <td>${d.location}</td>
-      <td>${statusBadge}</td>
-      <td><strong style="${healthColor}">${d.health}</strong></td>
-      <td>${reachBadge}</td>
-      <td><button class="btn btn-outline" style="height:28px;font-size:12px;padding:0 10px;" onclick="alert('${t('exportReady')}')">${t('deviceDetail')}</button></td>
-    </tr>`;
-  }).join('');
-
-  return `
-    <div class="page-header">
-      <div class="breadcrumb">${t('tabDevices')} / ${t('pageDevices')}</div>
-      <h2>${t('pageDevices')} <span style="font-size:14px;color:var(--text-muted);font-weight:400;">(${mockDevices.length} ${currentLang==='zh'?'台':'devices'})</span></h2>
-    </div>
-    <div class="card-panel">
-      <div class="toolbar">
-        <input class="search-input" placeholder="${t('searchDevice')}" data-i18n-placeholder="searchDevice">
-        <button class="btn btn-primary">+ ${t('btnAdd')}</button>
-        <button class="btn btn-outline" onclick="alert('${t('exportReady')}')">📥 ${t('btnImport')}</button>
-        <button class="btn btn-outline" onclick="alert('${t('exportReady')}')">📤 ${t('btnExport')}</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="data-table">
-          <thead><tr>
-            <th>${t('colName')}</th><th>${t('colIP')}</th><th>${t('colModel')}</th><th>${t('colLocation')}</th>
-            <th>${t('colStatus')}</th><th>${t('colHealth')}</th><th>${t('colReachable')}</th><th>${t('colAction')}</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderBackups() {
-  let rows = mockBackups.map(b => {
-    const statusBadge = b.status === 'success'
-      ? `<span class="badge badge-green">${t('backupSuccess')}</span>`
-      : `<span class="badge badge-red">${t('backupFailed')}</span>`;
-    return `<tr>
-      <td><strong>${b.device}</strong></td>
-      <td class="text-mono">${b.time}</td>
-      <td>${b.method}</td>
-      <td class="text-mono">${b.size}</td>
-      <td>${statusBadge}</td>
-      <td><button class="btn btn-outline" style="height:28px;font-size:12px;padding:0 10px;" onclick="alert('${t('exportReady')}')">${t('btnViewDiff')}</button></td>
-    </tr>`;
-  }).join('');
-  return `
-    <div class="page-header">
-      <div class="breadcrumb">${t('tabDevices')} / ${t('pageBackups')}</div>
-      <h2>${t('pageBackups')}</h2>
-    </div>
-    <div class="card-panel">
-      <div class="toolbar">
-        <input class="search-input" placeholder="${t('searchBackup')}" data-i18n-placeholder="searchBackup">
-        <button class="btn btn-primary" onclick="alert('${t('exportReady')}')">🔄 ${t('btnBatchBackup')}</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="data-table">
-          <thead><tr>
-            <th>${t('colName')}</th><th>${t('colBackupTime')}</th><th>${t('colBackupMethod')}</th><th>${t('colBackupSize')}</th><th>${t('colBackupStatus')}</th><th>${t('colAction')}</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-function renderFaults() {
-  let rows = mockFaults.map(f => {
-    const sevBadge = {
-      critical: `<span class="badge badge-red">${t('severityCritical')}</span>`,
-      major: `<span class="badge badge-orange">${t('severityMajor')}</span>`,
-      minor: `<span class="badge badge-blue">${t('severityMinor')}</span>`,
-      info: `<span class="badge badge-gray">${t('severityInfo')}</span>`,
-    }[f.severity] || '';
-    const stBadge = {
-      open: `<span class="badge badge-red">${t('faultOpen')}</span>`,
-      diagnosing: `<span class="badge badge-orange">${t('faultDiagnosing')}</span>`,
-      resolved: `<span class="badge badge-green">${t('faultResolved')}</span>`,
-      closed: `<span class="badge badge-gray">${t('faultClosed')}</span>`,
-    }[f.status] || '';
-    let actions = '';
-    if (f.status === 'open') actions += `<button class="btn btn-outline" style="height:26px;font-size:11px;padding:0 8px;margin-right:4px;" onclick="alert('${t('exportReady')}')">${t('btnDiagnose')}</button><button class="btn btn-outline" style="height:26px;font-size:11px;padding:0 8px;" onclick="alert('${t('exportReady')}')">${t('btnAssign')}</button>`;
-    else if (f.status === 'diagnosing') actions += `<button class="btn btn-outline" style="height:26px;font-size:11px;padding:0 8px;" onclick="alert('${t('exportReady')}')">${t('btnClose')}</button>`;
-    return `<tr>
-      <td><strong>${f.title}</strong></td>
-      <td>${f.device}</td>
-      <td>${sevBadge}</td>
-      <td>${stBadge}</td>
-      <td class="text-mono">${f.time}</td>
-      <td>${f.assignee}</td>
-      <td>${actions}</td>
-    </tr>`;
-  }).join('');
-  return `
-    <div class="page-header">
-      <div class="breadcrumb">${t('tabDevices')} / ${t('pageFaults')}</div>
-      <h2>${t('pageFaults')}</h2>
-    </div>
-    <div class="card-panel">
-      <div class="toolbar">
-        <input class="search-input" placeholder="${t('searchFault')}" data-i18n-placeholder="searchFault">
-        <button class="btn btn-primary">+ ${t('btnAdd')}</button>
-      </div>
-      <div style="overflow-x:auto;">
-        <table class="data-table">
-          <thead><tr>
-            <th>${t('colFaultTitle')}</th><th>${t('colFaultDevice')}</th><th>${t('colFaultLevel')}</th><th>${t('colFaultStatus')}</th><th>${t('colFaultTime')}</th><th>${t('colAssignee')}</th><th>${t('colAction')}</th>
-          </tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      </div>
-    </div>
-  `;
-}
-
-// ===== Main Render =====
-function renderAll() {
-  renderTopNav();
-  renderSidebar();
-
-  const main = document.getElementById('mainContent');
-  let html = '';
-  switch (currentPage) {
-    case 'dashboard': html = renderDashboard(); break;
-    case 'devices': html = renderDevices(); break;
-    case 'backups': html = renderBackups(); break;
-    case 'faults': html = renderFaults(); break;
-    default:
-      // For other sidebar items, just show a placeholder page
-      const label = t('mi' + currentPage.charAt(0).toUpperCase() + currentPage.slice(1)) || currentPage;
-      html = `<div class="page-header"><h2>${label}</h2></div>
-        <div class="card-panel" style="text-align:center;padding:60px;color:var(--text-muted);">
-          <div style="font-size:48px;margin-bottom:16px;">🚧</div>
-          <p>${label} - ${currentLang === 'zh' ? '演示页面（功能完整版请运行系统）' : 'Demo page (run the full system for complete features)'}</p>
+  // 1. Realtime Status
+  const rs=mockRealtime;
+  html+=`
+        <div class="widget span-4 h-1">
+          <div class="widget-body">
+            <div class="realtime-strip green">
+              <div class="rt-headline"><span class="rt-dot"></span><span class="rt-title">${t('rtTitle')}</span></div>
+              <div class="rt-metrics">
+                <div class="rt-item"><span class="rt-num">${rs.online}/${rs.total}</span><span class="rt-label">${t('rtOnline')}</span></div>
+                <div class="rt-item${rs.offline>0?' danger':''}"><span class="rt-num">${rs.offline}</span><span class="rt-label">${t('rtOffline')}</span></div>
+                <div class="rt-item"><span class="rt-num">${rs.online_pct}%</span><span class="rt-label">${t('rtOnlineRate')}</span></div>
+                <div class="rt-item${rs.active_faults>0?' warning':''}${rs.active_critical>0?' danger':''}">
+                  <span class="rt-num">${rs.active_faults}</span><span class="rt-label">${t('rtActiveFaults')}${rs.active_critical>0?`（${rs.active_critical} ${t('rtCritical')}）`:''}</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>`;
-  }
-  main.innerHTML = html;
-  applyI18n();
 
-  if (currentPage === 'dashboard') {
-    renderAlertStream();
-    setTimeout(initDashboardCharts, 150);
-  }
-}
+  // 2. Sites
+  html+=`
+        <div class="widget span-4 h-1">
+          <div class="widget-body">
+            <div class="site-breakdown">
+              <div class="site-title">${t('rtSiteTitle')}</div>
+              <div class="site-grid">
+                ${rs.sites.map(s=>`
+                <div class="site-card ${s.status}">
+                  <div class="site-head"><span class="site-dot ${s.status}"></span><span class="site-name">${s.site}</span></div>
+                  <div class="site-avail">${s.availability_pct}%</div>
+                  <div class="site-meta">${s.online}/${s.total} ${t('rtSiteOnline')}${s.offline>0?`<span class="off"> · ${s.offline} ${t('rtSiteOffline')}</span>`:''}${s.active_faults>0?`<span class="flt"> · ${s.active_faults} ${t('rtSiteFault')}</span>`:''}</div>
+                </div>`).join('')}
+              </div>
+            </div>
+          </div>
+        </div>`;
 
-// ===== Alert Stream =====
-function renderAlertStream() {
-  const alerts = [
-    { dot: 'var(--danger)', time: '08:42', text: currentLang === 'zh' ? 'SW-B2-01 设备离线，ping 不可达' : 'SW-B2-01 offline, ping unreachable' },
-    { dot: 'var(--warn)', time: '08:15', text: currentLang === 'zh' ? 'SW-A1-02 Gi1/0/15 端口翻动 #5' : 'SW-A1-02 Gi1/0/15 port flap #5' },
-    { dot: 'var(--warn)', time: '07:58', text: currentLang === 'zh' ? 'SW-A1-01 CPU 使用率达到 87%' : 'SW-A1-01 CPU usage reached 87%' },
-    { dot: 'var(--accent2)', time: '07:30', text: currentLang === 'zh' ? '每日自动备份任务完成: 10/12 成功' : 'Daily backup completed: 10/12 success' },
-    { dot: 'var(--warn)', time: '06:45', text: currentLang === 'zh' ? 'SW-Core-02 CRC 错误率上升至 0.05%' : 'SW-Core-02 CRC error rate up to 0.05%' },
-    { dot: 'var(--accent)', time: '06:00', text: currentLang === 'zh' ? '合规扫描完成: 87/100 分' : 'Compliance scan done: 87/100' },
+  // 3. Summary Bar
+  html+=`
+        <div class="widget span-4 h-1">
+          <div class="widget-body">
+            <div class="summary-bar warning">
+              <div class="summary-icon">📋</div>
+              <span class="summary-text">${currentLang==='zh'?'检测到 2 台设备不可达（B2车间 1 台离线、B1车间 1 台维护中），A2车间有 2 个活跃故障，建议优先排查 SW-B2-01 设备离线问题。':t('summaryRisk')}</span>
+              <span class="summary-ai-badge">${t('aiRecoAiBadge')}</span>
+              <span class="summary-range">30d</span>
+            </div>
+          </div>
+        </div>`;
+
+  // 4. KPI Cards
+  const kpis=mockKpis;
+  const kpiItems=[
+    {key:'availability',title:'kpiAvailability'},
+    {key:'active_faults',title:'kpiActiveFaults'},
+    {key:'sla_rate',title:'kpiSlaRate'},
+    {key:'mttr_hours',title:'kpiMttr'},
+    {key:'month_cost',title:'kpiMonthCost'},
+    {key:'budget_variance',title:'kpiBudgetVariance'},
   ];
-  const list = document.getElementById('alertStream');
-  if (!list) return;
-  list.innerHTML = alerts.map(a => `
-    <li>
-      <span class="alert-dot" style="background:${a.dot}"></span>
-      <span style="flex:1">${a.text}</span>
-      <span class="alert-time">${a.time}</span>
-    </li>
-  `).join('');
+  html+=`
+        <div class="widget span-4 h-2">
+          <div class="widget-body">
+            <div class="kpi-grid">
+              ${kpiItems.map(ki=>{
+                const k=kpis[ki.key];
+                if(!k)return'';
+                const valStr=k.unit==='¥'?`¥${k.value.toLocaleString()}`:`${k.value}${k.unit||''}`;
+                const trendCls=k.trend_dir==='up'?'up':(k.trend_dir==='down'?'down':'');
+                const trendSign=k.trend_dir==='up'?'▲':(k.trend_dir==='down'?'▼':'');
+                return`<div class="kpi-stat" onclick="showDemoMsg()"><div class="ks-label">${t(ki.title)}</div><div class="ks-value">${valStr}</div><div class="ks-sub"><span class="ks-trend ${trendCls}">${trendSign} ${Math.abs(k.trend)}${k.unit||'%'}</span> vs ${currentLang==='zh'?'上月':'last month'}</div></div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+
+  // 5. MTTR + Pareto row
+  html+=`
+        <div class="widget span-2 h-2">
+          <div class="widget-body">
+            <div class="mttr-funnel">
+              <div class="mttr-title">${t('mttrTitle')}</div>
+              ${[{name:currentLang==='zh'?'发现':'Detect',h:0.4,color:'#0984e3',w:7},{name:currentLang==='zh'?'响应':'Respond',h:0.6,color:'#00b894',w:26},{name:currentLang==='zh'?'诊断':'Diagnose',h:0.8,color:'#f59e0b',w:61},{name:currentLang==='zh'?'修复':'Repair',h:0.5,color:'#e17055',w:100}].map(s=>`
+              <div class="mttr-stage">
+                <span class="mttr-name">${s.name}</span>
+                <div class="mttr-bar-wrap"><div class="mttr-bar" style="width:${s.w}%;background:${s.color}"><span class="mttr-bar-label">${s.h}h</span></div></div>
+              </div>`).join('')}
+              <div style="text-align:right;font-size:11px;color:var(--text-muted);margin-top:4px">Total: 2.3h</div>
+            </div>
+          </div>
+        </div>
+        <div class="widget span-2 h-2">
+          <div class="widget-body">
+            <div class="pareto-wrap">
+              <div class="pareto-title">${t('paretoTitle')}</div>
+              ${[{name:currentLang==='zh'?'端口翻动':'Port Flapping',v:12,w:100,color:'#d63031'},{name:currentLang==='zh'?'电源故障':'Power Failure',v:8,w:67,color:'#e17055'},{name:currentLang==='zh'?'链路拥塞':'Link Congestion',v:5,w:42,color:'#0984e3'},{name:currentLang==='zh'?'配置错误':'Config Error',v:3,w:25,color:'#f59e0b'},{name:currentLang==='zh'?'硬件老化':'HW Aging',v:2,w:17,color:'#636e72'}].map(p=>`
+              <div class="pareto-row">
+                <span class="p-name">${p.name}</span>
+                <div class="p-bar-wrap"><div class="p-bar" style="width:${p.w}%;background:${p.color}"></div></div>
+                <span class="p-val">${p.v}</span>
+              </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+
+  // 6. SLO
+  html+=`
+        <div class="widget span-4 h-2">
+          <div class="widget-body">
+            <div class="slo-wrap">
+              <div class="slo-title">${t('sloTitle')}</div>
+              ${[{name:currentLang==='zh'?'设备可达性':'Device Reachability',target:99.9,actual:99.87,burnt:0.03},{name:currentLang==='zh'?'备份成功率':'Backup Success',target:98,actual:96.5,burnt:1.5},{name:currentLang==='zh'?'故障响应SLA':'Fault Response SLA',target:95,actual:93.2,burnt:1.8}].map(s=>`
+              <div class="slo-row">
+                <span class="slo-name">${s.name}</span>
+                <div class="slo-bar-wrap">
+                  <div class="slo-bar burnt" style="width:${Math.min(s.burnt,30)}%"></div>
+                </div>
+                <span class="slo-pct">${s.actual}%</span>
+                <span style="font-size:11px;color:var(--text-muted);width:80px;text-align:right">${currentLang==='zh'?'目标':'Target'} ${s.target}%</span>
+              </div>`).join('')}
+            </div>
+          </div>
+        </div>`;
+
+  // 7. Change Correlation
+  html+=`
+        <div class="widget span-4 h-1">
+          <div class="widget-body">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:var(--radius-lg);background:var(--bg-card);border:1px solid var(--border)">
+              <span style="font-size:13px;font-weight:700">${t('changeTitle')}</span>
+              <div class="change-corr">
+                <div class="cc-item"><span class="cc-num" style="color:var(--accent2)">24</span><span class="cc-label">${t('changeTotalChanges')}</span></div>
+                <div class="cc-item"><span class="cc-num" style="color:var(--warn)">3</span><span class="cc-label">${t('changeFaultLinked')}</span></div>
+                <div class="cc-item"><span class="cc-num" style="color:var(--danger)">12.5%</span><span class="cc-label">${t('changeLinkRate')}</span></div>
+              </div>
+              <span class="summary-range">30d</span>
+            </div>
+          </div>
+        </div>`;
+
+  html+=`
+      </div><!-- /widget-grid -->
+      <footer class="dash-footer">
+        <span>${t('dashVersion')} v2.0.0</span>
+        <span>${t('dashLastSync')}: <span id="dashClock">--:--:--</span></span>
+      </footer>
+    </div>
+  </div>`;
+  return html;
 }
 
-// ===== ECharts Initialization =====
-function initDashboardCharts() {
-  const isDark = currentTheme === 'dark';
-  const textColor = isDark ? '#8b949e' : '#6B7A8D';
+// ==================== Page: Operations ====================
+function renderOperations(){
+  const isZh=currentLang==='zh';
+  let html=`<div class="dash-bg"><div class="ops-shell">`;
 
-  // Device Status Pie
-  const domStatus = document.getElementById('chartDeviceStatus');
-  if (domStatus) {
-    const c = echarts.init(domStatus);
-    charts.deviceStatus = c;
-    c.setOption({
-      tooltip: { trigger: 'item' },
-      legend: { bottom: 0, textStyle: { color: textColor, fontSize: 12 } },
-      series: [{
-        type: 'pie', radius: ['55%', '78%'], center: ['50%', '45%'],
-        avoidLabelOverlap: false,
-        itemStyle: { borderRadius: 6, borderColor: isDark ? '#161b22' : '#fff', borderWidth: 3 },
-        label: { show: false },
-        emphasis: { label: { show: true, fontSize: 16, fontWeight: 'bold' } },
-        data: [
-          { value: 8, name: currentLang==='zh'?'在线':'Online', itemStyle: { color: '#00b894' } },
-          { value: 1, name: currentLang==='zh'?'离线':'Offline', itemStyle: { color: '#d63031' } },
-          { value: 1, name: currentLang==='zh'?'降级':'Degraded', itemStyle: { color: '#e17055' } },
-          { value: 1, name: currentLang==='zh'?'维护中':'Maintenance', itemStyle: { color: '#0984e3' } },
-          { value: 1, name: currentLang==='zh'?'未纳管':'Unmanaged', itemStyle: { color: '#636e72' } },
-        ]
-      }]
-    });
-  }
+  // AI Recommendations
+  html+=`
+    <section class="ai-reco-strip">
+      <div class="ai-reco-head">
+        <span class="ai-reco-title">${t('aiRecoTitle')}</span>
+        <span class="ai-reco-count">3</span>
+        <span class="ai-reco-badge">${t('aiRecoAiBadge')}</span>
+      </div>
+      <div class="ai-briefing">
+        <p class="ai-briefing-text">${isZh?'当前网络整体运行平稳，但存在 3 项需要关注的风险点。SW-B2-01 设备离线超过 30 分钟，SW-A1-02 端口频繁翻动，A2车间整体健康状况下降。建议按优先级逐一排查。':'The network is generally stable but 3 risk items need attention. SW-B2-01 has been offline for over 30 minutes, SW-A1-02 has frequent port flaps, and A2 workshop health is declining.'}</p>
+        <ul class="ai-briefing-priorities">
+          <li>${isZh?'P0: 恢复 SW-B2-01 设备连接（B2车间生产网络中断）':'P0: Restore SW-B2-01 connectivity (B2 workshop production network down)'}</li>
+          <li>${isZh?'P1: 排查 SW-A1-02 Gi1/0/15 端口翻动根因（5次/24h）':'P1: Investigate SW-A1-02 Gi1/0/15 port flap root cause (5x/24h)'}</li>
+          <li>${isZh?'P2: 检查 A2车间 交换机 CPU 负载趋势':'P2: Check A2 workshop switch CPU load trend'}</li>
+        </ul>
+        <p class="ai-briefing-insight">${isZh?'洞察：过去30天，端口翻动类故障占比最高（40%），建议安排物理层巡检。':'Insight: Port flapping accounts for 40% of faults in the last 30 days. Schedule physical layer inspection.'}</p>
+      </div>
+      <div class="ai-reco-list">
+        <div class="ai-reco-card critical" onclick="showDemoMsg()">
+          <span class="ai-reco-cat">${t('aiRecoCat_device')}</span>
+          <strong class="ai-reco-card-title">${isZh?'SW-B2-01 设备离线恢复':'SW-B2-01 Device Offline Recovery'}</strong>
+          <span class="ai-reco-detail">${isZh?'ping不可达超过30分钟，建议现场检查电源和 uplink':'Unreachable >30min, check power and uplink on site'}</span>
+        </div>
+        <div class="ai-reco-card high" onclick="showDemoMsg()">
+          <span class="ai-reco-cat">${t('aiRecoCat_fault')}</span>
+          <strong class="ai-reco-card-title">${isZh?'SW-A1-02 端口翻动排查':'SW-A1-02 Port Flap Investigation'}</strong>
+          <span class="ai-reco-detail">${isZh?'24h内5次端口翻动，建议更换光模块或光纤':'5 port flaps in 24h, consider replacing SFP or fiber'}</span>
+        </div>
+        <div class="ai-reco-card medium" onclick="showDemoMsg()">
+          <span class="ai-reco-cat">${t('aiRecoCat_compliance')}</span>
+          <strong class="ai-reco-card-title">${isZh?'备份合规缺口修复':'Backup Compliance Gap Fix'}</strong>
+          <span class="ai-reco-detail">${isZh?'4台设备缺少最新备份，建议补充定时备份任务':'4 devices missing recent backups, add scheduled backup tasks'}</span>
+        </div>
+      </div>
+    </section>`;
 
-  // Fault Trend Line
-  const domTrend = document.getElementById('chartFaultTrend');
-  if (domTrend) {
-    const c = echarts.init(domTrend);
-    charts.faultTrend = c;
-    const days = currentLang === 'zh'
-      ? ['7/24','7/25','7/26','7/27','7/28','7/29','7/30']
-      : ['Jul 24','Jul 25','Jul 26','Jul 27','Jul 28','Jul 29','Jul 30'];
-    c.setOption({
-      tooltip: { trigger: 'axis' },
-      legend: { data: [currentLang==='zh'?'新增':'New', currentLang==='zh'?'解决':'Resolved'], bottom: 0, textStyle: { color: textColor, fontSize: 12 } },
-      grid: { left: 10, right: 20, top: 10, bottom: 30 },
-      xAxis: { type: 'category', data: days, axisLabel: { color: textColor, fontSize: 11 }, axisLine: { lineStyle: { color: textColor } } },
-      yAxis: { type: 'value', axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: isDark ? '#21262d' : '#EEF2F6' } } },
-      series: [
-        { name: currentLang==='zh'?'新增':'New', type: 'line', data: [3,2,4,1,3,2,3], smooth: true, symbol: 'circle', symbolSize: 6,
-          lineStyle: { color: '#e17055', width: 2.5 }, itemStyle: { color: '#e17055' }, areaStyle: { color: 'rgba(225,112,85,.08)' } },
-        { name: currentLang==='zh'?'解决':'Resolved', type: 'line', data: [2,3,3,2,4,1,2], smooth: true, symbol: 'circle', symbolSize: 6,
-          lineStyle: { color: '#00b894', width: 2.5 }, itemStyle: { color: '#00b894' }, areaStyle: { color: 'rgba(0,184,148,.08)' } },
-      ]
-    });
-  }
+  // KPI Cards Section
+  html+=`
+    <section>
+      <div class="section-heading">
+        <div><h2 class="section-title">${t('dashHeroTitle')}</h2></div>
+        <p class="section-desc">${t('dashSectionMetricsDesc')}</p>
+      </div>
+      <div class="ops-kpi-grid">`;
 
-  // Top Fault Devices Bar
-  const domTop = document.getElementById('chartTopFaults');
-  if (domTop) {
-    const c = echarts.init(domTop);
-    charts.topFaults = c;
-    const devs = ['SW-A1-02','SW-A2-03','SW-B2-01','SW-A1-01','SW-Core-02'];
-    c.setOption({
-      tooltip: { trigger: 'axis' },
-      grid: { left: 10, right: 20, top: 10, bottom: 20 },
-      xAxis: { type: 'category', data: devs, axisLabel: { color: textColor, fontSize: 11, rotate: 20 }, axisLine: { lineStyle: { color: textColor } } },
-      yAxis: { type: 'value', name: currentLang==='zh'?'故障次数':'Fault Count', nameTextStyle: { color: textColor, fontSize: 11 }, axisLabel: { color: textColor, fontSize: 11 }, splitLine: { lineStyle: { color: isDark ? '#21262d' : '#EEF2F6' } } },
-      series: [{
-        type: 'bar', data: [
-          { value: 5, itemStyle: { color: '#e17055' } },
-          { value: 3, itemStyle: { color: '#0984e3' } },
-          { value: 2, itemStyle: { color: '#d63031' } },
-          { value: 2, itemStyle: { color: '#0984e3' } },
-          { value: 1, itemStyle: { color: '#e17055' } },
-        ],
-        barWidth: 28, borderRadius: [6,6,0,0],
-      }]
+  // 1. Device Overview (NOC Panel) - spans 2 rows
+  const healthScore=Math.round((142/148)*100);
+  const hsCls=healthScore>=95?'healthy':(healthScore>=80?'warning':'critical');
+  html+=`
+        <div class="ops-kpi-card span-row" onclick="switchPage('devices')">
+          <div class="kpi-header">
+            <div class="kpi-icon devices"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+            <span class="kpi-title">${t('dashNetworkDevices')}</span>
+            <span class="device-health-score ${hsCls}">${healthScore}</span>
+          </div>
+          <div class="noc-device-panel">
+            <div class="noc-top-section">
+              <div class="noc-health-gauge">
+                <svg class="noc-ring" viewBox="0 0 100 100">
+                  <circle class="noc-ring-bg" cx="50" cy="50" r="42"/>
+                  <circle class="noc-ring-progress ${hsCls}" cx="50" cy="50" r="42" stroke-dasharray="${263.9*.01}" stroke-dashoffset="${263.9*(1-healthScore/100)}"/>
+                </svg>
+                <div class="noc-health-center"><span class="noc-health-value">${healthScore}</span><span class="noc-health-label">${t('dashHealthScore')}</span></div>
+              </div>
+              <div class="noc-quick-stats">
+                <div class="noc-stat-box"><span class="noc-stat-value reachability">95.9%</span><span class="noc-stat-label">${t('dashReachability')}</span></div>
+                <div class="noc-stat-box"><span class="noc-stat-value warning">2</span><span class="noc-stat-label">${t('dashUnreachable')}</span></div>
+                <div class="noc-stat-box"><span class="noc-stat-value">148</span><span class="noc-stat-label">${t('dashTotalDevices')}</span></div>
+              </div>
+            </div>
+            <div class="noc-layers">
+              ${[{name:t('deviceLayerCore'),total:8,reachable:8,unreachable:0,maintenance:0,types:[{type:'core_switch',label:t('deviceTypeCoreSwitch'),t:2,r:2},{type:'server_switch',label:t('deviceTypeServerSwitch'),t:4,r:4},{type:'router',label:t('deviceTypeRouter'),t:2,r:2}]},{name:t('deviceLayerFirewall'),total:4,reachable:4,unreachable:0,maintenance:0,types:[{type:'pa',label:t('deviceTypePA'),t:2,r:2},{type:'ftd',label:t('deviceTypeFTD'),t:2,r:2}]},{name:t('deviceLayerWiFi'),total:46,reachable:44,unreachable:0,maintenance:2,types:[{type:'ap',label:t('deviceTypeAP'),t:42,r:40},{type:'wlc',label:t('deviceTypeWLC'),t:4,r:4}]},{name:t('deviceLayerAccess'),total:90,reachable:86,unreachable:1,maintenance:3,types:[{type:'uce',label:t('deviceTypeUCE'),t:48,r:46},{type:'office_switch',label:t('deviceTypeOfficeSwitch'),t:42,r:40}]}].map(l=>`
+              <div class="noc-layer">
+                <div class="noc-layer-header"><span class="noc-layer-name">${l.name}</span><span class="noc-layer-count">${l.total} ${currentLang==='zh'?'台':'devices'}</span></div>
+                <div class="noc-layer-bar">
+                  <div class="noc-segment reachable" style="width:${l.total>0?Math.round(l.reachable/l.total*100):0}%"></div>
+                  ${l.unreachable>0?`<div class="noc-segment unreachable" style="width:${Math.round(l.unreachable/l.total*100)}%"></div>`:''}
+                  ${l.maintenance>0?`<div class="noc-segment maintenance" style="width:${Math.round(l.maintenance/l.total*100)}%"></div>`:''}
+                </div>
+                <div class="noc-layer-types">${l.types.map(t=>`
+                  <div class="noc-type-pill active${t.r<t.t?' alert':''}">
+                    <span class="noc-type-dot ${t.r===t.t?'ok':'alert'}"></span>
+                    <span class="noc-type-name">${t.label}</span>
+                    <span class="noc-type-num">${t.t}</span>
+                  </div>`).join('')}</div>
+              </div>`).join('')}
+            </div>
+            <div class="noc-compliance">
+              <div class="noc-compliance-header"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg><span>${t('dashConfigCompliance')}</span></div>
+              <div class="noc-compliance-grid">
+                <div class="noc-compliance-item"><div class="noc-compliance-bar"><div class="noc-compliance-fill" style="width:94%"></div></div><span class="noc-compliance-label">${t('dashBackupCoverage')}</span><span class="noc-compliance-value">94%</span></div>
+                <div class="noc-compliance-item"><span class="noc-compliance-dot issue"></span><span class="noc-compliance-label">${t('dashUnbackedDevices')}</span><span class="noc-compliance-value">4</span></div>
+                <div class="noc-compliance-item"><span class="noc-compliance-dot changed"></span><span class="noc-compliance-label">${t('dashConfigChanges7d')}</span><span class="noc-compliance-value">8</span></div>
+              </div>
+            </div>
+          </div>
+        </div>`;
+
+  // 2. Fault Events
+  html+=`
+        <div class="ops-kpi-card" onclick="switchPage('faults')">
+          <div class="kpi-header">
+            <div class="kpi-icon faults has-alert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 9v4M12 17h.01"/><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.47a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg></div>
+            <span class="kpi-title">${t('dashFaultEvents')}</span>
+            <span class="trend-badge alert">${t('dashActive')}</span>
+          </div>
+          <div class="fault-active-section has-active">
+            <div class="big-number danger">4</div>
+            <div class="active-label">${t('dashActiveFaults')}</div>
+            <div class="severity-row">
+              <div class="severity-tag"><span class="dot critical"></span><span class="severity-label">${t('dashCritical')}</span><span class="severity-num">1</span></div>
+              <div class="severity-tag"><span class="dot major"></span><span class="severity-label">${t('dashMajor')}</span><span class="severity-num">2</span></div>
+              <div class="severity-tag"><span class="dot minor"></span><span class="severity-label">${t('dashMinor')}</span><span class="severity-num">1</span></div>
+            </div>
+          </div>
+          <div class="fault-resolved-section">
+            <span class="resolved-label">${t('dashResolvedFaults')}</span>
+            <span class="resolved-num">28</span>
+            <span class="resolved-period">${t('dashDays30')}</span>
+          </div>
+          <div class="fault-maintenance-footer">
+            <span class="maint-label">${t('dashMaintenance')}</span>
+            <span class="maint-item warn">${t('dashMaintenancePending')} 2</span>
+            <span class="maint-item active">${t('dashMaintenanceInProgress')} 1</span>
+            <span class="maint-item success">${t('dashMaintenanceCompleted')} 15</span>
+          </div>
+        </div>`;
+
+  // 3. Monthly OpEx
+  html+=`
+        <div class="ops-kpi-card">
+          <div class="kpi-header">
+            <div class="kpi-icon cost"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></div>
+            <span class="kpi-title">${t('dashMonthlyOpEx')}</span>
+          </div>
+          <div class="big-number">¥28,300</div>
+          <div class="cost-split">
+            <span class="cost-item-label"><span class="cost-dot parts"></span>${t('dashHardware')} ¥12,500</span>
+            <span class="cost-item-label"><span class="cost-dot labor"></span>${t('dashLabor')} ¥15,800</span>
+          </div>
+          <div class="cost-bar-chart">
+            <div class="bar-group">
+              ${[{label:isZh?'1月':'Jan',p:8000,l:12000},{label:isZh?'2月':'Feb',p:6000,l:14000},{label:isZh?'3月':'Mar',p:15000,l:13000},{label:isZh?'4月':'Apr',p:9000,l:15000},{label:isZh?'5月':'May',p:11000,l:16000},{label:isZh?'6月':'Jun',p:12500,l:15800}].map(m=>{
+                const maxH=Math.max(m.p+m.l,1);
+                return`<div class="cost-bar-item"><div class="cost-bar-track"><div class="cost-bar-fill parts" style="height:${m.p/31000*100}%"></div><div class="cost-bar-fill labor" style="height:${m.l/31000*100}%"></div></div><span class="cost-bar-label">${m.label}</span></div>`;
+              }).join('')}
+            </div>
+          </div>
+        </div>`;
+
+  // 4. Top 5 Fault Devices
+  html+=`
+        <div class="ops-kpi-card" onclick="switchPage('faults')">
+          <div class="kpi-header">
+            <div class="kpi-icon faults"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 20V10M12 20V4M6 20v-6"/></svg></div>
+            <span class="kpi-title">${t('dashTopFaultDevices')}</span>
+            <span class="trend-badge">30D</span>
+          </div>
+          <div class="top5-list">
+            ${[{name:'SW-A1-02',c:5},{name:'SW-A2-03',c:3},{name:'SW-B2-01',c:2},{name:'SW-A1-01',c:2},{name:'SW-Core-02',c:1}].map((d,i)=>`
+            <div class="top5-item"><span class="top5-rank">${i+1}</span><span class="top5-name">${d.name}</span><span class="top5-count">${d.c}</span></div>`).join('')}
+          </div>
+        </div>`;
+
+  // 5. Spare Inventory
+  html+=`
+        <div class="ops-kpi-card" onclick="showDemoMsg()">
+          <div class="kpi-header">
+            <div class="kpi-icon inventory"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg></div>
+            <span class="kpi-title">${t('dashSpareInventory')}</span>
+          </div>
+          <div class="spare-row">
+            <span class="spare-stat"><span class="spare-num">32</span>${t('dashSpareModels')}</span>
+            <span class="spare-stat"><span class="spare-num">486</span>${t('dashSpareTotalQty')}</span>
+            <span class="spare-stat"><span class="spare-num warning">5</span>${t('dashSpareLowStock')}</span>
+          </div>
+        </div>`;
+
+  html+=`</div></section>`;
+
+  // Charts Section
+  html+=`
+    <section>
+      <div class="section-heading">
+        <div><h2 class="section-title">${t('dashSectionAnalyticsTitle')}</h2></div>
+        <p class="section-desc">${t('dashSectionAnalyticsDesc')}</p>
+      </div>
+      <div class="charts-split">
+        <div class="chart-panel emphasis">
+          <div class="panel-header">
+            <h3 class="panel-title">${t('dashFaultTimeline')}</h3>
+            <div class="panel-controls">
+              <div class="pill-tabs" id="faultPills"></div>
+            </div>
+          </div>
+          <div class="panel-body"><div class="line-chart-container" id="chartFaultTimeline"></div></div>
+        </div>
+        <div class="risk-panel">
+          <div class="panel-header">
+            <h3 class="panel-title">${t('dashConfigBackups')}</h3>
+            <button class="link-btn" onclick="switchPage('backups')">${t('dashViewAll')} <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg></button>
+          </div>
+          <div class="panel-body">
+            <div class="backup-panel-list">
+              ${[{name:'SW-Core-01',time:'07-30 02:00',changed:false},{name:'SW-A1-01',time:'07-30 02:05',changed:false},{name:'SW-A2-01',time:'07-30 02:10',changed:true},{name:'SW-Edge-01',time:'07-30 02:15',changed:true},{name:'SW-A1-02',time:'07-30 02:06',changed:false},{name:'SW-B1-01',time:'07-30 02:20',changed:false}].map(b=>`
+              <div class="backup-panel-item">
+                <span class="backup-panel-dot${b.changed?' changed':''}"></span>
+                <span class="backup-panel-name">${b.name}</span>
+                <span class="backup-panel-time">${b.time}</span>
+              </div>`).join('')}
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  // Activity Section
+  html+=`
+    <section>
+      <div class="section-heading">
+        <div><h2 class="section-title">${t('dashSectionActivityTitle')}</h2></div>
+        <p class="section-desc">${t('dashSectionActivityDesc')}</p>
+      </div>
+      <div class="activity-grid">
+        <div class="activity-panel">
+          <div class="panel-header"><h3 class="panel-title">${t('dashEventStream')}</h3><span class="alert-badge">3</span></div>
+          <div class="panel-body" style="padding:0">
+            ${[{dot:'danger',title:isZh?'SW-B2-01 设备离线告警':'SW-B2-01 Device Offline',summary:isZh?'ping 不可达，B2车间网络中断':'ping unreachable, B2 workshop network down',time:'08:42',link:''},{dot:'warn',title:isZh?'SW-A1-02 Gi1/0/15 端口翻动':'SW-A1-02 Gi1/0/15 Port Flap',summary:isZh?'24h内第5次翻动':'5th flap in 24h',time:'08:15',link:''},{dot:'warn',title:isZh?'SW-A1-01 CPU使用率告警':'SW-A1-01 CPU Alert',summary:isZh?'CPU使用率达87%，超过阈值85%':'CPU at 87%, exceeds 85% threshold',time:'07:58',link:''},{dot:'info',title:isZh?'每日自动备份完成':'Daily Backup Completed',summary:isZh?'10/12 台设备备份成功':'10/12 devices backed up successfully',time:'07:30',link:''},{dot:'success',title:isZh?'合规扫描完成':'Compliance Scan Done',summary:isZh?'得分 87/100，发现 4 项不合规':'Score 87/100, 4 non-compliant items found',time:'06:00',link:''}].map(e=>`
+            <div class="event-item" onclick="showDemoMsg()">
+              <div class="event-timeline-marker"><span class="event-dot ${e.dot}"></span><span class="event-line"></span></div>
+              <div class="event-content"><span class="event-title">${e.title}</span><span class="event-summary">${e.summary}</span><span class="event-time">${e.time}</span></div>
+            </div>`).join('')}
+          </div>
+        </div>
+        <div class="activity-panel">
+          <div class="panel-header"><h3 class="panel-title">${t('dashRecentActivity')}</h3></div>
+          <div class="panel-body" style="padding:0">
+            ${[{type:'backup',text:isZh?'配置备份: SW-Core-01 — 未变更':'Config Backup: SW-Core-01 — Unchanged',time:'07-30 02:00'},{type:'backup',text:isZh?'配置备份: SW-A1-01 — 未变更':'Config Backup: SW-A1-01 — Unchanged',time:'07-30 02:05'},{type:'backup',text:isZh?'配置备份: SW-A2-01 — 有变更':'Config Backup: SW-A2-01 — Modified',time:'07-30 02:10'},{type:'fault',text:isZh?'32个故障事件 (近30天)':'32 fault events (last 30 days)',time:'07-30 08:00'},{type:'maintenance',text:isZh?'15项维修已完成':'15 maintenance items completed',time:'07-30 08:00'}].map(a=>`
+            <div class="activity-item" onclick="showDemoMsg()">
+              <div class="activity-icon ${a.type}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">${a.type==='backup'?'<path d="M12 3v12M12 15l4-4M12 15l-4-4"/>':a.type==='fault'?'<path d="M12 9v4M12 17h.01"/>':a.type==='maintenance'?'<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>':'<path d="M3 12h4l3 8 4-16 3 8h4"/>'}</svg></div>
+              <div class="activity-body"><span class="activity-text">${a.text}</span><span class="activity-time">${a.time}</span></div>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </section>`;
+
+  html+=`
+      <footer class="dash-footer">
+        <span>${t('dashVersion')} v2.0.0</span>
+        <span>${t('dashLastSync')}: <span id="dashClock">--:--:--</span></span>
+      </footer>
+    </div>
+  </div>`;
+  return html;
+}
+
+// ==================== Simple Pages ====================
+function renderDevices(){
+  const devs=[{name:'SW-Core-01',ip:'10.88.1.1',model:'Cisco C9500-24Y4C',location:'A栋中心机房',status:'online',health:98,reachable:true},{name:'SW-Core-02',ip:'10.88.1.2',model:'Cisco C9500-24Y4C',location:'A栋中心机房',status:'online',health:95,reachable:true},{name:'SW-A1-01',ip:'10.88.10.1',model:'Cisco C9300-48P',location:'A1车间',status:'online',health:88,reachable:true},{name:'SW-A1-02',ip:'10.88.10.2',model:'Cisco C9300-48P',location:'A1车间',status:'degraded',health:72,reachable:true},{name:'SW-A2-01',ip:'10.88.11.1',model:'Cisco C9200-48P',location:'A2车间',status:'online',health:91,reachable:true},{name:'SW-A2-02',ip:'10.88.11.2',model:'Cisco C9200-48P',location:'A2车间',status:'online',health:85,reachable:true},{name:'SW-A2-03',ip:'10.88.11.3',model:'Cisco C9200-24P',location:'A2车间',status:'online',health:76,reachable:true},{name:'SW-B1-01',ip:'10.88.20.1',model:'Cisco C9300-48U',location:'B1车间',status:'online',health:93,reachable:true},{name:'SW-B1-02',ip:'10.88.20.2',model:'Cisco C9300-48U',location:'B1车间',status:'maintenance',health:80,reachable:false},{name:'SW-B2-01',ip:'10.88.21.1',model:'Cisco C9200-48P',location:'B2车间',status:'offline',health:0,reachable:false},{name:'SW-Edge-01',ip:'10.88.254.1',model:'Cisco C8500-12X',location:'边界机房',status:'online',health:97,reachable:true},{name:'SW-Edge-02',ip:'10.88.254.2',model:'Cisco C8500-12X',location:'边界机房',status:'online',health:96,reachable:true}];
+  const sMap={online:`<span class="badge badge-green">${t('statusOnline')}</span>`,offline:`<span class="badge badge-red">${t('statusOffline')}</span>`,degraded:`<span class="badge badge-orange">${t('statusDegraded')}</span>`,maintenance:`<span class="badge badge-blue">${t('statusMaintenance')}</span>`};
+  return `<div class="simple-shell">
+    <div class="page-header"><div class="breadcrumb">${t('tabDevices')} / ${t('pageDevices')}</div><h2>${t('pageDevices')} <span style="font-size:14px;color:var(--text-muted);font-weight:400;">(${devs.length})</span></h2></div>
+    <div class="card-panel">
+      <div class="toolbar"><input class="search-input" placeholder="${t('searchDevice')}"><button class="btn btn-primary btn-sm">+ ${t('btnAdd')}</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📥 ${t('btnImport')}</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">📤 ${t('btnExport')}</button></div>
+      <div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>${t('colName')}</th><th>${t('colIP')}</th><th>${t('colModel')}</th><th>${t('colLocation')}</th><th>${t('colStatus')}</th><th>${t('colHealth')}</th><th>${t('colReachable')}</th><th>${t('colAction')}</th></tr></thead>
+      <tbody>${devs.map(d=>{const hc=d.health>=90?'color:var(--accent)':d.health>=70?'color:var(--warn)':'color:var(--danger)';return`<tr><td><strong>${d.name}</strong></td><td class="text-mono">${d.ip}</td><td>${d.model}</td><td>${d.location}</td><td>${sMap[d.status]}</td><td><strong style="${hc}">${d.health}</strong></td><td>${d.reachable?`<span class="badge badge-green">${t('reachable')}</span>`:`<span class="badge badge-red">${t('unreachable')}</span>`}</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">${t('deviceDetail')}</button></td></tr>`}).join('')}</tbody></table></div>
+    </div></div>`;
+}
+function renderBackups(){
+  const bks=[{device:'SW-Core-01',time:'2026-07-30 02:00:05',method:'SSH (Netmiko)',size:'48.2 KB',status:'success'},{device:'SW-Core-02',time:'2026-07-30 02:01:12',method:'SSH (Netmiko)',size:'47.8 KB',status:'success'},{device:'SW-A1-01',time:'2026-07-30 02:05:33',method:'SSH (Netmiko)',size:'32.1 KB',status:'success'},{device:'SW-A1-02',time:'2026-07-30 02:06:18',method:'SSH (Netmiko)',size:'31.5 KB',status:'success'},{device:'SW-A2-01',time:'2026-07-30 02:10:01',method:'SSH (Netmiko)',size:'28.9 KB',status:'success'},{device:'SW-B1-02',time:'2026-07-30 02:11:45',method:'SSH (Netmiko)',size:'-',status:'failed'},{device:'SW-B2-01',time:'2026-07-30 02:12:03',method:'SSH (Netmiko)',size:'-',status:'failed'},{device:'SW-Edge-01',time:'2026-07-30 02:15:22',method:'SSH (Netmiko)',size:'52.3 KB',status:'success'}];
+  return `<div class="simple-shell">
+    <div class="page-header"><div class="breadcrumb">${t('tabDevices')} / ${t('pageBackups')}</div><h2>${t('pageBackups')}</h2></div>
+    <div class="card-panel">
+      <div class="toolbar"><input class="search-input" placeholder="${t('searchBackup')}"><button class="btn btn-primary btn-sm" onclick="showDemoMsg()">🔄 ${t('btnBatchBackup')}</button></div>
+      <div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>${t('colName')}</th><th>${t('colBackupTime')}</th><th>${t('colBackupMethod')}</th><th>${t('colBackupSize')}</th><th>${t('colBackupStatus')}</th><th>${t('colAction')}</th></tr></thead>
+      <tbody>${bks.map(b=>`<tr><td><strong>${b.device}</strong></td><td class="text-mono">${b.time}</td><td>${b.method}</td><td class="text-mono">${b.size}</td><td>${b.status==='success'?`<span class="badge badge-green">${t('backupSuccess')}</span>`:`<span class="badge badge-red">${t('backupFailed')}</span>`}</td><td><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">${t('btnViewDiff')}</button></td></tr>`).join('')}</tbody></table></div>
+    </div></div>`;
+}
+function renderFaults(){
+  const fs=[{title:'SW-B2-01 设备离线告警',device:'SW-B2-01',severity:'critical',status:'open',time:'2026-07-30 08:42',assignee:'-'},{title:'SW-A1-02 端口 Gi1/0/15 频繁翻动',device:'SW-A1-02',severity:'major',status:'diagnosing',time:'2026-07-30 08:15',assignee:'张工'},{title:'SW-A1-01 CPU 使用率持续超过85%',device:'SW-A1-01',severity:'minor',status:'diagnosing',time:'2026-07-29 16:30',assignee:'李工'},{title:'SW-Core-02 上联端口 CRC 错误增长',device:'SW-Core-02',severity:'major',status:'open',time:'2026-07-29 14:20',assignee:'-'},{title:'SW-A2-03 温度传感器告警',device:'SW-A2-03',severity:'minor',status:'resolved',time:'2026-07-29 10:05',assignee:'王工'},{title:'SW-Edge-01 BGP 邻居震荡',device:'SW-Edge-01',severity:'critical',status:'resolved',time:'2026-07-28 22:30',assignee:'赵工'},{title:'SW-B1-01 PoE 供电异常',device:'SW-B1-01',severity:'minor',status:'closed',time:'2026-07-28 15:12',assignee:'李工'}];
+  const sevMap={critical:`<span class="badge badge-red">${t('severityCritical')}</span>`,major:`<span class="badge badge-orange">${t('severityMajor')}</span>`,minor:`<span class="badge badge-blue">${t('severityMinor')}</span>`,info:`<span class="badge badge-gray">${t('severityInfo')}</span>`};
+  const stMap={open:`<span class="badge badge-red">${t('faultOpen')}</span>`,diagnosing:`<span class="badge badge-orange">${t('faultDiagnosing')}</span>`,resolved:`<span class="badge badge-green">${t('faultResolved')}</span>`,closed:`<span class="badge badge-gray">${t('faultClosed')}</span>`};
+  return `<div class="simple-shell">
+    <div class="page-header"><div class="breadcrumb">${t('tabDevices')} / ${t('pageFaults')}</div><h2>${t('pageFaults')}</h2></div>
+    <div class="card-panel">
+      <div class="toolbar"><input class="search-input" placeholder="${t('searchFault')}"><button class="btn btn-primary btn-sm">+ ${t('btnAdd')}</button></div>
+      <div style="overflow-x:auto;"><table class="data-table"><thead><tr><th>${t('colFaultTitle')}</th><th>${t('colFaultDevice')}</th><th>${t('colFaultLevel')}</th><th>${t('colFaultStatus')}</th><th>${t('colFaultTime')}</th><th>${t('colAssignee')}</th><th>${t('colAction')}</th></tr></thead>
+      <tbody>${fs.map(f=>{let acts='';if(f.status==='open')acts=`<button class="btn btn-outline btn-sm" onclick="showDemoMsg()" style="margin-right:4px">${t('btnDiagnose')}</button><button class="btn btn-outline btn-sm" onclick="showDemoMsg()">${t('btnAssign')}</button>`;else if(f.status==='diagnosing')acts=`<button class="btn btn-outline btn-sm" onclick="showDemoMsg()">${t('btnClose')}</button>`;return`<tr><td><strong>${f.title}</strong></td><td>${f.device}</td><td>${sevMap[f.severity]}</td><td>${stMap[f.status]}</td><td class="text-mono">${f.time}</td><td>${f.assignee}</td><td>${acts}</td></tr>`}).join('')}</tbody></table></div>
+    </div></div>`;
+}
+
+// ==================== Charts ====================
+function initOperationsCharts(){
+  const isDark=currentTheme==='dark';
+  const textColor=isDark?'#e6edf3':'#0f172a';
+  const axisColor=isDark?'#8b949e':'#6B7A8D';
+  const splitColor=isDark?'#21262d':'#f1f5f9';
+
+  const dom=document.getElementById('chartFaultTimeline');
+  if(!dom)return;
+  const c=echarts.init(dom);
+  charts.faultTimeline=c;
+  const days=currentLang==='zh'?['7/24','7/25','7/26','7/27','7/28','7/29','7/30']:['Jul 24','Jul 25','Jul 26','Jul 27','Jul 28','Jul 29','Jul 30'];
+  c.setOption({
+    tooltip:{trigger:'axis',backgroundColor:isDark?'rgba(15,23,42,.92)':'rgba(255,255,255,.95)',borderColor:isDark?'#30363d':'#E2E8F2',textStyle:{color:textColor,fontSize:12}},
+    legend:{data:[t('dashCritical'),t('dashMajor'),t('dashMinor'),'Warning'],bottom:0,itemWidth:10,itemHeight:10,textStyle:{color:axisColor,fontSize:11}},
+    grid:{left:'3%',right:'4%',bottom:'14%',top:'5%',containLabel:true},
+    xAxis:{type:'category',boundaryGap:false,data:days,axisLabel:{color:axisColor,fontSize:10},axisLine:{lineStyle:{color:axisColor}}},
+    yAxis:{type:'value',minInterval:1,axisLabel:{color:axisColor,fontSize:10},splitLine:{lineStyle:{color:splitColor,type:'dashed'}}},
+    series:[
+      {name:t('dashCritical'),type:'line',stack:'Total',smooth:true,symbol:'circle',symbolSize:4,showSymbol:false,itemStyle:{color:'#d63031'},lineStyle:{width:2.5},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(214,48,49,.35)'},{offset:1,color:'rgba(214,48,49,.02)'}]}},data:[0,1,0,0,1,0,1]},
+      {name:t('dashMajor'),type:'line',stack:'Total',smooth:true,symbol:'circle',symbolSize:4,showSymbol:false,itemStyle:{color:'#e17055'},lineStyle:{width:2.5},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(225,112,85,.3)'},{offset:1,color:'rgba(225,112,85,.02)'}]}},data:[1,0,2,1,0,1,2]},
+      {name:t('dashMinor'),type:'line',stack:'Total',smooth:true,symbol:'circle',symbolSize:4,showSymbol:false,itemStyle:{color:'#0984e3'},lineStyle:{width:2.5},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(9,132,227,.25)'},{offset:1,color:'rgba(9,132,227,.02)'}]}},data:[2,1,2,0,1,1,0]},
+      {name:'Warning',type:'line',stack:'Total',smooth:true,symbol:'circle',symbolSize:4,showSymbol:false,itemStyle:{color:'#636e72'},lineStyle:{width:2},areaStyle:{color:{type:'linear',x:0,y:0,x2:0,y2:1,colorStops:[{offset:0,color:'rgba(99,110,114,.15)'},{offset:1,color:'rgba(99,110,114,.02)'}]}},data:[0,0,0,1,1,0,0]},
+    ]
+  });
+
+  // Fault time pills
+  const pills=document.getElementById('faultPills');
+  if(pills){
+    ['7D','30D','3M','1Y'].forEach((v,i)=>{
+      const btn=document.createElement('button');
+      btn.className='pill-tab'+(i===1?' active':'');
+      btn.textContent=v;
+      btn.onclick=function(){
+        pills.querySelectorAll('.pill-tab').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+      };
+      pills.appendChild(btn);
     });
   }
 }
 
-// ===== Init on Load =====
-document.addEventListener('DOMContentLoaded', () => {
+function initDashboardCharts(){} // Dashboard page uses static widgets, no ECharts needed currently
+
+// ==================== Render All ====================
+function renderAll(){
+  renderTopNav();renderSidebar();
+  const main=document.getElementById('mainContent');
+  let html='';
+  switch(currentPage){
+    case'dashboard':html=renderDashboard();break;
+    case'operations':html=renderOperations();break;
+    case'devices':html=renderDevices();break;
+    case'backups':html=renderBackups();break;
+    case'faults':html=renderFaults();break;
+    default:html=`<div class="simple-shell"><div class="page-header"><h2>${currentPage}</h2></div><div class="card-panel" style="text-align:center;padding:60px;color:var(--text-muted);"><div style="font-size:48px;margin-bottom:16px;">🚧</div><p>${currentLang==='zh'?'演示页面（功能完整版请运行系统）':'Demo page (run the full system for complete features)'}</p></div></div>`;
+  }
+  main.innerHTML=html;
   applyI18n();
-});
+  if(currentPage==='operations')setTimeout(initOperationsCharts,150);
+  if(currentPage==='dashboard')setTimeout(initDashboardCharts,150);
+  updateClock();
+}
 
-// ===== Keyboard shortcut: Enter to login =====
-document.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && !document.getElementById('loginOverlay').classList.contains('hidden')) {
-    doLogin();
-  }
-});
+function updateClock(){
+  const now=new Date();
+  const ts=now.toTimeString().slice(0,8);
+  const el=document.getElementById('dashClock');
+  if(el)el.textContent=ts;
+}
 
-// ===== Resize handler for charts =====
-window.addEventListener('resize', () => {
-  Object.values(charts).forEach(c => { try { c.resize(); } catch(e){} });
-});
+// ==================== Init ====================
+document.addEventListener('DOMContentLoaded',()=>{applyI18n()});
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&!document.getElementById('loginOverlay').classList.contains('hidden'))doLogin()});
+window.addEventListener('resize',()=>{Object.values(charts).forEach(c=>{try{c.resize()}catch(e){}})});
 </script>
 </body>
 </html>
