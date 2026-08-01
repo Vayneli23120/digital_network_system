@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts 已完成（2026-08-01） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy 已完成（2026-08-01） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -76,7 +76,8 @@
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
 - [ ] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
-- [ ] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[待验证]` 需确认模板来源是否仅限管理员
+- [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
+  → 修复（步骤 4B）：新增统一 `render_network_template()`，使用 `ImmutableSandboxedEnvironment`，清空默认 globals，阻断 `__class__` / `__globals__` / `cycler` / `lipsum` 逃逸；上下文仅允许 JSON 类型且不可覆盖 `now/now_str/device`，限制模板、上下文、输出大小并拦截超大乘法/指数。Deploy HTTP、DeployService、模板服务和 Deploy WebSocket 全部复用该入口，内置 4 个模板兼容测试通过。
 - [ ] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
 - [x] **P1** `auth/router.py:102,110` — passlib 缺失时静默退化为明文存储 + 明文比较，无任何告警。建议缺失即启动失败。`[已复核]`
   → 部分缓解（步骤 1）：`nas user create-admin` / `reset-password` 会先检查 `PWD_CONTEXT_AVAILABLE`，
@@ -164,6 +165,32 @@ debug 双开关、管理员通过与普通用户 403、环境变量映射和认�
   secret）；admin POST 最小改动 200 且空敏感字段保留；保存触发 config.yaml 原子重写后
   `auth_enabled`/`jwt_secret` 等安全配置保留、服务正常。
 - 未执行：浏览器端（D）、Docker（E）、用户归属审计（F）同前。
+
+**步骤 4B 验证结果（2026-08-01）**：✅ Deploy HTTP 权限矩阵完成：preview/variables/windows/history
+使用 `config:read`，execute/schedule 使用 `config:deploy`，rollback 使用 `config:rollback`，删除历史保留
+`deploy_history:delete`；✅ 主部署 WebSocket 在访问设备/凭证前校验 JWT + `config:deploy`，前端首条消息携带
+access token，部署历史、审计与工具日志统一记录 token 用户名；✅ HTTP 与流式 Netmiko/NAPALM 均在设备连接前执行命令守卫；
+✅ Deploy 请求改用 Pydantic 模型，限制 mode/engine/并发/设备数/维护窗口/额外字段；✅ 所有客户端和数据库来源的
+备份路径均约束在 `storage.backup_dir`，拒绝 `../`、根目录外绝对路径与符号链接逃逸；
+✅ `tests/test_deploy_security_step4b.py` + `tests/test_secure_template_renderer.py` 为 **44 passed / 1 skipped**
+（Windows 无符号链接权限时跳过），相邻回归新增代码无失败，Ruff 与 `app.main` 导入通过；
+✅ Windows 全量 pytest 为 **54 failed / 484 passed / 5 skipped / 10 errors**，失败集合仍为既存基线。
+⚠️ 本机未安装 `frontend/node_modules`，Vite build 未执行；`tests/test_deploy_service.py` 仍有 2 个旧模块 patch 路径失败。
+
+**步骤 4B 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、两个 4B 测试文件、批次一及全量 pytest，失败集合不得新增
+- [ ] `config:read` 用户只能 preview/variables/windows/history，execute/schedule/rollback 均 403
+- [ ] `config:deploy` 用户可通过 WebSocket 连接并执行**实验设备 dry-run**，历史与 LogEntry 用户名必须等于 token 用户
+- [ ] 无 token、伪造 token、仅 `config:read` 的 WebSocket 部署分别被拒绝，且拒绝前不得读取凭证或连接设备
+- [ ] `../`、根目录外绝对路径、符号链接逃逸在 HTTP 与 WebSocket 均被拒绝
+- [ ] SSTI payload（`__class__`、`__globals__`、`cycler`、`lipsum`、超大乘法/指数）全部被拒绝且不执行系统命令
+- [ ] 四个内置模板与现有用户模板抽样渲染正常；循环、条件、default、`now()/now_str` 和缺失变量兼容
+- [ ] 浏览器 Deploy 页 preview/历史/预约/回滚权限表现正确，WebSocket 断线与 401/403 提示可理解
+- [ ] 前端环境可用时执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4C devices——按 read/write/delete/import/export/photo 划分 33 个端点权限；
+照片上传使用安全生成文件名，限制 MIME、扩展名与大小并把文件 IO 移出事件循环；批量发现与 SNMP 写操作归入
+`device:write`。完成后再进入 4D logs（路径穿越 + WebSocket token + log:read/log:clear）。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 

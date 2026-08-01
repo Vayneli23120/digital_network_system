@@ -85,6 +85,34 @@ def _resolve_token_user(token: str, db: Session) -> User:
     return _resolve_payload_user(decode_access_token_payload(token), db)
 
 
+def resolve_token_principal(token: Optional[str], db: Session) -> Principal:
+    """为 WebSocket 等非 HTTPBearer 通道解析可信身份。"""
+    config = get_config()
+    if token and not (
+        token == "placeholder_token_auth_disabled"
+        and development_auth_bypass_enabled()
+    ):
+        user = _resolve_token_user(token, db)
+        return Principal(
+            username=user.username,
+            user_id=user.id,
+            user=user,
+            auth_source="jwt",
+        )
+
+    if config.security.auth_enabled:
+        raise _unauthorized("未提供认证令牌")
+    if not development_auth_bypass_enabled():
+        raise _unauthorized("认证已关闭，但开发身份旁路未启用")
+    return Principal(
+        username="developer",
+        user_id=None,
+        user=None,
+        auth_source="development_bypass",
+        is_development=True,
+    )
+
+
 def resolve_principal(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials],

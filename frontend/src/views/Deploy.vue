@@ -1712,6 +1712,7 @@ const executeDeploy = async () => {
     // 准备部署数据
     const deployData = {
       action: 'start_deploy',
+      access_token: localStorage.getItem('accessToken') || undefined,
       mode: deployForm.value.mode,
       engine: deployForm.value.engine,
       napalm_mode: deployForm.value.napalm_mode,

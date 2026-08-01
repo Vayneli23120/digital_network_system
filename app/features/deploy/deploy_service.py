@@ -5,10 +5,11 @@
 
 from loguru import logger
 from typing import List, Dict, Optional
-from datetime import datetime
 import re
 
 from app.core.command_guard import validate_commands, CommandGuardError
+from app.features.deploy.security import resolve_backup_file
+from app.shared.template_renderer import render_network_template
 
 try:
     from netmiko import ConnectHandler, NetmikoTimeoutException, NetmikoAuthenticationException
@@ -284,18 +285,13 @@ class DeployService:
         """
         # 读取备份文件
         try:
-            from pathlib import Path
-            backup_path = Path(backup_file)
-            if not backup_path.exists():
-                # 尝试相对路径
-                backup_path = Path(f"./backups/{backup_file}")
-
+            backup_path = resolve_backup_file(backup_file)
             with open(backup_path, 'r', encoding='utf-8') as f:
                 config_content = f.read()
-        except Exception as e:
+        except (ValueError, OSError):
             return {
                 'success': False,
-                'message': f'读取备份文件失败：{str(e)}',
+                'message': '读取备份文件失败：路径无效或文件不存在',
                 'device_name': device.get('name')
             }
 
@@ -322,18 +318,12 @@ class DeployService:
         Returns:
             部署结果
         """
-        from jinja2 import Template
-
         try:
-            # 渲染模板
-            tmpl = Template(template_content)
-            context = {
-                'now': datetime.utcnow,
-                'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-                'device': device
-            }
-            context.update(variables)
-            rendered_config = tmpl.render(**context)
+            rendered_config = render_network_template(
+                template_content,
+                variables,
+                device=device,
+            )
         except Exception as e:
             return {
                 'success': False,

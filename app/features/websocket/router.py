@@ -9,8 +9,8 @@ import json
 import uuid
 from typing import Dict, Optional, Set
 from datetime import datetime
-from pathlib import Path
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect, Depends
+from pydantic import ValidationError
 from loguru import logger
 
 from app.features.tool_logs.tool_executor import tool_executor
@@ -395,23 +395,22 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
         if action == 'start_deploy':
             from app.shared.database import get_db
             from app.shared.models import Device, CredentialGroup, ConfigTemplate
+            from app.shared.template_renderer import render_network_template
+            from app.features.deploy.schemas import WebSocketDeployRequest
+            from app.features.deploy.security import (
+                UnsafeBackupPathError,
+                authorize_deploy_token,
+                resolve_backup_file,
+            )
             from app.features.credentials.credential_service import decrypt_password
             from app.features.deploy.deploy_stream_service import get_deploy_stream_service
-            from jinja2 import Template
 
-            engine = request.get('engine', 'netmiko')
-            napalm_mode = request.get('napalm_mode', 'merge')
-            target_device_ids = request.get('target_devices', [])
-            dry_run = request.get('dry_run', False)
-            mode = request.get('mode', 'backup')
-            variables = request.get('variables', {})
-            parallel_limit = request.get('parallel_limit', 1)  # 并行数量
-            transfer_mode = request.get('transfer_mode', 'inline')  # scp | inline，默认 inline
-
-            if not target_device_ids:
+            try:
+                deploy_request = WebSocketDeployRequest.model_validate(request)
+            except ValidationError:
                 await websocket.send_json({
                     'type': 'deploy_error',
-                    'message': '请选择至少一台设备',
+                    'message': '部署请求参数无效',
                     'timestamp': datetime.utcnow().isoformat()
                 })
                 await websocket.send_json({
@@ -424,6 +423,30 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
             db = next(get_db())
 
             try:
+                try:
+                    principal = authorize_deploy_token(
+                        deploy_request.access_token,
+                        db,
+                    )
+                except HTTPException as exc:
+                    await websocket.send_json({
+                        'type': 'deploy_error',
+                        'message': str(exc.detail),
+                        'status_code': exc.status_code,
+                        'timestamp': datetime.utcnow().isoformat(),
+                    })
+                    await websocket.close(code=4401 if exc.status_code == 401 else 4403)
+                    return
+
+                engine = deploy_request.engine
+                napalm_mode = deploy_request.napalm_mode
+                target_device_ids = deploy_request.target_devices
+                dry_run = deploy_request.dry_run
+                mode = deploy_request.mode
+                variables = deploy_request.variables
+                parallel_limit = deploy_request.parallel_limit
+                transfer_mode = deploy_request.transfer_mode
+
                 # 获取设备列表
                 devices = db.query(Device).filter(Device.id.in_(target_device_ids)).all()
                 if not devices:
@@ -470,23 +493,19 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
                 config_content = None
 
                 if mode == 'backup':
-                    backup_file = request.get('backup_file')
-                    if not backup_file:
+                    try:
+                        backup_path = resolve_backup_file(deploy_request.backup_file)
+                    except UnsafeBackupPathError as exc:
                         await websocket.send_json({
                             'type': 'deploy_error',
-                            'message': '请选择备份文件',
+                            'message': str(exc),
                             'timestamp': datetime.utcnow().isoformat()
                         })
                         return
-
-                    backup_path = Path(backup_file)
-                    if not backup_path.exists():
-                        backup_path = Path(f"./backups/{backup_file}")
-
-                    if not backup_path.exists():
+                    except FileNotFoundError:
                         await websocket.send_json({
                             'type': 'deploy_error',
-                            'message': f'备份文件不存在：{backup_file}',
+                            'message': '备份文件不存在',
                             'timestamp': datetime.utcnow().isoformat()
                         })
                         return
@@ -495,14 +514,7 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
                         config_content = f.read()
 
                 elif mode == 'template':
-                    template_id = request.get('template_id')
-                    if not template_id:
-                        await websocket.send_json({
-                            'type': 'deploy_error',
-                            'message': '请选择配置模板',
-                            'timestamp': datetime.utcnow().isoformat()
-                        })
-                        return
+                    template_id = deploy_request.template_id
 
                     template = db.query(ConfigTemplate).filter(ConfigTemplate.id == template_id).first()
                     if not template:
@@ -513,16 +525,13 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
                         })
                         return
 
-                    tmpl = Template(template.template_content)
-                    context = {
-                        'now': datetime.utcnow,
-                        'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-                    }
-                    context.update(variables)
-                    config_content = tmpl.render(**context)
+                    config_content = render_network_template(
+                        template.template_content,
+                        variables,
+                    )
 
                 elif mode == 'snippet':
-                    config_content = request.get('snippet', '')
+                    config_content = deploy_request.snippet
 
                 if not config_content:
                     await websocket.send_json({
@@ -547,7 +556,9 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
                 transfer_mode=transfer_mode,
                 dry_run=dry_run,
                 session_id=session_id,
-                parallel_limit=parallel_limit
+                parallel_limit=parallel_limit,
+                username=principal.username,
+                user_id=principal.user_id,
             )
 
         elif action == 'ping':
@@ -561,7 +572,7 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
         try:
             await websocket.send_json({
                 'type': 'deploy_error',
-                'message': str(e),
+                'message': '部署处理失败，请查看服务端日志',
                 'timestamp': datetime.utcnow().isoformat()
             })
             await websocket.send_json({

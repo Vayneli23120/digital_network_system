@@ -11,7 +11,8 @@ from typing import Dict, List, Optional
 from pathlib import Path
 from loguru import logger
 from fastapi import WebSocket
-from jinja2 import Template
+
+from app.core.command_guard import validate_commands
 
 try:
     from netmiko import NetmikoTimeoutException, NetmikoAuthenticationException
@@ -127,6 +128,14 @@ class DeployStreamService:
 
         connection = None
         try:
+            commands, guard_warnings = validate_commands(
+                commands,
+                vendor=vendor,
+                context=f"websocket deploy:{device.get('name')}",
+            )
+            for warning in guard_warnings:
+                log_lines.append(f"[WARN] {warning}")
+
             log_lines.append(f"[INFO] 正在连接设备...")
             logger.info(f"正在连接设备 {device.get('name')} ({device.get('ip')})...")
             connection = ConnectHandler(**netmiko_device)
@@ -300,6 +309,14 @@ class DeployStreamService:
 
         connection = None
         try:
+            _, guard_warnings = validate_commands(
+                self._parse_config_to_commands(config),
+                vendor=vendor,
+                context=f"websocket napalm deploy:{device.get('name')}",
+            )
+            for warning in guard_warnings:
+                log_lines.append(f"[WARN] {warning}")
+
             log_lines.append(f"[INFO] 正在连接设备...")
             logger.info(f"正在通过 NAPALM 连接设备 {device.get('name')} ({device.get('ip')})...")
             driver = get_network_driver(driver_name)
@@ -406,7 +423,9 @@ class DeployStreamService:
         transfer_mode: str = 'inline',  # NAPALM 传输方式 (scp/inline)，默认 inline
         dry_run: bool = False,
         session_id: str = None,
-        parallel_limit: int = 1
+        parallel_limit: int = 1,
+        username: str = "system",
+        user_id: Optional[int] = None,
     ):
         """
         批量部署流式执行
@@ -422,6 +441,8 @@ class DeployStreamService:
             dry_run: 是否预览模式
             session_id: 会话ID
             parallel_limit: 并行数量（默认1，串行）
+            username: 已认证操作人
+            user_id: 已认证用户 ID
         """
         total_count = len(devices)
         completed_count = 0
@@ -618,8 +639,8 @@ class DeployStreamService:
 
                 # 创建历史主记录
                 history = DeployHistory(
-                    user_id=None,
-                    username="Web",
+                    user_id=user_id,
+                    username=username,
                     operation_type='deploy',
                     engine=engine,
                     mode=napalm_mode if engine == 'napalm' else 'config',
@@ -660,7 +681,7 @@ class DeployStreamService:
                         status='success' if result.get('success') else 'failed',
                         log_content=result.get('log_content', result.get('message', '')),
                         duration_ms=result.get('duration_ms'),
-                        created_by="Web"
+                        created_by=username
                     )
                     db.add(log_entry)
 

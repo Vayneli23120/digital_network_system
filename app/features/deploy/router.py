@@ -10,21 +10,34 @@ from typing import List, Optional
 from pathlib import Path
 from datetime import datetime, timedelta
 from loguru import logger
-from jinja2 import Template
 
 from app.shared.database import get_db
+from app.shared.template_renderer import (
+    NetworkTemplateRenderError,
+    render_network_template,
+)
 from app.features.auth.identity import Principal, get_current_principal
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User, LogEntry
 from app.shared.config import get_config
 from app.shared.dependencies import require_permission
 from app.features.auth.router import get_current_user_from_token
 from app.features.credentials.credential_service import decrypt_password
+from app.core.command_guard import CommandGuardError
+from .schemas import DeployRequest, RollbackRequest, ScheduleDeployRequest
+from .security import (
+    UnsafeBackupPathError,
+    resolve_backup_file,
+    validate_deploy_config,
+)
 from .deploy_service import get_deploy_service
 from .napalm_service import get_napalm_service
 from .config_diff_service import ConfigDiffService, ConfigDiffResult, DiffType, DiffLine
 
 router = APIRouter(prefix="/api/deploy", tags=["deploy"])
 config = get_config()
+require_config_read = require_permission("config:read")
+require_config_deploy = require_permission("config:deploy")
+require_config_rollback = require_permission("config:rollback")
 
 # 每个请求使用独立的线程池，避免全局资源争抢
 @asynccontextmanager
@@ -38,10 +51,14 @@ async def get_deploy_executor(max_workers: int):
 
 
 @router.post("/preview")
-async def preview_deploy(deploy_data: dict):
+async def preview_deploy(
+    deploy_request: DeployRequest,
+    _: None = Depends(require_config_read),
+):
     """
     预览配置部署变更（增强版）
     """
+    deploy_data = deploy_request.model_dump()
     db: Session = next(get_db())
 
     try:
@@ -62,22 +79,27 @@ async def preview_deploy(deploy_data: dict):
         if mode == 'backup':
             backup_file = deploy_data.get('backup_file')
             if backup_file:
-                backup_path = Path(backup_file)
-                if not backup_path.exists():
-                    backup_path = Path(f"./backups/{backup_file}")
-                if backup_path.exists():
-                    with open(backup_path, 'r', encoding='utf-8') as f:
-                        config_content = f.read()
+                try:
+                    backup_path = resolve_backup_file(backup_file)
+                except UnsafeBackupPathError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail="备份文件不存在") from exc
+                with open(backup_path, 'r', encoding='utf-8') as f:
+                    config_content = f.read()
 
         elif mode == 'template':
             template_id = deploy_data.get('template_id')
             if template_id:
                 template = db.query(ConfigTemplate).filter(ConfigTemplate.id == template_id).first()
                 if template:
-                    tmpl = Template(template.template_content)
-                    context = {'now': datetime.utcnow, 'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")}
-                    context.update(variables)
-                    config_content = tmpl.render(**context)
+                    try:
+                        config_content = render_network_template(
+                            template.template_content,
+                            variables,
+                        )
+                    except NetworkTemplateRenderError as exc:
+                        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         elif mode == 'snippet':
             # 配置片段模式：将片段追加到当前配置
@@ -87,12 +109,14 @@ async def preview_deploy(deploy_data: dict):
             # 先获取基础配置（从备份或模板）
             base_config = ""
             if deploy_data.get('base_backup_file'):
-                backup_path = Path(deploy_data['base_backup_file'])
-                if not backup_path.exists():
-                    backup_path = Path(f"./backups/{deploy_data['base_backup_file']}")
-                if backup_path.exists():
-                    with open(backup_path, 'r', encoding='utf-8') as f:
-                        base_config = f.read()
+                try:
+                    backup_path = resolve_backup_file(deploy_data['base_backup_file'])
+                except UnsafeBackupPathError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail="基础备份文件不存在") from exc
+                with open(backup_path, 'r', encoding='utf-8') as f:
+                    base_config = f.read()
 
             # 应用变量替换到片段
             if variables:
@@ -119,17 +143,12 @@ async def preview_deploy(deploy_data: dict):
             ).order_by(BackupRecord.backup_time.desc()).first()
             if latest_backup:
                 # 优先从文件读取，数据库 snapshot 可能为空
-                backup_path = Path(latest_backup.backup_file)
-                if not backup_path.exists():
-                    backup_path = Path(f"./backups/{latest_backup.backup_file}")
-                if backup_path.exists():
-                    try:
-                        with open(backup_path, 'r', encoding='utf-8') as f:
-                            current_config = f.read()
-                    except Exception as e:
-                        logger.warning(f"读取备份文件失败 {backup_path}: {e}")
-                        current_config = latest_backup.config_snapshot or ""
-                else:
+                try:
+                    backup_path = resolve_backup_file(latest_backup.backup_file)
+                    with open(backup_path, 'r', encoding='utf-8') as f:
+                        current_config = f.read()
+                except (ValueError, OSError):
+                    logger.warning("历史备份路径无效或不可读，使用数据库快照")
                     current_config = latest_backup.config_snapshot or ""
 
             # 片段模式特殊处理：只显示增量变更
@@ -481,8 +500,9 @@ async def preview_deploy(deploy_data: dict):
 
 @router.post("/execute")
 async def execute_deploy(
-    deploy_data: dict,
+    deploy_request: DeployRequest,
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_config_deploy),
 ):
     """
     执行配置部署
@@ -501,6 +521,7 @@ async def execute_deploy(
         "dry_run": false
     }
     """
+    deploy_data = deploy_request.model_dump()
     db: Session = next(get_db())
     history_id = None  # 部署历史记录 ID
 
@@ -551,12 +572,12 @@ async def execute_deploy(
             if not backup_file:
                 raise HTTPException(status_code=400, detail="请选择备份文件")
 
-            backup_path = Path(backup_file)
-            if not backup_path.exists():
-                backup_path = Path(f"./backups/{backup_file}")
-
-            if not backup_path.exists():
-                raise HTTPException(status_code=404, detail=f"备份文件不存在：{backup_file}")
+            try:
+                backup_path = resolve_backup_file(backup_file)
+            except UnsafeBackupPathError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            except FileNotFoundError as exc:
+                raise HTTPException(status_code=404, detail="备份文件不存在") from exc
 
             with open(backup_path, 'r', encoding='utf-8') as f:
                 config_content = f.read()
@@ -570,13 +591,13 @@ async def execute_deploy(
             if not template:
                 raise HTTPException(status_code=404, detail=f"模板不存在：{template_id}")
 
-            tmpl = Template(template.template_content)
-            context = {
-                'now': datetime.utcnow,
-                'now_str': datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-            }
-            context.update(variables)
-            config_content = tmpl.render(**context)
+            try:
+                config_content = render_network_template(
+                    template.template_content,
+                    variables,
+                )
+            except NetworkTemplateRenderError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
 
         elif mode == 'snippet':
             # 配置片段模式
@@ -594,12 +615,14 @@ async def execute_deploy(
             # 如果需要基于现有配置
             base_config = ""
             if deploy_data.get('base_backup_file'):
-                backup_path = Path(deploy_data['base_backup_file'])
-                if not backup_path.exists():
-                    backup_path = Path(f"./backups/{deploy_data['base_backup_file']}")
-                if backup_path.exists():
-                    with open(backup_path, 'r', encoding='utf-8') as f:
-                        base_config = f.read()
+                try:
+                    backup_path = resolve_backup_file(deploy_data['base_backup_file'])
+                except UnsafeBackupPathError as exc:
+                    raise HTTPException(status_code=400, detail=str(exc)) from exc
+                except FileNotFoundError as exc:
+                    raise HTTPException(status_code=404, detail="基础备份文件不存在") from exc
+                with open(backup_path, 'r', encoding='utf-8') as f:
+                    base_config = f.read()
 
             # 合并配置
             if snippet_position == 'append':
@@ -626,6 +649,14 @@ async def execute_deploy(
             }
             for device in devices
         ]
+
+        try:
+            validate_deploy_config(config_content, device_data_list)
+        except CommandGuardError as exc:
+            raise HTTPException(
+                status_code=400,
+                detail=f"命令安全检查失败：{exc.reason}",
+            ) from exc
 
         # 关闭数据库连接（并行执行阶段不访问数据库）
         db.close()
@@ -815,7 +846,7 @@ async def execute_deploy(
                 details = f"部署模式:{mode}, {engine_text}, 结果:{'成功' if result.get('success') else '失败'}"
 
                 audit_log = AuditLog(
-                    operator="Web",
+                    operator=current_username,
                     action=action,
                     target_type="device",
                     target_id=device_dict['id'],
@@ -838,7 +869,7 @@ async def execute_deploy(
                     status=status,
                     log_content=log_content,
                     duration_ms=duration_ms,
-                    created_by="Web"
+                    created_by=current_username
                 )
                 db_log.add(log_entry)
 
@@ -916,8 +947,9 @@ async def execute_deploy(
 
 @router.post("/rollback")
 async def rollback_deploy(
-    rollback_data: dict,
+    rollback_request: RollbackRequest,
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_config_rollback),
 ):
     """
     回滚设备配置到上一版本（仅 NAPALM 支持）
@@ -927,6 +959,7 @@ async def rollback_deploy(
         "target_devices": [设备 ID 列表]
     }
     """
+    rollback_data = rollback_request.model_dump()
     db: Session = next(get_db())
 
     current_username = principal.username
@@ -987,7 +1020,7 @@ async def rollback_deploy(
         # 记录审计日志和工具执行日志
         for device, result in zip(devices, results):
             audit_log = AuditLog(
-                operator="Web",
+                operator=current_username,
                 action="rollback_config",
                 target_type="device",
                 target_id=device.id,
@@ -1002,7 +1035,7 @@ async def rollback_deploy(
                 target=f"{device.name} ({device.ip})",
                 status="success" if result.get('success') else "failed",
                 log_content=result.get('output', '') or result.get('error', '') or "配置回滚",
-                created_by="Web"
+                created_by=current_username
             )
             db.add(log_entry)
 
@@ -1060,7 +1093,9 @@ async def rollback_deploy(
 
 
 @router.get("/compatible-variables")
-async def get_compatible_variables():
+async def get_compatible_variables(
+    _: None = Depends(require_config_read),
+):
     """
     获取所有兼容的变量列表
     """
@@ -1091,7 +1126,9 @@ async def get_compatible_variables():
 
 
 @router.get("/maintenance-windows")
-async def get_maintenance_windows():
+async def get_maintenance_windows(
+    _: None = Depends(require_config_read),
+):
     """
     获取可用的维护窗口时段
     """
@@ -1136,13 +1173,18 @@ async def get_maintenance_windows():
 
 
 @router.post("/schedule")
-async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
+async def schedule_deploy(
+    schedule_request: ScheduleDeployRequest,
+    _: None = Depends(require_config_deploy),
+    db: Session = Depends(get_db),
+):
     """
     预约部署任务
     """
     try:
-        window_id = schedule_data.get("window_id")
-        deploy_data = schedule_data.get("deploy_data", {})
+        schedule_data = schedule_request.model_dump()
+        window_id = schedule_data["window_id"]
+        deploy_data = schedule_data["deploy_data"]
 
         # 解析维护窗口时间
         parts = window_id.split('_')
@@ -1175,6 +1217,7 @@ async def get_deploy_history(
     limit: int = 50,
     offset: int = 0,
     operation_type: Optional[str] = None,
+    _: None = Depends(require_config_read),
     db: Session = Depends(get_db)
 ):
     """
@@ -1235,7 +1278,11 @@ async def get_deploy_history(
 
 
 @router.get("/history/{history_id}")
-async def get_deploy_history_detail(history_id: int, db: Session = Depends(get_db)):
+async def get_deploy_history_detail(
+    history_id: int,
+    _: None = Depends(require_config_read),
+    db: Session = Depends(get_db),
+):
     """
     获取单条部署历史详情（包含完整 CLI 输出）
     """

@@ -5,10 +5,12 @@
 """
 
 from typing import Optional, List, Dict, Any
-from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
-from jinja2 import Template, TemplateError
+from app.shared.template_renderer import (
+    NetworkTemplateRenderError,
+    render_network_template,
+)
 
 from app.shared.models import ConfigTemplate
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
@@ -182,16 +184,8 @@ def render_template(db: Session, template_id: int, variables: Optional[Dict[str,
         raise ResourceNotFoundException("Template")
 
     try:
-        tmpl = Template(template.template_content)
-        context: Dict[str, Any] = {
-            "now": datetime.utcnow,
-            "now_str": datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
-        }
-        if variables:
-            context.update(variables)
-
-        rendered = tmpl.render(**context)
+        rendered = render_network_template(template.template_content, variables)
         return {"content": rendered, "template_name": template.name}
 
-    except TemplateError as e:
-        raise ValueError(f"模板渲染失败: {str(e)}")
+    except NetworkTemplateRenderError as exc:
+        raise ValueError(f"模板渲染失败: {exc}") from exc
