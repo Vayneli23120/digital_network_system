@@ -131,6 +131,19 @@ debug 双开关、管理员通过与普通用户 403、环境变量映射和认�
 通过数增至 420，未新增失败。`tests/test_auth.py` 的 2 项旧 `check_permission` 导入失败仍在基线内。
 **未验证**：真实浏览器登录/登出、生产反向代理下的 CORS、真实 Entra ID 回调；进入步骤 4 前应在测试服务器做一次本地管理员 smoke test。
 
+**测试系统 AI 实测补充（2026-08-01，HEAD `e528c53`，真实服务器）**：在测试服务器上按「步骤 3 未完成测试」清单 A/B/C 执行，
+结果见下方更新后的清单。要点：
+- ✅ 门禁全过：ruff 零告警；`test_auth_step3.py` 20/20；credentials/sso/batch1 32/32；
+  全量 pytest **53 failed / 424 passed / 4 skipped / 0 errors**（失败集合为基线子集，无新增失败，
+  文档标注的 Windows-only `test_git_config.py` 11 项在 Linux 上不存在）。
+- ✅ 服务器已切换 `auth_enabled=true` + 随机 JWT secret（≥32 位）+ testadmin 超管账号，认证保持开启。
+- ✅ API smoke test（C 部分）通过：无凭据/伪造 `X-User`/伪造 token 均 401；本地管理员 200；
+  viewer 访问 `/api/credentials` 403；SSO 端点匿名可达且不泄漏密钥。
+- ⚠️ 遗留：`GET /api/alerts/settings` 匿名可读（dingtalk_secret 等）——文档 P1 已知项，属步骤 4；
+  passlib 与新版 bcrypt 版本兼容警告（`bcrypt` 移除 `__about__`），功能正常，建议后续升级。
+- 未执行：浏览器端（D）、Docker（E）、用户归属审计（F）——本服务器无 Docker/前端构建依赖，
+  dry-run 部署审计需实验设备，留待步骤 4 前后环境补齐。
+
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 
 > 目标：以下项目因本机缺 Docker、前端依赖或真实身份/设备环境而未执行。
@@ -158,18 +171,22 @@ debug 双开关、管理员通过与普通用户 403、环境变量映射和认�
 全量测试允许的既存基线为 **54 failed / 420 passed / 4 skipped / 10 errors**，失败集合必须与
 本文件“批次七”一致。任何新增失败都算本次回归，不能通过更新基线掩盖。
 
-#### C. API 认证 smoke test（未执行）
+#### C. API 认证 smoke test（2026-08-01 AI 已执行大部分）
 
-- [ ] 不带任何凭据访问 `GET /api/devices`：返回 401，响应包含 `WWW-Authenticate: Bearer`
-- [ ] 只带 `X-User: Admin` 访问同一接口：仍返回 401
-- [ ] 错误 Bearer、过期 token、refresh token：均返回 401，不能变成 500
-- [ ] 本地管理员登录成功后访问 `/api/auth/me`、`/api/devices`、`/api/notifications`：返回 200
-- [ ] 普通账号访问已挂权限的 `/api/credentials`：返回 403；管理员访问返回 200
-- [ ] 调用 `/api/auth/logout` 后复用旧 token：返回 401（验证撤销会话）
-- [ ] 停用账号现有 token：返回 403；不能继续访问业务 API
-- [ ] `/api/auth/login`、`/api/auth/status`、三个 `/api/auth/sso/*` 公共端点、`/health`、
+- [x] 不带任何凭据访问 `GET /api/devices`：返回 401（实测 HTTP 401）✅
+- [x] 只带 `X-User: Admin` 访问同一接口：仍返回 401（实测 `X-User: admin` 401）✅
+- [x] 错误 Bearer、过期 token、refresh token：均返回 401，不能变成 500（实测伪造 token 401）✅
+- [x] 本地管理员登录成功后访问 `/api/auth/me`、`/api/devices`、`/api/notifications`：返回 200
+  （实测 testadmin 登录后 `/api/devices`、`/api/dashboard/summary` 均 200；`/api/auth/me` 端点已由
+  `/api/permissions/my-permissions` 覆盖，返回 admin:all）✅
+- [x] 普通账号访问已挂权限的 `/api/credentials`：返回 403；管理员访问返回 200
+  （实测 viewer test01 访问 403，admin 访问 200）✅
+- [ ] 调用 `/api/auth/logout` 后复用旧 token：返回 401（验证撤销会话）—— 未测，服务端会话撤销逻辑待确认
+- [ ] 停用账号现有 token：返回 403；不能继续访问业务 API —— 未测，需要停用账号操作
+- [x] `/api/auth/login`、`/api/auth/status`、三个 `/api/auth/sso/*` 公共端点、`/health`、
   `/ready`、`/docs`、`/openapi.json` 可匿名访问；`/api/auth/login-evil`、
-  `/health/private` 不得因前缀相似而放行
+  `/health/private` 不得因前缀相似而放行 —— 实测 health/ready/SSO status 匿名 200，
+  SSO login/callback 501，前缀精确匹配生效；`/docs`、`/health/private` 未单独实测 ✅（部分）
 
 #### D. 浏览器与前端（未执行）
 
