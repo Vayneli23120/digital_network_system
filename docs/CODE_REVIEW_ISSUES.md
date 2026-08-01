@@ -277,15 +277,38 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 ✅ Windows 全量 pytest 为 **54 failed / 537 passed / 7 skipped / 10 errors**，失败集合仍为既存基线。
 ⚠️ 本机无 `frontend/node_modules`，前端 build 交由测试系统执行。
 
+**步骤 4D 测试系统 Linux 实测补充（2026-08-02，HEAD `b23db4e`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_logs_security_step4d.py` + `test_log_service.py` **42 passed**
+  （Linux 全过无 skip）；批次一 147 项全过；全量 pytest **53 failed / 541 passed / 4 skipped / 0 errors**，
+  失败集合与 4B/4C 基线逐项 diff 完全一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 /
+  deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败；通过数较 4C 增 +22 = 新增 4D 测试。
+- ✅ 真实 API 权限矩阵：新建 log_reader（仅 log:read）、log_clearer（仅 log:clear）两最小权限账号逐端点
+  探测——GET /api/logs、/api/logs/files、/api/logs/files/{filename}、/api/logs/search 均 reader 200、
+  clearer 403、admin 200；POST /api/logs/clear 为 clearer 200、reader 403、admin 200。跨权限一律 403。
+- ✅ 路径穿越/文件名约束：`../backend.log`、URL 编码 `..%2Fbackend.log`、绝对路径 `%2Fetc%2Fhostname`、
+  子目录 `sub%2Fbackend.log` 全部 404；`..%252Fbackend.log`（双重编码）按字面文件名解析、无逃逸、
+  200 返回空列表；`api.txt` → 400 “仅允许读取 .log 文件”；合法 `api.log?lines=5` → 200。错误响应均为
+  通用文案，不含服务器路径。符号链接逃逸由单测 `test_log_path_rejects_symlink_escape_when_supported` 覆盖通过。
+- ✅ 文件列表不泄露路径：`GET /api/logs/files?days=365` 返回全部 4 个文件（uvicorn.log / backend.log /
+  api.log / server.log），仅文件名+大小+修改时间，无绝对路径；默认 `days=7` 正确排除 17–82 天前的旧文件
+  （符合 7 天窗口语义，非缺陷）。
+- ✅ 三条日志 WebSocket（/api/logs/ws、/ws/logs、/ws/logs/{operation}）：无 token → `auth_error` 401
+  关闭 4401；伪造 token → 401/4401；仅 log:clear → 403/4403；log:read → `authenticated`
+  （username=log_reader）且 /api/logs/ws、/ws/logs 均 ping/pong 正常。
+- ✅ 认证超时清理：/api/logs/ws 连接后不发首条消息，服务端 10 秒超时自动关闭 4401；多次连接/断开后
+  事件循环保持响应，后续请求全部正常，manager 无残余连接干扰。
+- ✅ 前端构建：`npm run build` 成功（14.05s，仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Logs 页列表/搜索/文件查看/清理按钮交互未执行，需真实浏览器验证。
+
 **步骤 4D 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_logs_security_step4d.py`、`test_log_service.py`、批次一和全量 pytest，失败集合不得新增
-- [ ] `log:read` 只能列表/读取/搜索，`log:clear` 只能清理；跨权限 403，管理员全部放行
-- [ ] HTTP 测试 `../`、URL 编码 traversal、绝对路径、子目录、非 `.log`、符号链接逃逸，均不得读取根目录外内容
-- [ ] 日志文件列表/错误响应/服务日志不得泄露绝对路径
-- [ ] 三条日志 WebSocket 分别验证无 token、伪造 token、仅 log:clear 为 401/403/4401/4403；log:read 可认证并 ping/pong
-- [ ] 连接断开、认证超时和异常时 callback/ConnectionManager 不留残余连接，事件循环保持响应
+- [x] Linux 跑 Ruff、`test_logs_security_step4d.py`、`test_log_service.py`、批次一和全量 pytest，失败集合不得新增
+- [x] `log:read` 只能列表/读取/搜索，`log:clear` 只能清理；跨权限 403，管理员全部放行
+- [x] HTTP 测试 `../`、URL 编码 traversal、绝对路径、子目录、非 `.log`、符号链接逃逸，均不得读取根目录外内容
+- [x] 日志文件列表/错误响应/服务日志不得泄露绝对路径
+- [x] 三条日志 WebSocket 分别验证无 token、伪造 token、仅 log:clear 为 401/403/4401/4403；log:read 可认证并 ping/pong
+- [x] 连接断开、认证超时和异常时 callback/ConnectionManager 不留残余连接，事件循环保持响应
 - [ ] 浏览器 Logs 页列表、搜索、文件查看、清理按钮权限与 401/403 提示正常
-- [ ] 前端环境执行 `npm ci && npm run build`
+- [x] 前端环境执行 `npm ci && npm run build`
 
 **下一切片**：步骤 4E remaining writes——优先 backups（read/execute/batch/delete）和 templates
 （read/write/delete/render），再覆盖 faults、maintenance、planned maintenance、workflows、system settings 等剩余写接口；
