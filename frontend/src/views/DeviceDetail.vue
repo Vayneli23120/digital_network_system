@@ -7,10 +7,10 @@
         <el-tag v-if="device" :type="getStatusType(device.status)" size="large">
           {{ getStatusText(device.status) }}
         </el-tag>
-        <el-select v-if="device" :model-value="device.monitor_tier || 'normal'" @change="setMonitorTier" size="small" style="width: 132px; margin-left: 8px" placeholder="监控分级">
-          <el-option label="核心 critical" value="critical" />
-          <el-option label="普通 normal" value="normal" />
-          <el-option label="低优先 low" value="low" />
+        <el-select v-if="device" :model-value="device.monitor_tier || 'normal'" @change="setMonitorTier" size="small" style="width: 132px; margin-left: 8px" :placeholder="t('deviceMonitorTier')">
+          <el-option :label="t('deviceMonitorTierCritical')" value="critical" />
+          <el-option :label="t('deviceMonitorTierNormal')" value="normal" />
+          <el-option :label="t('deviceMonitorTierLow')" value="low" />
         </el-select>
       </div>
       <div class="page-actions">
@@ -163,60 +163,60 @@
         :closable="false"
         show-icon
         style="margin-bottom: 10px"
-        title="瘦 AP：由交换机 CDP 自动发现，在线状态取自所连交换机端口；不做备份 / 查看配置 / SSH / 接口采集。"
+        :title="t('deviceApWarning')"
       />
       <el-tabs v-model="activeTab">
-        <el-tab-pane label="接口监控" name="interfaces" v-if="!isAp">
+        <el-tab-pane :label="t('tabInterfaces')" name="interfaces" v-if="!isAp">
           <div class="iface-toolbar">
-            <el-button type="primary" size="small" :icon="Connection" @click="discoverInterfaces" :loading="ifaceDiscovering">发现接口</el-button>
-            <el-button size="small" :icon="Tools" @click="discoverNeighbors" :loading="ifaceNeighborLoading">发现邻居</el-button>
-            <el-button size="small" :icon="Refresh" @click="loadInterfaces(true)" :loading="ifacesLoading">刷新</el-button>
-            <el-button size="small" :icon="Warning" @click="runSnmpDiagnose" :loading="snmpDiagLoading">诊断 SNMP</el-button>
-            <el-checkbox v-model="ifaceMonitoredOnly" @change="loadInterfaces(true)" style="margin-left: 10px">仅看监控接口</el-checkbox>
-            <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">自动刷新(60s)</el-checkbox>
-            <span v-if="interfaces.length" style="margin-left: auto; font-size: 12px; color: #909399">共 {{ interfaces.length }} 口 · 在线 {{ ifaceUpCount }} · 上行 {{ ifaceUplinkCount }} · 监控 {{ ifaceMonitoredCount }}</span>
+            <el-button type="primary" size="small" :icon="Connection" @click="discoverInterfaces" :loading="ifaceDiscovering">{{ t('deviceDiscoverInterfaces') }}</el-button>
+            <el-button size="small" :icon="Tools" @click="discoverNeighbors" :loading="ifaceNeighborLoading">{{ t('deviceDiscoverNeighbors') }}</el-button>
+            <el-button size="small" :icon="Refresh" @click="loadInterfaces(true)" :loading="ifacesLoading">{{ t('commonRefresh') }}</el-button>
+            <el-button size="small" :icon="Warning" @click="runSnmpDiagnose" :loading="snmpDiagLoading">{{ t('deviceSnmpDiagnose') }}</el-button>
+            <el-checkbox v-model="ifaceMonitoredOnly" @change="loadInterfaces(true)" style="margin-left: 10px">{{ t('deviceMonitoredOnly') }}</el-checkbox>
+            <el-checkbox v-model="ifaceAutoRefresh" style="margin-left: 8px">{{ t('deviceAutoRefresh60s') }}</el-checkbox>
+            <span v-if="interfaces.length" style="margin-left: auto; font-size: 12px; color: #909399">{{ t('deviceIfacesSummary', { total: interfaces.length, up: ifaceUpCount, uplink: ifaceUplinkCount, monitored: ifaceMonitoredCount }) }}</span>
           </div>
           <el-table :data="interfaces" v-loading="ifacesLoading" size="small" border stripe row-key="if_index" @expand-change="onIfaceExpand" style="margin-top: 8px">
             <el-table-column type="expand">
               <template #default="{ row }">
                 <div class="iface-traffic-panel">
-                  <div v-if="trafficLoading[row.if_index]" style="color: #909399; padding: 8px">加载流量中…</div>
+                  <div v-if="trafficLoading[row.if_index]" style="color: #909399; padding: 8px">{{ t('deviceLoadingTraffic') }}</div>
                   <div v-else-if="(trafficData[row.if_index] || []).length" class="spark-wrap">
                     <div class="spark-line">
-                      <span class="spark-tag in">入向</span>
+                      <span class="spark-tag in">{{ t('deviceTrafficInbound') }}</span>
                       <svg :viewBox="`0 0 240 40`" preserveAspectRatio="none" class="spark-svg">
                         <polyline :points="sparkPoints(trafficData[row.if_index], 'in_bps')" fill="none" stroke="#409eff" stroke-width="1.5" />
                       </svg>
                       <span class="spark-val">{{ formatBps(row.last_in_bps) }} <em>{{ row.last_in_util != null ? row.last_in_util + '%' : '' }}</em></span>
                     </div>
                     <div class="spark-line">
-                      <span class="spark-tag out">出向</span>
+                      <span class="spark-tag out">{{ t('deviceTrafficOutbound') }}</span>
                       <svg :viewBox="`0 0 240 40`" preserveAspectRatio="none" class="spark-svg">
                         <polyline :points="sparkPoints(trafficData[row.if_index], 'out_bps')" fill="none" stroke="#67c23a" stroke-width="1.5" />
                       </svg>
                       <span class="spark-val">{{ formatBps(row.last_out_bps) }} <em>{{ row.last_out_util != null ? row.last_out_util + '%' : '' }}</em></span>
                     </div>
-                    <div class="spark-meta">最近 {{ (trafficData[row.if_index] || []).length }} 个采样 · 更新于 {{ row.last_sample_at ? formatDateTime(row.last_sample_at) : '--' }}</div>
+                    <div class="spark-meta">{{ t('deviceTrafficSamples', { count: (trafficData[row.if_index] || []).length, time: row.last_sample_at ? formatDateTime(row.last_sample_at) : '--' }) }}</div>
                   </div>
-                  <el-empty v-else description="暂无流量样本（需开启监控并等待下一次轮询）" :image-size="50" />
+                  <el-empty v-else :description="t('deviceNoTrafficSamples')" :image-size="50" />
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="接口" min-width="150">
+            <el-table-column :label="t('deviceInterface')" min-width="150">
               <template #default="{ row }">
                 <span style="font-weight: 600">{{ row.if_name || row.if_descr || ('if' + row.if_index) }}</span>
-                <el-tag v-if="row.is_uplink" type="warning" size="small" effect="plain" style="margin-left: 4px">上行</el-tag>
+                <el-tag v-if="row.is_uplink" type="warning" size="small" effect="plain" style="margin-left: 4px">{{ t('deviceUplink') }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="状态" width="88" align="center">
+            <el-table-column :label="t('deviceStatus')" width="88" align="center">
               <template #default="{ row }">
                 <el-tag :type="row.oper_status === 'up' ? 'success' : (row.oper_status === 'down' ? 'danger' : 'info')" size="small" effect="dark">{{ row.oper_status || 'unknown' }}</el-tag>
               </template>
             </el-table-column>
-            <el-table-column label="速率" width="72" align="center">
+            <el-table-column :label="t('deviceSpeed')" width="72" align="center">
               <template #default="{ row }">{{ row.speed_mbps ? row.speed_mbps + 'M' : '--' }}</template>
             </el-table-column>
-            <el-table-column label="入向" width="160">
+            <el-table-column :label="t('deviceInbound')" width="160">
               <template #default="{ row }">
                 <div class="util-cell">
                   <div class="util-bar-bg"><div class="util-bar-fill" :style="{ width: Math.min(row.last_in_util || 0, 100) + '%', background: getUtilizationColor(row.last_in_util) }"></div></div>
@@ -224,7 +224,7 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="出向" width="160">
+            <el-table-column :label="t('deviceOutbound')" width="160">
               <template #default="{ row }">
                 <div class="util-cell">
                   <div class="util-bar-bg"><div class="util-bar-fill" :style="{ width: Math.min(row.last_out_util || 0, 100) + '%', background: getUtilizationColor(row.last_out_util) }"></div></div>
@@ -232,27 +232,27 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="错误" width="80" align="center">
+            <el-table-column :label="t('deviceErrors')" width="80" align="center">
               <template #default="{ row }">
                 <span :style="{ color: ((row.last_in_errors || 0) + (row.last_out_errors || 0)) > 0 ? '#f56c6c' : '#67c23a' }">{{ (row.last_in_errors || 0) + (row.last_out_errors || 0) }}</span>
               </template>
             </el-table-column>
-            <el-table-column label="对端" min-width="160">
+            <el-table-column :label="t('devicePeer')" min-width="160">
               <template #default="{ row }">
                 <span v-if="row.peer_device_name">{{ row.peer_device_name }}<span v-if="row.peer_if_name" style="color: #909399"> / {{ row.peer_if_name }}</span></span>
                 <span v-else style="color: #c0c4cc">--</span>
               </template>
             </el-table-column>
-            <el-table-column label="上行口" width="68" align="center">
+            <el-table-column :label="t('deviceUplinkPort')" width="68" align="center">
               <template #default="{ row }"><el-switch :model-value="row.is_uplink" @change="v => toggleUplink(row, v)" size="small" /></template>
             </el-table-column>
-            <el-table-column label="监控" width="60" align="center">
+            <el-table-column :label="t('deviceMonitor')" width="60" align="center">
               <template #default="{ row }"><el-switch :model-value="row.monitored" @change="v => toggleMonitored(row, v)" size="small" /></template>
             </el-table-column>
           </el-table>
-          <el-empty v-if="!interfaces.length && !ifacesLoading" description="尚未发现接口，点击「发现接口」进行 SNMP 扫描" :image-size="60" />
+          <el-empty v-if="!interfaces.length && !ifacesLoading" :description="t('deviceSnmpNoInterfaces')" :image-size="60" />
         </el-tab-pane>
-        <el-tab-pane v-if="showTrafficTab" label="监控图表" name="traffic">
+        <el-tab-pane v-if="showTrafficTab" :label="t('tabMonitorCharts')" name="traffic">
           <DeviceTrafficChart :device-id="route.params.id" />
         </el-tab-pane>
         <el-tab-pane :label="t('tabBackupRecords')" name="backups" v-if="!isAp">
@@ -416,7 +416,7 @@
               <div class="input-with-btn">
                 <el-input v-model="editForm.ip" :placeholder="t('editDeviceIpPlaceholder')" />
                 <el-button size="small" @click="testReachability" :loading="probeLoading.ip" :disabled="!editForm.ip">
-                  测试连通
+                  {{ t('deviceTestConnect') }}
                 </el-button>
               </div>
               <div v-if="probeResult.ip" class="probe-result">
@@ -447,15 +447,15 @@
               :loading="probeLoading.fetch"
               :disabled="!editForm.ip || !editForm.credential_group || sshDisabled"
             >
-              一键获取设备信息
+              {{ t('deviceFetchInfo') }}
             </el-button>
           </div>
           <!-- SSH能力提示 -->
           <div v-if="sshDisabled" class="ssh-warning">
-            <el-tag type="warning" size="small">AP设备不支持SSH，无法自动获取信息</el-tag>
+            <el-tag type="warning" size="small">{{ t('deviceApNoSsh') }}</el-tag>
           </div>
           <div v-if="sshSpecialPermission" class="ssh-warning">
-            <el-tag type="info" size="small">防火墙需要GoVault权限才能SSH连接</el-tag>
+            <el-tag type="info" size="small">{{ t('deviceFirewallGoVault') }}</el-tag>
           </div>
           <div class="modules-container">
             <div v-for="(module, index) in editForm.modules" :key="index" class="module-row">
@@ -467,7 +467,7 @@
                 <el-option :label="t('deviceFanModule')" value="fan" />
                 <el-option :label="t('deviceTypeOther')" value="other" />
               </el-select>
-              <el-input v-model="module.pid" placeholder="型号 (如 C9300-24P)" size="small" style="width: 150px;" />
+              <el-input v-model="module.pid" :placeholder="t('deviceModelPlaceholder')" size="small" style="width: 150px;" />
               <el-input v-model="module.serial_number" :placeholder="t('deviceModuleSn')" size="small" style="width: 160px;" />
               <el-button type="danger" size="small" :icon="Close" circle @click="removeModule(index)" v-if="editForm.modules && editForm.modules.length > 1" />
             </div>
@@ -539,7 +539,7 @@
                   <el-option v-for="cred in credentialGroups" :key="cred.id" :label="cred.name" :value="cred.name" />
                 </el-select>
                 <el-button size="small" @click="testConnection" :loading="probeLoading.connection" :disabled="!editForm.ip || !editForm.credential_group || sshDisabled">
-                  测试连接
+                  {{ t('deviceTestConnect') }}
                 </el-button>
               </div>
               <div v-if="probeResult.connection" class="probe-result">
@@ -555,25 +555,25 @@
         <div class="form-section" v-if="editForm.device_type !== 'ap'">
           <div class="form-section-title">
             <el-icon><Connection /></el-icon>
-            SNMP 监控
+            {{ t('deviceSnmpMonitor') }}
           </div>
           <el-form :model="editForm" label-width="100px">
-            <el-form-item label="启用 SNMP">
+            <el-form-item :label="t('deviceSnmpEnabled')">
               <el-switch v-model="editForm.snmp_enabled" />
-              <span style="margin-left: 10px; font-size: 12px; color: #909399">开启后系统才会轮询接口流量/状态</span>
+              <span style="margin-left: 10px; font-size: 12px; color: #909399">{{ t('deviceSnmpEnabledHint') }}</span>
             </el-form-item>
-            <el-form-item label="社区串">
-              <el-input v-model="editForm.snmp_community" placeholder="只读社区串，需与设备 snmp-server community 一致（大小写敏感）" />
+            <el-form-item :label="t('deviceSnmpCommunity')">
+              <el-input v-model="editForm.snmp_community" :placeholder="t('deviceSnmpCommunityPlaceholder')" />
             </el-form-item>
-            <el-form-item label="版本">
+            <el-form-item :label="t('deviceSnmpVersion')">
               <el-select v-model="editForm.snmp_version" style="width: 120px">
                 <el-option label="v2c" value="2c" />
                 <el-option label="v1" value="1" />
               </el-select>
             </el-form-item>
-            <el-form-item label="端口">
+            <el-form-item :label="t('deviceSnmpPort')">
               <el-input-number v-model="editForm.snmp_port" :min="1" :max="65535" controls-position="right" style="width: 130px" />
-              <span style="margin-left: 10px; font-size: 12px; color: #909399">默认 161</span>
+              <span style="margin-left: 10px; font-size: 12px; color: #909399">{{ t('deviceSnmpDefaultPort') }}</span>
             </el-form-item>
           </el-form>
         </div>
@@ -597,14 +597,14 @@
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Warning /></el-icon>
-            {{ t('faultBasicInfo') || '基础信息' }}
+            {{ t('faultBasicInfo') }}
           </div>
           <el-form :model="faultForm" label-width="120px">
             <el-form-item :label="t('faultAssignTo')">
               <el-select v-model="faultForm.assigned_to" :placeholder="t('faultAssignPlaceholder')" style="width: 100%" clearable>
                 <el-option v-for="user in users" :key="user" :label="user" :value="user" />
               </el-select>
-              <div class="assign-tip">{{ t('faultAssignTip') || '指派后将自动通知负责人' }}</div>
+              <div class="assign-tip">{{ t('faultAssignTip') }}</div>
             </el-form-item>
             <el-form-item :label="t('faultType')">
               <el-select v-model="faultForm.fault_type" clearable style="width: 100%">
@@ -643,7 +643,7 @@
         <div class="form-section">
           <div class="form-section-title">
             <el-icon><Document /></el-icon>
-            {{ t('faultImpactDesc') || '影响与描述' }}
+            {{ t('faultImpactDesc') }}
           </div>
           <el-form :model="faultForm" label-width="120px">
             <el-form-item :label="t('faultImpact')">
@@ -674,7 +674,7 @@
     />
 
     <!-- SNMP 诊断结果对话框 -->
-    <el-dialog v-model="showSnmpDiag" title="SNMP 连通性诊断" width="640px" append-to-body draggable align-center>
+    <el-dialog v-model="showSnmpDiag" :title="t('deviceSnmpDiagTitle')" width="640px" append-to-body draggable align-center>
       <div v-if="snmpDiagResult">
         <el-alert
           :title="snmpDiagResult.conclusion"
@@ -685,26 +685,26 @@
           style="margin-bottom: 12px"
         />
         <el-descriptions :column="2" size="small" border style="margin-bottom: 12px">
-          <el-descriptions-item label="设备 IP">{{ snmpDiagResult.device_ip }}</el-descriptions-item>
-          <el-descriptions-item label="厂商">{{ snmpDiagResult.vendor || '--' }}</el-descriptions-item>
-          <el-descriptions-item label="SNMP 启用">{{ snmpDiagResult.snmp_enabled ? '是' : '否' }}</el-descriptions-item>
-          <el-descriptions-item label="社区串已配置">{{ snmpDiagResult.community_set ? '是' : '否' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deviceIp')">{{ snmpDiagResult.device_ip }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deviceVendor')">{{ snmpDiagResult.vendor || '--' }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deviceSnmpEnabled')">{{ snmpDiagResult.snmp_enabled ? t('monitorYes') : t('monitorNo') }}</el-descriptions-item>
+          <el-descriptions-item :label="t('deviceSnmpCommunity') + ' ' + t('monitorConfigured')">{{ snmpDiagResult.community_set ? t('monitorYes') : t('monitorNo') }}</el-descriptions-item>
         </el-descriptions>
         <el-table :data="snmpDiagResult.checks" size="small" border>
-          <el-table-column label="检查项" prop="name" min-width="160" />
-          <el-table-column label="结果" width="70" align="center">
+          <el-table-column :label="t('deviceSnmpCheckItem')" prop="name" min-width="160" />
+          <el-table-column :label="t('deviceSnmpCheckResult')" width="70" align="center">
             <template #default="{ row }">
               <el-tag :type="row.ok ? 'success' : 'danger'" size="small" effect="dark">{{ row.ok ? 'OK' : 'FAIL' }}</el-tag>
             </template>
           </el-table-column>
-          <el-table-column label="值" prop="value" min-width="120" show-overflow-tooltip />
-          <el-table-column label="说明" prop="detail" min-width="200" show-overflow-tooltip />
+          <el-table-column :label="t('deviceSnmpCheckValue')" prop="value" min-width="120" show-overflow-tooltip />
+          <el-table-column :label="t('deviceSnmpCheckDetail')" prop="detail" min-width="200" show-overflow-tooltip />
         </el-table>
       </div>
-      <el-empty v-else description="暂无诊断结果" />
+      <el-empty v-else :description="t('deviceSnmpNoDiag')" />
       <template #footer>
-        <el-button @click="showSnmpDiag = false">关闭</el-button>
-        <el-button type="primary" :loading="snmpDiagLoading" @click="runSnmpDiagnose">重新诊断</el-button>
+        <el-button @click="showSnmpDiag = false">{{ t('actionClose') }}</el-button>
+        <el-button type="primary" :loading="snmpDiagLoading" @click="runSnmpDiagnose">{{ t('deviceSnmpRediagnose') }}</el-button>
       </template>
     </el-dialog>
   </div>
@@ -1118,7 +1118,7 @@ const loadInterfaces = async (force = false) => {
     const data = await listDeviceInterfaces(route.params.id, ifaceMonitoredOnly.value)
     interfaces.value = data.items || []
   } catch (error) {
-    ElMessage.error('接口列表加载失败')
+    ElMessage.error(t('deviceIfacesLoadFailed'))
   } finally {
     ifacesLoading.value = false
   }
@@ -1129,13 +1129,13 @@ const discoverInterfaces = async () => {
   try {
     const res = await discoverDeviceInterfaces(route.params.id)
     if (res && res.ok === false) {
-      ElMessage.warning(res.error || '发现失败')
+      ElMessage.warning(res.error || t('deviceDiscoverFailed'))
     } else {
-      ElMessage.success(`发现完成，共 ${res.count != null ? res.count : ''} 个接口`)
+      ElMessage.success(t('deviceDiscoverOk', { count: res.count != null ? res.count : '' }))
       await loadInterfaces(true)
     }
   } catch (error) {
-    ElMessage.error('发现接口失败（检查 SNMP 是否开启）')
+    ElMessage.error(t('deviceDiscoverInterfacesFailed'))
   } finally {
     ifaceDiscovering.value = false
   }
@@ -1145,10 +1145,10 @@ const discoverNeighbors = async () => {
   ifaceNeighborLoading.value = true
   try {
     await discoverDeviceNeighbors(route.params.id)
-    ElMessage.success('邻居发现完成')
+    ElMessage.success(t('deviceDiscoverNeighborsOk'))
     await loadInterfaces(true)
   } catch (error) {
-    ElMessage.error('发现邻居失败')
+    ElMessage.error(t('deviceDiscoverNeighborsFailed'))
   } finally {
     ifaceNeighborLoading.value = false
   }
@@ -1158,9 +1158,9 @@ const toggleUplink = async (row, val) => {
   try {
     await updateDeviceInterface(route.params.id, row.if_index, { is_uplink: val })
     row.is_uplink = val
-    ElMessage.success('已更新')
+    ElMessage.success(t('msgUpdatedSuccess'))
   } catch (error) {
-    ElMessage.error('更新失败')
+    ElMessage.error(t('msgUpdateFailed'))
   }
 }
 
@@ -1168,9 +1168,9 @@ const toggleMonitored = async (row, val) => {
   try {
     await updateDeviceInterface(route.params.id, row.if_index, { monitored: val })
     row.monitored = val
-    ElMessage.success('已更新')
+    ElMessage.success(t('msgUpdatedSuccess'))
   } catch (error) {
-    ElMessage.error('更新失败')
+    ElMessage.error(t('msgUpdateFailed'))
   }
 }
 
@@ -1221,11 +1221,11 @@ const runSnmpDiagnose = async () => {
     const status = error.response?.status
     const detail = error.response?.data?.detail
     if (status === 404) {
-      ElMessage.error('诊断接口不存在（后端可能未更新部署，请重启后端服务）')
+      ElMessage.error(t('deviceSnmpDiag404'))
     } else if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
-      ElMessage.error('SNMP 诊断请求超时（设备长时间无响应，UDP/161 可能不通）')
+      ElMessage.error(t('deviceSnmpTimeout'))
     } else {
-      ElMessage.error(`SNMP 诊断失败：${detail || error.message || '服务异常'}`)
+      ElMessage.error(t('deviceSnmpFailed') + (detail || error.message ? `：${detail || error.message}` : ''))
     }
     snmpDiagResult.value = null
   } finally {
@@ -1238,9 +1238,9 @@ const setMonitorTier = async (tier) => {
     await updateDeviceApi(route.params.id, { monitor_tier: tier })
     if (device.value) device.value.monitor_tier = tier
     clearCache('device_detail')
-    ElMessage.success('监控分级已更新为 ' + tier)
+    ElMessage.success(t('deviceMonitorTierUpdated', { tier }))
   } catch (error) {
-    ElMessage.error('更新监控分级失败')
+    ElMessage.error(t('deviceMonitorTierUpdateFailed'))
   }
 }
 
@@ -1264,13 +1264,13 @@ const refreshMetrics = async () => {
     const data = await getDeviceMetrics(route.params.id)
     metricsData.value = data
     if (data && data.snmp_available === false) {
-      ElMessage.warning(data.error || '设备未启用 SNMP，无法获取性能指标')
+      ElMessage.warning(data.error || t('deviceSnmpNotEnabled'))
     } else if (data && data.error) {
       ElMessage.warning(data.error)
     }
   } catch (error) {
     if (error.code === 'ECONNABORTED' || /timeout/i.test(error.message || '')) {
-      ElMessage.error('性能指标请求超时，设备 SNMP 可能未配置或网络不可达')
+      ElMessage.error(t('deviceSnmpTimeout'))
     } else {
       ElMessage.error(t('msgMetricsLoadFailed') || '性能指标获取失败')
     }

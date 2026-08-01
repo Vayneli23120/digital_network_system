@@ -22,7 +22,7 @@
           </button>
           <button class="nav-action-btn" @click="discoverAps" :disabled="discoveringAps">
             <el-icon><Connection /></el-icon>
-            <span>{{ discoveringAps ? '发现中…' : '发现 AP' }}</span>
+            <span>{{ discoveringAps ? t('deviceDiscovering') : t('deviceDiscoverAp') }}</span>
           </button>
           <el-dropdown class="nav-action-dropdown" trigger="click">
             <button class="nav-action-btn export">
@@ -167,22 +167,22 @@
             @click="batchBackupSelected"
             style="margin-left: 12px;"
           >
-            批量备份 ({{ selectedDevices.length }})
+            {{ t('deviceBatchBackup') }} ({{ selectedDevices.length }})
           </button>
       </div>
 
       <!-- 筛选工具栏 -->
       <div class="filter-bar">
-        <el-select v-model="filterDeployStatus" placeholder="部署状态" clearable size="small" style="width: 120px;">
-          <el-option label="在用" value="in-use" />
-          <el-option label="备用" value="un-used" />
-          <el-option label="维护中" value="maintenance" />
-          <el-option label="已退役" value="retired" />
+        <el-select v-model="filterDeployStatus" :placeholder="t('deviceDeployment')" clearable size="small" style="width: 120px;">
+          <el-option :label="t('statusInUse')" value="in-use" />
+          <el-option :label="t('statusUnUsed')" value="un-used" />
+          <el-option :label="t('statusMaintenance')" value="maintenance" />
+          <el-option :label="t('statusRetired')" value="retired" />
         </el-select>
-        <el-select v-model="filterVendor" placeholder="厂商" clearable size="small" style="width: 100px;">
+        <el-select v-model="filterVendor" :placeholder="t('deviceVendor')" clearable size="small" style="width: 100px;">
           <el-option v-for="v in vendors" :key="v.key" :label="v.name" :value="v.key" />
         </el-select>
-        <el-select v-model="filterLocation" placeholder="位置" clearable size="small" style="width: 130px;">
+        <el-select v-model="filterLocation" :placeholder="t('deviceLocation')" clearable size="small" style="width: 130px;">
           <el-option v-for="loc in locationList" :key="loc" :label="loc" :value="loc" />
         </el-select>
         <span
@@ -190,7 +190,7 @@
           class="filter-clear-btn"
           @click="clearFilters"
         >
-          清除筛选
+          {{ t('deviceFilterClear') }}
         </span>
       </div>
 
@@ -219,7 +219,7 @@
             <span class="ip-text">{{ row.ip }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="deployment_status" :label="t('deviceDeployment')" width="110" align="center">
+        <el-table-column prop="deployment_status" :label="t('deviceDeployment')" min-width="130" align="center">
           <template #default="{ row }">
             <div :class="['deployment-badge', row.deployment_status]">
               <span>{{ getDeploymentText(row.deployment_status) }}</span>
@@ -236,7 +236,7 @@
             <span v-else class="empty-cell">--</span>
           </template>
         </el-table-column>
-        <el-table-column label="故障" width="90" align="center">
+        <el-table-column :label="t('deviceFaultCol')" width="90" align="center">
           <template #default="{ row }">
             <span v-if="row.active_fault_count > 0" class="fault-badge">{{ row.active_fault_count }}</span>
             <span v-else class="empty-cell">—</span>
@@ -252,7 +252,7 @@
             <span class="location-text">{{ row.location || '--' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="上次备份" width="110" align="center">
+        <el-table-column :label="t('deviceLastBackup')" width="110" align="center">
           <template #default="{ row }">
             <span :class="['backup-age-text', backupAgeClass(row.last_backup_time)]">
               {{ formatBackupAge(row.last_backup_time) }}
@@ -262,13 +262,13 @@
         <el-table-column :label="t('deviceAction')" width="100" fixed="right" align="center">
           <template #default="{ row }">
             <div class="action-group">
-              <button class="action-btn backup" @click="backupDevice(row)" title="备份配置">
+              <button class="action-btn backup" @click="backupDevice(row)" :title="t('deviceTooltipBackupConfig')">
                 <el-icon><Download /></el-icon>
               </button>
-              <button class="action-btn edit" @click="editDevice(row)" title="编辑">
+              <button class="action-btn edit" @click="editDevice(row)" :title="t('deviceEdit')">
                 <el-icon><Edit /></el-icon>
               </button>
-              <button class="action-btn delete" @click="deleteDevice(row)" title="删除">
+              <button class="action-btn delete" @click="deleteDevice(row)" :title="t('deviceDelete')">
                 <el-icon><Delete /></el-icon>
               </button>
             </div>
@@ -294,7 +294,7 @@
               <div class="input-with-btn">
                 <el-input v-model="newDevice.ip" :placeholder="t('editDeviceIpPlaceholder')" />
                 <el-button size="small" @click="testReachability" :loading="probeLoading.ip" :disabled="!newDevice.ip">
-                  测试连通
+                  {{ t('deviceTestConnect') }}
                 </el-button>
               </div>
               <div v-if="probeResult.ip" class="probe-result">
@@ -707,11 +707,11 @@ const resetNewDevice = () => {
 
 // 格式化备份时间为「X小时前」或「X天前」
 const formatBackupAge = (isoTime) => {
-  if (!isoTime) return '从未'
+  if (!isoTime) return t('backupNever')
   const hours = (Date.now() - new Date(isoTime)) / 3600000
-  if (hours < 1) return '1小时内'
-  if (hours < 24) return `${Math.floor(hours)}小时前`
-  return `${Math.floor(hours / 24)}天前`
+  if (hours < 1) return t('backupWithin1Hour')
+  if (hours < 24) return t('backupHoursAgo', { hours: Math.floor(hours) })
+  return t('backupDaysAgo', { days: Math.floor(hours / 24) })
 }
 
 // 根据备份时间返回 CSS class
