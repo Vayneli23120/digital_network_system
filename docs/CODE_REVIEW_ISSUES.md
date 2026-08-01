@@ -230,15 +230,41 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 ✅ Windows 全量 pytest 为 **54 failed / 516 passed / 6 skipped / 10 errors**，失败集合仍为既存基线。
 ⚠️ 本机无 `frontend/node_modules`，前端 build 交由测试系统执行。
 
+**步骤 4C 测试系统 Linux 实测补充（2026-08-02，HEAD `fddd3cb`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_device_security_step4c.py` **30 passed**（Linux 全过无 skip，
+  Windows 为 29 passed/1 skipped）；相邻回归 117 项全过（批次一/步骤3/凭证/SSO/alerts/4B）；
+  全量 pytest **53 failed / 519 passed / 4 skipped / 0 errors**，失败集合与 4B 基线逐项
+  diff 完全一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 /
+  auth 2 / email 1 / device 1 / dashboard 1），无新增失败；通过数较 4B 增 +30 = 新增 4C 测试。
+- ✅ 真实 API 权限矩阵：新建 dev_reader/…/dev_photographer 六种最小权限账号（各自仅持单一
+  device:read/write/delete/import/export/photo）逐端点探测 14 个代表端点——全部 read 端点
+  （列表/详情/vendors/统计/监控/照片列表）reader 200、writer 403；export 200/403；write 端点
+  （test-reachability/check-reachability/interfaces discover/discover-neighbors）writer 200 或
+  404（设备不存在，权限已过）、reader 403；import 400（文件解析，权限已过）/403；delete 404/403；
+  photo 上传与删除 404/403；admin 全部放行。跨权限均 403，无一例外。
+- ✅ 照片上传安全：恶意文件名 `../../../evil.jpg` + 伪造 `uploader=forged-admin` → 200，服务端
+  生成 UUID 文件名 `3817f1350a2c41b89adcce4fba3a177e.jpg`（无穿越），DB 记录 `uploader=dev_photographer`
+  （伪造名被忽略）；HTML 伪装 JPEG、空文件、>10 MB、错误 content-type 全部 400；被拒上传不落盘，
+  上传/删除后 assets/devices 无孤儿文件。
+- ✅ 内容访问与旧静态路径：reader 经内容 API 取照 200 `image/jpeg`，writer 403；删除照片 200 且文件与
+  DB 记录同步清除；直接请求旧 `/photos/...` 经认证返回 404（静态挂载已移除，OpenAPI 无独立 /photos 路由）。
+- ✅ `/ws/device-status`：无 token → `auth_error` 401 关闭 4401；伪造 token → 401/4401；仅
+  device:write → 403/4403；device:read → `authenticated`（username=dev_reader）+ ping/pong 正常。
+- ✅ floor plan 内容 API：`GET /api/floor-plans/10/content` 对 floor_plan:read 或 device:read 均 200
+  `image/jpeg`；把 image_path 临时指向 `/etc/hostname`（存储根目录外）→ 400，还原后恢复 200。
+- ✅ 前端构建：`npm run build` 成功（13.75s，仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端照片上传/预览/删除、接口流量图、批量邻居发现与 3D 底图 Bearer 行为（D）未执行，
+  需真实浏览器与前端交互。
+
 **步骤 4C 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_device_security_step4c.py`、批次一和全量 pytest，失败集合不得新增
-- [ ] 使用 read/write/delete/import/export/photo 六种最小权限账号验证 34 个端点矩阵，跨权限均应 403
-- [ ] 照片上传测试恶意文件名、伪造 uploader、错误 MIME/魔数、空文件、>10 MB、`../`/绝对路径/符号链接；不得产生孤儿文件
-- [ ] reader 能通过内容 API 查看照片，writer 不能；直接请求旧 `/photos/...` 必须 404，不能绕过 `device:read`
-- [ ] `/ws/device-status` 无 token、伪造 token、仅 device:write 分别拒绝；device:read 能认证并接收 ping/pong 与状态推送
+- [x] Linux 跑 Ruff、`test_device_security_step4c.py`、批次一和全量 pytest，失败集合不得新增
+- [x] 使用 read/write/delete/import/export/photo 六种最小权限账号验证 34 个端点矩阵，跨权限均应 403
+- [x] 照片上传测试恶意文件名、伪造 uploader、错误 MIME/魔数、空文件、>10 MB、`../`/绝对路径/符号链接；不得产生孤儿文件
+- [x] reader 能通过内容 API 查看照片，writer 不能；直接请求旧 `/photos/...` 必须 404，不能绕过 `device:read`
+- [x] `/ws/device-status` 无 token、伪造 token、仅 device:write 分别拒绝；device:read 能认证并接收 ping/pong 与状态推送
 - [ ] 浏览器验证照片上传/预览/删除、接口流量图、批量邻居发现和 3D 底图均携带 Bearer 且可用
-- [ ] floor plan 内容 API 对 `floor_plan:read` 或 `device:read` 可用，存储根目录外路径必须 400
-- [ ] 前端环境执行 `npm ci && npm run build`
+- [x] floor plan 内容 API 对 `floor_plan:read` 或 `device:read` 可用，存储根目录外路径必须 400
+- [x] 前端环境执行 `npm ci && npm run build`
 
 **下一切片**：步骤 4D logs——日志文件名/路径使用安全解析并拒绝 `../`、绝对路径与符号链接逃逸；
 列表/读取/搜索和两个日志 WebSocket 使用 `log:read`，清理使用 `log:clear`；WebSocket 首消息校验 JWT，
