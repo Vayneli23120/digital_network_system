@@ -658,7 +658,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
                 sla_compliant += 1
 
     sla_rate_value = (sla_compliant / sla_total * 100) if sla_total > 0 else 100
-    sla_rate_status = _get_status(sla_rate_value, 95, 90, higher_is_good=True) if sla_total > 0 else "gray"
+    sla_rate_status = _get_status(sla_rate_value, 95, 90, higher_is_good=True) if sla_total > 0 else "green"
 
     # 上期 SLA 达标率
     prev_completed_maints = db.query(MaintenanceRecord).filter(
@@ -1164,7 +1164,7 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         "kpis": {
             "availability": _make_kpi(availability_value, "%", 99.5, 98, availability_trend, availability_status),
             "active_faults": _make_kpi(active_faults, "", None, None, active_faults_trend, active_faults_status),
-            "sla_rate": _make_kpi(sla_rate_value if sla_total > 0 else None, "%", 95, 90, sla_rate_trend if sla_total > 0 else None, sla_rate_status),
+            "sla_rate": _make_kpi(sla_rate_value, "%", 95, 90, sla_rate_trend if sla_total > 0 else 0, sla_rate_status),
             "mttr_hours": _make_kpi(mttr_hours if resolved_faults else None, "h", 4, 8, mttr_trend if resolved_faults else None, mttr_status),
             "mtbf_days": _make_kpi(mtbf_days if total_faults_in_range > 0 else None, "d", None, None, mtbf_trend if total_faults_in_range > 0 else None, mtbf_status),
             "recurring_rate": _make_kpi(recurring_rate, "%", 15, 25, recurring_trend, recurring_status),
