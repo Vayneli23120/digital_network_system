@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices 已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices、4D logs 已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,7 +75,8 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-- [ ] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
+- [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
+  → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
   → 修复（步骤 4B）：新增统一 `render_network_template()`，使用 `ImmutableSandboxedEnvironment`，清空默认 globals，阻断 `__class__` / `__globals__` / `cycler` / `lipsum` 逃逸；上下文仅允许 JSON 类型且不可覆盖 `now/now_str/device`，限制模板、上下文、输出大小并拦截超大乘法/指数。Deploy HTTP、DeployService、模板服务和 Deploy WebSocket 全部复用该入口，内置 4 个模板兼容测试通过。
 - [x] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
@@ -266,13 +267,29 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 - [x] floor plan 内容 API 对 `floor_plan:read` 或 `device:read` 可用，存储根目录外路径必须 400
 - [x] 前端环境执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4D logs——日志文件名/路径使用安全解析并拒绝 `../`、绝对路径与符号链接逃逸；
-列表/读取/搜索和两个日志 WebSocket 使用 `log:read`，清理使用 `log:clear`；WebSocket 首消息校验 JWT，
-同步 `stream_logs` 移出事件循环，错误响应不泄露服务端路径。完成后继续给 backups/faults/maintenance/templates/system settings 等其余写接口挂权限。
+**步骤 4D 验证结果（2026-08-02）**：✅ `tests/test_logs_security_step4d.py` + 既有
+`tests/test_log_service.py` 为 **40 passed / 1 skipped**（Windows 符号链接权限）；
+✅ `/api/logs` 列表/文件/读取/搜索使用 `log:read`，清理使用 `log:clear`，真实 HTTP 测试覆盖
+未认证 401、跨权限 403、管理员 200 与参数 422；✅ `/api/logs/ws`、`/ws/logs`、
+`/ws/logs/{operation}` 均以首条 JSON 消息校验 JWT + `log:read`，无 token/无权限关闭 4401/4403；
+✅ 文件 tail 改为 `asyncio.to_thread` 增量轮询，移除事件循环中的 `time.sleep`；回调连接在所有退出路径清理；
+✅ 相邻安全回归 **169 passed / 3 skipped**，Ruff 与 `app.main` 导入通过；
+✅ Windows 全量 pytest 为 **54 failed / 537 passed / 7 skipped / 10 errors**，失败集合仍为既存基线。
+⚠️ 本机无 `frontend/node_modules`，前端 build 交由测试系统执行。
 
-**下一切片**：步骤 4C devices——按 read/write/delete/import/export/photo 划分 33 个端点权限；
-照片上传使用安全生成文件名，限制 MIME、扩展名与大小并把文件 IO 移出事件循环；批量发现与 SNMP 写操作归入
-`device:write`。完成后再进入 4D logs（路径穿越 + WebSocket token + log:read/log:clear）。
+**步骤 4D 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_logs_security_step4d.py`、`test_log_service.py`、批次一和全量 pytest，失败集合不得新增
+- [ ] `log:read` 只能列表/读取/搜索，`log:clear` 只能清理；跨权限 403，管理员全部放行
+- [ ] HTTP 测试 `../`、URL 编码 traversal、绝对路径、子目录、非 `.log`、符号链接逃逸，均不得读取根目录外内容
+- [ ] 日志文件列表/错误响应/服务日志不得泄露绝对路径
+- [ ] 三条日志 WebSocket 分别验证无 token、伪造 token、仅 log:clear 为 401/403/4401/4403；log:read 可认证并 ping/pong
+- [ ] 连接断开、认证超时和异常时 callback/ConnectionManager 不留残余连接，事件循环保持响应
+- [ ] 浏览器 Logs 页列表、搜索、文件查看、清理按钮权限与 401/403 提示正常
+- [ ] 前端环境执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E remaining writes——优先 backups（read/execute/batch/delete）和 templates
+（read/write/delete/render），再覆盖 faults、maintenance、planned maintenance、workflows、system settings 等剩余写接口；
+同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 
@@ -361,7 +378,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 - [ ] **P1** `backups/router.py:69,319` — async def 内直接调同步 netmiko SSH（超时 30/60s），`/batch` 还串行遍历全部设备。`[已复核]`
 - [ ] **P1** `deploy/router.py:971` — `rollback_deploy` 在 async def 内逐台同步调 `napalm_service.rollback_device`（同文件 `execute_deploy` 已正确用线程池，属遗漏）。`[已复核]`
-- [ ] **P1** `logs/router.py:66` — WebSocket 迭代同步阻塞生成器 `stream_logs`（内部 `time.sleep(0.5)` 死循环），一条连接占死事件循环。`[已复核]`
+- [x] **P1** `logs/router.py:66` — WebSocket 迭代同步阻塞生成器 `stream_logs`（内部 `time.sleep(0.5)` 死循环），一条连接占死事件循环。`[已复核]`
+  → 修复（步骤 4D）：改为每 0.5 秒异步等待客户端消息，文件读取通过 `asyncio.to_thread` 执行无等待增量轮询；连接断开可及时取消，不再占死事件循环。
 - [ ] **P1** `discovery/router.py:93` — 同步 `ping_sweep`（50 线程 + 阻塞 socket）在 async 内执行；`subnet` 无 CIDR 校验，`/8` 会构造 1600 万 future。`[已复核]`
 - [ ] **P1** `tool_logs/tool_executor.py:101-112` — 协程内直接同步 `ConnectHandler/send_command`，无 `run_in_executor`。`[已复核]`
 - [ ] **P1** `alerts/router.py:131` — `_send_email` 同步 SMTP 在 async 内调用。`[待验证]`

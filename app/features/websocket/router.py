@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from loguru import logger
 
 from app.features.tool_logs.tool_executor import tool_executor
+from app.features.logs.security import authenticate_log_websocket
 
 router = APIRouter(tags=["WebSocket"])
 
@@ -24,8 +25,15 @@ class ConnectionManager:
     def __init__(self):
         self.active_connections: Dict[str, Set[WebSocket]] = {}
 
-    async def connect(self, websocket: WebSocket, channel: str = "all"):
-        await websocket.accept()
+    async def connect(
+        self,
+        websocket: WebSocket,
+        channel: str = "all",
+        *,
+        accept: bool = True,
+    ):
+        if accept:
+            await websocket.accept()
         self.register(websocket, channel)
 
     def register(self, websocket: WebSocket, channel: str = "all"):
@@ -86,8 +94,12 @@ async def websocket_logs(websocket: WebSocket, tool_type: str = None):
     查询参数:
         tool_type: 过滤工具类型 (napalm/netmiko/jira)，不传则接收全部
     """
+    principal = await authenticate_log_websocket(websocket)
+    if principal is None:
+        return
+
     channel = tool_type or "all"
-    await manager.connect(websocket, channel)
+    await manager.connect(websocket, channel, accept=False)
 
     # 注册回调
     async def push_log(data: dict):
@@ -103,8 +115,9 @@ async def websocket_logs(websocket: WebSocket, tool_type: str = None):
             if data == "ping":
                 await websocket.send_text("pong")
     except WebSocketDisconnect:
-        manager.disconnect(websocket, channel)
+        pass
     finally:
+        manager.disconnect(websocket, channel)
         tool_executor.unregister_callback(push_log)
 
 
@@ -116,7 +129,11 @@ async def websocket_logs_by_op(websocket: WebSocket, operation: str):
     路径参数:
         operation: 操作标识符（如 backup_run_123）
     """
-    await manager.connect(websocket, f"op:{operation}")
+    principal = await authenticate_log_websocket(websocket)
+    if principal is None:
+        return
+
+    await manager.connect(websocket, f"op:{operation}", accept=False)
 
     async def push_log(data: dict):
         if data.get("operation", "").startswith(operation):
@@ -128,8 +145,9 @@ async def websocket_logs_by_op(websocket: WebSocket, operation: str):
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        manager.disconnect(websocket, f"op:{operation}")
+        pass
     finally:
+        manager.disconnect(websocket, f"op:{operation}")
         tool_executor.unregister_callback(push_log)
 
 
