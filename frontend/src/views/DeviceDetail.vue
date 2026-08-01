@@ -369,8 +369,11 @@
           <div class="photo-toolbar">
             <el-upload
               :action="uploadUrl"
+              name="photo"
               :headers="uploadHeaders"
               :data="{ photo_type: 'other' }"
+              accept="image/jpeg,image/png,image/webp"
+              :before-upload="beforePhotoUpload"
               :on-success="handlePhotoUploadSuccess"
               :on-error="handlePhotoUploadError"
               show-upload
@@ -383,7 +386,7 @@
           </div>
           <div v-if="device?.photos?.length" class="photo-grid">
             <div v-for="photo in device.photos" :key="photo.id" class="photo-item">
-              <el-image :src="`/assets${photo.photo_path}`" fit="cover" :preview-src-list="[`/assets${photo.photo_path}`]" class="photo-image">
+              <el-image :src="photo.display_url" fit="cover" :preview-src-list="[photo.display_url]" class="photo-image">
                 <template #error>
                   <div class="image-error"><el-icon><Picture /></el-icon></div>
                 </template>
@@ -712,7 +715,6 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
-import axios from 'axios'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Box, Setting, Plus, Close, Warning, Document, Refresh, Timer, WarningFilled, Promotion } from '@element-plus/icons-vue'
@@ -723,6 +725,7 @@ import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
 import DeviceTrafficChart from '@/components/ui/DeviceTrafficChart.vue'
+import api from '@/api/request.js'
 
 const { t } = useI18n()
 const route = useRoute()
@@ -740,6 +743,7 @@ const configContent = ref('')
 const credentialGroups = ref([])
 const vendors = ref([])
 const users = ref([])
+let photoObjectUrls = []
 
 // 设备探测状态
 const probeLoading = ref({
@@ -891,7 +895,38 @@ const faultForm = ref({
 const editForm = ref({})
 
 const uploadUrl = computed(() => `/api/devices/${route.params.id}/photos`)
-const uploadHeaders = computed(() => ({}))
+const uploadHeaders = computed(() => {
+  const token = localStorage.getItem('accessToken')
+  return token ? { Authorization: `Bearer ${token}` } : {}
+})
+
+const revokePhotoUrls = () => {
+  photoObjectUrls.forEach(url => URL.revokeObjectURL(url))
+  photoObjectUrls = []
+}
+
+const loadProtectedPhotoUrls = async (photos = []) => {
+  revokePhotoUrls()
+  const resolved = await Promise.all(photos.map(async photo => {
+    try {
+      const blob = await api.get(photo.content_url, { responseType: 'blob' })
+      const displayUrl = URL.createObjectURL(blob)
+      photoObjectUrls.push(displayUrl)
+      return { ...photo, display_url: displayUrl }
+    } catch {
+      return { ...photo, display_url: '' }
+    }
+  }))
+  return resolved
+}
+
+const beforePhotoUpload = (file) => {
+  const allowed = ['image/jpeg', 'image/png', 'image/webp'].includes(file.type)
+  const withinLimit = file.size <= 10 * 1024 * 1024
+  if (!allowed) ElMessage.error(t('msgPhotoTypeInvalid'))
+  if (allowed && !withinLimit) ElMessage.error(t('msgPhotoTooLarge'))
+  return allowed && withinLimit
+}
 
 const getStatusType = (status) => ({ online: 'success', offline: 'danger', maintenance: 'warning', retired: 'info' }[status] || 'info')
 const getStatusText = (status) => ({ online: t('statusOnline'), offline: t('statusOffline'), maintenance: t('statusMaintenance'), retired: t('statusRetired') }[status] || status)
@@ -947,7 +982,10 @@ const loadDevice = debounce(async (force = false) => {
       { id: route.params.id },
       { forceRefresh: force }
     )
-    device.value = data
+    device.value = {
+      ...data,
+      photos: await loadProtectedPhotoUrls(data.photos || [])
+    }
     // 解析 modules 数据（兼容旧数据无 pid 字段）
     const modules = data.modules || [{ type: 'main', pid: '', serial_number: '' }]
     // 确保每个模块都有 pid 字段
@@ -1445,7 +1483,7 @@ const deleteMaintInDetail = async (maintId) => {
 }
 
 onMounted(() => { loadDevice(); loadCredentialGroups(); loadVendors(); loadUsers(); refreshMetrics(); if (ifaceAutoRefresh.value) startAutoRefresh() })
-onUnmounted(() => { stopAutoRefresh() })
+onUnmounted(() => { stopAutoRefresh(); revokePhotoUrls() })
 </script>
 
 <style scoped>

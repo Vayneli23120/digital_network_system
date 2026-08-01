@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy 已完成（2026-08-01） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices 已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -78,7 +78,8 @@
 - [ ] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
   → 修复（步骤 4B）：新增统一 `render_network_template()`，使用 `ImmutableSandboxedEnvironment`，清空默认 globals，阻断 `__class__` / `__globals__` / `cycler` / `lipsum` 逃逸；上下文仅允许 JSON 类型且不可覆盖 `now/now_str/device`，限制模板、上下文、输出大小并拦截超大乘法/指数。Deploy HTTP、DeployService、模板服务和 Deploy WebSocket 全部复用该入口，内置 4 个模板兼容测试通过。
-- [ ] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
+- [x] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
+  → 修复（步骤 4C）：照片文件名由服务端 UUID 生成，客户端文件名完全忽略；仅允许 JPEG/PNG/WebP，验证文件魔数并限制 10 MB，分块写临时文件后原子落盘，文件 IO 放入工作线程；上传人固定取可信 Principal，数据库失败自动清理文件。读取/删除均校验路径位于 `storage.photo_dir`，设备照片改走 `device:read` 保护的内容 API，不再暴露真实路径；静态 `/photos` 整目录挂载已移除，floor plan 同步迁到受保护内容 API。
 - [x] **P1** `auth/router.py:102,110` — passlib 缺失时静默退化为明文存储 + 明文比较，无任何告警。建议缺失即启动失败。`[已复核]`
   → 部分缓解（步骤 1）：`nas user create-admin` / `reset-password` 会先检查 `PWD_CONTEXT_AVAILABLE`，
     缺失则拒绝创建并给出安装命令；`tests/test_credentials_no_plaintext.py::test_passlib_is_installed`
@@ -217,6 +218,31 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 - [x] 四个内置模板与现有用户模板抽样渲染正常；循环、条件、default、`now()/now_str` 和缺失变量兼容
 - [ ] 浏览器 Deploy 页 preview/历史/预约/回滚权限表现正确，WebSocket 断线与 401/403 提示可理解
 - [x] 前端环境可用时执行 `npm ci && npm run build`
+
+**步骤 4C 验证结果（2026-08-02）**：✅ Devices 的 34 个 HTTP 端点全部挂功能权限：
+查询/指标/详情/接口/拓扑读使用 `device:read`，探测/监控触发/SNMP/接口发现与更新使用
+`device:write`，删除/导入/导出/照片分别使用 `device:delete/import/export/photo`；
+✅ `/ws/device-status` 使用首条消息 JWT + `device:read` 鉴权，无 token/无权限关闭 4401/4403；
+✅ Element Plus 上传携带 Bearer、字段名固定为 photo，前端限制 MIME/10 MB；照片与 floor plan 使用认证 Axios Blob URL，
+所有旧原生 Axios 设备调用切到统一认证客户端，静态 `/photos` 不再挂载；✅ Excel 导入限制 10 MB 并在线程中解析；
+✅ `tests/test_device_security_step4c.py` 为 **29 passed / 1 skipped**（Windows 符号链接权限），
+相邻绿色回归 **145 passed / 2 skipped**，Ruff 与 `app.main` 导入通过；
+✅ Windows 全量 pytest 为 **54 failed / 516 passed / 6 skipped / 10 errors**，失败集合仍为既存基线。
+⚠️ 本机无 `frontend/node_modules`，前端 build 交由测试系统执行。
+
+**步骤 4C 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_device_security_step4c.py`、批次一和全量 pytest，失败集合不得新增
+- [ ] 使用 read/write/delete/import/export/photo 六种最小权限账号验证 34 个端点矩阵，跨权限均应 403
+- [ ] 照片上传测试恶意文件名、伪造 uploader、错误 MIME/魔数、空文件、>10 MB、`../`/绝对路径/符号链接；不得产生孤儿文件
+- [ ] reader 能通过内容 API 查看照片，writer 不能；直接请求旧 `/photos/...` 必须 404，不能绕过 `device:read`
+- [ ] `/ws/device-status` 无 token、伪造 token、仅 device:write 分别拒绝；device:read 能认证并接收 ping/pong 与状态推送
+- [ ] 浏览器验证照片上传/预览/删除、接口流量图、批量邻居发现和 3D 底图均携带 Bearer 且可用
+- [ ] floor plan 内容 API 对 `floor_plan:read` 或 `device:read` 可用，存储根目录外路径必须 400
+- [ ] 前端环境执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4D logs——日志文件名/路径使用安全解析并拒绝 `../`、绝对路径与符号链接逃逸；
+列表/读取/搜索和两个日志 WebSocket 使用 `log:read`，清理使用 `log:clear`；WebSocket 首消息校验 JWT，
+同步 `stream_logs` 移出事件循环，错误响应不泄露服务端路径。完成后继续给 backups/faults/maintenance/templates/system settings 等其余写接口挂权限。
 
 **下一切片**：步骤 4C devices——按 read/write/delete/import/export/photo 划分 33 个端点权限；
 照片上传使用安全生成文件名，限制 MIME、扩展名与大小并把文件 IO 移出事件循环；批量发现与 SNMP 写操作归入

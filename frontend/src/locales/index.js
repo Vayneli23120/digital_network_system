@@ -1584,6 +1584,8 @@ export const languages = {
     devicePhotoRack: '机柜',
     devicePhotoOther: '其他',
     deviceNoPhotos: '暂无照片',
+    msgPhotoTypeInvalid: '仅支持 JPEG、PNG 或 WebP 图片',
+    msgPhotoTooLarge: '照片大小不能超过 10 MB',
 
     // 性能指标
     metricCpu: 'CPU',
@@ -5224,6 +5226,8 @@ export const languages = {
     devicePhotoRack: 'Rack',
     devicePhotoOther: 'Other',
     deviceNoPhotos: 'No Photos',
+    msgPhotoTypeInvalid: 'Only JPEG, PNG, or WebP images are supported',
+    msgPhotoTooLarge: 'Photo size cannot exceed 10 MB',
 
     // Performance Metrics
     metricCpu: 'CPU',

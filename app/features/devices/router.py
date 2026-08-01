@@ -1,13 +1,10 @@
 """Device management router"""
 
 import asyncio
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Query
 from loguru import logger
 from sqlalchemy.orm import Session
 from typing import Optional, List, Literal
-from pathlib import Path
-import shutil
-from datetime import datetime
 from io import BytesIO
 
 try:
@@ -17,15 +14,26 @@ except ImportError:
     EXCEL_AVAILABLE = False
 
 try:
-    from starlette.responses import StreamingResponse
+    from starlette.responses import FileResponse, StreamingResponse
 except ImportError:
+    FileResponse = None
     StreamingResponse = None
 
 from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.models import Device, BackupRecord, FaultRecord, MaintenanceRecord, DevicePhoto, CredentialGroup, SparePartInstance, SparePart, DeviceInterface, InterfaceTrafficSample
-from app.shared.config import get_config
+from app.shared.dependencies import require_permission
+from app.features.auth.identity import Principal, get_current_principal
+from .photo_security import (
+    DevicePhotoValidationError,
+    allocate_photo_path,
+    content_type_for_photo_path,
+    delete_stored_photo,
+    resolve_stored_photo_path,
+    save_uploaded_photo,
+    validate_photo_type,
+)
 from app.shared.time_utils import utc_iso
 from app.services.device_metric_facts import (
     device_metric_sample_to_dict,
@@ -33,9 +41,14 @@ from app.services.device_metric_facts import (
     record_device_metric_sample,
 )
 
-config = get_config()
-
 router = APIRouter(prefix="/api/devices", tags=["devices"])
+MAX_DEVICE_IMPORT_BYTES = 10 * 1024 * 1024
+require_device_read = require_permission("device:read")
+require_device_write = require_permission("device:write")
+require_device_delete = require_permission("device:delete")
+require_device_import = require_permission("device:import")
+require_device_export = require_permission("device:export")
+require_device_photo = require_permission("device:photo")
 
 
 # ============ Pydantic 模型 ============
@@ -93,7 +106,10 @@ class ProbeRequest(BaseModel):
 # ============ 设备预检 API ============
 
 @router.post("/test-reachability")
-async def test_device_reachability(request: ProbeRequest):
+async def test_device_reachability(
+    request: ProbeRequest,
+    _: None = Depends(require_device_write),
+):
     """测试设备IP可达性（ping测试）
 
     所有设备类型都可用此API测试网络连通性。
@@ -104,7 +120,10 @@ async def test_device_reachability(request: ProbeRequest):
 
 
 @router.post("/test-connection")
-async def test_device_connection(request: ProbeRequest):
+async def test_device_connection(
+    request: ProbeRequest,
+    _: None = Depends(require_device_write),
+):
     """测试设备SSH连接
 
     仅支持SSH的设备类型可用此API。
@@ -126,7 +145,10 @@ async def test_device_connection(request: ProbeRequest):
 
 
 @router.post("/fetch-info")
-async def fetch_device_info(request: ProbeRequest):
+async def fetch_device_info(
+    request: ProbeRequest,
+    _: None = Depends(require_device_write),
+):
     """获取设备信息
 
     通过SSH连接设备执行show inventory和show snmp获取信息。
@@ -153,7 +175,8 @@ async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
                         deployment_status: Optional[str] = None,
                         reachability: Optional[str] = None,
                         skip: int = 0, limit: int = 200,
-                        db: Session = Depends(get_db)):
+                        db: Session = Depends(get_db),
+                        _: None = Depends(require_device_read)):
     """获取设备列表
 
     Args:
@@ -168,7 +191,9 @@ async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
 
 
 @router.get("/export")
-async def export_devices():
+async def export_devices(
+    _: None = Depends(require_device_export),
+):
     """导出设备信息为 Excel 文件"""
     if not EXCEL_AVAILABLE:
         raise HTTPException(status_code=500, detail="Excel 支持未安装，请运行 pip install openpyxl")
@@ -220,7 +245,10 @@ async def export_devices():
 
 
 @router.post("/import")
-async def import_devices(file: UploadFile = File(...)):
+async def import_devices(
+    file: UploadFile = File(...),
+    _: None = Depends(require_device_import),
+):
     """从 Excel 文件导入设备信息"""
     if not EXCEL_AVAILABLE:
         raise HTTPException(status_code=500, detail="Excel 支持未安装，请运行 pip install openpyxl")
@@ -229,8 +257,12 @@ async def import_devices(file: UploadFile = File(...)):
 
     try:
         # 读取上传的文件
-        content = await file.read()
-        wb = openpyxl.load_workbook(BytesIO(content))
+        content = await file.read(MAX_DEVICE_IMPORT_BYTES + 1)
+        if len(content) > MAX_DEVICE_IMPORT_BYTES:
+            raise HTTPException(status_code=413, detail="导入文件不能超过 10 MB")
+        if not content:
+            raise HTTPException(status_code=400, detail="导入文件不能为空")
+        wb = await asyncio.to_thread(openpyxl.load_workbook, BytesIO(content))
         ws = wb.active
 
         # 读取表头
@@ -298,24 +330,32 @@ async def import_devices(file: UploadFile = File(...)):
             "failed": failed_count,
             "errors": errors
         }
+    except HTTPException:
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=400, detail=f"导入失败：{str(e)}")
     finally:
+        await file.close()
         db.close()
 
 
 # ============ 厂商管理 API（放在 /{device_id} 之前，避免路由匹配冲突）============
 
 @router.get("/vendors")
-async def list_vendors():
+async def list_vendors(
+    _: None = Depends(require_device_read),
+):
     """获取支持的厂商列表"""
     from .vendor_service import get_supported_vendors
     return get_supported_vendors()
 
 
 @router.get("/vendors/{vendor}")
-async def get_vendor(vendor: str):
+async def get_vendor(
+    vendor: str,
+    _: None = Depends(require_device_read),
+):
     """获取厂商详细信息"""
     from .vendor_service import get_vendor_info
     return get_vendor_info(vendor)
@@ -324,7 +364,10 @@ async def get_vendor(vendor: str):
 # ============ 可达性监控 API ============
 
 @router.post("/{device_id}/check-reachability")
-async def manual_check_reachability(device_id: int):
+async def manual_check_reachability(
+    device_id: int,
+    _: None = Depends(require_device_write),
+):
     """手动触发单设备可达性检测
 
     立即检测设备可达性并返回结果。
@@ -353,7 +396,9 @@ async def manual_check_reachability(device_id: int):
 
 
 @router.get("/reachability-stats")
-async def get_reachability_stats():
+async def get_reachability_stats(
+    _: None = Depends(require_device_read),
+):
     """获取可达性统计
 
     返回已部署设备的可达性状态统计。
@@ -409,7 +454,9 @@ async def get_reachability_stats():
 
 
 @router.get("/monitor/status")
-async def get_monitor_status():
+async def get_monitor_status(
+    _: None = Depends(require_device_read),
+):
     """获取可达性监控服务状态"""
     from app.services.reachability_monitor import get_reachability_monitor
     monitor = get_reachability_monitor()
@@ -417,7 +464,9 @@ async def get_monitor_status():
 
 
 @router.get("/monitor/diagnostics")
-async def get_monitor_diagnostics():
+async def get_monitor_diagnostics(
+    _: None = Depends(require_device_read),
+):
     """可达性监控诊断
 
     列出哪些设备正在被监控、哪些被跳过（及原因），以及每台设备的当前状态与检测历史。
@@ -429,14 +478,19 @@ async def get_monitor_diagnostics():
 
 
 @router.get("/monitor/trap-diagnostics")
-async def get_trap_diagnostics():
+async def get_trap_diagnostics(
+    _: None = Depends(require_device_read),
+):
     """SNMP Trap 接收器诊断（是否在监听、收到/应用的 trap 数量）"""
     from app.services.trap_receiver import get_trap_receiver
     return get_trap_receiver().diagnostics()
 
 
 @router.post("/monitor/check-now")
-async def trigger_monitor_check_now(tier: Optional[str] = None):
+async def trigger_monitor_check_now(
+    tier: Optional[str] = None,
+    _: None = Depends(require_device_write),
+):
     """立即触发一次可达性检测（测试用，免等定时周期）
 
     Args:
@@ -451,7 +505,11 @@ async def trigger_monitor_check_now(tier: Optional[str] = None):
 
 
 @router.get("/{device_id}/metrics")
-async def get_device_performance_metrics(device_id: int, db: Session = Depends(get_db)):
+async def get_device_performance_metrics(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """获取设备性能指标
 
     通过 SNMP 查询获取 CPU、内存、温度、上行链路带宽利用率。
@@ -562,6 +620,7 @@ async def get_device_performance_metric_history(
     device_id: int,
     limit: int = Query(60, ge=1, le=500),
     db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
 ):
     """Return canonical device metric facts in chronological order."""
     device = db.query(Device).filter(Device.id == device_id).first()
@@ -577,7 +636,11 @@ async def get_device_performance_metric_history(
 
 
 @router.get("/{device_id}/snmp-diagnose")
-async def diagnose_device_snmp(device_id: int, db: Session = Depends(get_db)):
+async def diagnose_device_snmp(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """SNMP 连通性诊断
 
     逐项探测：sysDescr / sysUpTime / ifNumber / ifHCInOctets(64位计数器) /
@@ -725,7 +788,11 @@ async def diagnose_device_snmp(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{device_id}")
-async def get_device(device_id: int, db: Session = Depends(get_db)):
+async def get_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """获取设备详情"""
     from .device_service import get_device as svc_get_device
     from app.shared.exceptions import ResourceNotFoundException
@@ -738,7 +805,7 @@ async def get_device(device_id: int, db: Session = Depends(get_db)):
 
         return {
             **device,
-            "photos": [{"id": p.id, "photo_type": p.photo_type, "photo_path": p.photo_path, "upload_date": utc_iso(p.upload_date)} for p in photos],
+            "photos": [{"id": p.id, "photo_type": p.photo_type, "content_url": f"/api/devices/{device_id}/photos/{p.id}/content", "upload_date": utc_iso(p.upload_date)} for p in photos],
             "recent_backups": [{"id": b.id, "backup_time": utc_iso(b.backup_time), "has_change": b.has_change} for b in backups],
             "recent_faults": [{"id": f.id, "fault_no": f.fault_no, "severity": f.severity, "status": f.status, "description": f.description, "downtime_minutes": f.downtime_minutes, "impact": f.impact, "created_at": utc_iso(f.created_at)} for f in faults],
             "recent_maintenances": [{"id": m.id, "maint_no": m.maint_no, "maint_type": m.maint_type, "parts_replaced": m.parts_replaced, "parts_cost": float(m.parts_cost or 0), "labor_hours": float(m.labor_hours or 0), "labor_cost": float(m.labor_cost or 0), "vendor": m.vendor, "description": m.description, "maint_time": utc_iso(m.maint_time), "created_at": utc_iso(m.created_at)} for m in maintenances],
@@ -748,7 +815,11 @@ async def get_device(device_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("")
-async def create_device(device_data: DeviceCreate, db: Session = Depends(get_db)):
+async def create_device(
+    device_data: DeviceCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """创建新设备"""
     from .device_service import create_device as svc_create_device
     from app.shared.exceptions import ConflictException
@@ -762,7 +833,12 @@ async def create_device(device_data: DeviceCreate, db: Session = Depends(get_db)
 
 
 @router.put("/{device_id}")
-async def update_device(device_id: int, device_data: DeviceUpdate, db: Session = Depends(get_db)):
+async def update_device(
+    device_id: int,
+    device_data: DeviceUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """更新设备信息"""
     from .device_service import update_device as svc_update_device
     from app.shared.exceptions import ResourceNotFoundException
@@ -774,7 +850,11 @@ async def update_device(device_id: int, device_data: DeviceUpdate, db: Session =
 
 
 @router.delete("/{device_id}")
-async def delete_device(device_id: int, db: Session = Depends(get_db)):
+async def delete_device(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_delete),
+):
     """删除设备"""
     from .device_service import delete_device as svc_delete_device
     from app.shared.exceptions import ResourceNotFoundException
@@ -793,46 +873,61 @@ async def delete_device(device_id: int, db: Session = Depends(get_db)):
 async def upload_device_photo(
     device_id: int,
     photo: UploadFile = File(...),
-    photo_type: str = "other",
-    uploader: str = None
+    photo_type: str = Form("other"),
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_photo),
 ):
     """上传设备照片"""
-    db: Session = next(get_db())
-
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
         raise HTTPException(status_code=404, detail="设备不存在")
 
-    # 确保目录存在
-    photo_dir = Path(config.storage.photo_dir) / device.name / "photos"
-    photo_dir.mkdir(parents=True, exist_ok=True)
-
-    # 保存文件
-    filename = f"{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}_{photo.filename}"
-    file_path = photo_dir / filename
-
-    with open(file_path, "wb") as buffer:
-        shutil.copyfileobj(photo.file, buffer)
+    try:
+        validated_type = validate_photo_type(photo_type)
+        file_path, public_url = allocate_photo_path(device_id, photo.content_type or "")
+        await asyncio.to_thread(
+            save_uploaded_photo,
+            photo.file,
+            file_path,
+            photo.content_type or "",
+        )
+    except DevicePhotoValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        await photo.close()
 
     # 记录数据库
-    photo_record = DevicePhoto(
-        device_id=device_id,
-        device_name=device.name,
-        photo_path=str(file_path),
-        photo_type=photo_type,
-        uploader=uploader or "system"
-    )
-    db.add(photo_record)
-    db.commit()
-    db.refresh(photo_record)
+    try:
+        photo_record = DevicePhoto(
+            device_id=device_id,
+            device_name=device.name,
+            photo_path=public_url,
+            photo_type=validated_type,
+            uploader=principal.username,
+        )
+        db.add(photo_record)
+        db.commit()
+        db.refresh(photo_record)
+    except Exception:
+        db.rollback()
+        await asyncio.to_thread(delete_stored_photo, public_url)
+        raise
 
-    return {"id": photo_record.id, "path": str(file_path), "filename": filename}
+    return {
+        "id": photo_record.id,
+        "content_url": f"/api/devices/{device_id}/photos/{photo_record.id}/content",
+        "filename": file_path.name,
+    }
 
 
 @router.get("/{device_id}/photos")
-async def get_device_photos(device_id: int):
+async def get_device_photos(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """获取设备照片列表"""
-    db: Session = next(get_db())
     photos = db.query(DevicePhoto).filter(
         DevicePhoto.device_id == device_id
     ).order_by(DevicePhoto.upload_date.desc()).all()
@@ -842,7 +937,7 @@ async def get_device_photos(device_id: int):
             {
                 "id": p.id,
                 "photo_type": p.photo_type,
-                "photo_path": p.photo_path,
+                "content_url": f"/api/devices/{device_id}/photos/{p.id}/content",
                 "upload_date": utc_iso(p.upload_date),
                 "uploader": p.uploader
             }
@@ -851,10 +946,40 @@ async def get_device_photos(device_id: int):
     }
 
 
+@router.get("/{device_id}/photos/{photo_id}/content")
+async def get_device_photo_content(
+    device_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
+    """通过受保护接口返回设备照片内容。"""
+    photo = db.query(DevicePhoto).filter(
+        DevicePhoto.id == photo_id,
+        DevicePhoto.device_id == device_id,
+    ).first()
+    if not photo:
+        raise HTTPException(status_code=404, detail="照片不存在")
+
+    try:
+        photo_path = resolve_stored_photo_path(photo.photo_path)
+        media_type = content_type_for_photo_path(photo_path)
+    except DevicePhotoValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not photo_path.exists() or not photo_path.is_file():
+        raise HTTPException(status_code=404, detail="照片文件不存在")
+
+    return FileResponse(photo_path, media_type=media_type)
+
+
 @router.delete("/{device_id}/photos/{photo_id}")
-async def delete_device_photo(device_id: int, photo_id: int):
+async def delete_device_photo(
+    device_id: int,
+    photo_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_photo),
+):
     """删除设备照片"""
-    db: Session = next(get_db())
     photo = db.query(DevicePhoto).filter(
         DevicePhoto.id == photo_id,
         DevicePhoto.device_id == device_id
@@ -863,20 +988,31 @@ async def delete_device_photo(device_id: int, photo_id: int):
     if not photo:
         raise HTTPException(status_code=404, detail="照片不存在")
 
-    # 删除文件
-    photo_path = Path(photo.photo_path)
-    if photo_path.exists():
-        photo_path.unlink()
+    stored_path = photo.photo_path
+
+    try:
+        resolve_stored_photo_path(stored_path)
+    except DevicePhotoValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # 删除记录
     db.delete(photo)
     db.commit()
 
+    try:
+        await asyncio.to_thread(delete_stored_photo, stored_path)
+    except OSError as exc:
+        logger.warning(f"照片记录已删除，但文件清理失败: {exc}")
+
     return {"message": "删除成功"}
 
 
 @router.get("/{device_id}/inventory")
-async def get_device_inventory(device_id: int, db: Session = Depends(get_db)):
+async def get_device_inventory(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """获取设备当前安装的备件列表
 
     Args:
@@ -962,7 +1098,12 @@ def _iface_to_dict(i: DeviceInterface) -> dict:
 
 
 @router.put("/{device_id}/snmp")
-async def update_device_snmp(device_id: int, cfg: SnmpConfig, db: Session = Depends(get_db)):
+async def update_device_snmp(
+    device_id: int,
+    cfg: SnmpConfig,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """配置设备 SNMP 参数（启用/版本/团体名/端口）"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
@@ -987,7 +1128,11 @@ async def update_device_snmp(device_id: int, cfg: SnmpConfig, db: Session = Depe
 
 
 @router.post("/{device_id}/interfaces/discover")
-async def discover_device_interfaces(device_id: int, db: Session = Depends(get_db)):
+async def discover_device_interfaces(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """通过 SNMP 发现设备接口（walk ifName/ifDescr），落库供标记上行口/监控"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
@@ -1002,7 +1147,11 @@ async def discover_device_interfaces(device_id: int, db: Session = Depends(get_d
 
 
 @router.post("/{device_id}/interfaces/discover-neighbors")
-async def discover_device_neighbors(device_id: int, db: Session = Depends(get_db)):
+async def discover_device_neighbors(
+    device_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """通过 CDP 自动发现邻居，回写对端关联并按层级推断上行口（第一版仅 Cisco CDP）"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
@@ -1016,7 +1165,12 @@ async def discover_device_neighbors(device_id: int, db: Session = Depends(get_db
 
 
 @router.get("/{device_id}/interfaces")
-async def list_device_interfaces(device_id: int, monitored_only: bool = False, db: Session = Depends(get_db)):
+async def list_device_interfaces(
+    device_id: int,
+    monitored_only: bool = False,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """列出设备接口"""
     device = db.query(Device).filter(Device.id == device_id).first()
     if not device:
@@ -1034,7 +1188,13 @@ async def list_device_interfaces(device_id: int, monitored_only: bool = False, d
 
 
 @router.put("/{device_id}/interfaces/{if_index}")
-async def update_device_interface(device_id: int, if_index: int, update: InterfaceUpdate, db: Session = Depends(get_db)):
+async def update_device_interface(
+    device_id: int,
+    if_index: int,
+    update: InterfaceUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """标记接口为上行口 / 纳入监控"""
     iface = db.query(DeviceInterface).filter(
         DeviceInterface.device_id == device_id,
@@ -1052,7 +1212,13 @@ async def update_device_interface(device_id: int, if_index: int, update: Interfa
 
 
 @router.get("/{device_id}/interfaces/{if_index}/traffic")
-async def get_interface_traffic(device_id: int, if_index: int, limit: int = 60, db: Session = Depends(get_db)):
+async def get_interface_traffic(
+    device_id: int,
+    if_index: int,
+    limit: int = 60,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """获取接口最近流量样本（默认最近 60 个点，倒序时间）"""
     iface = db.query(DeviceInterface).filter(
         DeviceInterface.device_id == device_id,
@@ -1088,7 +1254,10 @@ async def get_interface_traffic(device_id: int, if_index: int, limit: int = 60, 
 
 
 @router.post("/monitor/discover-neighbors-all")
-async def discover_neighbors_all(db: Session = Depends(get_db)):
+async def discover_neighbors_all(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_write),
+):
     """对所有启用 SNMP 的设备批量执行 CDP/LLDP 邻居发现"""
     devices = db.query(Device).filter(
         Device.snmp_enabled == True,  # noqa: E712
@@ -1136,7 +1305,10 @@ async def discover_neighbors_all(db: Session = Depends(get_db)):
 
 
 @router.get("/monitor/neighbor-links")
-async def list_neighbor_links(db: Session = Depends(get_db)):
+async def list_neighbor_links(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_device_read),
+):
     """返回 CDP/LLDP 发现的邻居链路（供大屏自动绘制拓扑线）"""
     rows = db.query(DeviceInterface).filter(
         DeviceInterface.neighbor_source.isnot(None),

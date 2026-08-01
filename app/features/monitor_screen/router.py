@@ -5,6 +5,7 @@ Monitor Screen Router - 系统监控大屏 API
 """
 
 from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form
+from starlette.responses import FileResponse
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict
@@ -15,7 +16,12 @@ from pydantic import BaseModel
 
 from app.shared.database import get_db
 from app.shared.config import get_config
-from app.shared.models import Device, DeviceInterface, DeviceNode, FaultRecord
+from app.shared.models import Device, DeviceInterface, DeviceNode, FaultRecord, FloorPlan
+from app.shared.dependencies import require_permissions
+from app.features.devices.photo_security import (
+    DevicePhotoValidationError,
+    resolve_stored_photo_path,
+)
 from app.shared.time_utils import utc_iso
 from app.services.incident_insights import build_hot_links, build_impact_scope, build_root_cause_candidates, build_shared_path_edges
 from app.services.monitor3d_traffic_heat import build_traffic_heat_items
@@ -27,6 +33,14 @@ from .monitor_service import (
 
 config = get_config()
 router = APIRouter(prefix="/api", tags=["monitor-screen"])
+require_floor_plan_read = require_permissions(["floor_plan:read", "device:read"])
+FLOOR_PLAN_MEDIA_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".svg": "image/svg+xml",
+}
 
 
 # ============ Pydantic 模型 ============
@@ -816,3 +830,28 @@ async def get_all_device_paths(plan_id: int, db: Session = Depends(get_db)):
     """
     result = calculate_all_device_paths(db, plan_id)
     return result
+
+
+@router.get("/floor-plans/{plan_id}/content")
+async def get_floor_plan_content(
+    plan_id: int,
+    _: None = Depends(require_floor_plan_read),
+    db: Session = Depends(get_db),
+):
+    """通过受保护接口返回平面图图片。"""
+    plan = db.query(FloorPlan).filter(FloorPlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="平面图不存在")
+
+    floor_plan_root = Path(config.storage.photo_dir) / "floor_plans"
+    try:
+        image_path = resolve_stored_photo_path(plan.image_path, floor_plan_root)
+    except DevicePhotoValidationError as exc:
+        raise HTTPException(status_code=400, detail="平面图路径无效") from exc
+    if not image_path.exists() or not image_path.is_file():
+        raise HTTPException(status_code=404, detail="平面图文件不存在")
+
+    media_type = FLOOR_PLAN_MEDIA_TYPES.get(image_path.suffix.lower())
+    if not media_type:
+        raise HTTPException(status_code=400, detail="平面图文件类型无效")
+    return FileResponse(image_path, media_type=media_type)

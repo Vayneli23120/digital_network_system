@@ -19,7 +19,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
-import axios from 'axios'
+import { authenticatedAxios as axios } from '@/api/request.js'
 import { Refresh } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
 import { useI18n } from '@/composables/useI18n'

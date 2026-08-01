@@ -63,12 +63,33 @@ const api = axios.create({
   timeout: 30000
 })
 
-// 请求拦截器 — 自动附加 Auth Token 和请求取消
-api.interceptors.request.use(config => {
+export const authenticatedAxios = axios.create({ timeout: 30000 })
+
+function attachAuthToken(config) {
   const token = localStorage.getItem('accessToken')
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
+  return config
+}
+
+function handleAuthFailure(error) {
+  if (error.response?.status === 401) {
+    ElMessage.error('登录已过期，请重新登录')
+    localStorage.removeItem('accessToken')
+    localStorage.removeItem('isLoggedIn')
+    localStorage.removeItem('currentUser')
+    window.location.href = '/login'
+  }
+  return Promise.reject(error)
+}
+
+authenticatedAxios.interceptors.request.use(attachAuthToken)
+authenticatedAxios.interceptors.response.use(response => response, handleAuthFailure)
+
+// 请求拦截器 — 自动附加 Auth Token 和请求取消
+api.interceptors.request.use(config => {
+  attachAuthToken(config)
 
   // 为 GET 请求自动取消之前的相同请求
   if (config.method?.toLowerCase() === 'get') {
@@ -99,12 +120,7 @@ api.interceptors.response.use(
 
     // 处理认证错误
     if (error.response?.status === 401) {
-      ElMessage.error('登录已过期，请重新登录')
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('isLoggedIn')
-      localStorage.removeItem('currentUser')
-      window.location.href = '/login'
-      return Promise.reject(error)
+      return handleAuthFailure(error)
     }
 
     // 对于有具体错误信息的请求，显示具体信息而不是笼统提示

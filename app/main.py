@@ -131,12 +131,6 @@ if frontend_dist.exists():
     if frontend_assets.exists():
         app.mount("/assets", StaticFiles(directory=str(frontend_assets)), name="frontend-assets")
 
-# 照片资源 - 挂载到 /photos 避免与前端 assets 冲突
-photos_dir = Path(config.storage.photo_dir)
-if photos_dir.exists():
-    app.mount("/photos", StaticFiles(directory=str(photos_dir)), name="photos")
-
-
 # ============ 路由注册 ============
 
 app.include_router(devices_router)
@@ -332,7 +326,7 @@ async def grafana_proxy(request: Request, path: str):
 async def spa_fallback(full_path: str):
     """Vue SPA fallback - 返回前端 index.html（仅对非 API 路径）"""
     # 排除 API 和文档路径
-    if full_path.startswith(("api/", "docs", "redoc", "openapi", "health", "ready", "scanner", "static")):
+    if full_path.startswith(("api/", "docs", "redoc", "openapi", "health", "ready", "scanner", "static", "photos")):
         # 让 FastAPI 返回 404
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Not found")

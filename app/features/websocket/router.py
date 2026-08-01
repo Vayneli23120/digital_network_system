@@ -26,6 +26,9 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket, channel: str = "all"):
         await websocket.accept()
+        self.register(websocket, channel)
+
+    def register(self, websocket: WebSocket, channel: str = "all"):
         if channel not in self.active_connections:
             self.active_connections[channel] = set()
         self.active_connections[channel].add(websocket)
@@ -149,8 +152,34 @@ async def websocket_device_status(websocket: WebSocket):
         "timestamp": "2026-06-05T10:30:00"
     }
     """
-    await manager.connect(websocket, "device-status")
+    await websocket.accept()
     try:
+        try:
+            auth_message = json.loads(await websocket.receive_text())
+            access_token = auth_message.get("access_token")
+        except (json.JSONDecodeError, AttributeError):
+            access_token = None
+
+        from app.features.devices.security import authorize_device_read_token
+        from app.shared.database import get_db
+
+        db = next(get_db())
+        try:
+            try:
+                principal = authorize_device_read_token(access_token, db)
+            except HTTPException as exc:
+                await websocket.send_json({
+                    "event": "auth_error",
+                    "status_code": exc.status_code,
+                    "message": str(exc.detail),
+                })
+                await websocket.close(code=4401 if exc.status_code == 401 else 4403)
+                return
+        finally:
+            db.close()
+
+        manager.register(websocket, "device-status")
+        await websocket.send_json({"event": "authenticated", "username": principal.username})
         while True:
             data = await websocket.receive_text()
             if data == "ping":

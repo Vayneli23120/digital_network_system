@@ -747,6 +747,10 @@ export function getFloorPlan(id) {
   return api.get(`/floor-plans/${id}`)
 }
 
+export function getFloorPlanContent(id) {
+  return api.get(`/floor-plans/${id}/content`, { responseType: 'blob' })
+}
+
 export function createFloorPlan(formData) {
   return api.post('/floor-plans', formData, {
     headers: { 'Content-Type': 'multipart/form-data' }

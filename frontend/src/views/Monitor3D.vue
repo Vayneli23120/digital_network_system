@@ -665,8 +665,8 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit, Rank } from '@element-plus/icons-vue'
-import axios from 'axios'
-import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault } from '@/api'
+import { authenticatedAxios as axios } from '@/api/request.js'
+import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault, getFloorPlanContent } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
 
@@ -2745,14 +2745,13 @@ async function loadFloorPlanTexture() {
     oldGround.material?.dispose()
   }
 
-  // 转换本地路径到 HTTP URL
-  const path = currentPlan.value.image_path
-  const filename = path.split('/').pop()
-  const imageUrl = '/photos/floor_plans/' + encodeURIComponent(filename)
-
   const loader = new THREE.TextureLoader()
+  let imageUrl = null
 
   try {
+    const imageBlob = await getFloorPlanContent(currentPlan.value.id)
+    if (currentLoadId !== floorPlanLoadId) return
+    imageUrl = URL.createObjectURL(imageBlob)
     const tex = await loader.loadAsync(imageUrl)
 
     // 并发检查：如果这不是最新的加载请求，则放弃
@@ -2788,6 +2787,8 @@ async function loadFloorPlanTexture() {
     scene.add(ground)
   } catch (e) {
     console.error('加载底图失败:', e)
+  } finally {
+    if (imageUrl) URL.revokeObjectURL(imageUrl)
   }
 }
 
@@ -6054,6 +6055,12 @@ function connectDeviceStatusWs() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     wsUrl = `${proto}://${location.host}/ws/device-status`
     deviceStatusWs = new WebSocket(wsUrl)
+    deviceStatusWs.onopen = () => {
+      deviceStatusWs.send(JSON.stringify({
+        action: 'authenticate',
+        access_token: localStorage.getItem('accessToken') || undefined
+      }))
+    }
     deviceStatusWs.onmessage = (ev) => {
       try {
         const msg = JSON.parse(ev.data)
