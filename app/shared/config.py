@@ -324,6 +324,8 @@ class Config(BaseModel):
             # 配置文件缺失时会静默回退到本地 SQLite。生产是 PostgreSQL 时，
             # 这种回退会让服务连上一个空的开发库而不报任何错，所以必须显式告警。
             fallback = cls()
+            fallback._apply_security_env_overrides()
+            fallback.validate()
             effective = fallback.database.get_effective_url()
             print(
                 f"[CONFIG WARNING] 未找到配置文件 {path.resolve()}，"
@@ -350,9 +352,39 @@ class Config(BaseModel):
         data = cls._replace_env_vars(data)
 
         config = cls(**data)
+        config._apply_security_env_overrides()
         # Fail-fast 验证
         config.validate()
         return config
+
+    def _apply_security_env_overrides(self) -> None:
+        """应用容器/进程环境中的认证配置。
+
+        这些变量已在 docker-compose.yml 与 .env.example 中公开，必须真实生效。
+        """
+        if "AUTH_ENABLED" in os.environ:
+            self.security.auth_enabled = self._parse_bool_env(
+                "AUTH_ENABLED", os.environ["AUTH_ENABLED"]
+            )
+        if "APP_DEBUG" in os.environ:
+            self.app.debug = self._parse_bool_env("APP_DEBUG", os.environ["APP_DEBUG"])
+        if "JWT_SECRET" in os.environ:
+            self.security.jwt_secret = os.environ["JWT_SECRET"]
+        if "CORS_ALLOWED_ORIGINS" in os.environ:
+            self.security.cors_allowed_origins = [
+                origin.strip()
+                for origin in os.environ["CORS_ALLOWED_ORIGINS"].split(",")
+                if origin.strip()
+            ]
+
+    @staticmethod
+    def _parse_bool_env(name: str, value: str) -> bool:
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+        raise ValueError(f"{name} 必须是 true/false、1/0、yes/no 或 on/off")
 
     @staticmethod
     def _replace_env_vars(obj):

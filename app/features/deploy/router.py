@@ -4,7 +4,7 @@ import asyncio
 import json
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -13,6 +13,7 @@ from loguru import logger
 from jinja2 import Template
 
 from app.shared.database import get_db
+from app.features.auth.identity import Principal, get_current_principal
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User, LogEntry
 from app.shared.config import get_config
 from app.shared.dependencies import require_permission
@@ -479,7 +480,10 @@ async def preview_deploy(deploy_data: dict):
 
 
 @router.post("/execute")
-async def execute_deploy(deploy_data: dict, request: Request):
+async def execute_deploy(
+    deploy_data: dict,
+    principal: Principal = Depends(get_current_principal),
+):
     """
     执行配置部署
 
@@ -500,8 +504,7 @@ async def execute_deploy(deploy_data: dict, request: Request):
     db: Session = next(get_db())
     history_id = None  # 部署历史记录 ID
 
-    # 获取当前用户名
-    current_username = get_current_username_from_request(request)
+    current_username = principal.username
 
     try:
         mode = deploy_data.get('mode', 'backup')
@@ -912,7 +915,10 @@ async def execute_deploy(deploy_data: dict, request: Request):
 
 
 @router.post("/rollback")
-async def rollback_deploy(rollback_data: dict, request: Request):
+async def rollback_deploy(
+    rollback_data: dict,
+    principal: Principal = Depends(get_current_principal),
+):
     """
     回滚设备配置到上一版本（仅 NAPALM 支持）
 
@@ -923,8 +929,7 @@ async def rollback_deploy(rollback_data: dict, request: Request):
     """
     db: Session = next(get_db())
 
-    # 获取当前用户名
-    current_username = get_current_username_from_request(request)
+    current_username = principal.username
 
     try:
         target_device_ids = rollback_data.get('target_devices', [])
@@ -1163,41 +1168,6 @@ async def schedule_deploy(schedule_data: dict, db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"预约部署失败：{e}")
         raise HTTPException(status_code=500, detail=f"Scheduling failed: {str(e)}")
-
-
-# =============================================================================
-# 部署历史 API
-# =============================================================================
-
-def get_current_username_from_request(request) -> str:
-    """从请求获取当前用户名
-
-    优先级：
-    1. 从 X-User 请求头获取（前端传递）
-    2. 从 JWT token 解码获取
-    3. 认证关闭时返回 system
-    """
-    if not config.security.auth_enabled:
-        return "system"
-
-    # 从请求头获取
-    x_user = request.headers.get("X-User")
-    if x_user:
-        return x_user
-
-    # 从 Authorization header 解码 JWT
-    auth_header = request.headers.get("Authorization")
-    if auth_header and auth_header.startswith("Bearer "):
-        try:
-            from app.features.auth.router import decode_token
-            token = auth_header.replace("Bearer ", "")
-            payload = decode_token(token)
-            if payload and payload.get("sub"):
-                return payload.get("sub")
-        except Exception:
-            pass
-
-    return "system"
 
 
 @router.get("/history")

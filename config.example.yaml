@@ -1,0 +1,52 @@
+# Copy this file to config.yaml for local development.
+# Never commit config.yaml or real secrets.
+
+app:
+  name: "Network Automation System"
+  version: "1.3.0"
+  # Development bypass requires BOTH debug=true and auth_enabled=false.
+  debug: true
+
+security:
+  # Production must set this to true and set a strong JWT_SECRET (>= 32 chars).
+  auth_enabled: false
+  jwt_secret: "your-secret-key-change-in-production"
+  jwt_algorithm: "HS256"
+  jwt_access_token_expire_minutes: 30
+  jwt_refresh_token_expire_days: 7
+  cors_allowed_origins:
+    - "http://localhost:3000"
+    - "http://localhost:5173"
+  cors_allow_credentials: true
+
+sso:
+  enabled: false
+  provider: "entra"
+  display_name: "企业账号登录"
+  tenant_id: ""
+  client_id: ""
+  client_secret: "${SSO_CLIENT_SECRET}"
+  redirect_uri: ""
+  scopes:
+    - "openid"
+    - "profile"
+    - "email"
+  auto_provision: true
+  default_role: "viewer"
+
+# Omit database.url to allow DATABASE_URL to take precedence.
+database:
+  type: "sqlite"
+  sqlite_path: "./data/nas.db"
+  pool_size: 10
+  max_overflow: 20
+  pool_timeout: 30
+  pool_recycle: 1800
+  echo: false
+
+storage:
+  backup_dir: "./backups"
+  photo_dir: "./assets/devices"
+  log_dir: "./logs"
+  max_backups_per_device: 30
+  backup_retention_days: 365

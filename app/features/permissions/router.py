@@ -5,24 +5,20 @@
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, HTTPException, Depends, Header, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi import APIRouter, HTTPException, Depends, status
 from sqlalchemy.orm import Session, joinedload
 from pydantic import BaseModel, Field
 from datetime import datetime
 from loguru import logger
 
 from app.shared.database import get_db
-from app.shared.config import get_config
 from app.shared.models import Role, Permission, User
 from app.shared.dependencies import (
     check_user_permission, check_user_permissions, get_user_all_permissions,
     require_permission, require_superuser
 )
-from app.features.auth.router import get_current_user_from_token, decode_token
-
-config = get_config()
-security = HTTPBearer(auto_error=False)
+from app.features.auth.router import get_current_user_from_token
+from app.features.auth.identity import Principal, get_current_principal
 
 router = APIRouter(prefix="/api/permissions", tags=["permissions"])
 
@@ -1120,63 +1116,23 @@ async def check_permissions_batch(
 
 @router.get("/my-permissions", response_model=UserPermissionsResponse)
 async def get_my_permissions(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    x_user: Optional[str] = Header(None, alias="X-User"),
+    principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db)
 ):
     """
     获取当前用户的所有权限列表
 
-    供前端渲染菜单与按钮可见性。身份解析顺序：
-      1. JWT token
-      2. X-User 请求头（仅在 auth_enabled=false 的开发模式下作为回退，
-         该请求头由客户端自行填写，不能作为安全凭据）
-
-    auth_enabled=true 时解析失败一律返回 401，让前端走重新登录流程；
-    绝不能返回一份「超管」权限，否则令牌过期的用户会看到全功能菜单，
-    然后每次操作都被后端拒绝
+    供前端渲染菜单与按钮可见性。身份只由统一 principal 解析；
+    正式环境仅接受 JWT，X-User 只在显式 debug 开发旁路中生效。
     """
-    # 1) 尝试从 JWT token 解析用户
-    current_user = None
-    token = credentials.credentials if credentials else None
-    if token and token != "placeholder_token_auth_disabled":
-        try:
-            payload = decode_token(token)
-            # 与 get_current_user_from_token 保持一致：只接受 access 令牌，
-            # 否则 refresh 令牌也能换到一份权限清单
-            if payload.get("type") != "access":
-                raise ValueError(f"非 access 令牌: type={payload.get('type')!r}")
-            username = payload.get("sub")
-            if username:
-                user = db.query(User).filter(User.username == username).first()
-                if user and user.is_active:
-                    current_user = user
-                else:
-                    logger.debug(f"token 中的用户不存在或已停用: {username}")
-        except Exception as exc:
-            logger.debug(f"解析 token 失败: {type(exc).__name__}: {exc}")
-
-    # 2) 开发模式回退：认证关闭时通过 X-User 请求头识别身份
-    if not current_user and not config.security.auth_enabled and x_user:
-        user = db.query(User).filter(User.username == x_user).first()
-        if user and user.is_active:
-            current_user = user
-
+    current_user = principal.user
     if not current_user:
-        if config.security.auth_enabled:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="未认证或令牌已失效",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        # 认证关闭：整个后端本身不做鉴权，这里返回放开的占位身份，
-        # 保持与 require_permission 等依赖在该模式下的行为一致
         return {
             "user_id": 0,
-            "username": "guest",
+            "username": principal.username,
             "is_superuser": True,
             "permissions": ["admin:all"],
-            "roles": [{"id": 0, "name": "admin", "description": "认证已关闭（开发模式）"}]
+            "roles": [{"id": 0, "name": "developer", "description": "显式 debug 开发旁路"}]
         }
 
     permissions = get_user_all_permissions(current_user.id, db)

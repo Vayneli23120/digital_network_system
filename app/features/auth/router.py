@@ -16,6 +16,11 @@ import uuid
 from app.shared.database import get_db
 from app.shared.config import get_config
 from app.shared.models import User, Role, Permission, UserSession
+from app.features.auth.identity import (
+    Principal,
+    development_auth_bypass_enabled,
+    get_current_principal,
+)
 
 config = get_config()
 router = APIRouter(prefix="/api/auth", tags=["auth"])
@@ -35,6 +40,17 @@ try:
 except ImportError:
     PWD_CONTEXT_AVAILABLE = False
     pwd_context = None
+
+
+def validate_auth_runtime_dependencies() -> None:
+    """认证依赖缺失时拒绝启动，禁止退化为明文密码或不可验签状态。"""
+    missing = []
+    if not PWD_CONTEXT_AVAILABLE:
+        missing.append("passlib[bcrypt]")
+    if not JWT_AVAILABLE:
+        missing.append("python-jose[cryptography]")
+    if missing:
+        raise RuntimeError(f"缺少认证运行依赖: {', '.join(missing)}")
 
 
 # =============================================================================
@@ -83,7 +99,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     expires_in: int
-    username: Optional[str] = None  # 返回数据库中的标准用户名
+    username: Optional[str] = None
 
 
 class PasswordChange(BaseModel):
@@ -98,7 +114,6 @@ class PasswordChange(BaseModel):
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """验证密码"""
     if not PWD_CONTEXT_AVAILABLE:
-        # 预留模式：明文比较（仅开发测试用，需安装 passlib）
         return plain_password == hashed_password
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -106,7 +121,6 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 def get_password_hash(password: str) -> str:
     """获取密码哈希"""
     if not PWD_CONTEXT_AVAILABLE:
-        # 预留模式：返回明文
         return password
     return pwd_context.hash(password)
 
@@ -116,26 +130,26 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     if not JWT_AVAILABLE:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="JWT 功能未安装，请安装 python-jose[cryptography]"
+            detail="JWT 功能未安装，请安装 python-jose[cryptography]",
         )
 
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=config.security.jwt_access_token_expire_minutes))
+    expire = datetime.utcnow() + (
+        expires_delta
+        or timedelta(minutes=config.security.jwt_access_token_expire_minutes)
+    )
     jti = str(uuid.uuid4())
-
     to_encode.update({
         "exp": expire,
         "iat": datetime.utcnow(),
         "jti": jti,
-        "type": "access"
+        "type": "access",
     })
-
-    encoded_jwt = jwt.encode(
+    return jwt.encode(
         to_encode,
         config.security.jwt_secret,
-        algorithm=config.security.jwt_algorithm
+        algorithm=config.security.jwt_algorithm,
     )
-    return encoded_jwt
 
 
 def decode_token(token: str) -> dict:
@@ -166,84 +180,18 @@ def decode_token(token: str) -> dict:
 
 
 def get_current_user_from_token(
-    credentials: HTTPAuthorizationCredentials = Depends(security),
-    db: Session = Depends(get_db)
+    principal: Principal = Depends(get_current_principal),
 ) -> Optional[User]:
-    """从令牌获取当前用户"""
-    # 如果认证未启用，返回 None
-    if not config.security.auth_enabled:
-        return None
-
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="未提供认证令牌",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    token = credentials.credentials
-    payload = decode_token(token)
-
-    if not payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的令牌",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    if payload.get("type") != "access":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的令牌类型",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    username = payload.get("sub")
-    if not username:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="无效的令牌数据",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    # 检查 Token 是否被撤销
-    jti = payload.get("jti")
-    if jti:
-        revoked = db.query(UserSession).filter(
-            UserSession.token_jti == jti,
-            UserSession.revoked == True
-        ).first()
-        if revoked:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="令牌已被撤销",
-                headers={"WWW-Authenticate": "Bearer"}
-            )
-
-    user = db.query(User).filter(User.username == username).first()
-    if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="用户不存在",
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-
-    if not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="用户已被禁用"
-        )
-
-    return user
+    """兼容旧依赖名称；身份解析统一由 get_current_principal 完成。"""
+    return principal.user
 
 
 def get_current_active_user(
     current_user: User = Depends(get_current_user_from_token)
 ) -> User:
     """获取当前活跃用户（认证启用时）"""
-    if not config.security.auth_enabled:
-        # 认证关闭时返回模拟用户
-        return None
+    if development_auth_bypass_enabled():
+        return current_user
 
     if not current_user:
         raise HTTPException(
@@ -375,8 +323,13 @@ async def login(login_data: UserLogin, db: Session = Depends(get_db)):
     - 认证关闭时：返回模拟令牌，始终成功
     - 认证启用时：验证用户名密码
     """
-    # 认证关闭时的预留模式
+    # 认证关闭仅允许在显式 debug 环境使用开发旁路
     if not config.security.auth_enabled:
+        if not development_auth_bypass_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="认证未启用，且当前不是允许开发旁路的 debug 环境",
+            )
         # 如果数据库中有该用户，签发真实 JWT（支持角色/权限隔离）
         user = db.query(User).filter(User.username == login_data.username).first()
         if user and verify_password(login_data.password, user.password_hash):
@@ -479,13 +432,12 @@ async def get_current_user_info(
     db: Session = Depends(get_db)
 ):
     """获取当前登录用户信息"""
-    if not config.security.auth_enabled:
-        # 预留模式：返回模拟超级管理员
+    if development_auth_bypass_enabled() and not current_user:
         return {
             "id": 0,
-            "username": "admin",
-            "email": "admin@example.com",
-            "full_name": "System Administrator",
+            "username": "developer",
+            "email": None,
+            "full_name": "Development Bypass",
             "is_active": True,
             "is_superuser": True,
             "roles": [{"id": 1, "name": "admin", "description": "系统管理员"}],
@@ -642,7 +594,7 @@ async def change_password(
     db: Session = Depends(get_db)
 ):
     """修改密码"""
-    if not config.security.auth_enabled:
+    if development_auth_bypass_enabled() and not current_user:
         return {"message": "密码修改成功（认证未启用）"}
 
     if not current_user:

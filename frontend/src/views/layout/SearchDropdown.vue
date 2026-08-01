@@ -80,6 +80,7 @@ import { Search, Connection, Document, Download } from '@element-plus/icons-vue'
 import dayjs from 'dayjs'
 import { ElMessage } from 'element-plus'
 import { useI18n } from '@/composables/useI18n'
+import api from '@/api/request.js'
 import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
@@ -173,7 +174,7 @@ const handleSearch = debounce(async () => {
 
     // Search devices
     const devicesData = await cachedRequest(
-      () => fetch(`/api/devices?search=${encodeURIComponent(query)}&limit=5`).then(r => r.json()),
+      () => api.get('/devices', { params: { search: query, limit: 5 } }),
       `search_devices_${query}`,
       { query },
       { ttl: 30 }
@@ -182,7 +183,7 @@ const handleSearch = debounce(async () => {
 
     // Search templates
     const templatesData = await cachedRequest(
-      () => fetch(`/api/templates`).then(r => r.json()),
+      () => api.get('/templates'),
       'search_templates',
       {},
       { ttl: 120 }
@@ -195,7 +196,7 @@ const handleSearch = debounce(async () => {
 
     // Search backups
     const backupsData = await cachedRequest(
-      () => fetch('/api/backups?limit=20').then(r => r.json()),
+      () => api.get('/backups', { params: { limit: 20 } }),
       'search_backups',
       {},
       { ttl: 60 }

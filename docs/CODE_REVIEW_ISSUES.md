@@ -47,7 +47,7 @@
 > |---|---|---|
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
-> | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ⬜ |
+> | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
 > | 4 | 按危险度给写接口挂权限：deploy → devices → logs → 其余 | ⬜ |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
@@ -55,16 +55,34 @@
 > 步骤 5 必须排在步骤 3、4 之后：会话凭证的安全性完全依赖"会话属于谁可信"，
 > 在 `X-User` 可伪造的情况下先做会话凭证会比现状更糟。
 
-- [ ] **P0** `shared/config.py:176` — `auth_enabled` 默认 `False`，此时 `require_permission` / `require_permissions` / `require_superuser`（`shared/dependencies.py:150,190,232`）全部直接 return 放行，整套 RBAC 在默认配置下无效。需明确定位：默认改 `True`，或承认它只是 UI 偏好。`[已复核]`
-- [ ] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
+### 步骤 3 验收测试清单（✅ 2026-08-01 完成）
+
+- [x] `auth_enabled=true` 时，请求仅携带 `X-User: Admin` 必须返回 401，不能产生管理员身份
+- [x] 有效本地账号 access token 能解析为统一 principal，并能访问受保护依赖
+- [x] 缺失、过期、伪造、refresh 类型 token 统一返回 401，并带 `WWW-Authenticate: Bearer`
+- [x] `/api/devices` 不再属于认证白名单；未登录访问时返回 401
+- [x] 公共端点仅精确放行登录、SSO status/login/callback、health/ready 与 API 文档；相似前缀不能绕过
+- [x] `auth_enabled=false` 只有同时设置 `app.debug=true` 才启用开发旁路；非 debug 配置不得自动获得超管身份
+- [x] 开发旁路中的 `X-User` 只能识别已存在且启用的用户；请求未携带该头时使用明确的 developer 占位身份
+- [x] 通知与部署审计统一使用 principal，不再各自解码 JWT 或默认回退为 `Admin` / `system`
+- [x] 前端正式请求不再发送可伪造的 `X-User` 请求头
+- [x] SSO `/status`、`/login`、`/callback` 仍可匿名访问且不泄漏密钥
+- [x] `ruff check app scripts migrations tests` 零告警；新增步骤 3 聚焦回归测试全部通过
+- [x] 全量 pytest 失败集合不超过既存基线；若环境问题导致无法全跑，必须记录未验证项
+
+- [x] **P0** `shared/config.py:176` — `auth_enabled` 默认 `False`，此时 `require_permission` / `require_permissions` / `require_superuser`（`shared/dependencies.py:150,190,232`）全部直接 return 放行，整套 RBAC 在默认配置下无效。需明确定位：默认改 `True`，或承认它只是 UI 偏好。`[已复核]`
+  → 修复（步骤 3）：认证中间件改为始终注册；只有 `auth_enabled=false` **且** `app.debug=true` 才允许开发旁路。其余配置即使误关认证也拒绝受保护 API。`AUTH_ENABLED` / `APP_DEBUG` / `JWT_SECRET` / `CORS_ALLOWED_ORIGINS` 环境变量现已真正映射到配置，Docker 默认 `AUTH_ENABLED=true`、`APP_DEBUG=false`。
+- [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
+  → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
 - [ ] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
 - [ ] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[待验证]` 需确认模板来源是否仅限管理员
 - [ ] **P0** `devices/router.py:815` — 用未消毒的 `photo.filename` 拼写入路径（路径穿越写入），且无类型/大小限制、同步 `shutil.copyfileobj` 阻塞事件循环。`[已复核]`
-- [ ] **P1** `auth/router.py:102,110` — passlib 缺失时静默退化为明文存储 + 明文比较，无任何告警。建议缺失即启动失败。`[已复核]`
+- [x] **P1** `auth/router.py:102,110` — passlib 缺失时静默退化为明文存储 + 明文比较，无任何告警。建议缺失即启动失败。`[已复核]`
   → 部分缓解（步骤 1）：`nas user create-admin` / `reset-password` 会先检查 `PWD_CONTEXT_AVAILABLE`，
     缺失则拒绝创建并给出安装命令；`tests/test_credentials_no_plaintext.py::test_passlib_is_installed`
     把它变成测试门禁。运行期的 fail-fast 留到步骤 3 一起做。
+  → 完成（步骤 3）：应用 startup 调用 `validate_auth_runtime_dependencies()`；缺 passlib 或 python-jose 直接拒绝启动。
 - [x] **P0**（步骤 1 新增）没有创建本地管理员账号的手段 —— 收紧认证前无法确认"自己能登进去"。`[已复核]`
   → 新增 CLI：`nas user create-admin -u <用户名>`（交互式输入密码、强制 ≥8 位、自动关联 admin 角色）、
     `nas user reset-password`、`nas user list`
@@ -87,9 +105,11 @@
     `resolve_device_credentials()`。
 - [ ] **P1** `credentials/credential_service.py:24-38` — Fernet key 由 `jwt_secret` + 固定盐 `b"nas-salt"` 派生：轮换 JWT 密钥即全部设备凭证不可解密，且 `credentials/router.py:96` 已用 try/except 把解密失败兜成空密码。`[已复核]`
 - [ ] **P1** `alerts/router.py:36-56` — `GET /settings` 无鉴权返回 `dingtalk_secret` / webhook / SMTP 用户名。`[已复核]`
-- [ ] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
+- [x] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
+  → 修复（步骤 3）：删除设备域豁免，公共端点改精确匹配；中间件统一返回 JSON 401/403，并完整校验用户存在、启用状态与会话撤销状态。
 - [ ] **P1** `services/trap_receiver.py:196` — SNMP Trap 的 community 校验默认关闭，任意主机可伪造 linkDown 改设备状态并自动开工单。`[待验证]`
-- [ ] **P1** `notifications/router.py:37` — 解析不出用户时默认返回 `"Admin"`，匿名请求可读/已读/删除 Admin 的通知。`[已复核]`
+- [x] **P1** `notifications/router.py:37` — 解析不出用户时默认返回 `"Admin"`，匿名请求可读/已读/删除 Admin 的通知。`[已复核]`
+  → 修复（步骤 3）：通知接口依赖统一 `Principal`，删除手工 JWT 解码和 `Admin` 回退；部署审计同步改用该身份。
 - [ ] **P1** `frontend/src/router/index.js:431` — 路由守卫只读 `localStorage.isLoggedIn === 'true'`，无权限判断，手改标志位即可进 `/users`、`/credentials`。`[已复核]`
 - [ ] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]`
 
@@ -101,6 +121,90 @@
 ✅ 全量 pytest 失败集合仍为基线 64 条，通过数 355 → 387。
 **未验证**：前端页面实际渲染（npm 装不上依赖），登录页双入口需你在浏览器里看一眼；
 真实 Entra ID 跳转需等应用注册。
+
+**步骤 3 的验证结果（2026-08-01）**：✅ `tests/test_auth_step3.py` 20 项全过，覆盖
+伪造 `X-User`、有效/伪造/过期/refresh/撤销 token、公共路径精确匹配、CORS 预检、
+debug 双开关、管理员通过与普通用户 403、环境变量映射和认证依赖 fail-fast；
+✅ `tests/test_credentials_no_plaintext.py` 10 项、`tests/test_sso_placeholder.py` 7 项、
+`tests/test_batch1_regressions.py` 15 项全过；✅ `ruff` 零告警；
+✅ 全量 pytest（跳过会挂起的 console）仍为既存基线 **54 failed / 10 errors**，
+通过数增至 420，未新增失败。`tests/test_auth.py` 的 2 项旧 `check_permission` 导入失败仍在基线内。
+**未验证**：真实浏览器登录/登出、生产反向代理下的 CORS、真实 Entra ID 回调；进入步骤 4 前应在测试服务器做一次本地管理员 smoke test。
+
+### 步骤 3 未完成测试：测试系统 AI 接手清单
+
+> 目标：以下项目因本机缺 Docker、前端依赖或真实身份/设备环境而未执行。
+> 测试系统只处理验证和测试修复，不应顺带进入安全步骤 4 的接口权限改造。
+
+#### A. 测试环境准备
+
+1. 拉取 `origin/main`，确认工作区干净，并记录 `git rev-parse HEAD`。
+2. 后端生产式配置必须满足：`AUTH_ENABLED=true`、`APP_DEBUG=false`、
+   `JWT_SECRET` 为至少 32 位随机值、`CORS_ALLOWED_ORIGINS` 为测试前端的精确 Origin。
+3. 执行 `nas user list`；没有管理员时执行 `nas user create-admin -u testadmin`。
+4. 准备一个无 `admin:all`、无 `credential:read`、无 `config:deploy` 的普通测试账号。
+5. 不得使用生产设备凭证；部署审计测试只能选择实验设备并使用 dry-run。
+
+#### B. 自动化门禁（应全部满足）
+
+```powershell
+.\.venv\Scripts\python.exe -m ruff check app scripts migrations tests
+.\.venv\Scripts\python.exe -m pytest tests\test_auth_step3.py -q
+.\.venv\Scripts\python.exe -m pytest tests\test_credentials_no_plaintext.py tests\test_sso_placeholder.py tests\test_batch1_regressions.py -q
+.\.venv\Scripts\python.exe -m pytest -q --ignore=tests\test_console_service.py
+```
+
+预期：步骤 3 为 **20 passed**；凭证/SSO/批次一为 **32 passed**；Ruff 零告警。
+全量测试允许的既存基线为 **54 failed / 420 passed / 4 skipped / 10 errors**，失败集合必须与
+本文件“批次七”一致。任何新增失败都算本次回归，不能通过更新基线掩盖。
+
+#### C. API 认证 smoke test（未执行）
+
+- [ ] 不带任何凭据访问 `GET /api/devices`：返回 401，响应包含 `WWW-Authenticate: Bearer`
+- [ ] 只带 `X-User: Admin` 访问同一接口：仍返回 401
+- [ ] 错误 Bearer、过期 token、refresh token：均返回 401，不能变成 500
+- [ ] 本地管理员登录成功后访问 `/api/auth/me`、`/api/devices`、`/api/notifications`：返回 200
+- [ ] 普通账号访问已挂权限的 `/api/credentials`：返回 403；管理员访问返回 200
+- [ ] 调用 `/api/auth/logout` 后复用旧 token：返回 401（验证撤销会话）
+- [ ] 停用账号现有 token：返回 403；不能继续访问业务 API
+- [ ] `/api/auth/login`、`/api/auth/status`、三个 `/api/auth/sso/*` 公共端点、`/health`、
+  `/ready`、`/docs`、`/openapi.json` 可匿名访问；`/api/auth/login-evil`、
+  `/health/private` 不得因前缀相似而放行
+
+#### D. 浏览器与前端（未执行）
+
+- [ ] 在企业 CA/内网 npm 镜像可用的环境执行 `npm ci && npm run build`，构建必须成功
+- [ ] 本地账号登录后刷新页面，登录态保持；登出后回到登录页且旧 token 不可再用
+- [ ] 浏览器 Network 面板确认请求只有 `Authorization: Bearer ...`，不再发送 `X-User`
+- [ ] 顶部全局搜索能返回设备、模板、备份结果；401 时统一跳回登录页
+- [ ] 普通账号不能通过修改 `localStorage.isLoggedIn` 获得受保护 API 数据
+  （菜单级权限隐藏属于步骤 4/前端权限治理，API 拒绝必须现在成立）
+
+#### E. 反向代理、CORS 与容器（未执行）
+
+- [ ] `docker compose config` 成功，backend 生效值为 `AUTH_ENABLED=true`、`APP_DEBUG=false`
+- [ ] `docker compose up` 后 `/health` 与 `/ready` 正常，缺失/弱 `JWT_SECRET` 时 backend 必须拒绝启动
+- [ ] 合法 Origin 的 OPTIONS 预检成功；非法 Origin 不返回允许跨域头
+- [ ] HTTPS 反向代理下登录、Bearer 转发、401/403 响应和 `WWW-Authenticate` 头不被 Nginx 改写
+
+#### F. 用户归属与审计（未执行）
+
+- [ ] 建立用户 A/B 各自通知，A 只能读取、标记、删除 A 的通知，不能操作 B 的通知
+- [ ] 使用实验设备执行一次 dry-run 部署，部署历史/审计 operator 必须等于 token 用户名，
+  伪造 `X-User` 不能改变 operator
+- [ ] 多并发请求使用不同 token 时身份不得串线，日志中不得出现 token、密码或 JWT secret
+
+#### G. 明确暂缓项
+
+- 真实 Entra ID 授权跳转/回调仍等待 IT 应用注册，步骤 3 只要求占位端点匿名可达且不泄密。
+- WebSocket `/ws/logs` 不经过 HTTP middleware；其 token 协议与日志权限归入安全步骤 4 的 logs 切片，
+  测试系统应记录为待办，不应误判为步骤 3 已覆盖。
+- 真实 Netmiko/NAPALM 部署不在本轮执行；只允许实验设备 dry-run 验证身份归属。
+
+#### H. 测试回传格式
+
+测试系统需回传：commit SHA、环境变量（密钥脱敏）、命令与退出码、失败测试完整 nodeid、
+HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基线，以及可复现的最小步骤。
 
 ---
 
@@ -190,7 +294,8 @@
 - [ ] **P0** `views/Deploy.vue`（3631 行）— 无任何卸载钩子，部署中切路由后 `setInterval`(`:1737,:2078`) 与 WebSocket(`:1747`) 全部残留；且两处 `setInterval` 复用同一 `timer` 变量，`stopTimer()` 只清得掉最后一个。`[已复核]`
 - [ ] **P0** `utils/requestManager.js:22-30` + `api/request.js:78-83` — 所有 GET 按 `method:url:params:data` 自动 abort 同键旧请求，两个组件轮询同一端点会互相取消，表现为随机空数据，且调用方无法关闭该行为。`[已复核]`
 - [ ] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
-- [ ] **P0** `views/layout/SearchDropdown.vue:174-198` — 用原生 `fetch('/api/...')` 绕过 axios 实例，不带 Authorization、不过 401 拦截器。`[已复核]`
+- [x] **P0** `views/layout/SearchDropdown.vue:174-198` — 用原生 `fetch('/api/...')` 绕过 axios 实例，不带 Authorization、不过 401 拦截器。`[已复核]`
+  → 修复（安全步骤 3）：设备、模板、备份搜索全部改走统一 Axios 客户端并使用结构化 `params`，自动携带 JWT 与复用 401 处理。
 - [ ] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
 - [ ] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
 - [ ] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`

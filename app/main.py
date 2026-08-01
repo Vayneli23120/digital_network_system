@@ -78,8 +78,9 @@ app.add_middleware(
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-Request-ID"],
 )
 
-if config.security.auth_enabled:
-    app.middleware("http")(auth_middleware)
+# 始终注册：认证关闭但未显式开启 debug 时也必须拒绝受保护请求，
+# 避免配置遗漏导致整套 API 静默裸奔。
+app.middleware("http")(auth_middleware)
 
 app.add_middleware(RateLimitMiddleware)
 
@@ -351,6 +352,9 @@ async def spa_fallback(full_path: str):
 async def startup_event():
     """应用启动时执行"""
     import asyncio
+    from .features.auth.router import validate_auth_runtime_dependencies
+
+    validate_auth_runtime_dependencies()
     db_manager = get_db_manager()
     db_manager.init_db()
     logger.info(f"Network Automation System v{config.app.version} 启动")

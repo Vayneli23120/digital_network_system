@@ -8,11 +8,9 @@ from fastapi import Depends, HTTPException
 from sqlalchemy.orm import Session, joinedload
 
 from app.shared.database import get_db
-from app.shared.config import get_config
 from app.shared.models import User, Role, Permission
 from app.features.auth.router import get_current_user_from_token
-
-config = get_config()
+from app.features.auth.identity import development_auth_bypass_enabled
 
 
 def check_user_permission(user_id: int, permission_name: str, db: Session) -> bool:
@@ -149,8 +147,8 @@ def require_permission(permission_name: str):
         current_user: User = Depends(get_current_user_from_token),
         db: Session = Depends(get_db)
     ):
-        # 认证关闭时允许所有操作
-        if not config.security.auth_enabled:
+        # 仅显式 debug 开发模式允许跳过权限检查
+        if development_auth_bypass_enabled():
             return None
 
         # 未登录用户拒绝
@@ -184,8 +182,8 @@ def require_permissions(permission_names: list):
         current_user: User = Depends(get_current_user_from_token),
         db: Session = Depends(get_db)
     ):
-        # 认证关闭时允许所有操作
-        if not config.security.auth_enabled:
+        # 仅显式 debug 开发模式允许跳过权限检查
+        if development_auth_bypass_enabled():
             return None
 
         # 未登录用户拒绝
@@ -222,8 +220,8 @@ def require_superuser():
         current_user: User = Depends(get_current_user_from_token),
         db: Session = Depends(get_db)
     ):
-        # 认证关闭时允许所有操作
-        if not config.security.auth_enabled:
+        # 仅显式 debug 开发模式允许跳过权限检查
+        if development_auth_bypass_enabled():
             return None
 
         # 未登录用户拒绝

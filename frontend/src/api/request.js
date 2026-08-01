@@ -70,12 +70,6 @@ api.interceptors.request.use(config => {
     config.headers.Authorization = `Bearer ${token}`
   }
 
-  // 同时传递当前用户名作为备用
-  const currentUser = localStorage.getItem('currentUser')
-  if (currentUser) {
-    config.headers['X-User'] = currentUser
-  }
-
   // 为 GET 请求自动取消之前的相同请求
   if (config.method?.toLowerCase() === 'get') {
     cancelPreviousRequest(config)
