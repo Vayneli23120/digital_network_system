@@ -177,16 +177,46 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 ✅ Windows 全量 pytest 为 **54 failed / 484 passed / 5 skipped / 10 errors**，失败集合仍为既存基线。
 ⚠️ 本机未安装 `frontend/node_modules`，Vite build 未执行；`tests/test_deploy_service.py` 仍有 2 个旧模块 patch 路径失败。
 
+**步骤 4B 测试系统 Linux 实测补充（2026-08-01，HEAD `0de278c`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_deploy_security_step4b.py` + `test_secure_template_renderer.py`
+  **48 passed**（Linux 全过无 skip，Windows 为 44 passed/1 skipped）；相邻回归 69 项全过
+  （批次一/步骤3/凭证/SSO/alerts）；全量 pytest **53 failed / 489 passed / 4 skipped / 0 errors**，
+  失败集合与 4A 基线逐项一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 /
+  deploy 2（`tests/test_deploy_service.py` 旧模块 patch 路径）/ auth 2 / email 1 / device 1 /
+  dashboard 1），无新增失败；通过数较 4A 增 +48 = 新增 4B 测试。
+- ✅ 真实 API 权限矩阵：临时建 `smoke_reader`（仅 `config:read`）与 `smoke_deployer`（operator：
+  `config:read`+`config:deploy`+`config:rollback`）。smoke_reader 对 preview/variables/windows/history
+  均 200，execute/schedule/rollback 均 403；smoke_deployer 与 admin 越过权限后进入业务校验
+  （execute 设备不存在 404「未找到指定的设备」）；schedule 200。
+- ✅ WebSocket `/ws/deploy/{sid}`：无 token → `deploy_error` 401 并关闭 4401；伪造 token → 401/4401；
+  仅 `config:read` 的 token → 403/4403；`config:deploy` token 通过鉴权后才进入设备/凭证流程（设备 999
+  直接业务报错）。所有拒绝均发生在凭证读取与设备连接之前（`authorize_deploy_token` 位于凭证查询之前）。
+- ✅ 实验设备 dry-run 身份归属：smoke_deployer 对实验设备 pnetlab-swr（192.168.4.1，SSH 22 可达）经 WebSocket
+  dry-run 部署（业务结果因凭证不匹配失败），写入 `DeployHistory` id=52 `username='smoke_deployer'`、
+  `user_id=7`，`LogEntry` id=115 `created_by='smoke_deployer'`，与 token 用户一致；旧记录中的
+  `operator/created_by='Web'` 为修复前历史数据，源码级检查确认新写入不再产生。
+- ✅ 路径穿越：HTTP `POST /api/deploy/preview` 合法备份文件 200；`../../../../etc/passwd` 与 `/etc/passwd`
+  均 400「备份文件路径超出允许目录」；WebSocket `mode=backup` 相同两例均返回 `deploy_error`
+  「备份文件路径超出允许目录」；符号链接逃逸由 `test_backup_path_rejects_symlink_escape_when_supported` 覆盖。
+- ✅ SSTI：直接渲染 `render_network_template()` 与经 HTTP template-preview 双路径验证，
+  `__class__.__mro__`、`__subclasses__`、`cycler`/`lipsum` 的 `os.popen`、`10 ** 100000`、
+  `'A' * 100000000` 全部拒绝（「模板包含不安全表达式」/「模板语法或渲染无效」），未执行任何系统命令。
+- ✅ 模板兼容：四个内置模板（id 1/3/4/5）以样例变量渲染全部 OK；循环遍历上下文变量、`if/elif` 条件、
+  `default` 过滤器、`now()`/`now_str`、缺失变量留空均兼容。已知限制：沙箱清空 globals 后 `range()`
+  不可用（内置模板不使用，单元测试亦按变量循环设计）。
+- ✅ 前端构建：`npm run build` 成功（13.88s，仅既有 chunk 体积告警）。
+- ⚠️ 浏览器 Deploy 页手动验证（D）未执行，需真实浏览器与前端交互。
+
 **步骤 4B 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、两个 4B 测试文件、批次一及全量 pytest，失败集合不得新增
-- [ ] `config:read` 用户只能 preview/variables/windows/history，execute/schedule/rollback 均 403
-- [ ] `config:deploy` 用户可通过 WebSocket 连接并执行**实验设备 dry-run**，历史与 LogEntry 用户名必须等于 token 用户
-- [ ] 无 token、伪造 token、仅 `config:read` 的 WebSocket 部署分别被拒绝，且拒绝前不得读取凭证或连接设备
-- [ ] `../`、根目录外绝对路径、符号链接逃逸在 HTTP 与 WebSocket 均被拒绝
-- [ ] SSTI payload（`__class__`、`__globals__`、`cycler`、`lipsum`、超大乘法/指数）全部被拒绝且不执行系统命令
-- [ ] 四个内置模板与现有用户模板抽样渲染正常；循环、条件、default、`now()/now_str` 和缺失变量兼容
+- [x] Linux 跑 Ruff、两个 4B 测试文件、批次一及全量 pytest，失败集合不得新增
+- [x] `config:read` 用户只能 preview/variables/windows/history，execute/schedule/rollback 均 403
+- [x] `config:deploy` 用户可通过 WebSocket 连接并执行**实验设备 dry-run**，历史与 LogEntry 用户名必须等于 token 用户
+- [x] 无 token、伪造 token、仅 `config:read` 的 WebSocket 部署分别被拒绝，且拒绝前不得读取凭证或连接设备
+- [x] `../`、根目录外绝对路径、符号链接逃逸在 HTTP 与 WebSocket 均被拒绝
+- [x] SSTI payload（`__class__`、`__globals__`、`cycler`、`lipsum`、超大乘法/指数）全部被拒绝且不执行系统命令
+- [x] 四个内置模板与现有用户模板抽样渲染正常；循环、条件、default、`now()/now_str` 和缺失变量兼容
 - [ ] 浏览器 Deploy 页 preview/历史/预约/回滚权限表现正确，WebSocket 断线与 401/403 提示可理解
-- [ ] 前端环境可用时执行 `npm ci && npm run build`
+- [x] 前端环境可用时执行 `npm ci && npm run build`
 
 **下一切片**：步骤 4C devices——按 read/write/delete/import/export/photo 划分 33 个端点权限；
 照片上传使用安全生成文件名，限制 MIME、扩展名与大小并把文件 IO 移出事件循环；批量发现与 SNMP 写操作归入
