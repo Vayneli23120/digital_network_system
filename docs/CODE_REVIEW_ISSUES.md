@@ -155,6 +155,16 @@ debug 双开关、管理员通过与普通用户 403、环境变量映射和认�
 `config:deploy`，`rollback` 挂 `config:rollback`，并把用户模板渲染从裸 `jinja2.Template`
 迁到沙箱环境；真实设备只做实验设备 dry-run 与审计 operator 验证。
 
+**步骤 4A 测试系统 Linux 实测补充（2026-08-01，HEAD `a9721ce`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_alert_settings_security.py` 17/17；相邻回归
+  52/52（步骤 3 + 凭证/SSO/批次一）；全量 pytest **53 failed / 441 passed / 4 skipped / 0 errors**
+  （失败集合与基线一致，无新增；通过数较上次 424 增 +17 = 新增 alerts 测试）。
+- ✅ 真实 API smoke test：未认证 `GET /api/alerts/settings` 401；viewer（无 `alert:manage`）
+  GET/POST 均 403；admin GET 200 且响应脱敏（SMTP/Webhook/钉钉仅返回 `has_*` 标志，绝不回传
+  secret）；admin POST 最小改动 200 且空敏感字段保留；保存触发 config.yaml 原子重写后
+  `auth_enabled`/`jwt_secret` 等安全配置保留、服务正常。
+- 未执行：浏览器端（D）、Docker（E）、用户归属审计（F）同前。
+
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 
 > 目标：以下项目因本机缺 Docker、前端依赖或真实身份/设备环境而未执行。
