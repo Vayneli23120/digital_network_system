@@ -31,10 +31,22 @@
           <el-switch v-model="form.email_use_tls" />
         </el-form-item>
         <el-form-item :label="t('alertUsername')" v-if="form.email_enabled">
-          <el-input v-model="form.email_username" />
+          <div class="secret-field">
+            <el-input v-model="form.email_username" :disabled="form.clear_email_username" />
+            <div v-if="form.has_email_username" class="secret-meta">
+              <span>{{ t('alertSecretConfiguredTip') }}</span>
+              <el-checkbox v-model="form.clear_email_username">{{ t('alertClearSavedValue') }}</el-checkbox>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item :label="t('alertPassword')" v-if="form.email_enabled">
-          <el-input v-model="form.email_password" type="password" show-password />
+          <div class="secret-field">
+            <el-input v-model="form.email_password" type="password" show-password :disabled="form.clear_email_password" />
+            <div v-if="form.has_email_password" class="secret-meta">
+              <span>{{ t('alertSecretConfiguredTip') }}</span>
+              <el-checkbox v-model="form.clear_email_password">{{ t('alertClearSavedValue') }}</el-checkbox>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item :label="t('alertSender')" v-if="form.email_enabled">
           <el-input v-model="form.email_from_addr" placeholder="noreply@company.com" />
@@ -51,8 +63,13 @@
           <el-switch v-model="form.wechat_enabled" />
         </el-form-item>
         <el-form-item :label="t('alertWechatUrl')" v-if="form.wechat_enabled">
-          <el-input v-model="form.wechat_webhook_url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." />
-          <span class="form-tip">{{ t('alertWechatTip') }}</span>
+          <div class="secret-field">
+            <el-input v-model="form.wechat_webhook_url" placeholder="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..." :disabled="form.clear_wechat_webhook_url" />
+            <div class="secret-meta">
+              <span>{{ form.has_wechat_webhook_url ? t('alertSecretConfiguredTip') : t('alertWechatTip') }}</span>
+              <el-checkbox v-if="form.has_wechat_webhook_url" v-model="form.clear_wechat_webhook_url">{{ t('alertClearSavedValue') }}</el-checkbox>
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 钉钉 -->
@@ -61,11 +78,22 @@
           <el-switch v-model="form.dingtalk_enabled" />
         </el-form-item>
         <el-form-item :label="t('alertDingtalkUrl')" v-if="form.dingtalk_enabled">
-          <el-input v-model="form.dingtalk_webhook_url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." />
+          <div class="secret-field">
+            <el-input v-model="form.dingtalk_webhook_url" placeholder="https://oapi.dingtalk.com/robot/send?access_token=..." :disabled="form.clear_dingtalk_webhook_url" />
+            <div v-if="form.has_dingtalk_webhook_url" class="secret-meta">
+              <span>{{ t('alertSecretConfiguredTip') }}</span>
+              <el-checkbox v-model="form.clear_dingtalk_webhook_url">{{ t('alertClearSavedValue') }}</el-checkbox>
+            </div>
+          </div>
         </el-form-item>
         <el-form-item :label="t('alertDingtalkSecret')" v-if="form.dingtalk_enabled">
-          <el-input v-model="form.dingtalk_secret" placeholder="SECxxxxxxxx" show-password />
-          <span class="form-tip">{{ t('alertDingtalkSecretTip') }}</span>
+          <div class="secret-field">
+            <el-input v-model="form.dingtalk_secret" placeholder="SECxxxxxxxx" show-password :disabled="form.clear_dingtalk_secret" />
+            <div class="secret-meta">
+              <span>{{ form.has_dingtalk_secret ? t('alertSecretConfiguredTip') : t('alertDingtalkSecretTip') }}</span>
+              <el-checkbox v-if="form.has_dingtalk_secret" v-model="form.clear_dingtalk_secret">{{ t('alertClearSavedValue') }}</el-checkbox>
+            </div>
+          </div>
         </el-form-item>
 
         <!-- 测试按钮 -->
@@ -87,7 +115,6 @@ import { ElMessage } from 'element-plus'
 import { getAlertSettings, saveAlertSettings, testAlertChannel } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
-import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 
@@ -110,6 +137,16 @@ const form = reactive({
   dingtalk_enabled: false,
   dingtalk_webhook_url: '',
   dingtalk_secret: '',
+  has_email_username: false,
+  has_email_password: false,
+  has_wechat_webhook_url: false,
+  has_dingtalk_webhook_url: false,
+  has_dingtalk_secret: false,
+  clear_email_username: false,
+  clear_email_password: false,
+  clear_wechat_webhook_url: false,
+  clear_dingtalk_webhook_url: false,
+  clear_dingtalk_secret: false,
 })
 
 watch([() => form.email_enabled, () => form.wechat_enabled, () => form.dingtalk_enabled], () => {
@@ -119,7 +156,7 @@ watch([() => form.email_enabled, () => form.wechat_enabled, () => form.dingtalk_
   if (form.dingtalk_enabled) form.channels.push('dingtalk')
 })
 
-const loadSettings = debounce(async (force = false) => {
+const loadSettings = async (force = false) => {
   loading.value = true
   try {
     const res = await cachedRequest(
@@ -136,7 +173,7 @@ const loadSettings = debounce(async (force = false) => {
   } finally {
     loading.value = false
   }
-}, 300)
+}
 
 const saveSettings = async () => {
   saving.value = true
@@ -157,8 +194,24 @@ const saveSettings = async () => {
       dingtalk_enabled: form.dingtalk_enabled,
       dingtalk_webhook_url: form.dingtalk_webhook_url,
       dingtalk_secret: form.dingtalk_secret,
+      clear_email_username: form.clear_email_username,
+      clear_email_password: form.clear_email_password,
+      clear_wechat_webhook_url: form.clear_wechat_webhook_url,
+      clear_dingtalk_webhook_url: form.clear_dingtalk_webhook_url,
+      clear_dingtalk_secret: form.clear_dingtalk_secret,
     })
     clearCache('alert_settings')
+    form.email_username = ''
+    form.email_password = ''
+    form.wechat_webhook_url = ''
+    form.dingtalk_webhook_url = ''
+    form.dingtalk_secret = ''
+    form.clear_email_username = false
+    form.clear_email_password = false
+    form.clear_wechat_webhook_url = false
+    form.clear_dingtalk_webhook_url = false
+    form.clear_dingtalk_secret = false
+    await loadSettings(true)
     ElMessage.success(t('msgSaveSuccess'))
   } catch (e) {
     ElMessage.error(t('msgSaveFailed') + '：' + (e.response?.data?.detail || e.message))
@@ -184,4 +237,6 @@ onMounted(loadSettings)
 <style scoped>
 .alert-settings-page { padding: 0; }
 .form-tip { color: var(--text-muted); font-size: 12px; margin-left: var(--gap-sm); }
+.secret-field { width: 100%; }
+.secret-meta { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 6px; color: var(--text-muted); font-size: 12px; }
 </style>

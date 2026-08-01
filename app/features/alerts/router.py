@@ -1,43 +1,57 @@
-"""
-告警通知设置 API
-"""
+"""告警通知设置 API。"""
 
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import Optional, List
-from sqlalchemy.orm import Session
+import os
+from pathlib import Path
+from typing import Literal, Optional
 
-from app.shared.database import get_db
-from app.shared.config import get_config
-from app.services.notification_service import get_notification_service
+import yaml
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, ConfigDict, Field
+
+import app.shared.config as config_module
+from app.services.notification_service import (
+    get_notification_service,
+    reset_notification_service,
+)
+from app.shared.config import AlertsConfig, get_config
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/alerts", tags=["告警通知"])
 
+AlertChannel = Literal["email", "wechat_work", "dingtalk"]
+TestChannel = Literal["all", "email", "wechat_work", "dingtalk"]
+require_alert_manage = require_permission("alert:manage")
 
-class AlertSettings(BaseModel):
-    """告警设置"""
+
+class AlertSettingsUpdate(BaseModel):
+    """告警设置更新；敏感字段省略或留空表示保留现值。"""
+
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = False
-    channels: List[str] = []
+    channels: list[AlertChannel] = Field(default_factory=list)
     email_enabled: bool = False
-    email_smtp_host: str = ""
-    email_smtp_port: int = 587
+    email_smtp_host: str = Field(default="", max_length=255)
+    email_smtp_port: int = Field(default=587, ge=1, le=65535)
     email_use_tls: bool = True
-    email_username: str = ""
-    email_password: str = ""
-    email_from_addr: str = ""
-    email_recipients: List[str] = []
+    email_username: Optional[str] = Field(default=None, max_length=255)
+    email_password: Optional[str] = Field(default=None, max_length=4096)
+    email_from_addr: str = Field(default="", max_length=320)
+    email_recipients: list[str] = Field(default_factory=list)
     wechat_enabled: bool = False
-    wechat_webhook_url: str = ""
+    wechat_webhook_url: Optional[str] = Field(default=None, max_length=4096)
     dingtalk_enabled: bool = False
-    dingtalk_webhook_url: str = ""
-    dingtalk_secret: str = ""
+    dingtalk_webhook_url: Optional[str] = Field(default=None, max_length=4096)
+    dingtalk_secret: Optional[str] = Field(default=None, max_length=4096)
+    clear_email_username: bool = False
+    clear_email_password: bool = False
+    clear_wechat_webhook_url: bool = False
+    clear_dingtalk_webhook_url: bool = False
+    clear_dingtalk_secret: bool = False
 
 
-@router.get("/settings")
-async def get_alert_settings():
-    """获取告警设置"""
-    config = get_config()
-    alerts = config.alerts
+def _settings_response(alerts: AlertsConfig) -> dict:
+    """返回可编辑设置，但绝不回传凭据或完整 Webhook。"""
     return {
         "enabled": alerts.enabled,
         "channels": alerts.channels,
@@ -45,83 +59,123 @@ async def get_alert_settings():
         "email_smtp_host": alerts.email.smtp_host,
         "email_smtp_port": alerts.email.smtp_port,
         "email_use_tls": alerts.email.use_tls,
-        "email_username": alerts.email.username,
         "email_from_addr": alerts.email.from_addr,
         "email_recipients": alerts.email.recipients,
         "wechat_enabled": alerts.wechat_work.enabled,
-        "wechat_webhook_url": alerts.wechat_work.webhook_url,
         "dingtalk_enabled": alerts.dingtalk.enabled,
-        "dingtalk_webhook_url": alerts.dingtalk.webhook_url,
-        "dingtalk_secret": alerts.dingtalk.secret,
+        "has_email_username": bool(alerts.email.username),
+        "has_email_password": bool(alerts.email.password),
+        "has_wechat_webhook_url": bool(alerts.wechat_work.webhook_url),
+        "has_dingtalk_webhook_url": bool(alerts.dingtalk.webhook_url),
+        "has_dingtalk_secret": bool(alerts.dingtalk.secret),
     }
+
+
+def _set_sensitive(section: dict, key: str, value: Optional[str], clear: bool) -> None:
+    if clear:
+        section[key] = ""
+    elif value:
+        section[key] = value
+
+
+def persist_alert_settings(
+    settings: AlertSettingsUpdate,
+    config_path: Path = Path("config.yaml"),
+) -> None:
+    """合并并原子写入告警配置，避免空输入误清除已保存的秘密。"""
+    if config_path.exists():
+        with config_path.open("r", encoding="utf-8") as config_file:
+            raw_config = yaml.safe_load(config_file) or {}
+    else:
+        raw_config = {}
+
+    alerts = raw_config.setdefault("alerts", {})
+    alerts["enabled"] = settings.enabled
+    alerts["channels"] = list(settings.channels)
+
+    email = alerts.setdefault("email", {})
+    email.update({
+        "enabled": settings.email_enabled,
+        "smtp_host": settings.email_smtp_host,
+        "smtp_port": settings.email_smtp_port,
+        "use_tls": settings.email_use_tls,
+        "from_addr": settings.email_from_addr,
+        "recipients": settings.email_recipients,
+    })
+    _set_sensitive(email, "username", settings.email_username, settings.clear_email_username)
+    _set_sensitive(email, "password", settings.email_password, settings.clear_email_password)
+
+    wechat = alerts.setdefault("wechat_work", {})
+    wechat["enabled"] = settings.wechat_enabled
+    _set_sensitive(
+        wechat,
+        "webhook_url",
+        settings.wechat_webhook_url,
+        settings.clear_wechat_webhook_url,
+    )
+
+    dingtalk = alerts.setdefault("dingtalk", {})
+    dingtalk["enabled"] = settings.dingtalk_enabled
+    _set_sensitive(
+        dingtalk,
+        "webhook_url",
+        settings.dingtalk_webhook_url,
+        settings.clear_dingtalk_webhook_url,
+    )
+    _set_sensitive(
+        dingtalk,
+        "secret",
+        settings.dingtalk_secret,
+        settings.clear_dingtalk_secret,
+    )
+
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary_path = config_path.with_suffix(f"{config_path.suffix}.tmp")
+    try:
+        with temporary_path.open("w", encoding="utf-8") as config_file:
+            yaml.safe_dump(raw_config, config_file, default_flow_style=False, allow_unicode=True)
+            config_file.flush()
+            os.fsync(config_file.fileno())
+        os.replace(temporary_path, config_path)
+    finally:
+        if temporary_path.exists():
+            temporary_path.unlink()
+
+    config_module._config = None
+    reset_notification_service()
+
+
+@router.get("/settings")
+async def get_alert_settings(
+    _: None = Depends(require_alert_manage),
+):
+    """获取脱敏后的告警设置。"""
+    return _settings_response(get_config().alerts)
 
 
 @router.get("/status")
 async def get_alert_status():
-    """获取告警渠道状态"""
+    """获取告警渠道运行状态；不包含任何配置秘密。"""
     service = get_notification_service()
     return service.get_channels_status()
 
 
 @router.post("/settings")
-async def update_alert_settings(settings: dict):
-    """更新告警设置（写入 config.yaml）"""
-    import yaml
-    from pathlib import Path
-
-    config = get_config()
-    config_path = Path("config.yaml")
-
-    # 读取当前 config
-    if config_path.exists():
-        with open(config_path, "r", encoding="utf-8") as f:
-            raw_config = yaml.safe_load(f) or {}
-    else:
-        raw_config = {}
-
-    if "alerts" not in raw_config:
-        raw_config["alerts"] = {}
-
-    raw_config["alerts"]["enabled"] = settings.get("enabled", False)
-    raw_config["alerts"]["channels"] = settings.get("channels", [])
-
-    # Email
-    raw_config.setdefault("alerts", {}).setdefault("email", {})
-    raw_config["alerts"]["email"]["enabled"] = settings.get("email_enabled", False)
-    raw_config["alerts"]["email"]["smtp_host"] = settings.get("email_smtp_host", "")
-    raw_config["alerts"]["email"]["smtp_port"] = settings.get("email_smtp_port", 587)
-    raw_config["alerts"]["email"]["use_tls"] = settings.get("email_use_tls", True)
-    raw_config["alerts"]["email"]["username"] = settings.get("email_username", "")
-    raw_config["alerts"]["email"]["password"] = settings.get("email_password", "")
-    raw_config["alerts"]["email"]["from_addr"] = settings.get("email_from_addr", "")
-    raw_config["alerts"]["email"]["recipients"] = settings.get("email_recipients", [])
-
-    # WeChat Work
-    raw_config.setdefault("alerts", {}).setdefault("wechat_work", {})
-    raw_config["alerts"]["wechat_work"]["enabled"] = settings.get("wechat_enabled", False)
-    raw_config["alerts"]["wechat_work"]["webhook_url"] = settings.get("wechat_webhook_url", "")
-
-    # DingTalk
-    raw_config.setdefault("alerts", {}).setdefault("dingtalk", {})
-    raw_config["alerts"]["dingtalk"]["enabled"] = settings.get("dingtalk_enabled", False)
-    raw_config["alerts"]["dingtalk"]["webhook_url"] = settings.get("dingtalk_webhook_url", "")
-    raw_config["alerts"]["dingtalk"]["secret"] = settings.get("dingtalk_secret", "")
-
-    # 写回 config.yaml
-    with open(config_path, "w", encoding="utf-8") as f:
-        yaml.dump(raw_config, f, default_flow_style=False, allow_unicode=True)
-
-    # 重置全局 config 单例
-    from app.shared.config import _config
-    import app.config as config_module
-    config_module._config = None
-
+async def update_alert_settings(
+    settings: AlertSettingsUpdate,
+    _: None = Depends(require_alert_manage),
+):
+    """更新告警设置。"""
+    persist_alert_settings(settings)
     return {"message": "设置已保存"}
 
 
 @router.post("/test")
-async def test_alert_channel(channel: str = "all"):
-    """测试告警渠道"""
+async def test_alert_channel(
+    channel: TestChannel = Query(default="all"),
+    _: None = Depends(require_alert_manage),
+):
+    """向已配置渠道发送测试告警。"""
     service = get_notification_service()
     config = get_config()
     results = {}

@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：deploy → devices → logs → 其余 | ⬜ |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts 已完成（2026-08-01） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -104,7 +104,8 @@
   → 连带修复：`app/cli.py` 的 `backup run` 命令此前硬编码 `admin/admin/admin`，改为走
     `resolve_device_credentials()`。
 - [ ] **P1** `credentials/credential_service.py:24-38` — Fernet key 由 `jwt_secret` + 固定盐 `b"nas-salt"` 派生：轮换 JWT 密钥即全部设备凭证不可解密，且 `credentials/router.py:96` 已用 try/except 把解密失败兜成空密码。`[已复核]`
-- [ ] **P1** `alerts/router.py:36-56` — `GET /settings` 无鉴权返回 `dingtalk_secret` / webhook / SMTP 用户名。`[已复核]`
+- [x] **P1** `alerts/router.py:36-56` — `GET /settings` 无鉴权返回 `dingtalk_secret` / webhook / SMTP 用户名。`[已复核]`
+  → 修复（步骤 4A）：`GET/POST /settings` 与 `POST /test` 统一挂 `alert:manage`；读取接口仅返回 `has_*` 标志，绝不返回 SMTP 用户名/密码、Webhook 或钉钉 Secret；请求体换成 Pydantic 模型，空敏感字段表示保留，只有显式 `clear_*` 才清除；配置采用临时文件 + `os.replace` 原子写入并重置配置/通知服务缓存。前端同步改为“已配置，留空保留”与显式清除，并用 `alert:manage` 控制菜单入口。
 - [x] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
   → 修复（步骤 3）：删除设备域豁免，公共端点改精确匹配；中间件统一返回 JSON 401/403，并完整校验用户存在、启用状态与会话撤销状态。
 - [ ] **P1** `services/trap_receiver.py:196` — SNMP Trap 的 community 校验默认关闭，任意主机可伪造 linkDown 改设备状态并自动开工单。`[待验证]`
@@ -143,6 +144,16 @@ debug 双开关、管理员通过与普通用户 403、环境变量映射和认�
   passlib 与新版 bcrypt 版本兼容警告（`bcrypt` 移除 `__about__`），功能正常，建议后续升级。
 - 未执行：浏览器端（D）、Docker（E）、用户归属审计（F）——本服务器无 Docker/前端构建依赖，
   dry-run 部署审计需实验设备，留待步骤 4 前后环境补齐。
+
+**步骤 4A 验证结果（2026-08-01）**：✅ `tests/test_alert_settings_security.py` 17 项全过，覆盖
+真实 FastAPI 路由的未认证 401、无权限 403、管理员 200 与响应脱敏，以及空值保留、显式清除、
+新秘密替换、请求模型拒绝非法 channel/端口/额外字段、原子写入和服务缓存失效；
+✅ 与步骤 3/凭证/SSO/批次一相邻回归合计 69 项全过；✅ Ruff 零告警；✅ `app.main` 完整导入通过；
+✅ Windows 全量 pytest（跳过 console）为 **54 failed / 440 passed / 4 skipped / 10 errors**，
+失败集合仍为既存基线，无新增失败。⚠️ 本机未安装 `frontend/node_modules`，Vite build 留给测试系统执行。
+**下一切片**：步骤 4B deploy——`preview/history` 挂 `config:read`，`execute/schedule` 挂
+`config:deploy`，`rollback` 挂 `config:rollback`，并把用户模板渲染从裸 `jinja2.Template`
+迁到沙箱环境；真实设备只做实验设备 dry-run 与审计 operator 验证。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 

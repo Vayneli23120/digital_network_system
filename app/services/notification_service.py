@@ -143,3 +143,9 @@ def get_notification_service() -> NotificationService:
     if _notification_service is None:
         _notification_service = NotificationService()
     return _notification_service
+
+
+def reset_notification_service() -> None:
+    """配置更新后丢弃缓存实例，使下一次调用读取最新配置。"""
+    global _notification_service
+    _notification_service = None
