@@ -913,7 +913,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（安全步骤 3）：设备、模板、备份搜索全部改走统一 Axios 客户端并使用结构化 `params`，自动携带 JWT 与复用 401 处理。
 - [x] **P1** `views/Layout.vue:96` — 故障角标仍用原生 `fetch('/api/faults?...')`，绕过统一 Bearer/401 客户端；严格认证下角标会静默失效或保持旧值。`[已复核]`
   → 修复（步骤 4E-B1）：改用统一 `getFaults()` Axios 客户端，自动附加 Bearer 并复用 401 处理。
-- [ ] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
+- [x] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
+  → 修复（批次五剩余小项切片）：全项目唯一 `v-html` 点。`renderSectionContent` 开头先 `escapeHtml`（转义 `& < > " '`）再跑正则，白名单标签只来自替换字符串，捕获内容均为惰性化文本；内容来自用户可创建/编辑的标准文档 API，存储型 XSS 路径已堵。node 复核：`<script>`/`<img onerror>` 全部惰性化、无残留原始危险 token，粗体/行内代码 markdown 语义不变。
 - [x] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
   → 修复（批次五请求层切片）：`readFromStorage` 改返回完整记录 `{ value, expires }`，`getCache` 回填内存时保留原 expires，读取不再续期。
 - [x] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`
@@ -941,10 +942,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（批次五请求层切片）：`handleAuthFailure` 加模块级 `isRedirectingToLogin` 守卫，并发多个 401 只弹一次 toast、只触发一次跳转（`api` 与 `authenticatedAxios` 共用该函数，一处守卫覆盖两条拦截链）。refresh token 流程超出本切片范围，仍缺。
 - [ ] **P2** 巨型视图：`Monitor3D.vue` 7119 行、`Deploy.vue` 3631、`Compliance.vue` 2948，渲染与请求耦合，无法单测。`[已复核]`
 - [ ] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[待验证]`
-- [ ] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
+- [x] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
+  → 修复（批次五剩余小项切片）：剥离纯调试 `console.log` 7 处——Monitor3D 1227/1244/3308/3368（创建主干、拓扑缺节点调试）、Deploy 1749/1767/1781（含逐条 WS 报文日志）；保留 catch 内 `console.error`/`console.warn` 错误日志（其余 ~56 处）。`ToolLogs.vue:244` 为 catch 内错误日志但误用 `console.log`，不在本项范围，保留。
 - [x] **P2** `utils/requestManager.js:11,155` — `requestCache` 从未写入，配套 10s 清理定时器为空转死代码；`utils/cache.js:253` 同样是模块级常驻定时器。`[已复核]`
   → 修复（批次五请求层切片）：删 `requestCache` Map 与 10s 空转 `setInterval`（`generateRequestKey` 仍被 cancel/create/remove 使用，保留）；删 `cache.js` 模块级 300s `setInterval`（过期条目读时已清、写满时 `writeToStorage` 兜底触发）。
-- [ ] **P2** `.env.example` 的 `VITE_WS_URL` 源码零引用（WS 地址按 `window.location.host` 拼），配置已失效。`[待验证]`
+- [x] **P2** `.env.example` 的 `VITE_WS_URL` 源码零引用（WS 地址按 `window.location.host` 拼），配置已失效。`[待验证]`
+  → 修复（批次五剩余小项切片）：两处 WS 地址构造改读 `import.meta.env.VITE_WS_URL` 为可选覆盖、缺省回退 `location.host`——Monitor3D（`/ws/device-status`）、Deploy（`/ws/deploy/${sessionId}`）；`.env.example` 注释同步为「可选覆盖」语义。缺省行为不变。
 
 ### 批次五 · 请求层切片 · Linux 实测（2026-08-02）
 
@@ -967,6 +970,19 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed（前端改动不涉 app/，失败基线不变） |
 
 修复说明：Deploy.vue 实际 4146 行，`startElapsedTicker` 清旧再启消除孤儿计时器，`onBeforeUnmount` 停计时器 + 关 WS；DeviceHealth `chartInstances`/`disposeCharts` 覆盖刷新与卸载两路径；Monitor3D named `handleThemeChange` + 连线监听卸载时直接移除 + 数组材质与纹理 dispose + glow 纹理置空；`useSmartRefresh` 返回 `dispose`（该 composable 零消费者）。
+
+### 批次五 · 剩余小项切片 · Linux 实测（2026-08-02）
+
+前端改动（仅 `frontend/`），验证靠构建 + HTTPS 冒烟 + XSS 逻辑复核：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run build` | ✅ 13.77s 构建成功；主 index 295kB / Monitor3D 107kB，chunk 体积与卸载清理切片一致（500kB 警告为 echarts/element-plus/three 既有大 chunk，非新增） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（自起实例精确 PID 启停，未触碰用户 3001 dev server） |
+| XSS 逻辑复核（node 复刻 escape+正则管线） | ✅ `<script>alert(1)</script>`、`<img onerror>` 全部惰性化、无原始危险 token 残留；`**粗体**`/`` `行内` `` markdown 语义不变 |
+| 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed（前端改动不涉 app/，失败基线不变） |
+
+修复说明：916 唯一 `v-html` 点 escape-first（先转义再正则，白名单标签仅来自替换字符串）；944 剥离纯调试 `console.log` 7 处（含逐条 WS 报文日志），保留 catch 内错误日志；947 两处 WS 构造改 `import.meta.env.VITE_WS_URL` 可选覆盖、缺省 `location.host`。另清单外小项：`main.js` ElementPlus locale 由硬编码 `zhCn` 改为按 `localStorage('lang')` 选 `en`/`zhCn`（挂载时一次，运行中切换不实时更新，超出小项范围）。
 
 ---
 
