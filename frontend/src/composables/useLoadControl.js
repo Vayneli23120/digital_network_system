@@ -154,22 +154,34 @@ export function useSmartRefresh(refreshFn, options = {}) {
     }
   }
 
-  // 网络恢复时自动刷新
-  if (onReconnect) {
-    window.addEventListener('online', () => {
-      refreshFn()
-    })
-  }
-
-  // 页面可见性变化处理
-  document.addEventListener('visibilitychange', () => {
+  // named handler，便于 dispose 时移除
+  const handleOnline = () => refreshFn()
+  const handleVisibility = () => {
     if (document.visibilityState === 'visible') {
       refreshFn()
     }
-  })
+  }
+
+  // 网络恢复时自动刷新
+  if (onReconnect) {
+    window.addEventListener('online', handleOnline)
+  }
+
+  // 页面可见性变化处理
+  document.addEventListener('visibilitychange', handleVisibility)
+
+  // 释放所有资源（定时器 + 两个事件监听），应在组件卸载时调用
+  const dispose = () => {
+    stopAutoRefresh()
+    if (onReconnect) {
+      window.removeEventListener('online', handleOnline)
+    }
+    document.removeEventListener('visibilitychange', handleVisibility)
+  }
 
   return {
     startAutoRefresh,
-    stopAutoRefresh
+    stopAutoRefresh,
+    dispose
   }
 }
