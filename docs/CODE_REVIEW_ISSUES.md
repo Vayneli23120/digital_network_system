@@ -903,7 +903,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ## 批次五 · 前端
 
-- [ ] **P0** `views/Deploy.vue`（3631 行）— 无任何卸载钩子，部署中切路由后 `setInterval`(`:1737,:2078`) 与 WebSocket(`:1747`) 全部残留；且两处 `setInterval` 复用同一 `timer` 变量，`stopTimer()` 只清得掉最后一个。`[已复核]`
+- [x] **P0** `views/Deploy.vue`（3631 行）— 无任何卸载钩子，部署中切路由后 `setInterval`(`:1737,:2078`) 与 WebSocket(`:1747`) 全部残留；且两处 `setInterval` 复用同一 `timer` 变量，`stopTimer()` 只清得掉最后一个。`[已复核]`
+  → 修复（批次五卸载清理）：文件实际 4146 行（docs 行号过期）。抽 `startElapsedTicker()` 先清旧计时器再启动，替换两处内联 `setInterval`（消除孤儿计时器）；新增 `onBeforeUnmount`：`stopTimer()` + 关闭 `deployWebSocket` 并置空。
 - [x] **P0** `utils/requestManager.js:22-30` + `api/request.js:78-83` — 所有 GET 按 `method:url:params:data` 自动 abort 同键旧请求，两个组件轮询同一端点会互相取消，表现为随机空数据，且调用方无法关闭该行为。`[已复核]`
   → 修复（批次五请求层切片）：auto-abort 加逃生口——调用方传 `config.noAutoCancel: true` 关闭；已自带 `config.signal` 时不再覆盖（默认同键在途 GET 自动取消行为保留）。
 - [x] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
@@ -919,9 +920,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（批次五请求层切片）：`generateCacheKey` 改为「稳定序列化（递归排序键）→ djb2 哈希 → `STORAGE_PREFIX + resource + '_' + hash36`」，确定性、键序无关、无 `_` 替换碰撞。
 - [x] **P1** `utils/cache.js:218-246` — `cachedRequest` 声称去重但无 in-flight Map，并发同键全部打到后端。`[已复核]`
   → 修复（批次五请求层切片）：`cachedRequest` 新增 `inFlight` Map（按 cache key），同键请求在途时复用其 Promise，`finally` 清理。另修探索发现的 `ttl`/`customTtl` 分裂：`cachedRequest` 改读 `ttl`（毫秒，与 `DEFAULT_TTL` 一致），`Layout.vue`/`SearchDropdown.vue` 传秒的 5 处改毫秒。
-- [ ] **P1** `views/DeviceHealth.vue:334,365,391` — 3 个 `echarts.init` 无 dispose 且组件无卸载钩子。`[待验证]`
-- [ ] **P1** `views/Monitor3D.vue:1060` — 匿名 `theme-change` 监听从不移除，闭包持有旧 Three.js 场景阻止 GC；`:6231` 对数组材质 dispose 无效、纹理未 dispose。`[待验证]`
-- [ ] **P1** `composables/useLoadControl.js:142,159,165` — `online`/`visibilitychange` 监听从不移除，也不返回清理函数。`[已复核]`
+- [x] **P1** `views/DeviceHealth.vue:334,365,391` — 3 个 `echarts.init` 无 dispose 且组件无卸载钩子。`[待验证]`
+  → 修复（批次五卸载清理）：新增 `chartInstances` 数组 + `disposeCharts()`，`initCharts` 开头先 dispose 旧实例（mount 与每次刷新重跑不再泄漏）、三个实例 push 跟踪；新增 `onBeforeUnmount(() => disposeCharts())`。
+- [x] **P1** `views/Monitor3D.vue:1060` — 匿名 `theme-change` 监听从不移除，闭包持有旧 Three.js 场景阻止 GC；`:6231` 对数组材质 dispose 无效、纹理未 dispose。`[待验证]`
+  → 修复（批次五卸载清理）：`theme-change` 改 named `handleThemeChange`，`onBeforeUnmount` 移除；连线 `window` 监听（mousemove/mouseup）在 `onBeforeUnmount` 直接移除（连线中卸载不再泄漏）；`scene.traverse` 改数组材质逐个 dispose + `material.map` 纹理 dispose（覆盖底图）；模块级 `offlineGlowTexture`/`impactGlowTexture` dispose 并置空（重挂载时重建）。
+- [x] **P1** `composables/useLoadControl.js:142,159,165` — `online`/`visibilitychange` 监听从不移除，也不返回清理函数。`[已复核]`
+  → 修复（批次五卸载清理）：`useSmartRefresh` 改 named `handleOnline`/`handleVisibility`，新增 `dispose()`（清 interval + 移除两个监听）并返回。注：该 composable 全项目零消费者，改返回形状安全。
 - [ ] **P1** `main.js:16` 装了 Pinia 但全项目 `defineStore` 数为 0；登录态/用户/主题在 12 个文件裸读 localStorage（`views/Layout.vue:78,81`、`api/request.js:68,74` 等），无单一数据源。`[已复核]`
 - [x] **P1** `api/request.js:49` 读 `'language'`，`locales/index.js:6797,6802` 写 `'lang'`，键不一致导致英文界面仍被汉化。`[已复核]`
   → 修复（批次五请求层切片）：`translateSSHError` 改读 `localStorage.getItem('lang')`，与 `locales/index.js:7022` 统一。
@@ -953,6 +957,16 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` 53 failed / 625 passed / 4 skipped，与批次四基线**失败集合完全一致** |
 
 修复说明：auto-abort 逃生口 `config.noAutoCancel`；`withRetry` 咨询 `shouldRetry`（`apiWithRetry` 写操作 `retries:0`，该导出为死代码）；`cachedRequest` 统一 `ttl` 单位毫秒（Layout/SearchDropdown 秒→毫秒共 5 处）；SSH 翻译键统一 `'lang'`；401 并发去重守卫；`generateCacheKey` 稳定序列化+djb2 哈希。
+
+### 批次五 · 卸载清理切片 · Linux 实测（2026-08-02）
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run build` | ✅ 13.84s 构建成功；Monitor3D chunk 重建（107.44kB），其余 vendor/主 chunk 体积与请求层切片一致 |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/`、`/login` 均 200（仅按精确 PID 启停自起实例，未触碰用户 3001 dev server） |
+| 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed（前端改动不涉 app/，失败基线不变） |
+
+修复说明：Deploy.vue 实际 4146 行，`startElapsedTicker` 清旧再启消除孤儿计时器，`onBeforeUnmount` 停计时器 + 关 WS；DeviceHealth `chartInstances`/`disposeCharts` 覆盖刷新与卸载两路径；Monitor3D named `handleThemeChange` + 连线监听卸载时直接移除 + 数组材质与纹理 dispose + glow 纹理置空；`useSmartRefresh` 返回 `dispose`（该 composable 零消费者）。
 
 ---
 
