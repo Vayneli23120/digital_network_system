@@ -904,32 +904,55 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 批次五 · 前端
 
 - [ ] **P0** `views/Deploy.vue`（3631 行）— 无任何卸载钩子，部署中切路由后 `setInterval`(`:1737,:2078`) 与 WebSocket(`:1747`) 全部残留；且两处 `setInterval` 复用同一 `timer` 变量，`stopTimer()` 只清得掉最后一个。`[已复核]`
-- [ ] **P0** `utils/requestManager.js:22-30` + `api/request.js:78-83` — 所有 GET 按 `method:url:params:data` 自动 abort 同键旧请求，两个组件轮询同一端点会互相取消，表现为随机空数据，且调用方无法关闭该行为。`[已复核]`
-- [ ] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
+- [x] **P0** `utils/requestManager.js:22-30` + `api/request.js:78-83` — 所有 GET 按 `method:url:params:data` 自动 abort 同键旧请求，两个组件轮询同一端点会互相取消，表现为随机空数据，且调用方无法关闭该行为。`[已复核]`
+  → 修复（批次五请求层切片）：auto-abort 加逃生口——调用方传 `config.noAutoCancel: true` 关闭；已自带 `config.signal` 时不再覆盖（默认同键在途 GET 自动取消行为保留）。
+- [x] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
+  → 修复（批次五请求层切片）：`withRetry` catch 分支补 `if (shouldRetry(error) === false) throw error`（此前从未咨询调用方策略）；`apiWithRetry` 的 post/put/patch/delete 默认 `retries: 0`（写操作不重试），get 保留重试（幂等读，network/5xx 才重）。注：`apiWithRetry` 为死代码（全项目零调用方），保留但收敛默认行为。
 - [x] **P0** `views/layout/SearchDropdown.vue:174-198` — 用原生 `fetch('/api/...')` 绕过 axios 实例，不带 Authorization、不过 401 拦截器。`[已复核]`
   → 修复（安全步骤 3）：设备、模板、备份搜索全部改走统一 Axios 客户端并使用结构化 `params`，自动携带 JWT 与复用 401 处理。
 - [x] **P1** `views/Layout.vue:96` — 故障角标仍用原生 `fetch('/api/faults?...')`，绕过统一 Bearer/401 客户端；严格认证下角标会静默失效或保持旧值。`[已复核]`
   → 修复（步骤 4E-B1）：改用统一 `getFaults()` Axios 客户端，自动附加 Bearer 并复用 401 处理。
 - [ ] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
-- [ ] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
-- [ ] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`
-- [ ] **P1** `utils/cache.js:218-246` — `cachedRequest` 声称去重但无 in-flight Map，并发同键全部打到后端。`[已复核]`
+- [x] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
+  → 修复（批次五请求层切片）：`readFromStorage` 改返回完整记录 `{ value, expires }`，`getCache` 回填内存时保留原 expires，读取不再续期。
+- [x] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`
+  → 修复（批次五请求层切片）：`generateCacheKey` 改为「稳定序列化（递归排序键）→ djb2 哈希 → `STORAGE_PREFIX + resource + '_' + hash36`」，确定性、键序无关、无 `_` 替换碰撞。
+- [x] **P1** `utils/cache.js:218-246` — `cachedRequest` 声称去重但无 in-flight Map，并发同键全部打到后端。`[已复核]`
+  → 修复（批次五请求层切片）：`cachedRequest` 新增 `inFlight` Map（按 cache key），同键请求在途时复用其 Promise，`finally` 清理。另修探索发现的 `ttl`/`customTtl` 分裂：`cachedRequest` 改读 `ttl`（毫秒，与 `DEFAULT_TTL` 一致），`Layout.vue`/`SearchDropdown.vue` 传秒的 5 处改毫秒。
 - [ ] **P1** `views/DeviceHealth.vue:334,365,391` — 3 个 `echarts.init` 无 dispose 且组件无卸载钩子。`[待验证]`
 - [ ] **P1** `views/Monitor3D.vue:1060` — 匿名 `theme-change` 监听从不移除，闭包持有旧 Three.js 场景阻止 GC；`:6231` 对数组材质 dispose 无效、纹理未 dispose。`[待验证]`
 - [ ] **P1** `composables/useLoadControl.js:142,159,165` — `online`/`visibilitychange` 监听从不移除，也不返回清理函数。`[已复核]`
 - [ ] **P1** `main.js:16` 装了 Pinia 但全项目 `defineStore` 数为 0；登录态/用户/主题在 12 个文件裸读 localStorage（`views/Layout.vue:78,81`、`api/request.js:68,74` 等），无单一数据源。`[已复核]`
-- [ ] **P1** `api/request.js:49` 读 `'language'`，`locales/index.js:6797,6802` 写 `'lang'`，键不一致导致英文界面仍被汉化。`[已复核]`
+- [x] **P1** `api/request.js:49` 读 `'language'`，`locales/index.js:6797,6802` 写 `'lang'`，键不一致导致英文界面仍被汉化。`[已复核]`
+  → 修复（批次五请求层切片）：`translateSSHError` 改读 `localStorage.getItem('lang')`，与 `locales/index.js:7022` 统一。
 - [ ] **P1** `locales/index.js` — 190 组重复键（`zh:dashDevices` L230/L288、`zh:uploadFailed` L742/L1349 等）后者静默覆盖；zh 3065 / en 3015 键，52 键缺英文、2 键缺中文。`[待验证]` 建议脚本化校验
 - [ ] **P1** 硬编码中文与 `useI18n` 混用：`Monitor3D.vue` 825 处、`Deploy.vue` 245 处、`Compliance.vue` 189 处，英文模式大面积失效。`[待验证]`
-- [ ] **P1** `vite.config.js:18` — target `chrome60` 与 router 全量动态 `import()`（需 Chrome 63+）自相矛盾；`format:'es'` 写在 `build` 下属无效键。`[已复核]`
-- [ ] **P1** `vite.config.js` — 无 `manualChunks`，three@0.184 + echarts + element-plus 同一 vendor chunk，首屏体积过大。`[已复核]`
-- [ ] **P1** `vite.config.js:27-30` — `server.https` 无条件 `readFileSync` 证书，缺证书连 `vite build` 都崩。`[已复核]`
-- [ ] **P2** `api/request.js:107-113` — 401 用 `window.location.href` 整页刷新，多并发请求连弹错误，无 refresh token 流程。`[已复核]`
+- [x] **P1** `vite.config.js:18` — target `chrome60` 与 router 全量动态 `import()`（需 Chrome 63+）自相矛盾；`format:'es'` 写在 `build` 下属无效键。`[已复核]`
+  → 修复（批次五请求层切片）：删无效 `build.format`；`target` 改 `['es2018','chrome63']`，注释同步（router 已用动态 import，≥63 才真实）。
+- [x] **P1** `vite.config.js` — 无 `manualChunks`，three@0.184 + echarts + element-plus 同一 vendor chunk，首屏体积过大。`[已复核]`
+  → 修复（批次五请求层切片）：`build.rollupOptions.output.manualChunks` 按 `node_modules` 切 three/echarts(+zrender)/element-plus/vue-vendor(vue,@vue,vue-router,pinia)/axios；实测主 index chunk 1.5MB→295kB，vendor 独立成 chunk 可长缓存。
+- [x] **P1** `vite.config.js:27-30` — `server.https` 无条件 `readFileSync` 证书，缺证书连 `vite build` 都崩。`[已复核]`
+  → 修复（批次五请求层切片）：`fs.existsSync(key/cert)` 后才注入 `https`，缺证书时 `vite build`/`vite dev` 不再崩溃（本机证书在位，HTTPS 冒烟 200）。
+- [x] **P2** `api/request.js:107-113` — 401 用 `window.location.href` 整页刷新，多并发请求连弹错误，无 refresh token 流程。`[已复核]`
+  → 修复（批次五请求层切片）：`handleAuthFailure` 加模块级 `isRedirectingToLogin` 守卫，并发多个 401 只弹一次 toast、只触发一次跳转（`api` 与 `authenticatedAxios` 共用该函数，一处守卫覆盖两条拦截链）。refresh token 流程超出本切片范围，仍缺。
 - [ ] **P2** 巨型视图：`Monitor3D.vue` 7119 行、`Deploy.vue` 3631、`Compliance.vue` 2948，渲染与请求耦合，无法单测。`[已复核]`
 - [ ] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[待验证]`
 - [ ] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
-- [ ] **P2** `utils/requestManager.js:11,155` — `requestCache` 从未写入，配套 10s 清理定时器为空转死代码；`utils/cache.js:253` 同样是模块级常驻定时器。`[已复核]`
+- [x] **P2** `utils/requestManager.js:11,155` — `requestCache` 从未写入，配套 10s 清理定时器为空转死代码；`utils/cache.js:253` 同样是模块级常驻定时器。`[已复核]`
+  → 修复（批次五请求层切片）：删 `requestCache` Map 与 10s 空转 `setInterval`（`generateRequestKey` 仍被 cancel/create/remove 使用，保留）；删 `cache.js` 模块级 300s `setInterval`（过期条目读时已清、写满时 `writeToStorage` 兜底触发）。
 - [ ] **P2** `.env.example` 的 `VITE_WS_URL` 源码零引用（WS 地址按 `window.location.host` 拼），配置已失效。`[待验证]`
+
+### 批次五 · 请求层切片 · Linux 实测（2026-08-02）
+
+前端改动（仅 `frontend/`），无 vitest，验证靠构建 + 冒烟：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run build` | ✅ 13.64s 构建成功；`manualChunks` 生效——主 index chunk 1.5MB→295kB（gzip 99.66kB），three/echarts/element-plus/vue-vendor/axios 拆为独立 vendor chunk |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/`、`/login` 均 200（证书在位，`server.https` 守卫正常注入） |
+| 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` 53 failed / 625 passed / 4 skipped，与批次四基线**失败集合完全一致** |
+
+修复说明：auto-abort 逃生口 `config.noAutoCancel`；`withRetry` 咨询 `shouldRetry`（`apiWithRetry` 写操作 `retries:0`，该导出为死代码）；`cachedRequest` 统一 `ttl` 单位毫秒（Layout/SearchDropdown 秒→毫秒共 5 处）；SSH 翻译键统一 `'lang'`；401 并发去重守卫；`generateCacheKey` 稳定序列化+djb2 哈希。
 
 ---
 
