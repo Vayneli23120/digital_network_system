@@ -424,7 +424,15 @@ class ComplianceService:
 
         if result.get("success"):
             parsed = adk_runner.parse_json_response(result.get("response", ""))
-            if parsed:
+            if isinstance(parsed, list):
+                # AI 返回了裸 JSON 数组（如 [{"rule":..., "line":..., "severity":...}]），
+                # 直接作为结果列表返回，避免 list.get 崩溃。
+                return {
+                    "success": True,
+                    "score": 50,
+                    "results": parsed,
+                }
+            if isinstance(parsed, dict):
                 return {
                     "success": True,
                     "score": parsed.get("score", 50),

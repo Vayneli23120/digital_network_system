@@ -34,6 +34,15 @@ def create_celery_app() -> Celery:
         task_track_started=True,
         task_acks_late=True,          # 任务完成后才 ACK，避免 worker 崩溃丢任务
         worker_prefetch_multiplier=1, # 每次只取 1 个任务，避免长任务阻塞
+        # 显式导入任务模块：`celery -A app.core.celery_app worker` 默认不会
+        # 自动发现 app/tasks 下的模块，worker 进程必须提前 import 才能注册任务。
+        imports=(
+            "app.tasks.backup_tasks",
+            "app.tasks.deploy_tasks",
+            "app.tasks.ai_tasks",
+            "app.tasks.notification_tasks",
+            "app.tasks.scheduled_tasks",
+        ),
         task_routes={
             "app.tasks.backup_tasks.*": {"queue": "device_ops"},
             "app.tasks.deploy_tasks.*": {"queue": "device_ops"},
