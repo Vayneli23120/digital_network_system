@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices、4D logs、4E-A backups/templates 已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-A + 4E-B0 permissions 已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -76,6 +76,8 @@
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
   → 已分切片完成 alerts、deploy、devices、logs、backups、templates；faults、maintenance、planned maintenance、workflows、system settings 等仍待步骤 4E-B。
+- [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
+  → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -339,7 +341,12 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 - [ ] 浏览器 Backups 页列表/查看/diff/认证下载/批量执行可用，菜单与按钮权限表现正确，401/403 提示可理解
 - [ ] 前端环境执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E-B remaining writes——覆盖 faults、maintenance、planned maintenance、workflows、system settings 等剩余写接口；
+**步骤 4E-B0 验证结果（2026-08-02）**：✅ 权限定义、角色 CRUD/clone 与用户角色分配九条写路由全部挂功能权限；
+✅ `tests/test_permissions_security_step4e_b.py` 3 项真实 HTTP 回归覆盖普通用户创建权限、创建管理员角色、给自己绑定管理员角色均 403，
+并验证 `role:write` 与 `user:write` 职责隔离；与统一认证回归合计 **23 passed**；全仓 Ruff、`app.main` 导入和编辑器诊断通过。
+Linux 测试系统需重跑该测试，并以普通账号复核上述三条自提权路径 403、管理员仍可正常管理角色。
+
+**下一切片**：步骤 4E-B1 Faults，再覆盖 Maintenance、planned maintenance、workflows、system settings 等剩余写接口；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单

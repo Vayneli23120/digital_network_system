@@ -21,6 +21,9 @@ from app.features.auth.router import get_current_user_from_token
 from app.features.auth.identity import Principal, get_current_principal
 
 router = APIRouter(prefix="/api/permissions", tags=["permissions"])
+require_role_write = require_permission("role:write")
+require_role_delete = require_permission("role:delete")
+require_user_write = require_permission("user:write")
 
 
 # =============================================================================
@@ -586,6 +589,7 @@ async def list_permissions(
 @router.post("/permissions", response_model=PermissionResponse, status_code=status.HTTP_201_CREATED)
 async def create_permission(
     permission_data: PermissionCreate,
+    _: None = Depends(require_role_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -627,6 +631,7 @@ async def get_permission(
 @router.delete("/permissions/{permission_id}")
 async def delete_permission(
     permission_id: int,
+    _: None = Depends(require_role_delete),
     db: Session = Depends(get_db)
 ):
     """
@@ -729,6 +734,7 @@ async def list_roles(
 @router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
 async def create_role(
     role_data: RoleCreate,
+    _: None = Depends(require_role_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -797,6 +803,7 @@ async def get_role(role_id: int, db: Session = Depends(get_db)):
 async def update_role(
     role_id: int,
     role_update: RoleUpdate,
+    _: None = Depends(require_role_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -848,6 +855,7 @@ async def update_role(
 @router.delete("/roles/{role_id}")
 async def delete_role(
     role_id: int,
+    _: None = Depends(require_role_delete),
     db: Session = Depends(get_db)
 ):
     """
@@ -905,6 +913,7 @@ async def get_role_users(
 async def clone_role(
     role_id: int,
     new_name: str,
+    _: None = Depends(require_role_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -976,6 +985,7 @@ async def get_user_roles(user_id: int, db: Session = Depends(get_db)):
 async def update_user_roles(
     user_id: int,
     role_update: UserRoleUpdate,
+    _: None = Depends(require_user_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -1002,6 +1012,7 @@ async def update_user_roles(
 async def add_role_to_user(
     user_id: int,
     role_id: int,
+    _: None = Depends(require_user_write),
     db: Session = Depends(get_db)
 ):
     """
@@ -1028,6 +1039,7 @@ async def add_role_to_user(
 async def remove_role_from_user(
     user_id: int,
     role_id: int,
+    _: None = Depends(require_user_write),
     db: Session = Depends(get_db)
 ):
     """
