@@ -310,10 +310,17 @@ _discovery_service: Optional[DiscoveryService] = None
 
 
 def get_discovery_service(timeout: float = 2.0, workers: int = 50) -> DiscoveryService:
-    """获取全局 DiscoveryService 实例"""
+    """获取全局 DiscoveryService 实例
+
+    单例缓存首次创建的实例，但每次调用都会用传入的 timeout/workers
+    同步实例属性，避免后续传参被静默忽略。
+    """
     global _discovery_service
     if _discovery_service is None:
         _discovery_service = DiscoveryService(timeout=timeout, workers=workers)
+    else:
+        _discovery_service.timeout = timeout
+        _discovery_service.workers = workers
     return _discovery_service
 
 
