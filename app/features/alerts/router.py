@@ -1,5 +1,6 @@
 """告警通知设置 API。"""
 
+import asyncio
 import os
 from pathlib import Path
 from typing import Literal, Optional
@@ -182,7 +183,9 @@ async def test_alert_channel(
 
     if channel in ("all", "email"):
         if config.alerts.email.enabled:
-            results["email"] = service._send_email(
+            # SMTP 同步阻塞，放线程池避免卡住事件循环
+            results["email"] = await asyncio.to_thread(
+                service._send_email,
                 subject="[NAS 测试] 邮件告警测试",
                 body="这是一封测试邮件，确认邮件告警渠道配置正确。",
             )

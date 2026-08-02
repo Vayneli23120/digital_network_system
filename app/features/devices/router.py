@@ -122,6 +122,7 @@ async def test_device_reachability(
 @router.post("/test-connection")
 async def test_device_connection(
     request: ProbeRequest,
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_write),
 ):
     """测试设备SSH连接
@@ -130,23 +131,22 @@ async def test_device_connection(
     AP设备不支持SSH，防火墙需要特殊权限。
     """
     from .device_probe_service import get_probe_service
-    db = next(get_db())
-    try:
-        service = get_probe_service()
-        return service.test_ssh_connection(
-            db,
-            request.ip,
-            request.credential_group or "default",
-            request.vendor or "cisco",
-            request.device_type
-        )
-    finally:
-        db.close()
+    service = get_probe_service()
+    # netmiko SSH 同步阻塞，放线程池避免卡住事件循环
+    return await asyncio.to_thread(
+        service.test_ssh_connection,
+        db,
+        request.ip,
+        request.credential_group or "default",
+        request.vendor or "cisco",
+        request.device_type,
+    )
 
 
 @router.post("/fetch-info")
 async def fetch_device_info(
     request: ProbeRequest,
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_write),
 ):
     """获取设备信息
@@ -155,18 +155,16 @@ async def fetch_device_info(
     仅支持SSH的设备类型可用此API。
     """
     from .device_probe_service import get_probe_service
-    db = next(get_db())
-    try:
-        service = get_probe_service()
-        return service.fetch_device_info(
-            db,
-            request.ip,
-            request.credential_group or "default",
-            request.vendor or "cisco",
-            request.device_type
-        )
-    finally:
-        db.close()
+    service = get_probe_service()
+    # netmiko SSH 同步阻塞，放线程池避免卡住事件循环
+    return await asyncio.to_thread(
+        service.fetch_device_info,
+        db,
+        request.ip,
+        request.credential_group or "default",
+        request.vendor or "cisco",
+        request.device_type,
+    )
 
 
 @router.get("")
@@ -192,68 +190,63 @@ async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
 
 @router.get("/export")
 async def export_devices(
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_export),
 ):
     """导出设备信息为 Excel 文件"""
     if not EXCEL_AVAILABLE:
         raise HTTPException(status_code=500, detail="Excel 支持未安装，请运行 pip install openpyxl")
 
-    db: Session = next(get_db())
+    devices = db.query(Device).order_by(Device.id).limit(5000).all()
 
-    try:
-        devices = db.query(Device).order_by(Device.id).limit(5000).all()
+    # 创建 Excel 工作簿
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Devices"
 
-        # 创建 Excel 工作簿
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "Devices"
+    # 表头
+    headers = ["name", "ip", "model", "serial_number", "location", "device_type", "role",
+               "deployment_status", "reachability", "credential_group", "vendor", "purchase_cost"]
+    ws.append(headers)
 
-        # 表头
-        headers = ["name", "ip", "model", "serial_number", "location", "device_type", "role",
-                   "deployment_status", "reachability", "credential_group", "vendor", "purchase_cost"]
-        ws.append(headers)
+    # 数据
+    for device in devices:
+        ws.append([
+            device.name,
+            device.ip or "",
+            device.model or "",
+            device.serial_number or "",
+            device.location or "",
+            device.device_type or "other",
+            device.role or "",
+            device.deployment_status or "un-used",
+            device.reachability or "unknown",
+            device.credential_group or "default",
+            device.vendor or "",
+            float(device.purchase_cost) if device.purchase_cost else 0
+        ])
 
-        # 数据
-        for device in devices:
-            ws.append([
-                device.name,
-                device.ip or "",
-                device.model or "",
-                device.serial_number or "",
-                device.location or "",
-                device.device_type or "other",
-                device.role or "",
-                device.deployment_status or "un-used",
-                device.reachability or "unknown",
-                device.credential_group or "default",
-                device.vendor or "",
-                float(device.purchase_cost) if device.purchase_cost else 0
-            ])
+    # 输出为字节流
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
 
-        # 输出为字节流
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-
-        return StreamingResponse(
-            output,
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": "attachment; filename=devices.xlsx"}
-        )
-    finally:
-        db.close()
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=devices.xlsx"}
+    )
 
 
 @router.post("/import")
 async def import_devices(
     file: UploadFile = File(...),
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_import),
 ):
     """从 Excel 文件导入设备信息"""
     if not EXCEL_AVAILABLE:
         raise HTTPException(status_code=500, detail="Excel 支持未安装，请运行 pip install openpyxl")
-
-    db: Session = next(get_db())
 
     try:
         # 读取上传的文件
@@ -337,7 +330,6 @@ async def import_devices(
         raise HTTPException(status_code=400, detail=f"导入失败：{str(e)}")
     finally:
         await file.close()
-        db.close()
 
 
 # ============ 厂商管理 API（放在 /{device_id} 之前，避免路由匹配冲突）============
@@ -366,6 +358,7 @@ async def get_vendor(
 @router.post("/{device_id}/check-reachability")
 async def manual_check_reachability(
     device_id: int,
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_write),
 ):
     """手动触发单设备可达性检测
@@ -374,83 +367,86 @@ async def manual_check_reachability(
     """
     from app.services.reachability_monitor import get_reachability_monitor
 
-    db = next(get_db())
-    try:
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if not device:
-            raise HTTPException(status_code=404, detail="设备不存在")
+    device = db.query(Device).filter(Device.id == device_id).first()
+    if not device:
+        raise HTTPException(status_code=404, detail="设备不存在")
 
-        monitor = get_reachability_monitor()
-        result = monitor.check_device_reachability(db, device)
+    monitor = get_reachability_monitor()
+    # 网络检测（ICMP+SSH socket）同步阻塞，放线程池避免卡住事件循环
+    detect_result = await asyncio.to_thread(monitor._detect_reachability, device.ip)
+    # 回写状态（内部 session_scope 提交，与周期监控同一路径）
+    await asyncio.to_thread(monitor._update_device_status, {
+        "id": device.id,
+        "name": device.name,
+        "tier": device.monitor_tier or "normal",
+        "result": detect_result,
+    })
+    # 状态更新在另一会话提交，刷新本会话的 Device 对象拿到最新值
+    db.refresh(device)
 
-        return {
-            "device_id": device_id,
-            "device_name": device.name,
-            "reachability": device.reachability,
-            "latency_ms": device.reachability_latency_ms,
-            "method": device.reachability_method,
-            "last_check": utc_iso(device.last_reachability_check),
-        }
-    finally:
-        db.close()
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "reachability": device.reachability,
+        "latency_ms": device.reachability_latency_ms,
+        "method": device.reachability_method,
+        "last_check": utc_iso(device.last_reachability_check),
+    }
 
 
 @router.get("/reachability-stats")
 async def get_reachability_stats(
+    db: Session = Depends(get_db),
     _: None = Depends(require_device_read),
 ):
     """获取可达性统计
 
     返回已部署设备的可达性状态统计。
     """
-    db = next(get_db())
-    try:
-        total = db.query(Device).filter(Device.deployment_status == 'in-use').count()
-        reachable = db.query(Device).filter(
-            Device.deployment_status == 'in-use',
-            Device.reachability == 'reachable'
-        ).count()
-        unreachable = db.query(Device).filter(
-            Device.deployment_status == 'in-use',
-            Device.reachability == 'unreachable'
-        ).count()
-        unknown = db.query(Device).filter(
-            Device.deployment_status == 'in-use',
-            Device.reachability == 'unknown'
-        ).count()
+    total = db.query(Device).filter(Device.deployment_status == 'in-use').count()
+    reachable = db.query(Device).filter(
+        Device.deployment_status == 'in-use',
+        Device.reachability == 'reachable'
+    ).count()
+    unreachable = db.query(Device).filter(
+        Device.deployment_status == 'in-use',
+        Device.reachability == 'unreachable'
+    ).count()
+    unknown = db.query(Device).filter(
+        Device.deployment_status == 'in-use',
+        Device.reachability == 'unknown'
+    ).count()
 
-        # 按设备类型统计
-        device_types = ['uce', 'core_switch', 'server_switch', 'office_switch', 'ap', 'wlc', 'router', 'pa', 'ftd', 'other']
-        by_type = {}
-        for dtype in device_types:
-            type_total = db.query(Device).filter(
+    # 按设备类型统计
+    device_types = ['uce', 'core_switch', 'server_switch', 'office_switch', 'ap', 'wlc', 'router', 'pa', 'ftd', 'other']
+    by_type = {}
+    for dtype in device_types:
+        type_total = db.query(Device).filter(
+            Device.device_type == dtype,
+            Device.deployment_status == 'in-use'
+        ).count()
+        by_type[dtype] = {
+            'total': type_total,
+            'reachable': db.query(Device).filter(
                 Device.device_type == dtype,
-                Device.deployment_status == 'in-use'
-            ).count()
-            by_type[dtype] = {
-                'total': type_total,
-                'reachable': db.query(Device).filter(
-                    Device.device_type == dtype,
-                    Device.deployment_status == 'in-use',
-                    Device.reachability == 'reachable'
-                ).count(),
-                'unreachable': db.query(Device).filter(
-                    Device.device_type == dtype,
-                    Device.deployment_status == 'in-use',
-                    Device.reachability == 'unreachable'
-                ).count(),
-            }
-
-        return {
-            "total_deployed": total,
-            "reachable": reachable,
-            "unreachable": unreachable,
-            "unknown": unknown,
-            "online_rate": round(reachable / total * 100, 2) if total > 0 else 0,
-            "by_type": by_type,
+                Device.deployment_status == 'in-use',
+                Device.reachability == 'reachable'
+            ).count(),
+            'unreachable': db.query(Device).filter(
+                Device.device_type == dtype,
+                Device.deployment_status == 'in-use',
+                Device.reachability == 'unreachable'
+            ).count(),
         }
-    finally:
-        db.close()
+
+    return {
+        "total_deployed": total,
+        "reachable": reachable,
+        "unreachable": unreachable,
+        "unknown": unknown,
+        "online_rate": round(reachable / total * 100, 2) if total > 0 else 0,
+        "by_type": by_type,
+    }
 
 
 @router.get("/monitor/status")

@@ -81,6 +81,8 @@ class DiscoveryService:
         """
         logger.info(f"开始 Ping Sweep: {subnet}")
         network = ipaddress.ip_network(subnet, strict=False)
+        if network.num_addresses > 65536:
+            raise ValueError("子网过大，最多允许 65536 个地址（/16），请缩小扫描范围")
         discovered = []
 
         with ThreadPoolExecutor(max_workers=self.workers) as executor:

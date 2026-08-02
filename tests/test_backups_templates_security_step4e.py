@@ -742,7 +742,7 @@ def test_backup_network_operations_are_threaded_and_menus_use_read_permissions()
         root / "frontend/src/views/Layout.vue"
     ).read_text(encoding="utf-8")
 
-    assert "await asyncio.to_thread(\n            backup_device_config" in router_source
+    assert "await run_device_op(\n            backup_device_config" in router_source
     backup_menu = next(line for line in layout_source.splitlines() if "path: '/backups'" in line)
     template_menu = next(line for line in layout_source.splitlines() if "path: '/templates'" in line)
     assert "permission: 'backup:read'" in backup_menu

@@ -2,8 +2,6 @@
 
 import asyncio
 import json
-from concurrent.futures import ThreadPoolExecutor
-from contextlib import asynccontextmanager
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -12,6 +10,7 @@ from datetime import datetime, timedelta
 from loguru import logger
 
 from app.shared.database import get_db
+from app.shared.device_ops import get_device_executor_pool, run_device_op
 from app.shared.template_renderer import (
     NetworkTemplateRenderError,
     render_network_template,
@@ -38,16 +37,6 @@ config = get_config()
 require_config_read = require_permission("config:read")
 require_config_deploy = require_permission("config:deploy")
 require_config_rollback = require_permission("config:rollback")
-
-# 每个请求使用独立的线程池，避免全局资源争抢
-@asynccontextmanager
-async def get_deploy_executor(max_workers: int):
-    """获取部署专用的线程池执行器，自动清理"""
-    executor = ThreadPoolExecutor(max_workers=max_workers)
-    try:
-        yield executor
-    finally:
-        executor.shutdown(wait=False)  # 不等待，快速释放
 
 
 @router.post("/preview")
@@ -742,8 +731,8 @@ async def execute_deploy(
             # 整体超时时间（秒）
             TOTAL_TIMEOUT = DEVICE_TIMEOUT * len(device_data_list) / parallel_limit + 60
 
-            # 使用独立的线程池执行器
-            async with get_deploy_executor(max_workers=min(parallel_limit, 5)) as executor:
+            # 使用统一的设备操作线程池执行器
+            async with get_device_executor_pool(max_workers=min(parallel_limit, 5)) as executor:
                 semaphore = asyncio.Semaphore(parallel_limit)
 
                 async def deploy_single_device(device_dict: dict):
@@ -938,8 +927,8 @@ async def execute_deploy(
             if db and db.is_active:
                 db.rollback()
                 db.close()
-        except:
-            pass
+        except Exception as rollback_error:
+            logger.warning(f"清理部署会话异常: {rollback_error}")
         raise HTTPException(status_code=500, detail=f"部署失败：{str(e)}")
     # 注意：db.close() 在正常流程中已经在并行执行前关闭，
     # 这里不需要 finally 再次关闭
@@ -948,6 +937,7 @@ async def execute_deploy(
 @router.post("/rollback")
 async def rollback_deploy(
     rollback_request: RollbackRequest,
+    db: Session = Depends(get_db),
     principal: Principal = Depends(get_current_principal),
     _: None = Depends(require_config_rollback),
 ):
@@ -960,7 +950,6 @@ async def rollback_deploy(
     }
     """
     rollback_data = rollback_request.model_dump()
-    db: Session = next(get_db())
 
     current_username = principal.username
 
@@ -991,8 +980,9 @@ async def rollback_deploy(
                 logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
                 continue
 
-        # 使用 NAPALM 服务回滚
+        # 使用 NAPALM 服务回滚（经统一设备操作执行器，避免阻塞事件循环；逐台串行 await）
         napalm_service = get_napalm_service()
+        DEVICE_TIMEOUT = 180  # 回滚仅 NAPALM，沿用 napalm 超时
         results = []
         success_count = 0
         failed_count = 0
@@ -1006,9 +996,11 @@ async def rollback_deploy(
                 'credential_group': device.credential_group or 'default'
             }
 
-            result = napalm_service.rollback_device(
+            result = await run_device_op(
+                napalm_service.rollback_device,
                 device=device_dict,
-                credential_groups=credential_groups
+                credential_groups=credential_groups,
+                timeout=DEVICE_TIMEOUT,
             )
             results.append(result)
 
@@ -1088,8 +1080,6 @@ async def rollback_deploy(
         db.rollback()
         logger.error(f"回滚配置失败：{e}")
         raise HTTPException(status_code=500, detail=f"回滚失败：{str(e)}")
-    finally:
-        db.close()
 
 
 @router.get("/compatible-variables")
@@ -1473,7 +1463,8 @@ def create_deploy_history(
 
     db.flush()  # 获取 ID
     history_id = history.id
-    db.commit()
+    # 注意：这里不 commit，由调用方（execute_deploy / rollback_deploy）统一提交，
+    # 避免同一 session 二次提交导致半提交状态。
     logger.info(f"创建部署历史记录: id={history_id}, type={operation_type}, user={username}")
 
     return history_id  # 返回 ID 而不是对象

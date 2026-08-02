@@ -24,7 +24,7 @@ from typing import Optional, List, Tuple, Dict, Any
 
 from loguru import logger
 
-from app.shared.database import get_db
+from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceInterface
 
 # ===== 标准 Trap OID =====
@@ -261,32 +261,30 @@ class TrapReceiver:
 
     def _apply_link_event(self, src_ip: str, if_index: int, event: str):
         new_oper = "up" if event == "up" else "down"
-        db = next(get_db())
-        try:
-            device = db.query(Device).filter(Device.ip == src_ip).first()
-            if not device:
-                logger.debug(f"Trap 源 {src_ip} 未匹配到设备")
-                return
-            iface = db.query(DeviceInterface).filter(
-                DeviceInterface.device_id == device.id,
-                DeviceInterface.if_index == if_index,
-            ).first()
-            old_oper = iface.oper_status if iface else None
-            if iface:
-                iface.oper_status = new_oper
-                iface.last_check = datetime.utcnow()
-                db.commit()
-            self._upsert_incident(db, device, if_index, iface, event)
-            self.applied += 1
-            # 秒级推送（即使接口未发现也推送，让大屏即时感知）
-            if old_oper != new_oper:
-                self._broadcast(device, if_index, iface, old_oper, new_oper)
-                logger.info(f"Trap link{event} {device.name} ifIndex={if_index} ({old_oper}->{new_oper})")
-        except Exception as e:
-            db.rollback()
-            logger.error(f"应用 Trap 链路事件失败: {e}")
-        finally:
-            db.close()
+        with get_db_manager().session_scope() as db:
+            try:
+                device = db.query(Device).filter(Device.ip == src_ip).first()
+                if not device:
+                    logger.debug(f"Trap 源 {src_ip} 未匹配到设备")
+                    return
+                iface = db.query(DeviceInterface).filter(
+                    DeviceInterface.device_id == device.id,
+                    DeviceInterface.if_index == if_index,
+                ).first()
+                old_oper = iface.oper_status if iface else None
+                if iface:
+                    iface.oper_status = new_oper
+                    iface.last_check = datetime.utcnow()
+                    db.commit()
+                self._upsert_incident(db, device, if_index, iface, event)
+                self.applied += 1
+                # 秒级推送（即使接口未发现也推送，让大屏即时感知）
+                if old_oper != new_oper:
+                    self._broadcast(device, if_index, iface, old_oper, new_oper)
+                    logger.info(f"Trap link{event} {device.name} ifIndex={if_index} ({old_oper}->{new_oper})")
+            except Exception as e:
+                db.rollback()
+                logger.error(f"应用 Trap 链路事件失败: {e}")
 
     def _upsert_incident(self, db, device, if_index: int, iface, event: str):
         try:

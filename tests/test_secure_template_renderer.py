@@ -142,10 +142,12 @@ def test_all_builtin_templates_render_in_sandbox(monkeypatch):
         def close():
             return None
 
-    def fake_get_db():
-        yield SessionStub()
+    class ManagerStub:
+        @staticmethod
+        def get_session():
+            return SessionStub()
 
-    monkeypatch.setattr(db_init, "get_db", fake_get_db)
+    monkeypatch.setattr(db_init, "get_db_manager", ManagerStub)
 
     db_init.init_default_templates()
 

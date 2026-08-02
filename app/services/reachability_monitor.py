@@ -23,7 +23,7 @@ from loguru import logger
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
-from app.shared.database import get_db
+from app.shared.database import get_db_manager
 from app.shared.models import Device
 from app.shared.cache import cache
 
@@ -191,50 +191,48 @@ class ReachabilityMonitor:
         Args:
             detect_result: 检测结果 {id, name, tier, result}
         """
-        db = next(get_db())
-        try:
-            device = db.query(Device).filter(Device.id == detect_result['id']).first()
-            if not device:
-                logger.warning(f"Device {detect_result['id']} not found")
-                return
+        with get_db_manager().session_scope() as db:
+            try:
+                device = db.query(Device).filter(Device.id == detect_result['id']).first()
+                if not device:
+                    logger.warning(f"Device {detect_result['id']} not found")
+                    return
 
-            result = detect_result['result']
-            tier = detect_result['tier']
+                result = detect_result['result']
+                tier = detect_result['tier']
 
-            # 获取历史记录
-            history = self._get_check_history(device.id)
-            history.append(result['reachable'])
+                # 获取历史记录
+                history = self._get_check_history(device.id)
+                history.append(result['reachable'])
 
-            # 保留最近10次记录
-            if len(history) > 10:
-                history = history[-10:]
+                # 保留最近10次记录
+                if len(history) > 10:
+                    history = history[-10:]
 
-            # 更新历史缓存
-            self._update_check_history(device.id, history)
+                # 更新历史缓存
+                self._update_check_history(device.id, history)
 
-            # 使用分级阈值判定状态
-            old_reachability = device.reachability
-            new_reachability = self._determine_state(history, old_reachability, tier)
+                # 使用分级阈值判定状态
+                old_reachability = device.reachability
+                new_reachability = self._determine_state(history, old_reachability, tier)
 
-            # 更新设备状态
-            device.reachability = new_reachability
-            device.last_reachability_check = datetime.utcnow()
-            device.reachability_latency_ms = result['latency_ms']
-            device.reachability_method = result['method']
+                # 更新设备状态
+                device.reachability = new_reachability
+                device.last_reachability_check = datetime.utcnow()
+                device.reachability_latency_ms = result['latency_ms']
+                device.reachability_method = result['method']
 
-            db.commit()
+                db.commit()
 
-            # 状态变化触发告警
-            if old_reachability != new_reachability:
-                self._trigger_state_change_alert(device, old_reachability, new_reachability)
-                logger.info(
-                    f"Device {device.name} reachability changed: {old_reachability} -> {new_reachability}"
-                )
-        except Exception as e:
-            logger.error(f"Failed to update device {detect_result['name']}: {e}")
-            db.rollback()
-        finally:
-            db.close()
+                # 状态变化触发告警
+                if old_reachability != new_reachability:
+                    self._trigger_state_change_alert(device, old_reachability, new_reachability)
+                    logger.info(
+                        f"Device {device.name} reachability changed: {old_reachability} -> {new_reachability}"
+                    )
+            except Exception as e:
+                logger.error(f"Failed to update device {detect_result['name']}: {e}")
+                db.rollback()
 
     def _load_devices_by_tier(self, tier: str) -> List[Dict]:
         """加载指定分级的设备列表
@@ -245,8 +243,7 @@ class ReachabilityMonitor:
         Returns:
             设备信息列表 [{id, name, ip, monitor_tier}]
         """
-        db = next(get_db())
-        try:
+        with get_db_manager().session_scope() as db:
             devices = db.query(Device).filter(
                 Device.deployment_status == 'in-use',
                 Device.ip.isnot(None),
@@ -263,8 +260,6 @@ class ReachabilityMonitor:
                 }
                 for d in devices
             ]
-        finally:
-            db.close()
 
     def _icmp_check(self, ip: str, timeout: int = 2) -> Dict[str, any]:
         """ICMP Ping 检测"""
@@ -433,26 +428,25 @@ class ReachabilityMonitor:
         if new_state == "reachable" and old_state != "unreachable":
             return
 
-        db = next(get_db())
-        try:
-            from app.services.incident_automation import MonitorEvent, upsert_fault_from_monitor_event
-            upsert_fault_from_monitor_event(db, MonitorEvent(
-                source_type="reachability",
-                event_type="device_recovered" if new_state == "reachable" else "device_unreachable",
-                device_id=device.id,
-                device_name=device.name,
-                ip=device.ip,
-                raw={
-                    "old_state": old_state,
-                    "new_state": new_state,
-                    "latency_ms": device.reachability_latency_ms,
-                    "monitor_tier": device.monitor_tier,
-                },
-            ))
-        except Exception as e:
-            logger.warning(f"设备可达性自动故障工单处理失败: {e}")
-        finally:
-            db.close()
+        with get_db_manager().session_scope() as db:
+            try:
+                from app.services.incident_automation import MonitorEvent, upsert_fault_from_monitor_event
+                upsert_fault_from_monitor_event(db, MonitorEvent(
+                    source_type="reachability",
+                    event_type="device_recovered" if new_state == "reachable" else "device_unreachable",
+                    device_id=device.id,
+                    device_name=device.name,
+                    ip=device.ip,
+                    raw={
+                        "old_state": old_state,
+                        "new_state": new_state,
+                        "latency_ms": device.reachability_latency_ms,
+                        "monitor_tier": device.monitor_tier,
+                    },
+                ))
+            except Exception as e:
+                logger.warning(f"设备可达性自动故障工单处理失败: {e}")
+                db.rollback()
 
     def _estimate_downtime(self, device: Device) -> Optional[int]:
         """估算设备离线时间（分钟）"""
@@ -494,8 +488,7 @@ class ReachabilityMonitor:
 
     def diagnostics(self) -> Dict[str, any]:
         """监控诊断：列出被监控/被跳过的设备及当前状态，定位为何无告警。"""
-        db = next(get_db())
-        try:
+        with get_db_manager().session_scope() as db:
             all_devices = db.query(Device).all()
             in_use = [d for d in all_devices if d.deployment_status == 'in-use' and d.ip]
             not_monitored = [d for d in all_devices if d.deployment_status != 'in-use' or not d.ip]
@@ -542,8 +535,6 @@ class ReachabilityMonitor:
                 ],
                 "monitored_devices": monitored,
             }
-        finally:
-            db.close()
 
 
 # 全局服务实例

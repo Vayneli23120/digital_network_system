@@ -113,7 +113,8 @@ def _sync_modules_to_inventory(db: Session, device_id: int, modules: List[Dict[s
         )
         db.add(instance)
 
-    db.commit()
+    # 注意：这里不 commit，由调用方（create_device/update_device）统一提交，
+    # 保证设备行 + 模块资产实例处于同一事务，中途失败整批回滚。
 
 
 def list_devices(db: Session, status: Optional[str] = None, role: Optional[str] = None,
@@ -242,12 +243,14 @@ def create_device(db: Session, device_data: Dict[str, Any]) -> Dict[str, Any]:
 
     device = Device(**device_data)
     db.add(device)
-    db.commit()
+    db.flush()  # 获取 device.id，与模块资产同事务提交
     db.refresh(device)
 
     # 同步模块到设备资产
     if modules_data:
         _sync_modules_to_inventory(db, device.id, modules_data)
+
+    db.commit()  # 设备行 + 模块资产实例单事务提交
 
     return {
         "id": device.id,
@@ -374,12 +377,14 @@ def update_device(db: Session, device_id: int, update_data: Dict[str, Any]) -> D
         else:
             device.modules = None
 
-    db.commit()
+    db.flush()  # 与模块资产同事务提交
     db.refresh(device)
 
     # 同步模块到设备资产
     if modules_data:
         _sync_modules_to_inventory(db, device.id, modules_data)
+
+    db.commit()  # 设备行 + 模块资产实例单事务提交
 
     return {
         "id": device.id,

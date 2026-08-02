@@ -14,8 +14,9 @@ from typing import Dict, List, Optional, Callable, AsyncGenerator
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-from app.database import get_db
-from app.models import LogEntry
+from app.shared.database import get_db_manager
+from app.shared.device_ops import run_device_op
+from app.shared.models import LogEntry
 
 logger = logging.getLogger(__name__)
 
@@ -93,53 +94,53 @@ class ToolExecutor:
             created_by=created_by
         )
 
-        db = next(get_db())
-        db.add(log_entry)
-        db.commit()
-
-        try:
-            await self._log(log_entry, f"[{datetime.utcnow().isoformat()}] Connecting to {device['ip']}...", db)
-
-            conn = ConnectHandler(**device)
-            await self._log(log_entry, f"Connected successfully.", db)
-
-            outputs = []
-            for cmd in commands:
-                await self._log(log_entry, f"Executing: {cmd}", db)
-                output = conn.send_command(cmd)
-                outputs.append(output)
-                await self._log(log_entry, f"Output ({len(output)} chars): {output[:200]}...", db)
-
-            conn.disconnect()
-
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "success"
-            log_entry.duration_ms = duration_ms
+        with get_db_manager().session_scope() as db:
+            db.add(log_entry)
             db.commit()
 
-            await self._log(log_entry, f"Completed in {duration_ms}ms.", db)
+            try:
+                await self._log(log_entry, f"[{datetime.utcnow().isoformat()}] Connecting to {device['ip']}...", db)
 
-            return {
-                "success": True,
-                "output": "\n".join(outputs),
-                "duration_ms": duration_ms
-            }
+                conn = await run_device_op(ConnectHandler, **device)
+                await self._log(log_entry, f"Connected successfully.", db)
 
-        except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "failed"
-            log_entry.duration_ms = duration_ms
-            log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
-            db.commit()
-            return {"success": False, "error": str(e), "duration_ms": duration_ms}
+                outputs = []
+                for cmd in commands:
+                    await self._log(log_entry, f"Executing: {cmd}", db)
+                    output = await run_device_op(conn.send_command, cmd, timeout=30)
+                    outputs.append(output)
+                    await self._log(log_entry, f"Output ({len(output)} chars): {output[:200]}...", db)
 
-        except Exception as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "failed"
-            log_entry.duration_ms = duration_ms
-            log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
-            db.commit()
-            return {"success": False, "error": str(e), "duration_ms": duration_ms}
+                await run_device_op(conn.disconnect)
+
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "success"
+                log_entry.duration_ms = duration_ms
+                db.commit()
+
+                await self._log(log_entry, f"Completed in {duration_ms}ms.", db)
+
+                return {
+                    "success": True,
+                    "output": "\n".join(outputs),
+                    "duration_ms": duration_ms
+                }
+
+            except (NetmikoTimeoutException, NetmikoAuthenticationException) as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "failed"
+                log_entry.duration_ms = duration_ms
+                log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
+                db.commit()
+                return {"success": False, "error": str(e), "duration_ms": duration_ms}
+
+            except Exception as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "failed"
+                log_entry.duration_ms = duration_ms
+                log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
+                db.commit()
+                return {"success": False, "error": str(e), "duration_ms": duration_ms}
 
     async def execute_napalm(
         self,
@@ -175,42 +176,42 @@ class ToolExecutor:
             created_by=created_by
         )
 
-        db = next(get_db())
-        db.add(log_entry)
-        db.commit()
-
-        try:
-            await self._log(log_entry, f"Initializing NAPALM driver for {device['hostname']}...", db)
-
-            driver = get_network_driver("ios")  # 默认 IOS，可扩展
-            driver_instance = driver(**device)
-            driver_instance.open()
-            await self._log(log_entry, "NAPALM connection established.", db)
-
-            method_fn = getattr(driver_instance, method, None)
-            if method_fn is None:
-                raise AttributeError(f"NAPALM method '{method}' not found")
-
-            result = method_fn(**(args or {}))
-            await self._log(log_entry, f"Method '{method}' executed successfully.", db)
-
-            driver_instance.close()
-
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "success"
-            log_entry.duration_ms = duration_ms
-            log_entry.log_content = (log_entry.log_content or "") + f"Result: {str(result)[:500]}...\n"
+        with get_db_manager().session_scope() as db:
+            db.add(log_entry)
             db.commit()
 
-            return {"success": True, "result": result, "duration_ms": duration_ms}
+            try:
+                await self._log(log_entry, f"Initializing NAPALM driver for {device['hostname']}...", db)
 
-        except Exception as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "failed"
-            log_entry.duration_ms = duration_ms
-            log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
-            db.commit()
-            return {"success": False, "error": str(e), "duration_ms": duration_ms}
+                driver = get_network_driver("ios")  # 默认 IOS，可扩展
+                driver_instance = driver(**device)
+                await run_device_op(driver_instance.open)
+                await self._log(log_entry, "NAPALM connection established.", db)
+
+                method_fn = getattr(driver_instance, method, None)
+                if method_fn is None:
+                    raise AttributeError(f"NAPALM method '{method}' not found")
+
+                result = await run_device_op(method_fn, **(args or {}))
+                await self._log(log_entry, f"Method '{method}' executed successfully.", db)
+
+                await run_device_op(driver_instance.close)
+
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "success"
+                log_entry.duration_ms = duration_ms
+                log_entry.log_content = (log_entry.log_content or "") + f"Result: {str(result)[:500]}...\n"
+                db.commit()
+
+                return {"success": True, "result": result, "duration_ms": duration_ms}
+
+            except Exception as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "failed"
+                log_entry.duration_ms = duration_ms
+                log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
+                db.commit()
+                return {"success": False, "error": str(e), "duration_ms": duration_ms}
 
     async def execute_jira(
         self,
@@ -246,47 +247,48 @@ class ToolExecutor:
             created_by=created_by
         )
 
-        db = next(get_db())
-        db.add(log_entry)
-        db.commit()
-
-        try:
-            await self._log(log_entry, f"Connecting to JIRA ({settings.jira_server})...", db)
-
-            jira = JIRA(
-                server=settings.jira_server,
-                basic_auth=(settings.jira_username, settings.jira_password)
-            )
-            await self._log(log_entry, "JIRA connected.", db)
-
-            if action == "create":
-                issue = jira.create_issue(**issue_data)
-                await self._log(log_entry, f"Issue created: {issue.key}", db)
-                result = {"issue_key": issue.key}
-            elif action == "update":
-                issue = jira.issue(issue_data["key"])
-                issue.update(**issue_data.get("fields", {}))
-                await self._log(log_entry, f"Issue {issue_data['key']} updated.", db)
-                result = {"issue_key": issue_data["key"]}
-            else:
-                raise ValueError(f"Unknown JIRA action: {action}")
-
-            jira.close()
-
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "success"
-            log_entry.duration_ms = duration_ms
+        with get_db_manager().session_scope() as db:
+            db.add(log_entry)
             db.commit()
 
-            return {"success": True, **result, "duration_ms": duration_ms}
+            try:
+                await self._log(log_entry, f"Connecting to JIRA ({settings.jira_server})...", db)
 
-        except Exception as e:
-            duration_ms = int((time.time() - start_time) * 1000)
-            log_entry.status = "failed"
-            log_entry.duration_ms = duration_ms
-            log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
-            db.commit()
-            return {"success": False, "error": str(e), "duration_ms": duration_ms}
+                jira = await run_device_op(
+                    JIRA,
+                    server=settings.jira_server,
+                    basic_auth=(settings.jira_username, settings.jira_password)
+                )
+                await self._log(log_entry, "JIRA connected.", db)
+
+                if action == "create":
+                    issue = await run_device_op(jira.create_issue, **issue_data)
+                    await self._log(log_entry, f"Issue created: {issue.key}", db)
+                    result = {"issue_key": issue.key}
+                elif action == "update":
+                    issue = await run_device_op(jira.issue, issue_data["key"])
+                    await run_device_op(issue.update, **issue_data.get("fields", {}))
+                    await self._log(log_entry, f"Issue {issue_data['key']} updated.", db)
+                    result = {"issue_key": issue_data["key"]}
+                else:
+                    raise ValueError(f"Unknown JIRA action: {action}")
+
+                await run_device_op(jira.close)
+
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "success"
+                log_entry.duration_ms = duration_ms
+                db.commit()
+
+                return {"success": True, **result, "duration_ms": duration_ms}
+
+            except Exception as e:
+                duration_ms = int((time.time() - start_time) * 1000)
+                log_entry.status = "failed"
+                log_entry.duration_ms = duration_ms
+                log_entry.log_content = (log_entry.log_content or "") + f"Error: {str(e)}\n"
+                db.commit()
+                return {"success": False, "error": str(e), "duration_ms": duration_ms}
 
 
 # 全局实例

@@ -13,6 +13,7 @@ from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from app.shared.database import get_db
+from app.shared.device_ops import run_device_op
 from .discovery_service import (
     get_discovery_service,
     DiscoveredDevice,
@@ -90,7 +91,8 @@ async def ping_sweep(
             timeout=request.timeout,
             workers=request.workers
         )
-        devices = service.ping_sweep(request.subnet)
+        # 经统一设备操作执行器，避免 socket 探测阻塞事件循环
+        devices = await run_device_op(service.ping_sweep, request.subnet)
         duration_ms = (time.time() - start) * 1000
 
         return DiscoveryResponse(
@@ -112,6 +114,9 @@ async def ping_sweep(
             scan_duration_ms=round(duration_ms, 2),
         )
 
+    except ValueError as e:
+        # 非法 CIDR / 子网过大守卫（如 /8）→ 400
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ping Sweep 失败: {str(e)}")
 
@@ -175,6 +180,9 @@ async def discover_devices(
             scan_duration_ms=round(duration_ms, 2),
         )
 
+    except ValueError as e:
+        # discover_subnet 内部 ping_sweep 的子网过大守卫 → 400
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"发现失败: {str(e)}")
 

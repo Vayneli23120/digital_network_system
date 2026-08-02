@@ -16,6 +16,7 @@ from app.features.credentials.credential_service import decrypt_password
 from app.shared.config import get_config
 from app.shared.database import get_db
 from app.shared.dependencies import require_permission
+from app.shared.device_ops import run_device_op
 from app.shared.models import BackupRecord, Device, CredentialGroup, LogEntry
 from app.shared.time_utils import utc_iso
 from .backup_service import delete_backup as svc_delete_backup
@@ -89,9 +90,9 @@ async def backup_device(
                 detail=f"凭证组 '{cred_group_name}' 未设置密码"
             )
 
-        # 执行备份
+        # 执行备份（经统一设备操作执行器）
         config = get_config()
-        result = await asyncio.to_thread(
+        result = await run_device_op(
             backup_device_config,
             device,
             credentials,
@@ -416,7 +417,7 @@ async def batch_backup(
                 credentials = {"username": "admin", "password": "", "secret": ""}
 
             config = get_config()
-            result = await asyncio.to_thread(
+            result = await run_device_op(
                 backup_device_config,
                 device,
                 credentials,

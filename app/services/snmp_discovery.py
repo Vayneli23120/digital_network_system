@@ -20,7 +20,7 @@ from typing import Dict, List, Optional
 from loguru import logger
 from sqlalchemy import func
 
-from app.shared.database import get_db
+from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceInterface
 from app.features.devices.snmp_service import get_snmp_service, SNMP_AVAILABLE
 from app.services.ap_discovery import is_ap_neighbor, upsert_ap_from_neighbor
@@ -136,55 +136,53 @@ def discover_interfaces(device_id: int) -> Dict:
     """SNMP walk ifName/ifDescr，落库 device_interfaces（幂等 upsert）"""
     if not SNMP_AVAILABLE:
         return {"ok": False, "error": "SNMP 库不可用（puresnmp 未安装）"}
-    db = next(get_db())
-    try:
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if not device:
-            return {"ok": False, "error": "设备不存在"}
-        if not (device.snmp_enabled and device.ip and device.snmp_community):
-            return {"ok": False, "error": "设备未启用 SNMP 或缺少团体名/IP"}
+    with get_db_manager().session_scope() as db:
+        try:
+            device = db.query(Device).filter(Device.id == device_id).first()
+            if not device:
+                return {"ok": False, "error": "设备不存在"}
+            if not (device.snmp_enabled and device.ip and device.snmp_community):
+                return {"ok": False, "error": "设备未启用 SNMP 或缺少团体名/IP"}
 
-        svc = get_snmp_service()
+            svc = get_snmp_service()
 
-        def walk(oid):
-            return asyncio.run(svc.snmp_walk_async(device.ip, device.snmp_community, oid, timeout=SNMP_TIMEOUT))
+            def walk(oid):
+                return asyncio.run(svc.snmp_walk_async(device.ip, device.snmp_community, oid, timeout=SNMP_TIMEOUT))
 
-        names = walk(OID_IF_NAME)
-        descrs = walk(OID_IF_DESCR)
-        oper = walk(OID_IF_OPER_STATUS)
+            names = walk(OID_IF_NAME)
+            descrs = walk(OID_IF_DESCR)
+            oper = walk(OID_IF_OPER_STATUS)
 
-        source = names or descrs
-        if not source:
-            return {"ok": False, "error": "SNMP 无响应或无接口（检查团体名/ACL）"}
+            source = names or descrs
+            if not source:
+                return {"ok": False, "error": "SNMP 无响应或无接口（检查团体名/ACL）"}
 
-        count = 0
-        for idx_str, name in source.items():
-            try:
-                if_index = int(idx_str)
-            except (ValueError, TypeError):
-                continue
-            iface = db.query(DeviceInterface).filter(
-                DeviceInterface.device_id == device_id,
-                DeviceInterface.if_index == if_index,
-            ).first()
-            if not iface:
-                iface = DeviceInterface(device_id=device_id, if_index=if_index)
-                db.add(iface)
-            if names:
-                iface.if_name = str(name)
-            if idx_str in descrs:
-                iface.if_descr = str(descrs.get(idx_str))
-            iface.oper_status = oper_status_text(oper.get(idx_str, ""))
-            iface.last_check = datetime.utcnow()
-            count += 1
-        db.commit()
-        return {"ok": True, "discovered": count}
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Discover interfaces failed (device {device_id}): {e}")
-        return {"ok": False, "error": str(e)}
-    finally:
-        db.close()
+            count = 0
+            for idx_str, name in source.items():
+                try:
+                    if_index = int(idx_str)
+                except (ValueError, TypeError):
+                    continue
+                iface = db.query(DeviceInterface).filter(
+                    DeviceInterface.device_id == device_id,
+                    DeviceInterface.if_index == if_index,
+                ).first()
+                if not iface:
+                    iface = DeviceInterface(device_id=device_id, if_index=if_index)
+                    db.add(iface)
+                if names:
+                    iface.if_name = str(name)
+                if idx_str in descrs:
+                    iface.if_descr = str(descrs.get(idx_str))
+                iface.oper_status = oper_status_text(oper.get(idx_str, ""))
+                iface.last_check = datetime.utcnow()
+                count += 1
+            db.commit()
+            return {"ok": True, "discovered": count}
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Discover interfaces failed (device {device_id}): {e}")
+            return {"ok": False, "error": str(e)}
 
 
 def discover_neighbors(device_id: int) -> Dict:
@@ -194,158 +192,156 @@ def discover_neighbors(device_id: int) -> Dict:
     """
     if not SNMP_AVAILABLE:
         return {"ok": False, "error": "SNMP 库未安装（puresnmp）"}
-    db = next(get_db())
-    try:
-        device = db.query(Device).filter(Device.id == device_id).first()
-        if not device:
-            return {"ok": False, "error": "设备不存在"}
-        if not (device.snmp_enabled and device.ip and device.snmp_community):
-            return {"ok": False, "error": "设备未启用 SNMP 或缺少团体名/IP"}
+    with get_db_manager().session_scope() as db:
+        try:
+            device = db.query(Device).filter(Device.id == device_id).first()
+            if not device:
+                return {"ok": False, "error": "设备不存在"}
+            if not (device.snmp_enabled and device.ip and device.snmp_community):
+                return {"ok": False, "error": "设备未启用 SNMP 或缺少团体名/IP"}
 
-        svc = get_snmp_service()
-        community = device.snmp_community
+            svc = get_snmp_service()
+            community = device.snmp_community
 
-        def walk(oid):
-            return asyncio.run(svc.snmp_walk_raw_async(device.ip, community, oid, timeout=SNMP_TIMEOUT))
+            def walk(oid):
+                return asyncio.run(svc.snmp_walk_raw_async(device.ip, community, oid, timeout=SNMP_TIMEOUT))
 
-        # CDP 优先，LLDP 补充；按本地接口去重（CDP 已覆盖的接口不再被 LLDP 覆盖）
-        raw_neighbors = _collect_cdp(walk) + _collect_lldp(walk)
-        if not raw_neighbors:
-            return {"ok": False, "error": "CDP/LLDP 无响应（检查 cdp run / lldp run / 团体名）"}
+            # CDP 优先，LLDP 补充；按本地接口去重（CDP 已覆盖的接口不再被 LLDP 覆盖）
+            raw_neighbors = _collect_cdp(walk) + _collect_lldp(walk)
+            if not raw_neighbors:
+                return {"ok": False, "error": "CDP/LLDP 无响应（检查 cdp run / lldp run / 团体名）"}
 
-        self_rank = _tier_rank(getattr(device, "device_type", None))
-        neighbors = []
-        matched = 0
-        uplinks_marked = 0
-        aps_synced = 0
-        seen_ifaces = set()   # 已处理的本地接口（按 if_index），CDP 先于 LLDP
+            self_rank = _tier_rank(getattr(device, "device_type", None))
+            neighbors = []
+            matched = 0
+            uplinks_marked = 0
+            aps_synced = 0
+            seen_ifaces = set()   # 已处理的本地接口（按 if_index），CDP 先于 LLDP
 
-        for n in raw_neighbors:
-            iface = _resolve_local_iface(db, device_id, n)
-            if iface is None:
-                continue
-            if iface.if_index in seen_ifaces:
-                continue
-            seen_ifaces.add(iface.if_index)
+            for n in raw_neighbors:
+                iface = _resolve_local_iface(db, device_id, n)
+                if iface is None:
+                    continue
+                if iface.if_index in seen_ifaces:
+                    continue
+                seen_ifaces.add(iface.if_index)
 
-            remote_host = n.get("remote_host") or ""
-            remote_port = n.get("remote_port") or ""
-            remote_ip = n.get("remote_ip") or ""
-            remote_platform = n.get("remote_platform") or ""
+                remote_host = n.get("remote_host") or ""
+                remote_port = n.get("remote_port") or ""
+                remote_ip = n.get("remote_ip") or ""
+                remote_platform = n.get("remote_platform") or ""
 
-            # 匹配系统内对端设备：先 IP，再主机名（含去域名）
-            peer = None
-            if remote_ip:
-                peer = db.query(Device).filter(Device.ip == remote_ip).first()
-            if peer is None and remote_host:
-                short = remote_host.split(".")[0]
-                peer = db.query(Device).filter(
-                    func.lower(Device.name) == remote_host.lower()
-                ).first()
-                if peer is None and short:
+                # 匹配系统内对端设备：先 IP，再主机名（含去域名）
+                peer = None
+                if remote_ip:
+                    peer = db.query(Device).filter(Device.ip == remote_ip).first()
+                if peer is None and remote_host:
+                    short = remote_host.split(".")[0]
                     peer = db.query(Device).filter(
-                        func.lower(Device.name) == short.lower()
+                        func.lower(Device.name) == remote_host.lower()
                     ).first()
+                    if peer is None and short:
+                        peer = db.query(Device).filter(
+                            func.lower(Device.name) == short.lower()
+                        ).first()
 
-            iface.peer_device_name = remote_host or None
-            iface.peer_ip = remote_ip or None
-            iface.peer_if_name = remote_port or None
-            iface.neighbor_source = n.get("source")
-            iface.neighbor_updated_at = datetime.utcnow()
+                iface.peer_device_name = remote_host or None
+                iface.peer_ip = remote_ip or None
+                iface.peer_if_name = remote_port or None
+                iface.neighbor_source = n.get("source")
+                iface.neighbor_updated_at = datetime.utcnow()
 
-            # 未匹配到系统内设备，但 CDP/LLDP 特征判定为 AP → 自动建 AP 记录。
-            # AP 在线状态后续由所连交换机端口 oper_status 推导（sync_ap_online_status）；
-            # 此刻能看到 CDP 邻居即说明端口 up，先置 reachable。
-            if peer is None and is_ap_neighbor(remote_platform, remote_host):
-                peer = upsert_ap_from_neighbor(db, n, device)
+                # 未匹配到系统内设备，但 CDP/LLDP 特征判定为 AP → 自动建 AP 记录。
+                # AP 在线状态后续由所连交换机端口 oper_status 推导（sync_ap_online_status）；
+                # 此刻能看到 CDP 邻居即说明端口 up，先置 reachable。
+                if peer is None and is_ap_neighbor(remote_platform, remote_host):
+                    peer = upsert_ap_from_neighbor(db, n, device)
+                    if peer is not None:
+                        peer.reachability = "reachable"
+                        peer.last_reachability_check = datetime.utcnow()
+                        peer.reachability_method = "cdp"
+                        aps_synced += 1
+
+                is_uplink = False
                 if peer is not None:
-                    peer.reachability = "reachable"
-                    peer.last_reachability_check = datetime.utcnow()
-                    peer.reachability_method = "cdp"
-                    aps_synced += 1
+                    matched += 1
+                    iface.peer_device_id = peer.id
+                    peer_rank = _tier_rank(getattr(peer, "device_type", None))
+                    if peer_rank >= self_rank:
+                        is_uplink = True
+                        if not iface.is_uplink:
+                            uplinks_marked += 1
+                        iface.is_uplink = True
+                        iface.monitored = True
 
-            is_uplink = False
-            if peer is not None:
-                matched += 1
-                iface.peer_device_id = peer.id
-                peer_rank = _tier_rank(getattr(peer, "device_type", None))
-                if peer_rank >= self_rank:
-                    is_uplink = True
-                    if not iface.is_uplink:
-                        uplinks_marked += 1
-                    iface.is_uplink = True
-                    iface.monitored = True
+                neighbors.append({
+                    "local_if_index": iface.if_index,
+                    "remote_ip": remote_ip,
+                    "remote_host": remote_host,
+                    "remote_port": remote_port,
+                    "remote_platform": remote_platform,
+                    "source": n.get("source"),
+                    "peer_device_id": peer.id if peer else None,
+                    "is_uplink": is_uplink,
+                })
 
-            neighbors.append({
-                "local_if_index": iface.if_index,
-                "remote_ip": remote_ip,
-                "remote_host": remote_host,
-                "remote_port": remote_port,
-                "remote_platform": remote_platform,
-                "source": n.get("source"),
-                "peer_device_id": peer.id if peer else None,
-                "is_uplink": is_uplink,
-            })
+            # 清理陈旧对端：线缆被拔掉/改接后，旧邻居不再出现在 CDP/LLDP 结果里，
+            # 但接口上原先写入的 peer_* 不会自动消失，会导致数据链路仍按旧拓扑
+            # 画到旧对端（并误判为断开、显示红色）。这里把本次未再发现邻居、
+            # 但之前由 CDP/LLDP 写入过对端的接口清空。
+            cleared = 0
+            stale_ifaces = db.query(DeviceInterface).filter(
+                DeviceInterface.device_id == device_id,
+                DeviceInterface.neighbor_source.isnot(None),
+            ).all()
+            for si in stale_ifaces:
+                if si.if_index in seen_ifaces:
+                    continue
+                old_peer_id = si.peer_device_id
+                si.peer_device_id = None
+                si.peer_device_name = None
+                si.peer_ip = None
+                si.peer_if_name = None
+                si.neighbor_source = None
+                si.neighbor_updated_at = datetime.utcnow()
+                si.is_uplink = False
+                si.monitored = False
+                cleared += 1
 
-        # 清理陈旧对端：线缆被拔掉/改接后，旧邻居不再出现在 CDP/LLDP 结果里，
-        # 但接口上原先写入的 peer_* 不会自动消失，会导致数据链路仍按旧拓扑
-        # 画到旧对端（并误判为断开、显示红色）。这里把本次未再发现邻居、
-        # 但之前由 CDP/LLDP 写入过对端的接口清空。
-        cleared = 0
-        stale_ifaces = db.query(DeviceInterface).filter(
-            DeviceInterface.device_id == device_id,
-            DeviceInterface.neighbor_source.isnot(None),
-        ).all()
-        for si in stale_ifaces:
-            if si.if_index in seen_ifaces:
-                continue
-            old_peer_id = si.peer_device_id
-            si.peer_device_id = None
-            si.peer_device_name = None
-            si.peer_ip = None
-            si.peer_if_name = None
-            si.neighbor_source = None
-            si.neighbor_updated_at = datetime.utcnow()
-            si.is_uplink = False
-            si.monitored = False
-            cleared += 1
+                # 同时清理对端设备上回指本机的接口。
+                # 注意：不能依赖 peer_if_name/if_name 做字符串匹配，因为 Cisco 设备
+                # 的 SNMP ifName 返回短格式（Gi0/2）而 CDP 返回长格式（GigabitEthernet0/2），
+                # 导致端口名无法直接比较。改用 device_id + peer_device_id 配对定位。
+                if old_peer_id:
+                    reciprocal = db.query(DeviceInterface).filter(
+                        DeviceInterface.device_id == old_peer_id,
+                        DeviceInterface.peer_device_id == device_id,
+                    ).all()
+                    for ri in reciprocal:
+                        ri.peer_device_id = None
+                        ri.peer_device_name = None
+                        ri.peer_ip = None
+                        ri.peer_if_name = None
+                        ri.neighbor_source = None
+                        ri.neighbor_updated_at = datetime.utcnow()
+                        ri.is_uplink = False
+                        ri.monitored = False
+                        cleared += 1
 
-            # 同时清理对端设备上回指本机的接口。
-            # 注意：不能依赖 peer_if_name/if_name 做字符串匹配，因为 Cisco 设备
-            # 的 SNMP ifName 返回短格式（Gi0/2）而 CDP 返回长格式（GigabitEthernet0/2），
-            # 导致端口名无法直接比较。改用 device_id + peer_device_id 配对定位。
-            if old_peer_id:
-                reciprocal = db.query(DeviceInterface).filter(
-                    DeviceInterface.device_id == old_peer_id,
-                    DeviceInterface.peer_device_id == device_id,
-                ).all()
-                for ri in reciprocal:
-                    ri.peer_device_id = None
-                    ri.peer_device_name = None
-                    ri.peer_ip = None
-                    ri.peer_if_name = None
-                    ri.neighbor_source = None
-                    ri.neighbor_updated_at = datetime.utcnow()
-                    ri.is_uplink = False
-                    ri.monitored = False
-                    cleared += 1
-
-        db.commit()
-        return {
-            "ok": True,
-            "neighbors": neighbors,
-            "found": len(neighbors),
-            "matched": matched,
-            "uplinks_marked": uplinks_marked,
-            "aps_synced": aps_synced,
-            "cleared": cleared,
-        }
-    except Exception as e:
-        db.rollback()
-        logger.error(f"Discover neighbors failed (device {device_id}): {e}")
-        return {"ok": False, "error": str(e)}
-    finally:
-        db.close()
+            db.commit()
+            return {
+                "ok": True,
+                "neighbors": neighbors,
+                "found": len(neighbors),
+                "matched": matched,
+                "uplinks_marked": uplinks_marked,
+                "aps_synced": aps_synced,
+                "cleared": cleared,
+            }
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Discover neighbors failed (device {device_id}): {e}")
+            return {"ok": False, "error": str(e)}
 
 
 def _collect_cdp(walk) -> List[Dict]:
