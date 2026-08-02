@@ -5,6 +5,7 @@ Dashboard 服务层
 集成内存缓存提升读多写少场景性能。
 """
 
+import bisect
 from typing import Optional, Dict, Any, List
 from datetime import datetime, timedelta
 from collections import defaultdict
@@ -24,58 +25,45 @@ def get_dashboard_summary(db: Session) -> Dict[str, Any]:
     Returns:
         摘要数据字典
     """
-    # 设备统计 - 改用 reachability 字段（只统计已部署设备）
-    total_deployed = db.query(Device).filter(Device.deployment_status == "in-use").count()
-    reachable_devices = db.query(Device).filter(
-        Device.deployment_status == "in-use",
-        Device.reachability == "reachable"
-    ).count()
-    unreachable_devices = db.query(Device).filter(
-        Device.deployment_status == "in-use",
-        Device.reachability == "unreachable"
-    ).count()
-    unknown_devices = db.query(Device).filter(
-        Device.deployment_status == "in-use",
-        Device.reachability == "unknown"
-    ).count()
+    # 设备统计 - 改用 reachability 字段（只统计已部署设备）。
+    # 一次批量拉取 device_type/deployment_status/reachability 后内存聚合，
+    # 避免按 10 种设备类型循环执行约 80 条 COUNT 查询。
+    _device_rows = db.query(Device.device_type, Device.deployment_status, Device.reachability).all()
+
+    def _agg_device(_rows, _pred):
+        return sum(1 for _t, _s, _r in _rows if _pred(_t, _s, _r))
 
     # 部署状态统计（全部设备）
-    in_use_devices = db.query(Device).filter(Device.deployment_status == "in-use").count()
-    un_used_devices = db.query(Device).filter(Device.deployment_status == "un-used").count()
-    maintenance_devices = db.query(Device).filter(Device.deployment_status == "maintenance").count()
-    retired_devices = db.query(Device).filter(Device.deployment_status == "retired").count()
+    in_use_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "in-use")
+    un_used_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "un-used")
+    maintenance_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "maintenance")
+    retired_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "retired")
+
+    # 已部署（in-use）设备按可达性
+    reachable_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "in-use" and _r == "reachable")
+    unreachable_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "in-use" and _r == "unreachable")
+    unknown_devices = _agg_device(_device_rows, lambda _t, _s, _r: _s == "in-use" and _r == "unknown")
+    total_deployed = in_use_devices  # 只统计已部署设备
 
     # 按设备类型统计 - 同时包含 deployment_status 和 reachability
     device_types = ["uce", "core_switch", "server_switch", "office_switch", "ap", "wlc", "router", "pa", "ftd", "other"]
     devices_by_type = {}
     for dtype in device_types:
-        total = db.query(Device).filter(Device.device_type == dtype).count()
+        type_rows = [(_s, _r) for _t, _s, _r in _device_rows if _t == dtype]
         devices_by_type[dtype] = {
-            "total": total,
+            "total": len(type_rows),
             # 部署状态
-            "in_use": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "in-use").count(),
-            "un_used": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "un-used").count(),
-            "maintenance": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "maintenance").count(),
-            "retired": db.query(Device).filter(Device.device_type == dtype, Device.deployment_status == "retired").count(),
+            "in_use": sum(1 for _s, _r in type_rows if _s == "in-use"),
+            "un_used": sum(1 for _s, _r in type_rows if _s == "un-used"),
+            "maintenance": sum(1 for _s, _r in type_rows if _s == "maintenance"),
+            "retired": sum(1 for _s, _r in type_rows if _s == "retired"),
             # 可达性状态（仅统计 in-use 设备）
-            "reachable": db.query(Device).filter(
-                Device.device_type == dtype,
-                Device.deployment_status == "in-use",
-                Device.reachability == "reachable"
-            ).count(),
-            "unreachable": db.query(Device).filter(
-                Device.device_type == dtype,
-                Device.deployment_status == "in-use",
-                Device.reachability == "unreachable"
-            ).count(),
-            "unknown": db.query(Device).filter(
-                Device.device_type == dtype,
-                Device.deployment_status == "in-use",
-                Device.reachability == "unknown"
-            ).count(),
+            "reachable": sum(1 for _s, _r in type_rows if _s == "in-use" and _r == "reachable"),
+            "unreachable": sum(1 for _s, _r in type_rows if _s == "in-use" and _r == "unreachable"),
+            "unknown": sum(1 for _s, _r in type_rows if _s == "in-use" and _r == "unknown"),
             # 兼容旧字段（向后兼容）
-            "online": db.query(Device).filter(Device.device_type == dtype, Device.reachability == "reachable", Device.deployment_status == "in-use").count(),
-            "offline": db.query(Device).filter(Device.device_type == dtype, Device.reachability == "unreachable", Device.deployment_status == "in-use").count(),
+            "online": sum(1 for _s, _r in type_rows if _r == "reachable" and _s == "in-use"),
+            "offline": sum(1 for _s, _r in type_rows if _r == "unreachable" and _s == "in-use"),
         }
 
     # 备份统计（最近 10 条）
@@ -930,6 +918,17 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     # 查询配置的 SLO 目标
     slo_configs = db.query(ServiceSlo).filter(ServiceSlo.is_active == True).all()
 
+    # 设备类型 -> id 列表，一次批量查询供所有 SLO 复用（避免逐 SLO 查 Device）
+    _dev_by_type: dict = defaultdict(list)
+    for _dtype, _did in db.query(Device.device_type, Device.id).all():
+        _dev_by_type[_dtype or ""].append(_did)
+
+    # 故障按所有 SLO 的最早窗口一次性批量拉取，再在内存按各 SLO 窗口/范围过滤，
+    # 避免每个 SLO 各查一次故障全集。
+    _max_window_days = max([(slo.window_days or 30) for slo in slo_configs], default=30)
+    _slo_window_start = now - timedelta(days=_max_window_days)
+    _slo_faults_all = db.query(FaultRecord).filter(FaultRecord.created_at >= _slo_window_start).all()
+
     slo_results = []
     for slo in slo_configs:
         window_days = slo.window_days or 30
@@ -945,8 +944,8 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         # 该服务范围内的设备 id
         scope_device_ids = []
         if type_list:
-            scope_devices = db.query(Device.id).filter(Device.device_type.in_(type_list)).all()
-            scope_device_ids = [d.id for d in scope_devices]
+            for _t in type_list:
+                scope_device_ids.extend(_dev_by_type.get(_t, []))
 
         # 已消耗：窗口内故障造成的停机分钟数。
         # 自动按故障时长推导（不再依赖手工 downtime_minutes，否则自动工单永远算 0）：
@@ -956,10 +955,14 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
         last_24h_start = now - timedelta(hours=24)
         OUTAGE_SEVERITIES = ("critical", "major")
 
-        scope_fault_q = db.query(FaultRecord).filter(FaultRecord.created_at >= window_start)
-        if type_list and scope_device_ids:
-            scope_fault_q = scope_fault_q.filter(FaultRecord.device_id.in_(scope_device_ids))
-        scope_faults = scope_fault_q.all()
+        # 原逻辑：仅当 type_list 与 scope_device_ids 同时非空才按设备过滤；
+        # 内存过滤保持等价语义（type_list 空或范围内无该类型设备时不过滤设备）
+        _filter_by_device = bool(type_list and scope_device_ids)
+        scope_faults = [
+            f for f in _slo_faults_all
+            if f.created_at >= window_start
+            and (not _filter_by_device or f.device_id in scope_device_ids)
+        ]
 
         def _auto_downtime(f, floor_start):
             """故障停机分钟数（可选起点下限，用于 24h 窗口切分）"""
@@ -1050,6 +1053,23 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     correlation_window_hours = 72
     correlation_window = timedelta(hours=correlation_window_hours)
 
+    # 批量拉取相关故障（当前周期所有变更的窗口并集），按设备分组并排序时间戳，
+    # 循环内用 bisect 计数，避免逐 change 一条 COUNT 查询（N+1）。
+    _cur_change_fault_ts: dict = {}
+    if config_changes:
+        _cur_min = min(c.backup_time for c in config_changes)
+        _cur_max = max(c.backup_time for c in config_changes)
+        _cur_fault_rows = db.query(FaultRecord.device_id, FaultRecord.created_at).filter(
+            FaultRecord.device_id.in_([c.device_id for c in config_changes]),
+            FaultRecord.created_at >= _cur_min,
+            FaultRecord.created_at <= _cur_max + correlation_window,
+        ).all()
+        _tmp: dict = defaultdict(list)
+        for _fid, _fcreated in _cur_fault_rows:
+            if _fcreated:
+                _tmp[_fid].append(_fcreated)
+        _cur_change_fault_ts = {_k: sorted(_v) for _k, _v in _tmp.items()}
+
     # 统计变更后发生故障的次数
     changes_with_faults = 0
     device_change_fault_map = defaultdict(lambda: {"changes": 0, "faults_after_change": 0})
@@ -1057,11 +1077,11 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     for change in config_changes:
         # 查找变更后时间窗口内该设备的故障
         window_end = change.backup_time + correlation_window
-        faults_after_change = db.query(FaultRecord).filter(
-            FaultRecord.device_id == change.device_id,
-            FaultRecord.created_at >= change.backup_time,
-            FaultRecord.created_at <= window_end
-        ).count()
+        _ts = _cur_change_fault_ts.get(change.device_id)
+        faults_after_change = (
+            bisect.bisect_right(_ts, window_end) - bisect.bisect_left(_ts, change.backup_time)
+            if _ts else 0
+        )
 
         if faults_after_change > 0:
             changes_with_faults += 1
@@ -1095,27 +1115,37 @@ def get_executive_summary(db: Session, time_range: str = "30d") -> Dict[str, Any
     device_correlation_list.sort(key=lambda x: x["fault_rate"], reverse=True)
     risky_devices = device_correlation_list[:5]
 
-    # 上周期对比（趋势）
-    prev_changes = db.query(BackupRecord).filter(
+    # 上周期对比（趋势）——一次查询取回变更列表，count 与 all 不再重复查询
+    _prev_changes = db.query(BackupRecord).filter(
         BackupRecord.has_change == True,
         BackupRecord.backup_time >= prev_range_start,
         BackupRecord.backup_time < range_start
-    ).count()
+    ).all()
+    prev_changes = len(_prev_changes)
 
     prev_changes_with_faults = 0
-    for change in db.query(BackupRecord).filter(
-        BackupRecord.has_change == True,
-        BackupRecord.backup_time >= prev_range_start,
-        BackupRecord.backup_time < range_start
-    ).all():
-        window_end = change.backup_time + correlation_window
-        faults = db.query(FaultRecord).filter(
-            FaultRecord.device_id == change.device_id,
-            FaultRecord.created_at >= change.backup_time,
-            FaultRecord.created_at <= window_end
-        ).count()
-        if faults > 0:
-            prev_changes_with_faults += 1
+    if _prev_changes:
+        _prev_min = min(c.backup_time for c in _prev_changes)
+        _prev_max = max(c.backup_time for c in _prev_changes)
+        _prev_rows = db.query(FaultRecord.device_id, FaultRecord.created_at).filter(
+            FaultRecord.device_id.in_([c.device_id for c in _prev_changes]),
+            FaultRecord.created_at >= _prev_min,
+            FaultRecord.created_at <= _prev_max + correlation_window,
+        ).all()
+        _prev_tmp: dict = defaultdict(list)
+        for _fid, _fcreated in _prev_rows:
+            if _fcreated:
+                _prev_tmp[_fid].append(_fcreated)
+        _prev_fault_ts = {_k: sorted(_v) for _k, _v in _prev_tmp.items()}
+        for change in _prev_changes:
+            window_end = change.backup_time + correlation_window
+            _ts = _prev_fault_ts.get(change.device_id)
+            faults = (
+                bisect.bisect_right(_ts, window_end) - bisect.bisect_left(_ts, change.backup_time)
+                if _ts else 0
+            )
+            if faults > 0:
+                prev_changes_with_faults += 1
 
     prev_change_success_rate = (1 - prev_changes_with_faults / prev_changes) * 100 if prev_changes > 0 else 100
     change_trend = change_success_rate - prev_change_success_rate
