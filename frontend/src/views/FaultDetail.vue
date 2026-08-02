@@ -1430,6 +1430,14 @@ const saveMaintEdit = async () => {
     ElMessage.error(t('maintUpdateFailed') + ': 维修单ID不存在')
     return
   }
+  const invalidMovement = [
+    ...maintEditForm.value.spare_parts.filter(part => !part.is_from_scan && part.part_id && (!part.serial_number || part.quantity !== 1)),
+    ...maintEditForm.value.return_parts.filter(part => part.scrap_in && part.part_id && (!part.serial_number || part.quantity !== 1))
+  ]
+  if (invalidMovement.length > 0) {
+    ElMessage.warning('库存实例必须提供序列号且每次只能操作 1 件')
+    return
+  }
   savingMaint.value = true
   try {
     // 合并备件和返回件
@@ -1459,7 +1467,6 @@ const saveMaintEdit = async () => {
             quantity: part.quantity || 1,
             serial_number: part.serial_number,
             reason: `维修出库 - ${maintenanceInfo.value.maint_no}`,
-            operator: 'Web',
             reference: maintenanceInfo.value.maint_no,
             target_device_id: fault.value.device_id
           })
@@ -1481,7 +1488,6 @@ const saveMaintEdit = async () => {
             quantity: part.quantity,
             serial_number: part.serial_number,
             reason: '返回件入报废库',
-            operator: 'Web',
             reference: maintenanceInfo.value.maint_no,
             source_device_id: fault.value.device_id
           })

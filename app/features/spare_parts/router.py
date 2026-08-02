@@ -3,13 +3,16 @@
 
 提供备件的 CRUD 和统计功能。
 """
-from typing import Optional
+from decimal import Decimal
+from typing import Literal, Optional
 from datetime import datetime
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Path, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, condecimal
 
+from app.features.auth.identity import Principal, get_current_principal
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from .spare_part_service import (
     list_parts as svc_list_parts,
     get_part as svc_get_part,
@@ -21,29 +24,37 @@ from .spare_part_service import (
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
 router = APIRouter(prefix="/api/spare-parts", tags=["备件管理"])
+require_spare_read = require_permission("spare_part:read")
+require_spare_write = require_permission("spare_part:write")
+require_spare_delete = require_permission("spare_part:delete")
+Money = condecimal(ge=0, max_digits=10, decimal_places=2)
 
 
 class SparePartCreate(BaseModel):
-    name: str
-    part_number: str  # 型号（唯一）
-    category: Optional[str] = None  # 模块/电源/线缆/其他
-    manufacturer: Optional[str] = None
-    description: Optional[str] = None
-    quantity_in_stock: int = 0
-    min_quantity: int = 0
-    unit_price: float = 0
-    location: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=200)
+    part_number: str = Field(min_length=1, max_length=100)
+    category: Optional[str] = Field(default=None, max_length=100)
+    manufacturer: Optional[str] = Field(default=None, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=100_000)
+    quantity_in_stock: int = Field(default=0, ge=0, le=1_000_000)
+    min_quantity: int = Field(default=0, ge=0, le=1_000_000)
+    unit_price: Money = Decimal("0")
+    location: Optional[str] = Field(default=None, max_length=200)
 
 
 class SparePartUpdate(BaseModel):
-    name: Optional[str] = None
-    category: Optional[str] = None
-    manufacturer: Optional[str] = None
-    description: Optional[str] = None
-    min_quantity: Optional[int] = None
-    unit_price: Optional[float] = None
-    location: Optional[str] = None
-    status: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=200)
+    category: Optional[str] = Field(default=None, max_length=100)
+    manufacturer: Optional[str] = Field(default=None, max_length=200)
+    description: Optional[str] = Field(default=None, max_length=100_000)
+    min_quantity: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+    unit_price: Optional[Money] = None
+    location: Optional[str] = Field(default=None, max_length=200)
+    status: Optional[Literal["active", "inactive", "depleted"]] = None
 
 
 class SparePartStats(BaseModel):
@@ -58,18 +69,23 @@ class SparePartStats(BaseModel):
 async def api_list_parts(
     skip: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    category: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
+    category: Optional[str] = Query(None, min_length=1, max_length=100),
+    status: Optional[Literal["active", "inactive", "depleted"]] = Query(None),
     low_stock: bool = Query(False, description="只显示库存不足"),
-    search: Optional[str] = Query(None, description="搜索名称/型号"),
+    search: Optional[str] = Query(None, min_length=1, max_length=200, description="搜索名称/型号"),
     db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
 ):
     """备件列表"""
     return svc_list_parts(db, skip=skip, limit=limit, category=category, status=status, low_stock=low_stock, search=search)
 
 
 @router.post("/")
-async def api_create_part(part: SparePartCreate, db: Session = Depends(get_db)):
+async def api_create_part(
+    part: SparePartCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_write),
+):
     """新增备件"""
     try:
         result = svc_create_part(db, part.model_dump())
@@ -79,7 +95,11 @@ async def api_create_part(part: SparePartCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/by-serial/{serial_number}")
-async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_db)):
+async def api_get_part_by_serial(
+    serial_number: str = Path(min_length=1, max_length=100),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
+):
     """通过序列号查找备件实例（扫码枪接口，返回完整历史信息）"""
     from app.shared.models import SparePartInstance, SparePart, SparePartMovement
 
@@ -127,9 +147,10 @@ async def api_get_part_by_serial(serial_number: str, db: Session = Depends(get_d
 
 @router.get("/search-in-stock")
 async def api_search_in_stock_instances(
-    keyword: str = Query(None, description="搜索关键词（序列号/型号/名称）"),
+    keyword: Optional[str] = Query(None, min_length=1, max_length=200, description="搜索关键词（序列号/型号/名称）"),
     limit: int = Query(20, ge=1, le=50),
     db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
 ):
     """搜索库存中的备件实例（维修更换备件专用接口，只返回 in_stock 状态）"""
     from app.shared.models import SparePartInstance, SparePart
@@ -166,7 +187,11 @@ async def api_search_in_stock_instances(
 
 
 @router.get("/{part_id}")
-async def api_get_part(part_id: int, db: Session = Depends(get_db)):
+async def api_get_part(
+    part_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
+):
     """备件详情"""
     try:
         return svc_get_part(db, part_id)
@@ -177,8 +202,11 @@ async def api_get_part(part_id: int, db: Session = Depends(get_db)):
 @router.get("/{part_id}/instances")
 async def api_get_part_instances(
     part_id: int,
-    status: Optional[str] = None,
-    db: Session = Depends(get_db)
+    status: Optional[Literal["in_stock", "out", "inuse", "pending_scrap", "scrapped"]] = Query(None),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
 ):
     """获取备件的所有实例列表（每个个体的SN号、PO号等）"""
     from app.shared.models import SparePartInstance, SparePart
@@ -193,16 +221,27 @@ async def api_get_part_instances(
     if status:
         query = query.filter(SparePartInstance.status == status)
 
-    instances = query.order_by(SparePartInstance.created_at.desc()).all()
+    total_instances = query.count()
+    instances = query.order_by(
+        SparePartInstance.created_at.desc()
+    ).offset(skip).limit(limit).all()
 
     return {
         "part_id": part_id,
         "part_name": part.name,
         "part_number": part.part_number,
         "unit_price": float(part.unit_price) if part.unit_price else 0,
-        "total_instances": len(instances),
-        "in_stock_count": sum(1 for i in instances if i.status == "in_stock"),
-        "out_count": sum(1 for i in instances if i.status == "out"),
+        "total_instances": total_instances,
+        "in_stock_count": db.query(SparePartInstance).filter(
+            SparePartInstance.part_id == part_id,
+            SparePartInstance.status == "in_stock",
+        ).count(),
+        "out_count": db.query(SparePartInstance).filter(
+            SparePartInstance.part_id == part_id,
+            SparePartInstance.status == "out",
+        ).count(),
+        "skip": skip,
+        "limit": limit,
         "instances": [
             {
                 "id": inst.id,
@@ -223,27 +262,33 @@ async def api_get_part_instances(
 
 class ManualStockIn(BaseModel):
     """手动入库"""
-    serial_number: str
-    po_number: Optional[str] = None
-    unit_price: Optional[float] = None
-    location: Optional[str] = None
-    notes: Optional[str] = None
-    reason: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    serial_number: str = Field(min_length=1, max_length=100)
+    po_number: Optional[str] = Field(default=None, max_length=100)
+    unit_price: Optional[Money] = None
+    location: Optional[str] = Field(default=None, max_length=200)
+    notes: Optional[str] = Field(default=None, max_length=500)
+    reason: Optional[str] = Field(default=None, max_length=500)
 
 
 class ManualStockOut(BaseModel):
     """手动出库"""
-    serial_number: str
-    reason: str
-    destination: Optional[str] = None
-    notes: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    serial_number: str = Field(min_length=1, max_length=100)
+    reason: str = Field(min_length=1, max_length=500)
+    destination: Optional[str] = Field(default=None, max_length=200)
+    notes: Optional[str] = Field(default=None, max_length=500)
 
 
 @router.post("/{part_id}/manual-in")
 async def api_manual_stock_in(
     part_id: int,
     data: ManualStockIn,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """手动入库（创建备件实例）"""
     from app.shared.models import SparePart, SparePartInstance, SparePartMovement
@@ -258,8 +303,10 @@ async def api_manual_stock_in(
     ).first()
 
     if existing:
+        if existing.part_id != part_id:
+            raise HTTPException(status_code=422, detail="序列号不属于指定备件")
         # 如果已存在但状态不是in_stock，更新状态
-        if existing.status != "in_stock":
+        if existing.status == "out":
             existing.status = "in_stock"
             existing.in_stock_at = datetime.utcnow()
             existing.out_at = None
@@ -267,8 +314,10 @@ async def api_manual_stock_in(
             existing.unit_price = data.unit_price or existing.unit_price
             existing.location = data.location or existing.location
             existing.notes = data.notes or existing.notes
-        else:
+        elif existing.status == "in_stock":
             raise HTTPException(status_code=400, detail="该序列号已在库中")
+        else:
+            raise HTTPException(status_code=409, detail="该序列号当前状态不能入库")
     else:
         # 创建新实例
         instance = SparePartInstance(
@@ -298,8 +347,9 @@ async def api_manual_stock_in(
         part_id=part_id,
         movement_type="in",
         quantity=1,
+        serial_number=data.serial_number,
         reason=data.reason or "手动入库",
-        operator="",
+        operator=principal.username,
         reference=data.po_number or "",
         created_at=datetime.utcnow()
     )
@@ -318,7 +368,9 @@ async def api_manual_stock_in(
 async def api_manual_stock_out(
     part_id: int,
     data: ManualStockOut,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """手动出库（通过序列号定位实例）"""
     from app.shared.models import SparePart, SparePartInstance, SparePartMovement
@@ -327,14 +379,21 @@ async def api_manual_stock_out(
     if not part:
         raise HTTPException(status_code=404, detail="备件不存在")
 
-    # 通过序列号查找实例
+    # 通过序列号查找实例并锁定，防止并发重复出库
     instance = db.query(SparePartInstance).filter(
         SparePartInstance.serial_number == data.serial_number,
-        SparePartInstance.status == "in_stock"
-    ).first()
+        SparePartInstance.part_id == part_id,
+    ).with_for_update().first()
 
     if not instance:
-        raise HTTPException(status_code=404, detail="未找到该序列号的在库实例")
+        serial_exists = db.query(SparePartInstance.id).filter(
+            SparePartInstance.serial_number == data.serial_number
+        ).first()
+        if serial_exists:
+            raise HTTPException(status_code=422, detail="序列号不属于指定备件")
+        raise HTTPException(status_code=404, detail="未找到该序列号实例")
+    if instance.status != "in_stock":
+        raise HTTPException(status_code=409, detail="该序列号当前状态不能出库")
 
     # 更新实例状态
     instance.status = "out"
@@ -365,8 +424,9 @@ async def api_manual_stock_out(
         part_id=part_id,
         movement_type="out",
         quantity=1,
+        serial_number=data.serial_number,
         reason=data.reason,
-        operator="",
+        operator=principal.username,
         reference=data.destination or "",
         created_at=datetime.utcnow()
     )
@@ -382,7 +442,12 @@ async def api_manual_stock_out(
 
 
 @router.put("/{part_id}")
-async def api_update_part(part_id: int, part: SparePartUpdate, db: Session = Depends(get_db)):
+async def api_update_part(
+    part_id: int,
+    part: SparePartUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_write),
+):
     """更新备件"""
     try:
         result = svc_update_part(db, part_id, part.model_dump(exclude_unset=True))
@@ -392,7 +457,11 @@ async def api_update_part(part_id: int, part: SparePartUpdate, db: Session = Dep
 
 
 @router.delete("/{part_id}")
-async def api_delete_part(part_id: int, db: Session = Depends(get_db)):
+async def api_delete_part(
+    part_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_delete),
+):
     """删除备件"""
     try:
         return svc_delete_part(db, part_id)
@@ -401,6 +470,9 @@ async def api_delete_part(part_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/stats/summary")
-async def api_get_stats(db: Session = Depends(get_db)):
+async def api_get_stats(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_spare_read),
+):
     """备件统计"""
     return svc_get_stats(db)

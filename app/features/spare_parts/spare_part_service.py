@@ -91,6 +91,9 @@ def list_parts(
                 "unit_price": float(p.unit_price),
                 "location": p.location,
                 "status": p.status,
+                "has_instances": db.query(SparePartInstance.id).filter(
+                    SparePartInstance.part_id == p.id
+                ).first() is not None,
                 # 计算总价值（从库存实例汇总单价）
                 "total_value": float(
                     db.query(func.sum(SparePartInstance.unit_price))
@@ -322,6 +325,50 @@ def create_movement(
     if quantity <= 0:
         raise ValueError("数量必须大于 0")
 
+    valid_types = {"in", "out", "scrap_in", "scrap_out"}
+    if movement_type not in valid_types:
+        raise ValueError("movement_type 必须为 'in', 'out', 'scrap_in' 或 'scrap_out'")
+
+    instance = None
+    if serial_number:
+        if quantity != 1:
+            raise ValueError("带序列号的出入库数量必须为 1")
+        instance = db.query(SparePartInstance).filter(
+            SparePartInstance.serial_number == serial_number,
+            SparePartInstance.part_id == part_id,
+        ).with_for_update().first()
+        if not instance:
+            serial_exists = db.query(SparePartInstance.id).filter(
+                SparePartInstance.serial_number == serial_number
+            ).first()
+            if serial_exists:
+                raise ValueError("序列号不属于指定备件")
+            raise ValueError("序列号不存在")
+    elif movement_type in {"scrap_in", "scrap_out"}:
+        raise ValueError("报废出入库必须提供序列号")
+    elif movement_type in {"in", "out"}:
+        has_instances = db.query(SparePartInstance.id).filter(
+            SparePartInstance.part_id == part_id
+        ).first()
+        if has_instances:
+            raise ValueError("该备件按序列号管理，出入库必须提供序列号")
+
+    if target_device_id and not serial_number:
+        raise ValueError("安装到设备时必须提供序列号")
+
+    if instance:
+        required_states = {
+            "out": "in_stock",
+            "in": "out",
+            "scrap_in": "inuse",
+            "scrap_out": "pending_scrap",
+        }
+        required_state = required_states[movement_type]
+        if instance.status != required_state:
+            raise ValueError(
+                f"序列号当前状态不允许 {movement_type} 操作"
+            )
+
     if movement_type == "out":
         updated = db.query(SparePart).filter(
             SparePart.id == part_id,
@@ -337,47 +384,35 @@ def create_movement(
             )
         db.expire(part, ["quantity_in_stock"])
 
-        # 如果指定了目标设备，更新备件实例状态为在设备上使用
-        if serial_number and target_device_id:
-            instance = db.query(SparePartInstance).filter(
-                SparePartInstance.serial_number == serial_number
-            ).first()
-            if instance:
+        if instance:
+            if target_device_id:
                 instance.status = "inuse"
                 instance.installed_device_id = target_device_id
                 instance.installed_at = datetime.utcnow()
                 instance.installed_by = operator
+            else:
+                instance.status = "out"
+            instance.out_at = datetime.utcnow()
 
-    elif movement_type == "in" or movement_type == "scrap_in":
-        # 返回件入库：验证状态必须为 inuse
-        if movement_type == "scrap_in" and serial_number:
-            instance = db.query(SparePartInstance).filter(
-                SparePartInstance.serial_number == serial_number
-            ).first()
-            if instance:
-                # 验证状态必须是 inuse（在设备上使用）
-                if instance.status != "inuse":
-                    raise ValueError(
-                        f"备件状态为 '{instance.status}'，只有 'inuse'(在设备上使用) 状态的备件才能作为返回件入库"
-                    )
-                instance.status = "pending_scrap"  # 待报废状态
-                if source_device_id:
-                    instance.removed_from_device_id = source_device_id
-                instance.removed_at = datetime.utcnow()
-                instance.installed_device_id = None  # 清除安装设备
-
+    elif movement_type == "in":
+        if instance:
+            instance.status = "in_stock"
+            instance.in_stock_at = datetime.utcnow()
+            instance.out_at = None
+            instance.installed_device_id = None
+            instance.installed_at = None
+            instance.installed_by = None
         part.quantity_in_stock += quantity
 
+    elif movement_type == "scrap_in":
+        instance.status = "pending_scrap"
+        if source_device_id:
+            instance.removed_from_device_id = source_device_id
+        instance.removed_at = datetime.utcnow()
+        instance.installed_device_id = None
+
     elif movement_type == "scrap_out":
-        # 报废出库：验证状态为待报废，更新为已报废
-        if serial_number:
-            instance = db.query(SparePartInstance).filter(
-                SparePartInstance.serial_number == serial_number
-            ).first()
-            if instance and instance.status == "pending_scrap":
-                instance.status = "scrapped"
-    else:
-        raise ValueError("movement_type 必须为 'in', 'out', 'scrap_in' 或 'scrap_out'")
+        instance.status = "scrapped"
 
     # 更新备件状态
     if part.quantity_in_stock == 0:

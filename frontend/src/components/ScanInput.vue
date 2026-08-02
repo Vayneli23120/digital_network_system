@@ -130,7 +130,7 @@
 import { ref, computed, watch, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Aim, Plus, Minus } from '@element-plus/icons-vue'
-import { getPartBySerialNumber, getPartList, createPart, createMovement } from '@/api'
+import { getPartBySerialNumber, getPartList, createPart, createMovement, manualStockIn } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -271,8 +271,8 @@ const quickOut = async () => {
       part_id: foundPart.value.id,
       movement_type: 'out',
       quantity: 1,
-      reason: t('scanQuickOutReason'),
-      operator: t('scanScannerOperator')
+      serial_number: foundPart.value.serial_number,
+      reason: t('scanQuickOutReason')
     })
     ElMessage.success(t('scanOutSuccess', { name: foundPart.value.name }))
     emit('added', { ...foundPart.value, action: 'out' })
@@ -291,8 +291,8 @@ const quickIn = async () => {
       part_id: foundPart.value.id,
       movement_type: 'in',
       quantity: 1,
-      reason: t('scanQuickInReason'),
-      operator: t('scanScannerOperator')
+      serial_number: foundPart.value.serial_number,
+      reason: t('scanQuickInReason')
     })
     ElMessage.success(t('scanInSuccess', { name: foundPart.value.name }))
     emit('added', { ...foundPart.value, action: 'in' })
@@ -339,15 +339,23 @@ const submitAddPart = async () => {
 
   adding.value = true
   try {
-    const result = await createPart(addForm.value)
+    const result = await createPart({
+      name: addForm.value.name,
+      part_number: addForm.value.part_number,
+      category: addForm.value.category,
+      quantity_in_stock: 0,
+      min_quantity: 0,
+      unit_price: addForm.value.unit_price,
+      location: addForm.value.location
+    })
 
     if (props.mode === 'in') {
-      await createMovement({
-        part_id: result.id,
-        movement_type: 'in',
-        quantity: addForm.value.quantity_in_stock,
-        reason: t('scanNewPartCreatedIn'),
-        operator: t('scanScannerOperator')
+      await manualStockIn(result.id, {
+        serial_number: addForm.value.serial_number,
+        po_number: addForm.value.po_number,
+        unit_price: addForm.value.unit_price,
+        location: addForm.value.location,
+        reason: t('scanNewPartCreatedIn')
       })
     }
 

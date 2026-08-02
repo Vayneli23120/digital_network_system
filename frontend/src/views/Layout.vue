@@ -187,9 +187,9 @@ const sidebarData = computed(() => {
         key: 'spare-parts',
         label: t('groupSpare'),
         items: [
-          { path: '/spare-parts', text: t('menuSpareParts'), icon: Box, permission: 'nav_spare:spare_parts' },
-          { path: '/movements', text: t('menuMovements'), icon: Sort, permission: 'nav_spare:movements' },
-          { path: '/scrap-inventory', text: t('menuScrapInventory'), icon: Delete, permission: 'nav_spare:scrap_inventory' },
+          { path: '/spare-parts', text: t('menuSpareParts'), icon: Box, permission: 'spare_part:read' },
+          { path: '/movements', text: t('menuMovements'), icon: Sort, permission: 'spare_movement:read' },
+          { path: '/scrap-inventory', text: t('menuScrapInventory'), icon: Delete, permission: 'spare_movement:read' },
         ]
       },
     ],

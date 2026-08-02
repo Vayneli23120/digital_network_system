@@ -877,7 +877,8 @@ const addPartToComplete = () => {
       name: part.name,
       unit_price: part.unit_price || 0,
       quantity: 1,
-      max_qty: part.quantity_in_stock
+      max_qty: part.quantity_in_stock,
+      has_instances: part.has_instances === true
     })
   }
 
@@ -964,6 +965,15 @@ const showCompleteDialog = async (row) => {
 
 const completeTask = async () => {
   try {
+    const invalidMovement = [
+      ...completeForm.value.parts.filter(part => part.has_instances && (!part.serial_number || part.quantity !== 1)),
+      ...completeForm.value.return_parts.filter(part => part.scrap_in && (!part.serial_number || part.quantity !== 1))
+    ]
+    if (invalidMovement.length > 0) {
+      ElMessage.warning('库存实例必须提供序列号且每次只能操作 1 件；请先通过备件管理完成扫码出入库')
+      return
+    }
+
     // 构建提交数据 - 合并备件和返回件
     const combinedParts = [
       ...completeForm.value.parts.map(p => ({ ...p, is_return: false })),
@@ -984,8 +994,8 @@ const completeTask = async () => {
         part_id: part.part_id,
         movement_type: 'out',
         quantity: part.quantity,
+        serial_number: part.serial_number,
         reason: `${t('pmTitle')} - ${currentTask.value.task_no}`,
-        operator: 'Web',
         reference: currentTask.value.device_name || t('pmTitle')
       })
     }
@@ -997,8 +1007,8 @@ const completeTask = async () => {
           part_id: part.part_id,
           movement_type: 'scrap_in',
           quantity: part.quantity,
+          serial_number: part.serial_number,
           reason: `${t('pmReturnPartsSection')} - ${t('scrapScrap')}`,
-          operator: 'Web',
           reference: currentTask.value.device_name || t('pmTitle')
         })
       }

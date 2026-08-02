@@ -474,7 +474,7 @@
                     <el-table-column prop="name" :label="t('maintColName')" min-width="100" />
                     <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
                       <template #default="{ row }">
-                        <el-input-number v-model="row.quantity" :min="1" size="small" @change="updateEditPartsCost" />
+                        <el-input-number v-model="row.quantity" :min="1" :max="row.serial_number ? 1 : 100000" size="small" @change="updateEditPartsCost" />
                       </template>
                     </el-table-column>
                     <el-table-column prop="unit_price" :label="t('maintColUnitPrice')" width="70">
@@ -596,7 +596,7 @@
                     <el-table-column prop="name" :label="t('maintColName')" min-width="100" />
                     <el-table-column prop="quantity" :label="t('maintColQuantity')" width="60">
                       <template #default="{ row, $index }">
-                        <el-input-number v-model="row.quantity" :min="1" size="small" />
+                        <el-input-number v-model="row.quantity" :min="1" :max="row.serial_number ? 1 : 100000" size="small" />
                       </template>
                     </el-table-column>
                     <el-table-column :label="t('maintReturnScrapLabel')" width="90">
@@ -903,6 +903,14 @@ const openEditDialog = () => {
 
 const updateMaintenanceRecord = async () => {
   if (!editForm.value.description) { ElMessage.warning(t('maintEnterDescription')); return }
+  const invalidMovement = [
+    ...editForm.value.spare_parts.filter(part => !part.is_from_scan && part.part_id && (!part.serial_number || part.quantity !== 1)),
+    ...editForm.value.return_parts.filter(part => !part.is_from_scan && part.scrap_in && part.part_id && (!part.serial_number || part.quantity !== 1))
+  ]
+  if (invalidMovement.length > 0) {
+    ElMessage.warning('库存实例必须提供序列号且每次只能操作 1 件')
+    return
+  }
   try {
     const combinedParts = [...editForm.value.spare_parts.map(p => ({ ...p, is_return: false })), ...editForm.value.return_parts.map(p => ({ ...p, is_return: true }))]
     await updateMaintenance(maintenance.value.id, {
@@ -917,12 +925,12 @@ const updateMaintenanceRecord = async () => {
     })
     for (const part of editForm.value.spare_parts) {
       if (!part.is_from_scan && part.part_id) {
-        await createMovement({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity || 1, serial_number: part.serial_number, reason: `${t('spareReasonMaintenancePartReplace')} - ${maintenance.value.maint_no}`, operator: 'Web', reference: maintenance.value.maint_no, target_device_id: maintenance.value.device_id })
+        await createMovement({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity || 1, serial_number: part.serial_number, reason: `${t('spareReasonMaintenancePartReplace')} - ${maintenance.value.maint_no}`, reference: maintenance.value.maint_no, target_device_id: maintenance.value.device_id })
       }
     }
     for (const part of editForm.value.return_parts) {
       if (!part.is_from_scan && part.scrap_in && part.part_id) {
-        await createMovement({ part_id: part.part_id, movement_type: 'scrap_in', quantity: part.quantity, serial_number: part.serial_number, reason: t('spareReasonReturnPartScrap'), operator: 'Web', reference: maintenance.value.maint_no, source_device_id: maintenance.value.device_id })
+        await createMovement({ part_id: part.part_id, movement_type: 'scrap_in', quantity: part.quantity, serial_number: part.serial_number, reason: t('spareReasonReturnPartScrap'), reference: maintenance.value.maint_no, source_device_id: maintenance.value.device_id })
       }
     }
     ElMessage.success(t('maintRecordUpdated'))

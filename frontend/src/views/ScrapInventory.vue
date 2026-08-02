@@ -533,7 +533,7 @@
 import { ref, onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh, Aim, Document, Clock, Collection, Box, Wallet, Calendar, Warning, Search, ArrowRight, Download, Upload, Edit, Delete, Plus, Minus } from '@element-plus/icons-vue'
-import { getPartList, createMovement, getMovements, getPartBySerialNumber, updateMovement, deleteMovement } from '@/api'
+import { getPartList, createMovement, getMovements, getPartBySerialNumber, updateMovement } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import ScanSession from '@/components/ScanSession.vue'
 import { useI18n } from '@/composables/useI18n'
@@ -1261,27 +1261,14 @@ const handleDeleteScrap = async (row) => {
       { type: 'warning' }
     )
 
-    // 使用存储的movement_id或重新查找
-    let movementId = instance.movement_id
-
-    if (!movementId) {
-      const scrapInResult = await getMovements({
-        movement_type: 'scrap_in',
-        keyword: instance.serial_number,
-        limit: 1
-      })
-      const movement = scrapInResult.items?.find(
-        m => m.serial_number === instance.serial_number
-      )
-      movementId = movement?.id
-    }
-
-    if (!movementId) {
-      ElMessage.warning(t('scrapSerialNotInScrap'))
-      return
-    }
-
-    await deleteMovement(movementId)
+    await createMovement({
+      part_id: row.part_id,
+      movement_type: 'scrap_out',
+      quantity: 1,
+      serial_number: instance.serial_number,
+      reason: t('scrapDeleteConfirm'),
+      reference: instance.reference || ''
+    })
 
     clearCache('scrap_in_movements')
     clearCache('scrap_out_movements')

@@ -54,6 +54,7 @@
 >
 > 步骤 5 必须排在步骤 3、4 之后：会话凭证的安全性完全依赖"会话属于谁可信"，
 > 在 `X-User` 可伪造的情况下先做会话凭证会比现状更糟。
+> 在 `X-User` 可伪造的情况下先做会话凭证会比现状更糟。
 
 ### 步骤 3 验收测试清单（✅ 2026-08-01 完成）
 
@@ -75,7 +76,7 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-  → 高风险主线已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows、users、system settings/SLO/system ops；Spare、Notifications、Jobs、Compliance 等长尾端点仍待逐域复核。
+  → 高风险主线已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows、users、system settings/SLO/system ops；Spare/Movements C1 已完成代码收口、待服务器验证，Notifications、Jobs、Compliance 与 Scan Sessions 等长尾端点仍待逐域复核。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
@@ -496,7 +497,39 @@ system settings 导航权限，新权限默认仅由 admin:all 放行；
 - [ ] 抓取上游请求确认不含 NAS Authorization/Cookie；流结束、上游失败和客户端断开后 response/client 均关闭
 - [ ] 浏览器 SystemSettings 配置与 SLO CRUD 均携带 Bearer、一次保存无半写；执行 `npm ci && npm run build`
 
-**下一切片**：继续步骤 4 长尾端点——Spare/Movements、Notifications、Jobs、Compliance 与权限读取面；
+**步骤 4E-C1 Spare Parts / Movements 代码收口（2026-08-02，本提交，待服务器验证）**：
+✅ Spare Parts 11 条端点按 `spare_part:read/write/delete` 分层，Movements 5 条端点按
+`spare_movement:read/write` 分层；新增 read 权限并同步 operator/viewer 预置角色；✅ Create/Update/Manual
+Stock/Movement 请求改为拒绝额外字段且有枚举、长度、金额、数量和查询参数边界的 Pydantic 模型；所有写入
+operator 固定取 JWT Principal，前端不再发送 `operator: Web`；✅ serial 查询与状态变更同时约束 `part_id`，
+带 serial 的操作强制 quantity=1，跨型号 serial 在库存扣减前拒绝；实例状态按
+`in_stock → out/inuse → in_stock` 与 `inuse → pending_scrap → scrapped` 流转，聚合库存按实例状态重算；
+存在实例的备件禁止无 serial 出入库，无实例的旧聚合库存仍保留按数量操作；✅ 扫码新建备件目录初始库存设为 0，
+再由 manual-in 唯一创建实例与增加库存，避免初始数量 + movement 双计数；ScanInput 快速出入库携带 serial；
+✅ Movement 历史改为不可物理删除，报废库存页面“删除”改为创建 `scrap_out` 反向业务记录，不再删除
+`pending_scrap` 实例和审计轨迹；✅ Task/Planned/Maintenance/Fault 页面在提交主记录前拦截缺 serial 或
+serialized quantity != 1 的必失败库存动作，避免已知校验错误发生在主记录提交之后；菜单使用功能 read 权限。
+
+**本地仅执行最低静态门禁（按业主要求暂停测试）**：
+- ✅ 受影响 Python 文件 `py_compile` 通过
+- ✅ `ruff check app/features/spare_parts app/features/spare_movements app/features/permissions/router.py` 通过
+- ✅ `import app.main` 通过，应用路由可装配
+- ✅ `git diff --check` 与 VS Code 受影响文件诊断通过
+- ⚠️ **未执行任何 pytest、PostgreSQL/并发测试、真实数据库写入、前端 Vite build 或浏览器操作**；以下全部由服务器端 AI 接手，不能把静态门禁当成行为验收
+
+**步骤 4E-C1 服务器端 AI 必做清单**：
+- [ ] 拉取本提交，记录 SHA/环境；运行全仓 Ruff、`test_spare_part_service.py`、`test_spare_part_service.py` 的既有基线对比及全量 pytest（仍忽略已知挂起 console 时须注明）
+- [ ] 新增 `tests/test_spare_security_step4e_c1.py`，对 Parts 11 条 + Movements 5 条路由做依赖矩阵、未认证 401、跨权限 403、admin 放行和 Principal operator 落库测试
+- [ ] PostgreSQL 分别验证 serial 属于同一/另一 `part_id`、serial 不存在、重复 out/in/scrap_in/scrap_out、quantity != 1；所有拒绝路径库存、实例和 movement 数量均不得变化
+- [ ] 验证实例状态机和聚合不变量：每次成功/失败后 `SparePart.quantity_in_stock == count(instance.status == 'in_stock')`；旧无实例聚合备件仍可按数量 in/out，有实例备件无 serial 必须拒绝
+- [ ] 并发两次对同一 serial 出库只能成功一次；并发聚合出库不得负库存；SQLite 与 PostgreSQL 的 `with_for_update` 差异必须记录
+- [ ] 验证 manual-in 新建/重新入库、manual-out、扫码快速入/出、跨型号 serial、PO/单价/安装设备/拆卸设备与审计 operator 全生命周期
+- [ ] 验证 Movement PUT 只能改 reason/reference/实例单价且 part_id+serial 绑定；DELETE 一律 409，ScrapInventory 通过 scrap_out 移除报废库存并保留 scrap_in/out 历史与实例记录
+- [ ] 浏览器验证 PartsTable、ScanInput、FaultDetail、MaintenanceDetail、PlannedMaintenance、TaskDetail、ScrapInventory 全流程并执行 `npm ci && npm run build`
+- [ ] **重点复现既存非原子流程**：任务/维修记录更新与后续多条 spare movement 仍是跨 API 多事务；在第 N 条 movement 故障时记录半提交结果。服务器 AI 应设计并实现单个服务端事务端点或明确补偿机制后再判定该项完成
+- [ ] 核对 `tests/test_spare_part_service.py` 既有 3 个分类/估值失败，确认仍为旧契约差异，禁止通过修改新安全逻辑或更新基线掩盖
+
+**下一切片**：服务器端 AI 先完成 C1 行为验收与跨 API 原子事务，再继续 Scan Sessions、Notifications、Jobs、Compliance 与权限读取面；
 完成长尾写接口后再进入步骤 5 的会话级 SSH 凭证、二次确认和独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
@@ -658,7 +691,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `dashboard/dashboard_service.py:51-78` — 按 10 种设备类型循环执行约 8 条 COUNT，单次 summary 近 80 次查询。`[已复核]`
 - [ ] **P1** `dashboard/dashboard_service.py:1057,1103` — 变更-故障关联在循环内逐条 COUNT（N+1），且同条件 count 与 all 重复查两次；`:948,962` SLO 计算逐个查设备与故障全集。`[已复核]`
 - [ ] **P1** `faults/router.py:217,222` — 列表接口每条故障各查一次 Device 和 MaintenanceRecord（limit=100 → 约 200 次额外查询）。`[已复核]`
-- [ ] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[已复核]`
+- [x] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[代码已修复，待服务器验证]`
+  → 修复（步骤 4E-C1）：所有实例查询同时约束 part_id+serial 并在库存变更前校验归属/状态；serial 操作强制 quantity=1，聚合库存与实例状态同步。未跑行为/并发测试，验收见 C1 服务器清单。
 - [ ] **P1** `planned_maintenance` 任务完成与备件出入库由浏览器分成多次请求：后端先 commit completed，前端再逐条调用 spare movement；中途失败会留下“任务已完成但库存只更新一部分”。`[已复核]`
   → 4E-B3 仅完成权限、身份与输入边界；后续应把任务完成与全部库存动作合并为一个服务端事务，不能继续由前端编排。
 - [ ] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`

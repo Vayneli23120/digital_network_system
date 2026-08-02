@@ -71,6 +71,7 @@ EXTENDED_PERMISSIONS = [
     {"name": "spare_part:read", "resource": "spare_part", "action": "read", "description": "查看备件"},
     {"name": "spare_part:write", "resource": "spare_part", "action": "write", "description": "创建/编辑备件"},
     {"name": "spare_part:delete", "resource": "spare_part", "action": "delete", "description": "删除备件"},
+    {"name": "spare_movement:read", "resource": "spare_movement", "action": "read", "description": "查看备件出入库"},
     {"name": "spare_movement:write", "resource": "spare_movement", "action": "write", "description": "备件出入库"},
 
     # 配置模板
@@ -260,7 +261,7 @@ PRESET_ROLES = [
             "config:read", "config:deploy", "config:rollback",
             "fault:read", "fault:write", "fault:analyze",
             "maintenance:read", "maintenance:write", "maintenance:transition",
-            "spare_part:read", "spare_part:write", "spare_movement:write",
+            "spare_part:read", "spare_part:write", "spare_movement:read", "spare_movement:write",
             "template:read", "template:write", "template:render",
             "workflow:read", "workflow:trigger",
             "planned_task:read", "planned_task:execute",
@@ -277,7 +278,7 @@ PRESET_ROLES = [
         "is_system": True,
         "permissions": [
             "device:read", "backup:read", "config:read",
-            "fault:read", "maintenance:read", "spare_part:read",
+            "fault:read", "maintenance:read", "spare_part:read", "spare_movement:read",
             "template:read", "workflow:read", "planned_task:read",
             "log:read", "tool_log:read", "floor_plan:read",
             # 导航：只保留与只读功能权限对应的菜单
