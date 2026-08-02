@@ -120,6 +120,12 @@ EXTENDED_PERMISSIONS = [
     # 系统管理
     {"name": "admin:all", "resource": "admin", "action": "all", "description": "超级管理员权限"},
     {"name": "alert:manage", "resource": "alert", "action": "manage", "description": "管理告警设置"},
+    {"name": "system_config:read", "resource": "system_config", "action": "read", "description": "查看系统配置"},
+    {"name": "system_config:write", "resource": "system_config", "action": "write", "description": "修改系统配置"},
+    {"name": "slo:read", "resource": "slo", "action": "read", "description": "查看 SLO 配置"},
+    {"name": "slo:write", "resource": "slo", "action": "write", "description": "修改 SLO 配置"},
+    {"name": "system_ops:read", "resource": "system_ops", "action": "read", "description": "查看系统诊断"},
+    {"name": "system_ops:write", "resource": "system_ops", "action": "write", "description": "执行系统运维操作"},
     {"name": "compliance:check", "resource": "compliance", "action": "check", "description": "合规检查"},
 
     # AI 功能权限
@@ -191,9 +197,9 @@ NAV_SPARE = [
 NAV_SYSTEM_COMMON = [
     "nav_system:notifications", "nav_system:logs", "nav_system:system_help",
 ]
-# 系统配置类菜单（需要 alert:manage / 系统设置类权限才有意义）
+# 非管理员可管理的告警设置菜单；通用系统配置只由 admin:all 默认放行。
 NAV_SYSTEM_SETTINGS = [
-    "nav_system:alert_settings", "nav_system:system_settings",
+    "nav_system:alert_settings",
 ]
 # 账号与权限治理菜单（nav_system:users / nav_system:permissions）只授予 admin，
 # admin 通过 admin:all 绕过导航过滤，因此不需要在预置角色里显式列出
@@ -682,6 +688,9 @@ async def list_resource_types(db: Session = Depends(get_db)):
         "role": "角色权限",
         "admin": "系统管理",
         "alert": "告警设置",
+        "system_config": "系统配置",
+        "slo": "SLO 配置",
+        "system_ops": "系统运维",
         "compliance": "合规检查",
         "ai": "AI功能",
     }
@@ -1199,6 +1208,9 @@ async def get_default_permissions_info(db: Session = Depends(get_db)):
         "role": "角色权限",
         "admin": "系统管理",
         "alert": "告警设置",
+        "system_config": "系统配置",
+        "slo": "SLO 配置",
+        "system_ops": "系统运维",
         "compliance": "合规检查",
         "ai": "AI功能",
         "nav_overview": "运维监控",

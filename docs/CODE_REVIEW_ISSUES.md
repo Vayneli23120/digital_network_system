@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B5A（含 users）已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 高风险主线 4A–4E-B5B 已完成（2026-08-02），长尾端点继续治理 |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,7 +75,7 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows；system settings 等仍待步骤 4E-B。
+  → 高风险主线已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows、users、system settings/SLO/system ops；Spare、Notifications、Jobs、Compliance 等长尾端点仍待逐域复核。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
@@ -88,6 +88,8 @@
   → 修复（步骤 4E-B4）：按 `workflow:read/write/delete/trigger` 分层；HTTP 触发在任何动作执行前还必须满足动作目标域权限（maintenance/planned_task/device write），缺失时整次 403 且零副作用。
 - [x] **P0** `auth/router.py` — 用户列表/详情/创建/编辑/密码重置/停用/删除与角色目录只有登录认证，任意已登录用户可管理其他账号。`[已复核]`
   → 修复（步骤 4E-B5A）：按 `user:read/write/delete` 与 `role:read` 分层；委派角色同时要求 `role:write` 且只能授予自身权限子集，禁止 admin:all、重复/不存在角色和修改管理员目标。
+- [x] **P0** `system_settings/router.py`、`dashboard/router.py::SLO` 与 `main.py` 系统运维端点仅有登录认证，任意登录用户可修改全局配置/SLO、清缓存、跑诊断或写 Grafana。`[已复核]`
+  → 修复（步骤 4E-B5B）：新增 `system_config:read/write`、`slo:read/write`、`system_ops:read/write`；配置只允许 timezone/grafana_url 原子更新，SLO 严格校验，系统运维与 Grafana 按读写分权。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -469,8 +471,33 @@ superuser/admin:all 目标；✅ 管理员密码重置、停用账号和用户�
 - [ ] 管理员重置密码、停用账号、用户自改密码后复用旧 access token 必须 401；删除带活动 Session/角色的用户不得 500
 - [ ] 浏览器 Users 列表、创建、编辑、角色分配、密码重置、停用和删除可用；执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E-B5B System Settings、SLO 与系统运维端点；
-同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
+**步骤 4E-B5B 验证结果（2026-08-02）**：✅ SystemConfig GET/PUT 使用 `system_config:read/write`，
+仅返回并允许修改 timezone/grafana_url，数据库未知 key 不再回传；时区通过 ZoneInfo 校验，Grafana URL 仅允许
+无凭据/片段的 HTTP(S)，两项在单个事务中原子更新并记录 Principal `updated_by`；✅ 前端 SystemSettings
+全部迁到统一认证 API 客户端，配置一次 PUT 保存，不再产生半写状态；菜单使用 `system_config:read`；
+✅ SLO 使用 `slo:read/write`，service key/name/目标 90–100/窗口 1–365/设备类型/文本与额外字段均严格验证；
+✅ cache/rate-limit/diagnostics/Grafana 按 `system_ops:read/write` 分层，diagnostics 使用依赖会话且异常脱敏；
+readiness 返回真实 200/503 JSONResponse，不再把 `(body, status)` 序列化为 200 数组；✅ Grafana GET 与写方法分权，
+限制路径/查询/5 MB body，拒绝非法 Content-Length，不向上游转发 NAS Authorization/Cookie，过滤 hop-by-hop 头，
+StreamingResponse 完成后关闭上游 response/client，连接失败只返回通用 502；✅ operator 预置角色不再携带失效的
+system settings 导航权限，新权限默认仅由 admin:all 放行；
+✅ `tests/test_system_settings_security_step4e_b.py` **6 passed**，与 users/permissions/alerts/auth 相邻回归
+**53 passed**，全部安全切片 **198 passed / 4 skipped**；全仓 Ruff、`app.main` 导入和编辑器诊断通过；
+✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 602 passed / 8 skipped / 10 errors**，
+相对 B5A 恰好新增 6 passed，失败/错误集合不变。⚠️ 本机缺 Vite，前端构建交 Linux 测试系统。
+
+**步骤 4E-B5B 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_system_settings_security_step4e_b.py`、users/permissions/alerts/auth 相邻及全量 pytest，失败集合不得新增
+- [ ] 用 system_config/slo/system_ops read/write 六个最小权限账号验证配置、SLO、cache、diagnostics、Grafana；跨权限 403、未认证 401
+- [ ] SystemConfig 尝试读/写未知 key、JWT/数据库/密钥字段必须拒绝或隐藏；timezone/URL 非法、null、额外字段均 422；合法两项一次提交且 updated_by=token 用户
+- [ ] SLO 非法 key、目标 <90 或 >100、窗口越界、重复/超长设备类型、额外 operator 均 422；合法 CRUD 可用
+- [ ] readiness 在数据库/Prometheus 失败时真实返回 503，响应不得含 SQL、路径、连接串或异常文本；diagnostics 同样脱敏且连接池无泄漏
+- [ ] Grafana GET 只需 system_ops:read，POST/PUT/DELETE/PATCH 需 write；超长路径/查询、>5 MB/非法 Content-Length 被拒且不上游
+- [ ] 抓取上游请求确认不含 NAS Authorization/Cookie；流结束、上游失败和客户端断开后 response/client 均关闭
+- [ ] 浏览器 SystemSettings 配置与 SLO CRUD 均携带 Bearer、一次保存无半写；执行 `npm ci && npm run build`
+
+**下一切片**：继续步骤 4 长尾端点——Spare/Movements、Notifications、Jobs、Compliance 与权限读取面；
+完成长尾写接口后再进入步骤 5 的会话级 SSH 凭证、二次确认和独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
 
@@ -609,10 +636,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ### 3.5 启动与关闭
 
-- [ ] **P1** `main.py:217-221` — `return {...}, status_code` 被序列化成数组且状态码恒 200，`/ready` 永远"健康"。`[已复核]`
+- [x] **P1** `main.py:217-221` — `return {...}, status_code` 被序列化成数组且状态码恒 200，`/ready` 永远"健康"。`[已复核]`
+  → 修复（步骤 4E-B5B）：改为显式 JSONResponse，依赖失败真实返回 503；检查异常仅写服务端日志，响应不泄露细节。
 - [ ] **P1** `main.py:434-435` — 导入期注册 SIGTERM/SIGINT，会被 uvicorn 自身 handler 覆盖，且无 `@app.on_event("shutdown")` → Trap 接收器 / APScheduler / 连接池清理实际不执行。`[已复核]`
 - [ ] **P1** `services/prometheus_connector.py:505` — `start()` 内先阻塞跑一次完整 `poll_once()`；`:507` 的轮询任务未设 `max_instances/coalesce`（清理任务设了），60s 周期可重叠，`_last_counters` 多线程读写导致速率算错。`[已复核]`
-- [ ] **P1** `main.py:262-283` — `async with AsyncClient` 内 `send(stream=True)`，返回 StreamingResponse 前 client 已关闭。`[待验证]`
+- [x] **P1** `main.py:262-283` — `async with AsyncClient` 内 `send(stream=True)`，返回 StreamingResponse 前 client 已关闭。`[已验证]`
+  → 修复（步骤 4E-B5B）：client 生命周期延长到 StreamingResponse background close；同步关闭上游 response/client，并过滤凭据与 hop-by-hop 头。
 - [ ] **P1** `main.py:76-80` — 限流中间件注册在 auth 之后，实际先于认证执行，无法按用户限流。`[已复核]`
 - [ ] **P2** `services/trap_receiver.py:243` — `stop()` 只关 socket 不 join 线程；全局 `_db_lock` 串行处理所有 Trap，风暴时丢包。`[待验证]`
 

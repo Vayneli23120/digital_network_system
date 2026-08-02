@@ -214,6 +214,31 @@ export function deleteMaintenance(id) {
   return api.delete(`/maintenance/${id}`)
 }
 
+// 系统设置与 SLO
+export function getSystemConfig() {
+  return api.get('/system/config')
+}
+
+export function updateSystemConfig(data) {
+  return api.put('/system/config', data)
+}
+
+export function getServiceSlos() {
+  return api.get('/dashboard/slo')
+}
+
+export function createServiceSlo(data) {
+  return api.post('/dashboard/slo', data)
+}
+
+export function updateServiceSlo(id, data) {
+  return api.put(`/dashboard/slo/${id}`, data)
+}
+
+export function deleteServiceSlo(id) {
+  return api.delete(`/dashboard/slo/${id}`)
+}
+
 // 维修状态流转
 export function transitionMaintenanceStatus(id, data) {
   return api.post(`/maintenance/${id}/transition`, data)

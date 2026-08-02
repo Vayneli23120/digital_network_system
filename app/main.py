@@ -12,14 +12,18 @@ Network Automation System - FastAPI 主程序
 import signal
 import sys
 import uuid
-from fastapi import FastAPI, Request
+from typing import Optional
+
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from loguru import logger
 
 from .shared.config import get_config
-from .shared.database import get_db_manager
+from .shared.database import get_db, get_db_manager
+from .shared.dependencies import require_permission
 from .shared.exceptions import register_exception_handlers
 from .shared.db_init import init_default_templates, init_default_roles
 from .routers import (
@@ -58,6 +62,8 @@ from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
 
 config = get_config()
+require_system_ops_read = require_permission("system_ops:read")
+require_system_ops_write = require_permission("system_ops:write")
 
 app = FastAPI(
     title=config.app.name,
@@ -186,8 +192,9 @@ async def readiness_check():
         with db.engine.connect() as conn:
             conn.execute(text("SELECT 1"))
         checks["database"] = {"status": "ok"}
-    except Exception as e:
-        checks["database"] = {"status": "error", "detail": str(e)}
+    except Exception:
+        logger.exception("Readiness database check failed")
+        checks["database"] = {"status": "error"}
         overall_ok = False
 
     # Redis 检查（可选，不阻塞就绪状态）
@@ -195,8 +202,9 @@ async def readiness_check():
         from app.shared.redis_cache import get_redis_cache
         rc = get_redis_cache()
         checks["redis"] = {"status": "ok" if rc.available else "not_connected"}
-    except Exception as e:
-        checks["redis"] = {"status": "error", "detail": str(e)}
+    except Exception:
+        logger.exception("Readiness Redis check failed")
+        checks["redis"] = {"status": "error"}
 
     # Prometheus 连接器检查
     try:
@@ -207,20 +215,27 @@ async def readiness_check():
         }
         if not pc._running:
             overall_ok = False
-    except Exception as e:
-        checks["prometheus_connector"] = {"status": "error", "detail": str(e)}
+    except Exception:
+        logger.exception("Readiness Prometheus connector check failed")
+        checks["prometheus_connector"] = {"status": "error"}
         overall_ok = False
 
     status_code = 200 if overall_ok else 503
-    return {
-        "status": "ready" if overall_ok else "degraded",
-        "checks": checks,
-        "version": config.app.version,
-    }, status_code
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": "ready" if overall_ok else "degraded",
+            "checks": checks,
+            "version": config.app.version,
+        },
+    )
 
 
 @app.get("/api/rate-limit/status", tags=["health"])
-async def rate_limit_status(request: Request):
+async def rate_limit_status(
+    request: Request,
+    _: None = Depends(require_system_ops_read),
+):
     """查看当前请求的限流状态"""
     from .shared.middleware.rate_limiter import get_rate_limiter
 
@@ -229,7 +244,7 @@ async def rate_limit_status(request: Request):
 
 
 @app.get("/api/cache/stats", tags=["health"])
-async def cache_stats():
+async def cache_stats(_: None = Depends(require_system_ops_read)):
     """查看缓存统计（内存 + Redis）"""
     from .shared.cache import cache
     from .shared.redis_cache import get_redis_cache
@@ -242,7 +257,10 @@ async def cache_stats():
 
 
 @app.post("/api/cache/clear", tags=["health"])
-async def cache_clear(prefix: str = None):
+async def cache_clear(
+    prefix: Optional[str] = Query(default=None, max_length=200),
+    _: None = Depends(require_system_ops_write),
+):
     """清除缓存"""
     from .shared.cache import cache
 
@@ -251,11 +269,13 @@ async def cache_clear(prefix: str = None):
 
 
 @app.get("/api/system/diagnostics", tags=["health"])
-async def system_diagnostics():
+async def system_diagnostics(
+    db=Depends(get_db),
+    _: None = Depends(require_system_ops_read),
+):
     """系统诊断 — 各后台服务运行状态"""
     from datetime import datetime, timezone
-    from app.shared.database import get_db
-    from app.shared.models import DeviceInterface, InterfaceTrafficSample
+    from app.shared.models import DeviceInterface
 
     diag = {"services": {}, "database": {}}
     now = datetime.now(timezone.utc)
@@ -267,26 +287,23 @@ async def system_diagnostics():
         diag["services"]["prometheus_connector"] = {
             "running": pc._running,
         }
-    except Exception as e:
-        diag["services"]["prometheus_connector"] = {"error": str(e)}
+    except Exception:
+        logger.exception("System diagnostics Prometheus check failed")
+        diag["services"]["prometheus_connector"] = {"status": "unavailable"}
 
     # 数据库状态（最近一次采样时间）
-    db = next(get_db())
-    try:
-        latest_check = db.query(DeviceInterface.last_check)\
-            .filter(DeviceInterface.monitored == True)\
-            .order_by(DeviceInterface.last_check.desc()).first()
-        if latest_check and latest_check[0]:
-            age = int((now - latest_check[0].replace(tzinfo=timezone.utc)).total_seconds())
-            diag["database"]["last_poll_seconds_ago"] = age
-            diag["database"]["last_poll_at"] = latest_check[0].isoformat()
-        else:
-            diag["database"]["last_poll"] = None
+    latest_check = db.query(DeviceInterface.last_check)\
+        .filter(DeviceInterface.monitored == True)\
+        .order_by(DeviceInterface.last_check.desc()).first()
+    if latest_check and latest_check[0]:
+        age = int((now - latest_check[0].replace(tzinfo=timezone.utc)).total_seconds())
+        diag["database"]["last_poll_seconds_ago"] = age
+        diag["database"]["last_poll_at"] = latest_check[0].isoformat()
+    else:
+        diag["database"]["last_poll"] = None
 
-        total_ifaces = db.query(DeviceInterface).filter(DeviceInterface.monitored == True).count()
-        diag["database"]["monitored_interfaces"] = total_ifaces
-    finally:
-        db.close()
+    total_ifaces = db.query(DeviceInterface).filter(DeviceInterface.monitored == True).count()
+    diag["database"]["monitored_interfaces"] = total_ifaces
 
     return diag
 
@@ -294,30 +311,85 @@ async def system_diagnostics():
 # ============ Grafana 反向代理 ============
 
 
-@app.api_route("/grafana/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
-async def grafana_proxy(request: Request, path: str):
-    """代理 Grafana 请求，避免 HTTPS 页面嵌入 HTTP iframe 的混合内容拦截"""
+async def _proxy_grafana(request: Request, path: str):
+    """Proxy Grafana without forwarding NAS credentials."""
+    from starlette.background import BackgroundTask
     from starlette.responses import StreamingResponse
     from httpx import AsyncClient, URL as HttpxURL
 
-    # 去掉 Accept-Encoding，让 Grafana 返回未压缩内容，避免代理解压/编码不一致
-    async with AsyncClient(base_url="http://localhost:3001") as client:
+    if len(path) > 2048 or len(request.url.query) > 4096:
+        raise HTTPException(status_code=414, detail="Grafana 请求地址过长")
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            declared_length = int(content_length)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail="无效的 Content-Length") from exc
+        if declared_length < 0:
+            raise HTTPException(status_code=400, detail="无效的 Content-Length")
+        if declared_length > 5 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Grafana 请求体过大")
+    content = await request.body()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Grafana 请求体过大")
+
+    client = AsyncClient(base_url="http://localhost:3001", timeout=30)
+    try:
         url = HttpxURL(path=f"/grafana/{path}", query=request.url.query.encode())
         headers = {k: v for k, v in request.headers.items()
-                   if k.lower() not in ("host", "referer", "accept-encoding")}
+                   if k.lower() not in (
+                       "host", "referer", "accept-encoding", "authorization",
+                       "cookie", "content-length",
+                   )}
         req = client.build_request(
             request.method,
             url,
             headers=headers,
-            content=await request.body(),
+            content=content,
         )
         resp = await client.send(req, stream=True)
+    except Exception as exc:
+        await client.aclose()
+        logger.exception("Grafana proxy request failed")
+        raise HTTPException(status_code=502, detail="Grafana 服务不可用") from exc
 
-        return StreamingResponse(
-            resp.aiter_bytes(),
-            status_code=resp.status_code,
-            headers=dict(resp.headers),
-        )
+    async def close_proxy_resources():
+        await resp.aclose()
+        await client.aclose()
+
+    hop_by_hop = {
+        "connection", "keep-alive", "proxy-authenticate",
+        "proxy-authorization", "te", "trailers", "transfer-encoding", "upgrade",
+    }
+    response_headers = {
+        key: value
+        for key, value in resp.headers.items()
+        if key.lower() not in hop_by_hop
+    }
+    return StreamingResponse(
+        resp.aiter_bytes(),
+        status_code=resp.status_code,
+        headers=response_headers,
+        background=BackgroundTask(close_proxy_resources),
+    )
+
+
+@app.get("/grafana/{path:path}")
+async def grafana_proxy_read(
+    request: Request,
+    path: str,
+    _: None = Depends(require_system_ops_read),
+):
+    return await _proxy_grafana(request, path)
+
+
+@app.api_route("/grafana/{path:path}", methods=["POST", "PUT", "DELETE", "PATCH"])
+async def grafana_proxy_write(
+    request: Request,
+    path: str,
+    _: None = Depends(require_system_ops_write),
+):
+    return await _proxy_grafana(request, path)
 
 
 # ============ SPA Fallback ============

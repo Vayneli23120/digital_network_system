@@ -120,8 +120,8 @@
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import axios from 'axios'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { createServiceSlo, deleteServiceSlo, getServiceSlos, getSystemConfig, updateServiceSlo, updateSystemConfig } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 
 const { t } = useI18n()
@@ -157,8 +157,8 @@ const timezoneOptions = [
 async function loadSettings() {
   loading.value = true
   try {
-    const res = await axios.get('/api/system/config')
-    const items = res.data.items || []
+    const res = await getSystemConfig()
+    const items = res.items || []
     for (const item of items) {
       if (item.key in form) {
         form[item.key] = item.value
@@ -174,8 +174,10 @@ async function loadSettings() {
 async function saveSettings() {
   saving.value = true
   try {
-    await axios.put('/api/system/config', { key: 'timezone', value: form.timezone })
-    await axios.put('/api/system/config', { key: 'grafana_url', value: form.grafana_url || '' })
+    await updateSystemConfig({
+      timezone: form.timezone,
+      grafana_url: form.grafana_url || ''
+    })
     ElMessage.success('设置已保存')
   } catch (e) {
     ElMessage.error('保存设置失败')
@@ -223,8 +225,8 @@ const sloForm = reactive({
 async function loadSlo() {
   sloLoading.value = true
   try {
-    const res = await axios.get('/api/dashboard/slo')
-    sloList.value = res.data.items || []
+    const res = await getServiceSlos()
+    sloList.value = res.items || []
   } catch (e) {
     ElMessage.error('加载 SLO 配置失败')
   } finally {
@@ -269,9 +271,9 @@ async function saveSlo() {
   }
   try {
     if (sloForm.id) {
-      await axios.put(`/api/dashboard/slo/${sloForm.id}`, payload)
+      await updateServiceSlo(sloForm.id, payload)
     } else {
-      await axios.post('/api/dashboard/slo', payload)
+      await createServiceSlo(payload)
     }
     ElMessage.success('已保存')
     sloDialog.value = false
@@ -285,7 +287,7 @@ async function saveSlo() {
 
 async function toggleSlo(row, val) {
   try {
-    await axios.put(`/api/dashboard/slo/${row.id}`, {
+    await updateServiceSlo(row.id, {
       service_key: row.service_key,
       service_name: row.service_name,
       slo_target: row.slo_target,
@@ -306,7 +308,7 @@ async function deleteSloRow(row) {
     return
   }
   try {
-    await axios.delete(`/api/dashboard/slo/${row.id}`)
+    await deleteServiceSlo(row.id)
     ElMessage.success('已删除')
     loadSlo()
   } catch (e) {

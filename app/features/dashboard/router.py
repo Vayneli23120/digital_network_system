@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from .dashboard_service import get_dashboard_summary as svc_get_dashboard_summary
 from .dashboard_service import get_fault_trend as svc_get_fault_trend
 from .dashboard_service import get_cost_trend as svc_get_cost_trend
@@ -13,6 +14,8 @@ from .dashboard_service import get_executive_summary as svc_get_executive_summar
 from app.shared.cache import cache, _DASHBOARD_TTL, _TREND_TTL, _cache_key
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
+require_slo_read = require_permission("slo:read")
+require_slo_write = require_permission("slo:write")
 
 
 @router.get("/summary")
@@ -239,18 +242,48 @@ async def network_overview(db: Session = Depends(get_db)):
 # ============ SLO 配置管理（无迁移，界面直接维护）============
 
 from fastapi import HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.shared.models import ServiceSlo
 
 
 class SloUpsert(BaseModel):
-    service_key: str
-    service_name: str
-    slo_target: float
-    device_types: Optional[str] = None   # 逗号分隔的设备类型；空=全局
-    window_days: int = 30
-    description: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    service_key: str = Field(
+        min_length=1,
+        max_length=50,
+        pattern=r"^[a-z][a-z0-9_-]*$",
+    )
+    service_name: str = Field(min_length=1, max_length=100)
+    slo_target: float = Field(ge=90, le=100)
+    device_types: Optional[str] = Field(default=None, max_length=200)
+    window_days: int = Field(default=30, ge=1, le=365)
+    description: Optional[str] = Field(default=None, max_length=200)
     is_active: bool = True
+
+    @field_validator("service_key", "service_name")
+    @classmethod
+    def normalize_required_text(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("字段不能为空")
+        return normalized
+
+    @field_validator("device_types")
+    @classmethod
+    def normalize_device_types(cls, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        items = [item.strip() for item in value.split(",") if item.strip()]
+        if not items or any(
+            len(item) > 50 or not item.replace("_", "").isalnum()
+            for item in items
+        ):
+            raise ValueError("设备类型格式无效")
+        normalized = ",".join(dict.fromkeys(items))
+        if len(normalized) > 200:
+            raise ValueError("设备类型超过长度限制")
+        return normalized
 
 
 def _slo_to_dict(s: ServiceSlo) -> dict:
@@ -267,22 +300,29 @@ def _slo_to_dict(s: ServiceSlo) -> dict:
 
 
 @router.get("/slo")
-async def list_slo(db: Session = Depends(get_db)):
+async def list_slo(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_slo_read),
+):
     """列出所有 SLO 配置"""
     rows = db.query(ServiceSlo).order_by(ServiceSlo.is_active.desc(), ServiceSlo.id).all()
     return {"items": [_slo_to_dict(s) for s in rows]}
 
 
 @router.post("/slo")
-async def create_slo(body: SloUpsert, db: Session = Depends(get_db)):
+async def create_slo(
+    body: SloUpsert,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_slo_write),
+):
     """新增 SLO 配置"""
     if db.query(ServiceSlo).filter(ServiceSlo.service_key == body.service_key).first():
         raise HTTPException(status_code=400, detail=f"service_key '{body.service_key}' 已存在")
     slo = ServiceSlo(
-        service_key=body.service_key.strip(),
-        service_name=body.service_name.strip(),
+        service_key=body.service_key,
+        service_name=body.service_name,
         slo_target=body.slo_target,
-        device_types=(body.device_types or "").strip() or None,
+        device_types=body.device_types,
         window_days=body.window_days,
         description=body.description,
         is_active=body.is_active,
@@ -295,7 +335,12 @@ async def create_slo(body: SloUpsert, db: Session = Depends(get_db)):
 
 
 @router.put("/slo/{slo_id}")
-async def update_slo(slo_id: int, body: SloUpsert, db: Session = Depends(get_db)):
+async def update_slo(
+    slo_id: int,
+    body: SloUpsert,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_slo_write),
+):
     """更新 SLO 配置"""
     slo = db.query(ServiceSlo).filter(ServiceSlo.id == slo_id).first()
     if not slo:
@@ -305,10 +350,10 @@ async def update_slo(slo_id: int, body: SloUpsert, db: Session = Depends(get_db)
     ).first()
     if dup:
         raise HTTPException(status_code=400, detail=f"service_key '{body.service_key}' 已被占用")
-    slo.service_key = body.service_key.strip()
-    slo.service_name = body.service_name.strip()
+    slo.service_key = body.service_key
+    slo.service_name = body.service_name
     slo.slo_target = body.slo_target
-    slo.device_types = (body.device_types or "").strip() or None
+    slo.device_types = body.device_types
     slo.window_days = body.window_days
     slo.description = body.description
     slo.is_active = body.is_active
@@ -318,7 +363,11 @@ async def update_slo(slo_id: int, body: SloUpsert, db: Session = Depends(get_db)
 
 
 @router.delete("/slo/{slo_id}")
-async def delete_slo(slo_id: int, db: Session = Depends(get_db)):
+async def delete_slo(
+    slo_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_slo_write),
+):
     """删除 SLO 配置"""
     slo = db.query(ServiceSlo).filter(ServiceSlo.id == slo_id).first()
     if not slo:

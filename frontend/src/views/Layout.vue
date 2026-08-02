@@ -201,7 +201,7 @@ const sidebarData = computed(() => {
           { path: '/notifications', text: t('menuNotifications'), icon: Bell, permission: 'nav_system:notifications' },
           { path: '/logs', text: t('menuLogs'), icon: Document, permission: 'log:read' },
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell, permission: 'alert:manage' },
-          { path: '/system-settings', text: t('menuSystemSettings'), icon: Setting, permission: 'nav_system:system_settings' },
+          { path: '/system-settings', text: t('menuSystemSettings'), icon: Setting, permission: 'system_config:read' },
           { path: '/system-help', text: t('menuSystemHelp'), icon: QuestionFilled, permission: 'nav_system:system_help' },
           { path: '/users', text: t('menuUsers'), icon: User, permission: 'user:read' },
           { path: '/permissions', text: t('menuPermissions'), icon: Lock, permission: 'nav_system:permissions' },
