@@ -930,8 +930,10 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `main.js:16` 装了 Pinia 但全项目 `defineStore` 数为 0；登录态/用户/主题在 12 个文件裸读 localStorage（`views/Layout.vue:78,81`、`api/request.js:68,74` 等），无单一数据源。`[已复核]`
 - [x] **P1** `api/request.js:49` 读 `'language'`，`locales/index.js:6797,6802` 写 `'lang'`，键不一致导致英文界面仍被汉化。`[已复核]`
   → 修复（批次五请求层切片）：`translateSSHError` 改读 `localStorage.getItem('lang')`，与 `locales/index.js:7022` 统一。
-- [ ] **P1** `locales/index.js` — 190 组重复键（`zh:dashDevices` L230/L288、`zh:uploadFailed` L742/L1349 等）后者静默覆盖；zh 3065 / en 3015 键，52 键缺英文、2 键缺中文。`[待验证]` 建议脚本化校验
-- [ ] **P1** 硬编码中文与 `useI18n` 混用：`Monitor3D.vue` 825 处、`Deploy.vue` 245 处、`Compliance.vue` 189 处，英文模式大面积失效。`[待验证]`
+- [x] **P1** `locales/index.js` — 190 组重复键（`zh:dashDevices` L230/L288、`zh:uploadFailed` L742/L1349 等）后者静默覆盖；zh 3065 / en 3015 键，52 键缺英文、2 键缺中文。`[已复核]`
+  → 修复（批次五 i18n 重建切片）：实测 183 组重复（191 冗余行，docs 190 接近）+ 43 键缺英、2 键缺中（docs 52 已过期）——同值组 keep-first、异值组 keep-last（行为保持）去重；修正 en 块 4 处漏进中文（如 `commonRefresh` '刷新'→'Refresh'）；补 42 en + 2 zh 译文。新增 `frontend/scripts/validate-locales.mjs`（ESM 逐行解析，无重复键/无缺键，违规 exit 1）+ package.json `validate:locales`。现 zh/en 各 3212 键，`npm run validate:locales` 0 违规。
+- [x] **P1** 硬编码中文与 `useI18n` 混用：`Monitor3D.vue` 825 处、`Deploy.vue` 245 处、`Compliance.vue` 189 处，英文模式大面积失效。`[已复核]`
+  → 修复（批次五 i18n 重建切片）：docs 计数含注释/模板含中文行，真实用户可见硬编码 ~140 处且全在 script（Monitor3D ~19、Deploy ~15、Compliance ~11 条提示 + 模板 provider 下拉）——迁移为 `t()` 调用（复用 `faultTransferFailed`/`faultTransferSuccess`/`deviceUplinkPort`/`hudStatus`/`faultOwner`/`complianceRecommendation`/`complianceAIProvider*` 等现成键；新增 `monitor3d*`/`deploy*`/`compliance*` 键含 `{param}` 占位）。排除项：后端存储值（复核 notes '大屏确认：…'、转维修 description）、逻辑/存储匹配串（`'起点'`、provider map 键）、zh 回退 map（deviceTypeMap/statusMap）、console 日志。英文模式失效修复。
 - [x] **P1** `vite.config.js:18` — target `chrome60` 与 router 全量动态 `import()`（需 Chrome 63+）自相矛盾；`format:'es'` 写在 `build` 下属无效键。`[已复核]`
   → 修复（批次五请求层切片）：删无效 `build.format`；`target` 改 `['es2018','chrome63']`，注释同步（router 已用动态 import，≥63 才真实）。
 - [x] **P1** `vite.config.js` — 无 `manualChunks`，three@0.184 + echarts + element-plus 同一 vendor chunk，首屏体积过大。`[已复核]`
@@ -983,6 +985,19 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed（前端改动不涉 app/，失败基线不变） |
 
 修复说明：916 唯一 `v-html` 点 escape-first（先转义再正则，白名单标签仅来自替换字符串）；944 剥离纯调试 `console.log` 7 处（含逐条 WS 报文日志），保留 catch 内错误日志；947 两处 WS 构造改 `import.meta.env.VITE_WS_URL` 可选覆盖、缺省 `location.host`。另清单外小项：`main.js` ElementPlus locale 由硬编码 `zhCn` 改为按 `localStorage('lang')` 选 `en`/`zhCn`（挂载时一次，运行中切换不实时更新，超出小项范围）。
+
+### 批次五 · i18n 重建切片 · Linux 实测（2026-08-02）
+
+前端改动（仅 `frontend/`），验证靠 `validate:locales` + 构建 + HTTPS 冒烟 + 代码审查：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run validate:locales` | ✅ 0 违规（新增校验脚本，无重复键/无缺键；现 zh/en 各 3212 键） |
+| `npm run build` | ✅ 13.77s 构建成功；chunk 体积与剩余小项切片一致（500kB 警告为既有大 chunk） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（自起实例精确 PID 启停，未触碰用户 3001 dev server） |
+| 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败 |
+
+修复说明（932/933，i18n 表重建）：去重 183 组重复键（191 冗余行，同值 keep-first、异值 keep-last 行为保持）+ 修正 en 块 4 处漏进中文 + 补 42 en / 2 zh 缺键，新增 `scripts/validate-locales.mjs` 脚本化校验（`package.json` `validate:locales`）；硬编码中文真实 ~140 处（docs 计数含注释行），全在 script 与 Compliance provider 下拉——Monitor3D ~19 / Deploy ~15 / Compliance ~11 条提示 + 模板下拉，逐处换 `t()`（复用 `faultTransferFailed` 等现成键，新增 `monitor3d*`/`deploy*`/`compliance*` 键含 `{param}` 占位）。排除：后端存储值（复核 notes、转维修 description）、逻辑/存储匹配串（`'起点'`、provider map 键）、zh 回退 map（deviceTypeMap/statusMap）、console 日志。
 
 ---
 
