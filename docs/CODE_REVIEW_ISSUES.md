@@ -831,27 +831,34 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ## 批次四 · 数据正确性（页面数字目前不可信）
 
-- [ ] **P1** `compliance/compliance_service.py:341` — `max([severity 字符串])` 按字典序，结果 `medium > low > high > critical`，行级严重度标注全错。`[已复核]`
+- [x] **P1** `compliance/compliance_service.py:341` — `max([severity 字符串])` 按字典序，结果 `medium > low > high > critical`，行级严重度标注全错。`[已复核]`
+  → 修复（批次四）：新增 `SEVERITY_RANK = {"critical":5,"high":4,"medium":3,"low":2,"info":1,"ok":0}`，行级严重度取最高等级、默认 `"ok"`。
 - [x] **P1** `faults/router.py:210` — `order_by(severity.desc())` 是字符串倒序（`warning > minor > major > critical`），与注释声称的 critical 优先相反。`[已复核]`
   → 修复（步骤 4E-B1）：使用 SQLAlchemy `case` 显式映射业务优先级，SQLite/PostgreSQL 均按 critical、major、warning、minor 排序。
 - [x] **P1** `faults/router.py:938-955` — 统计只覆盖 `open/investigating/resolved/closed`，实际状态机含 `assigned/accepted/diagnosing/resolving/transferred`（`models.py:154` 注释），活跃数低估、分布不等于总数。`[已复核]`
   → 修复（步骤 4E-B1）：状态分布覆盖完整 `FAULT_STATUS_LABELS`，除 closed 外全部计为活跃，严重度与最近事件使用同一活跃集合。
-- [ ] **P1** `compliance/compliance_service.py:421` vs `compliance/router.py:283` — service 返回 `results`，router 读 `security_issues/compliance_issues/config_errors/recommendations`，`/quick-check` 永远返回空数组。`[已复核]`
-- [ ] **P1** `dashboard/dashboard_service.py:51-78` — 按 10 种设备类型循环执行约 8 条 COUNT，单次 summary 近 80 次查询。`[已复核]`
-- [ ] **P1** `dashboard/dashboard_service.py:1057,1103` — 变更-故障关联在循环内逐条 COUNT（N+1），且同条件 count 与 all 重复查两次；`:948,962` SLO 计算逐个查设备与故障全集。`[已复核]`
-- [ ] **P1** `faults/router.py:217,222` — 列表接口每条故障各查一次 Device 和 MaintenanceRecord（limit=100 → 约 200 次额外查询）。`[已复核]`
+- [x] **P1** `compliance/compliance_service.py:421` vs `compliance/router.py:283` — service 返回 `results`，router 读 `security_issues/compliance_issues/config_errors/recommendations`，`/quick-check` 永远返回空数组。`[已复核]`
+  → 修复（批次四）：router 改读真实键 `{"success","score","results"}`；`quick_audit` 兼容 AI 返回裸 JSON 数组（`parse_json_response` 可能返回 list），不再 `list.get` 崩溃。
+- [x] **P1** `dashboard/dashboard_service.py:51-78` — 按 10 种设备类型循环执行约 8 条 COUNT，单次 summary 近 80 次查询。`[已复核]`
+  → 修复（批次四）：1 次 `db.query(Device.device_type, Device.deployment_status, Device.reachability).all()` + Python 聚合，输出形状完全不变（total/reachable/unreachable/unknown、in_use/un_used/maintenance/retired、by_type 每类型含 online/offline）。
+- [x] **P1** `dashboard/dashboard_service.py:1057,1103` — 变更-故障关联在循环内逐条 COUNT（N+1），且同条件 count 与 all 重复查两次；`:948,962` SLO 计算逐个查设备与故障全集。`[已复核]`
+  → 修复（批次四）：变更-故障关联改为按 `device_id` 批量拉取后 `bisect` 计 72h 窗口；上周期对比去掉 count+all 重复查询；SLO 提升设备类型→id 解析到循环外 1 次查询、故障按最大窗口批量拉取后在内存按窗口切分。
+- [x] **P1** `faults/router.py:217,222` — 列表接口每条故障各查一次 Device 和 MaintenanceRecord（limit=100 → 约 200 次额外查询）。`[已复核]`
+  → 修复（批次四）：列表查询加 `selectinload(FaultRecord.device), selectinload(FaultRecord.maintenance)`，循环内改读 `f.device` / `f.maintenance`。
 - [x] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[代码已修复，待服务器验证]`
   → 修复（步骤 4E-C1）：所有实例查询同时约束 part_id+serial 并在库存变更前校验归属/状态；serial 操作强制 quantity=1，聚合库存与实例状态同步。未跑行为/并发测试，验收见 C1 服务器清单。
 - [x] **P1** `planned_maintenance` 任务完成与备件出入库由浏览器分成多次请求：后端先 commit completed，前端再逐条调用 spare movement；中途失败会留下“任务已完成但库存只更新一部分”。`[已复核]`
   → 修复（步骤 4E-C1）：spare movements 折入 `complete_task`/`update_maintenance` 主记录单事务，新增
   `POST /api/spare-movements/batch`，任一条失败整批回滚；前端四个视图改为单次请求携带 `spare_movements`，
   不再由前端逐条编排。真实服务器 22/22 PASS，见 4E-C1 清单第 9 项。
-- [ ] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`
-- [ ] **P1** `tasks/backup_tasks.py:139` — 批量任务伪造子 Job ID `f"{job_id}-{i}"`，Job 表无对应记录 → 子任务全部 "Job not found"。`[已复核]`
+- [x] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`
+  → 修复（批次四，完整实现定时）：抽出 `_run_deploy_impl(deploy_data, current_username)` 复用 `execute_deploy` 主体；`schedule_deploy` 落库 `Job(job_type=deploy)` + `deploy_scheduled.apply_async(eta=本地墙钟→UTC aware)`（celery timezone=UTC），返回真实 `job_id`/`task_id`。执行需常驻 celery worker：`celery -A app.core.celery_app worker -Q device_ops`（`celery_app` 已加 `imports` 让 worker 注册任务模块；未运行 worker 时 Job 停在 pending/queued，不再假装已执行）。
+- [x] **P1** `tasks/backup_tasks.py:139` — 批量任务伪造子 Job ID `f"{job_id}-{i}"`，Job 表无对应记录 → 子任务全部 "Job not found"。`[已复核]`
+  → 修复（批次四）：删除死代码 `backup_devices_batch`（无任何调用方）。
 - [x] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
   → 修复（步骤 4E-A）：同步与批量日志状态均显式写入 `success` / `failed` 字符串。
-- [ ] **P1** 分页参数普遍无 `ge/le` 约束：`devices/router.py:155`、`devices/device_service.py:150`、`backups/backup_service.py:16`、`faults/router.py:170`、`maintenance/router.py:744`、`deploy/router.py:1205`（`spare_parts/router.py:59` 用了 `Query(ge/le)`，风格不统一）。`[已复核]`
-  → Backups HTTP 路由已在步骤 4E-A、Faults 在 4E-B1、Maintenance 在 4E-B2、Planned Maintenance 在 4E-B3 增加范围限制；服务层直调及其余列出端点仍待统一。
+- [x] **P1** 分页参数普遍无 `ge/le` 约束：`devices/router.py:155`、`devices/device_service.py:150`、`backups/backup_service.py:16`、`faults/router.py:170`、`maintenance/router.py:744`、`deploy/router.py:1205`（`spare_parts/router.py:59` 用了 `Query(ge/le)`，风格不统一）。`[已复核]`
+  → Backups HTTP 路由已在步骤 4E-A、Faults 在 4E-B1、Maintenance 在 4E-B2、Planned Maintenance 在 4E-B3 增加范围限制；批次四补齐剩余：`devices/router.py` `limit=Query(200,ge=1,le=200)`/`skip=Query(0,ge=0)`、`deploy/router.py` `limit=Query(50,ge=1,le=200)`/`offset=Query(0,ge=0)`，并给 `device_service.list_devices`、`backup_service.list_backups` 服务层加 `skip>=0, 1<=limit<=200` clamp 防直调越界。
 - [x] **P1** 高危写操作请求体为裸 `dict`：`deploy/router.py:40,482,915,1134`、`credentials/router.py:41,115`、`templates/router.py:28,42`（后者还 `ConfigTemplate(**data)` 批量赋值）。`[已复核]`
   → 修复：Deploy 在 4B、Credentials 在步骤 1、Templates 在 4E-A 全部迁到 Pydantic 模型；模板服务额外使用字段白名单，禁止覆盖 id/时间戳等内部字段。
 - [x] **P1** `maintenance/router.py` 九类写/建议请求使用裸 `dict`，客户端可提交 operator/status/id 等内部字段，文本、金额与枚举没有边界。`[已复核]`
@@ -860,14 +867,37 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（步骤 4E-B3）：legacy 与 AOP 请求全部 `extra=forbid` 并加边界；前端改显式 payload，避免把服务端只读字段回传导致 422。
 - [x] **P1** `workflows/router.py` 的 trigger_conditions/action_config/event_data 为任意字典，未知 trigger/action 与未知条件操作符可进入执行层；动作失败后 Executor 仍返回整体 success。`[已复核]`
   → 修复（步骤 4E-B4）：严格限制注册类型、JSON 大小/深度/节点与动作字段；任一动作失败则整体 false，内部异常统一脱敏。
-- [ ] **P2** `templates/template_service.py:20`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
-  → Workflows 已在步骤 4E-B4 改为 count + offset/limit，响应同时返回真实 total、skip、limit。
-- [ ] **P2** 时间字段两套写法：devices/backups 走 `utc_iso()`（带 Z），`faults/router.py:288`、`deploy/router.py:1237`、`credentials/router.py:30` 直接 `isoformat()`（无 Z），`notifications/router.py:57` 手工拼 Z，`deploy/router.py:1105` 用本地 `datetime.now()`。`[已复核]`
-- [ ] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`
-- [ ] **P2** `compliance/router.py:26` — 模块导入期实例化 `ComplianceService()`，其 `__init__` 会访问数据库。`[已复核]`
-- [ ] **P2** `deploy/router.py:815,985` — 审计日志 `operator` 硬编码 `"Web"`，同函数内已解析出 `current_username`，审计不可追溯。`[已复核]`
+- [x] **P2** `templates/template_service.py:20`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
+  → Workflows 已在步骤 4E-B4 改为 count + offset/limit，响应同时返回真实 total、skip、limit。批次四补齐：`template_service.list_templates` 的 `total` 改 `db.query(ConfigTemplate).count()`；notifications 新增 `SystemNotificationService.get_user_notifications_total(user, unread_only)` 返回真实总数。
+- [x] **P2** 时间字段两套写法：devices/backups 走 `utc_iso()`（带 Z），`faults/router.py:288`、`deploy/router.py:1237`、`credentials/router.py:30` 直接 `isoformat()`（无 Z），`notifications/router.py:57` 手工拼 Z，`deploy/router.py:1105` 用本地 `datetime.now()`。`[已复核]`
+  → 批次四统一：faults 列表、deploy history、credentials、notifications 全部改 `utc_iso()`（带 Z）。`get_maintenance_windows` 的 `datetime.now()` **保留本地墙钟语义**（复核结论：改 `utcnow` 会在非 UTC 服务器把窗口日期偏移一天，窗口选择是纯本地日期概念，不应变 UTC）；`schedule_deploy` 的 `scheduled_at` 入参保持本地 naive ISO，仅 `eta` 做本地→UTC aware 转换交给 celery（timezone=UTC）。
+- [x] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`
+  → 修复（批次四）：`get_discovery_service` 每次返回前把传入 `timeout/workers` 同步到缓存实例。
+- [x] **P2** `compliance/router.py:26` — 模块导入期实例化 `ComplianceService()`，其 `__init__` 会访问数据库。`[已复核]`
+  → 修复（批次四）：改为懒加载 `get_compliance_service()` 单例，4 处调用点全部替换。
+- [x] **P2** `deploy/router.py:815,985` — 审计日志 `operator` 硬编码 `"Web"`，同函数内已解析出 `current_username`，审计不可追溯。`[已复核]`
+  → **纠偏**：docs 行号过期——deploy 早已修复（`router.py` 用 `current_username`，`test_deploy_security_step4b.py` 断言无 `"Web"`）。真正残留为 compliance：`compliance_service._save_audit_log`（`created_by="Web"`）与 `compliance/router.py` `/standards/upload`。批次四修复：`audit_config`/`_save_audit_log` 透传 `operator`（默认 system），`/check`、`/upload`、`/standards/upload` 加 `Depends(get_current_principal)`，按 `_actor_username` 范式取 `principal.username`。
 - [x] **P2** `faults/router.py:1015,1042,1069,1096,1125` — 五个后台任务用 `print()` 吞异常，工作流/AI/通知失败完全不可见。`[已复核]`
   → 修复（步骤 4E-B1）：全部改为 Loguru `logger.exception`，保留 fault/maintenance ID 并记录堆栈。
+
+### 批次四 · Linux 实测（2026-08-02，PostgreSQL + 严格认证）
+
+静态：`ruff check app/ tests/` 全绿。回归：`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` 53 failed / 625 passed，与基线**失败集合完全一致**（无新增无收敛）。
+
+真实服务器冒烟（systemd `nas-backend.service`，uvicorn :8000，PostgreSQL，`auth_enabled=true`）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| dashboard summary 形状 | ✅ 输出形状不变：deployment in_use/un_used/maintenance/retired、reachable/unreachable/unknown/online/offline、`by_type` 每设备类型含 total/in_use/un_used/maintenance/retired/reachable/unreachable/unknown/online/offline |
+| faults 列表时间戳 | ✅ `last_event_at/fault_time/created_at/updated_at` 全部带 `Z` |
+| compliance `/check` 审计操作人 | ✅ `ComplianceAuditLog.created_by = 'admin'`（真实登录用户名），旧数据 `'Web'` 不再产生 |
+| `/api/deploy/schedule` 真实调度 | ✅ 返回真实 `job_id`(UUID)+`task_id`(celery UUID)；Job 落库 status=pending、operator=admin、parameters 含 window_id/scheduled_at/deploy_data |
+| celery worker 实际执行 | ✅ `celery -A app.core.celery_app worker -Q device_ops --pool=solo` 注册 `deploy_scheduled`；用 eta=过去 + 不存在的 device_id(999999) 调度 → Job `failed`、error=`404: 未找到指定的设备`、started_at/completed_at 落库（证明任务真实执行）；验后已停 worker |
+| 分页越界 | ✅ `/api/devices?limit=201`、`limit=-1` 被拒绝（`less_than_equal`/`greater_than_equal` 校验详情，应用统一 400 校验体；`limit=50` 200） |
+| 真实 total | ✅ notifications `total=69`（limit=3 仅返回 3 条）、templates `total=15` |
+| quick-check 契约 | ✅ 返回 `{"success":true,"score":50,"results":[...]}`（AI 返回裸 JSON 数组时也正常） |
+
+部署说明（批次四 item 6 新增）：`POST /api/deploy/schedule` 返回真实 Job+task_id 并在到点后**真正执行**，前提是常驻 celery worker 运行 `celery -A app.core.celery_app worker -Q device_ops`。`celery_app` 已加 `imports` 使 worker 启动即注册任务模块（此前 `KeyError: unknown task`）。未运行 worker 时 Job 停留在 pending/queued，不再假装已执行。
 
 ---
 
