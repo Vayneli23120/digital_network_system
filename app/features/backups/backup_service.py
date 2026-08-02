@@ -23,6 +23,10 @@ def list_backups(db: Session, device_id: Optional[int] = None, skip: int = 0, li
     Returns:
         包含 total 和 items 的字典
     """
+    # 分页边界收敛（服务层可被非 HTTP 直调，越界时收敛到合法范围）
+    skip = max(0, skip)
+    limit = min(200, max(1, limit))
+
     query = db.query(BackupRecord)
 
     if device_id:

@@ -172,7 +172,7 @@ async def list_devices(status: Optional[str] = None, role: Optional[str] = None,
                         device_type: Optional[str] = None,
                         deployment_status: Optional[str] = None,
                         reachability: Optional[str] = None,
-                        skip: int = 0, limit: int = 200,
+                        skip: int = Query(0, ge=0), limit: int = Query(200, ge=1, le=200),
                         db: Session = Depends(get_db),
                         _: None = Depends(require_device_read)):
     """获取设备列表

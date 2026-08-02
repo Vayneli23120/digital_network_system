@@ -63,6 +63,18 @@ class SystemNotificationService:
 
         return query.order_by(Notification.created_at.desc()).limit(limit).all()
 
+    def get_user_notifications_total(self, user: str, unread_only: bool = False) -> int:
+        """获取用户通知总数（不受 limit 截断，用于返回真实 total）"""
+        query = self.db.query(Notification)
+
+        if user.lower() != 'admin':
+            query = query.filter(Notification.user.ilike(user))
+
+        if unread_only:
+            query = query.filter(Notification.read == False)
+
+        return query.count()
+
     def get_unread_count(self, user: str) -> int:
         """获取未读通知数量
 

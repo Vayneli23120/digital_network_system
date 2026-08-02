@@ -27,10 +27,11 @@ def list_templates(db: Session) -> Dict[str, Any]:
     Returns:
         包含 total 和 items 的字典
     """
+    total = db.query(ConfigTemplate).count()
     templates = db.query(ConfigTemplate).order_by(ConfigTemplate.id.desc()).limit(500).all()
 
     return {
-        "total": len(templates),
+        "total": total,
         "items": [
             {
                 "id": t.id,

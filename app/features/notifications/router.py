@@ -46,10 +46,11 @@ async def get_notifications(
             "created_at": created_at_iso
         })
 
+    total = service.get_user_notifications_total(user, unread_only)
     unread_count = service.get_unread_count(user)
 
     return {
-        "total": len(items),
+        "total": total,
         "unread_count": unread_count,
         "items": items
     }
