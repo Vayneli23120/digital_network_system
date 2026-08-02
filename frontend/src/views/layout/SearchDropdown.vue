@@ -177,7 +177,7 @@ const handleSearch = debounce(async () => {
       () => api.get('/devices', { params: { search: query, limit: 5 } }),
       `search_devices_${query}`,
       { query },
-      { ttl: 30 }
+      { ttl: 30000 }
     )
     searchResults.value.devices = devicesData.items || []
 
@@ -186,7 +186,7 @@ const handleSearch = debounce(async () => {
       () => api.get('/templates'),
       'search_templates',
       {},
-      { ttl: 120 }
+      { ttl: 120000 }
     )
     const allTemplates = templatesData.items || templatesData || []
     searchResults.value.templates = allTemplates
@@ -199,7 +199,7 @@ const handleSearch = debounce(async () => {
       () => api.get('/backups', { params: { limit: 20 } }),
       'search_backups',
       {},
-      { ttl: 60 }
+      { ttl: 60000 }
     )
     const allBackups = backupsData.items || backupsData.backups || []
     searchResults.value.backups = allBackups

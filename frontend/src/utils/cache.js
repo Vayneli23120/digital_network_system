@@ -32,18 +32,43 @@ const CACHE_CONFIG = {
 // 内存缓存存储
 const memoryCache = new Map()
 
+// 在途请求去重存储（cachedRequest 同键并发合并）
+const inFlight = new Map()
+
 /**
- * 生成缓存键
+ * 稳定序列化：对象键递归排序，保证相同参数产出相同字符串（键序无关）。
+ * 避免直接 JSON.stringify 后做非字母数字替换导致的键碰撞（如 {"a_b":1} 与 {"a":"b_1"}）。
+ */
+function stableStringify(value) {
+  if (value === null) return 'null'
+  if (value === undefined) return 'undefined'
+  if (typeof value !== 'object') return JSON.stringify(value)
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`
+  }
+  const keys = Object.keys(value).sort()
+  const body = keys
+    .map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`)
+    .join(',')
+  return `{${body}}`
+}
+
+/**
+ * 生成缓存键：稳定序列化 + djb2 哈希，确定性、键序无关、无 _ 替换碰撞
  */
 export function generateCacheKey(resource, params = {}) {
-  const paramStr = Object.keys(params).length
-    ? '_' + JSON.stringify(params).replace(/[^a-zA-Z0-9]/g, '_')
-    : ''
-  return `${CACHE_CONFIG.STORAGE_PREFIX}${resource}${paramStr}`
+  const serialized = stableStringify(params)
+  let hash = 5381
+  for (let i = 0; i < serialized.length; i++) {
+    hash = ((hash << 5) + hash) ^ serialized.charCodeAt(i)
+  }
+  return `${CACHE_CONFIG.STORAGE_PREFIX}${resource}_${(hash >>> 0).toString(36)}`
 }
 
 /**
  * 从 localStorage 读取缓存
+ * 返回完整记录 { value, expires, timestamp }，让内存回填时能保留原过期时间，
+ * 避免读取即续期导致数据无限存活。
  */
 function readFromStorage(key) {
   if (!CACHE_CONFIG.ENABLE_STORAGE) return null
@@ -56,7 +81,7 @@ function readFromStorage(key) {
       localStorage.removeItem(key)
       return null
     }
-    return parsed.value
+    return parsed
   } catch (e) {
     localStorage.removeItem(key)
     return null
@@ -107,7 +132,6 @@ function cleanupExpiredCache() {
  */
 export function getCache(resource, params = {}) {
   const key = generateCacheKey(resource, params)
-  const ttl = CACHE_CONFIG.DEFAULT_TTL[resource] || 30000
 
   // 先检查内存缓存
   if (memoryCache.has(key)) {
@@ -118,15 +142,14 @@ export function getCache(resource, params = {}) {
     memoryCache.delete(key)
   }
 
-  // 再检查 localStorage
+  // 再检查 localStorage；回填内存时保留原 expires，读取不续期
   const stored = readFromStorage(key)
   if (stored !== null) {
-    // 重新加载到内存
     memoryCache.set(key, {
-      value: stored,
-      expires: Date.now() + ttl,
+      value: stored.value,
+      expires: stored.expires,
     })
-    return stored
+    return stored.value
   }
 
   return null
@@ -135,13 +158,13 @@ export function getCache(resource, params = {}) {
 /**
  * 设置缓存
  */
-export function setCache(resource, params, value, customTtl = null) {
+export function setCache(resource, params, value, ttl = null) {
   const key = generateCacheKey(resource, params)
-  const ttl = customTtl || CACHE_CONFIG.DEFAULT_TTL[resource] || 30000
+  const expiresIn = ttl || CACHE_CONFIG.DEFAULT_TTL[resource] || 30000
 
   const item = {
     value,
-    expires: Date.now() + ttl,
+    expires: Date.now() + expiresIn,
     timestamp: Date.now(),
   }
 
@@ -149,7 +172,7 @@ export function setCache(resource, params, value, customTtl = null) {
   memoryCache.set(key, item)
 
   // 写入 localStorage
-  writeToStorage(key, value, ttl)
+  writeToStorage(key, value, expiresIn)
 }
 
 /**
@@ -214,6 +237,7 @@ export function getCacheMeta(resource, params = {}) {
 
 /**
  * 带缓存的 API 请求包装器
+ * ttl 单位为毫秒（与 CACHE_CONFIG.DEFAULT_TTL 一致），缺省用资源默认值。
  */
 export async function cachedRequest(
   apiFn,
@@ -223,9 +247,10 @@ export async function cachedRequest(
 ) {
   const {
     forceRefresh = false,
-    customTtl = null,
+    ttl = null,
     onError = null,
   } = options
+  const key = generateCacheKey(resource, params)
 
   // 检查缓存
   if (!forceRefresh) {
@@ -233,24 +258,31 @@ export async function cachedRequest(
     if (cached !== null) {
       return Promise.resolve(cached)
     }
-  }
-
-  // 发起请求
-  try {
-    const result = await apiFn()
-    // 缓存结果
-    setCache(resource, params, result, customTtl)
-    return result
-  } catch (error) {
-    if (onError) {
-      return onError(error)
+    // 同键请求在途则复用其结果，避免并发打穿后端
+    if (inFlight.has(key)) {
+      return inFlight.get(key)
     }
-    throw error
   }
-}
 
-// 定期清理过期缓存（每5分钟）
-setInterval(cleanupExpiredCache, 300000)
+  const requestPromise = (async () => {
+    try {
+      const result = await apiFn()
+      // 缓存结果
+      setCache(resource, params, result, ttl)
+      return result
+    } catch (error) {
+      if (onError) {
+        return onError(error)
+      }
+      throw error
+    } finally {
+      inFlight.delete(key)
+    }
+  })()
+
+  inFlight.set(key, requestPromise)
+  return requestPromise
+}
 
 // 导出配置
 export const CacheConfig = CACHE_CONFIG

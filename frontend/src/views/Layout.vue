@@ -93,7 +93,7 @@ const loadFaultBadge = debounce(async (force = false) => {
       () => getFaults({ limit: 500 }),
       'layout_fault_badge',
       {},
-      { forceRefresh: force, ttl: 60 }
+      { forceRefresh: force, ttl: 60000 }
     )
     faultBadge.value = res.items?.filter(f => f.status !== 'closed').length || 0
   } catch (err) {
@@ -110,7 +110,7 @@ const loadUnreadNotifCount = debounce(async (force = false) => {
       () => getUnreadCount(),
       'layout_unread_count',
       {},
-      { forceRefresh: force, ttl: 30 }
+      { forceRefresh: force, ttl: 30000 }
     )
     unreadNotifCount.value = res.unread_count || 0
   } catch (err) {
