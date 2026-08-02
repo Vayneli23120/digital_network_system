@@ -944,7 +944,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P2** `api/request.js:107-113` — 401 用 `window.location.href` 整页刷新，多并发请求连弹错误，无 refresh token 流程。`[已复核]`
   → 修复（批次五请求层切片）：`handleAuthFailure` 加模块级 `isRedirectingToLogin` 守卫，并发多个 401 只弹一次 toast、只触发一次跳转（`api` 与 `authenticatedAxios` 共用该函数，一处守卫覆盖两条拦截链）。refresh token 流程超出本切片范围，仍缺。
 - [ ] **P2** 巨型视图：`Monitor3D.vue` 7119 行、`Deploy.vue` 3631、`Compliance.vue` 2948，渲染与请求耦合，无法单测。`[已复核]`
-- [ ] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[待验证]`
+- [x] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[已复核]`
+  → 修复（批次五 :key-Logs 切片）：新增 `utils/uid.js`（`stampUid` 用 `Object.defineProperty` 定义**不可枚举** `_uid`，JSON 序列化不携带，避免泄漏进 payload / 被后端 `json.dumps` 落地 DB）。表单行改 `:key="xxx._uid"`：Devices:340/DeviceDetail:464 模块行、Deploy:285 变量行，stamp 覆盖初始/reset/add/probe/populate 全部分配点；展示列表改天然稳定键：Operations faultDeviceList→`device_id`、recentBackups→`device_name+backup_time`、alerts→`alert_key` 回退复合、activityFeed→`type+text`，Compliance configLineAnalysis→`lineNum`。探索按 `:key="idx"` 补出 4 处同病 Monitor3D 拐点行（`editingWaypoints`/Trunk/BranchLink/TopoEdge，均 v-model input-number + add/remove），一并 `_uid` 化。Logs 实时 interval 改 `loadLogs(true)`（原不 force 命中 30s 缓存，实际每 30s 才真刷新）；主表改 `el-table-v2` + `el-auto-resizer` 虚拟滚动（仅渲染可视行），列定义 `computed` 随语言响应式，message 列 ellipsis + 原生 title 替代 overflow tooltip。保留 `:key="index"`：Operations:18/24（字符串数组）、Operations:272（并行数组 index 承载）、Compliance:667/686（toc/content 的 active/scroll/ref 全靠 index 且静态）、Deploy:508（cliLogs append-only）、FaultDetail:129（字符串数组）。
 - [x] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
   → 修复（批次五剩余小项切片）：剥离纯调试 `console.log` 7 处——Monitor3D 1227/1244/3308/3368（创建主干、拓扑缺节点调试）、Deploy 1749/1767/1781（含逐条 WS 报文日志）；保留 catch 内 `console.error`/`console.warn` 错误日志（其余 ~56 处）。`ToolLogs.vue:244` 为 catch 内错误日志但误用 `console.log`，不在本项范围，保留。
 - [x] **P2** `utils/requestManager.js:11,155` — `requestCache` 从未写入，配套 10s 清理定时器为空转死代码；`utils/cache.js:253` 同样是模块级常驻定时器。`[已复核]`
@@ -1012,6 +1013,20 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `ruff check app/ tests/` 全绿（venv 内 ruff 0.16.0）；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败 |
 
 修复说明（930，Pinia 状态集中）：新增 `stores/auth.js` + `stores/theme.js`，localStorage 键名不变、零迁移。2 个源码断言测试随实现更新（`tests/test_deploy_security_step4b.py::test_stream_history_uses_authenticated_username_source`、`tests/test_device_security_step4c.py::test_device_status_frontend_sends_access_token` 原断言 `access_token: localStorage.getItem('accessToken')` → `access_token: authStore.accessToken`，安全意图「前端带 token」不变）；`tests/test_faults_security_step4e_b.py:381` 为否定断言（断言旧 `author: localStorage.getItem('currentUser')` 不存在）仍在 FaultDetail.vue 成立，无需改。注意：全量测试须用 venv 解释器（`.venv/bin/python -m pytest`），系统 python 无 ruff 会误报 `test_ruff_static_analysis_is_clean`/`test_git_config.py` 等环境失败。
+
+### 批次五 · :key-Logs 切片 · Linux 实测（2026-08-02）
+
+前端改动（仅 `frontend/`），验证靠构建 + HTTPS 冒烟 + 代码审查：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run validate:locales` | ✅ 0 违规（无 locales 改动，zh/en 各 3212 键） |
+| `npm run build` | ✅ 13.85s 构建成功（el-table-v2 / el-auto-resizer / ElTag cellRenderer 编译通过）；chunk 体积与前序切片一致（500kB 警告为既有大 chunk） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（自起实例精确 PID 启停，未触碰用户 3001 dev server） |
+| 代码审查 | ✅ 全项目 `:key="index"` 只剩保留清单 4 处（Compliance 669/688 toc-content、Deploy 508 cliLogs；Operations 18/24/272 与 FaultDetail 129 为 `:key="i"/"idx"` 同保留）；`el-table-v2`/`el-auto-resizer` 仅在 Logs.vue；`_uid` 不可枚举（`Object.defineProperty enumerable:false`） |
+| 后端门禁 | ✅ `pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致，无新增失败 |
+
+修复说明（947，:key 稳定化 + Logs 虚拟滚动）：新增 `utils/uid.js` `stampUid`（不可枚举 `_uid`），3 处表单行 + 探索补出的 4 处 Monitor3D 拐点行全部 `_uid` 键；5 处展示列表改天然稳定键；Logs 实时 interval `loadLogs(true)` 修复「读 30s 缓存不真刷新」bug + 主表改 `el-table-v2` 虚拟滚动（message 列 ellipsis + 原生 title 替代 overflow tooltip）。
 
 ---
 
