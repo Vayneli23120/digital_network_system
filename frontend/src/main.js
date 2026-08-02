@@ -6,6 +6,7 @@ import 'element-plus/theme-chalk/dark/css-vars.css'
 import './styles/tokens.css'
 import './styles/shared.css'
 import zhCn from 'element-plus/es/locale/lang/zh-cn'
+import en from 'element-plus/es/locale/lang/en'
 import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
@@ -21,8 +22,10 @@ for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
 
 app.use(pinia)
 app.use(router)
+// ElementPlus 内部文案（日期/分页等）跟随界面语言（'lang' 与应用 i18n 共用）
+const appLang = localStorage.getItem('lang') || 'zh'
 app.use(ElementPlus, {
-  locale: zhCn
+  locale: appLang === 'en' ? en : zhCn
 })
 
 // 初始化暗色模式
