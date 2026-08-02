@@ -1761,7 +1761,7 @@ const executeDeploy = async () => {
       console.error('WebSocket 错误:', error)
       stopTimer()
       executionStatus.value = 'failed'
-      ElMessage.error('WebSocket 连接失败，请检查网络')
+      ElMessage.error(t('deployWsConnectFailed'))
     }
 
     deployWebSocket.onclose = () => {
@@ -1780,17 +1780,17 @@ const executeDeploy = async () => {
 const handleDeployMessage = (data) => {
   if (data.type === 'deploy_started') {
     // 部署开始
-    ElMessage.info(`开始部署 ${data.total_count} 台设备`)
+    ElMessage.info(t('deployStartCount', { count: data.total_count }))
   }
   else if (data.type === 'device_started') {
     // 设备开始部署
     const device = deviceExecutions.value.find(d => d.device_id === data.device_id)
     if (device) {
       device.status = 'running'
-      device.message = '正在部署...'
+      device.message = t('deployDeploying')
       device.cliLogs.push({
         timestamp: data.timestamp,
-        content: `开始部署设备 ${data.device_name}`,
+        content: t('deployDeviceStartLog', { name: data.device_name }),
         type: 'info'
       })
     }
@@ -1815,21 +1815,21 @@ const handleDeployMessage = (data) => {
       if (data.diff) {
         device.cliLogs.push({
           timestamp: data.timestamp,
-          content: `配置差异:\n${data.diff}`,
+          content: t('deployConfigDiffLog', { diff: data.diff }),
           type: 'diff'
         })
       }
       if (data.rollback_available) {
         device.cliLogs.push({
           timestamp: data.timestamp,
-          content: '支持回滚，可通过 rollback 操作恢复',
+          content: t('deployRollbackAvailableLog'),
           type: 'info'
         })
       }
       if (!data.success) {
         device.cliLogs.push({
           timestamp: data.timestamp,
-          content: `错误: ${data.message}`,
+          content: t('deployErrorLog', { msg: data.message }),
           type: 'error'
         })
       }
@@ -1874,11 +1874,11 @@ const handleDeployMessage = (data) => {
     clearCache('devices')
 
     if (failedCount === 0) {
-      ElMessage.success(`部署完成，全部 ${successCount} 台设备成功`)
+      ElMessage.success(t('deployCompleteAllSuccess', { count: successCount }))
     } else if (successCount > 0) {
-      ElMessage.warning(`部署完成，${successCount} 台成功，${failedCount} 台失败`)
+      ElMessage.warning(t('deployCompletePartial', { ok: successCount, failed: failedCount }))
     } else {
-      ElMessage.error(`部署失败，全部 ${failedCount} 台设备失败`)
+      ElMessage.error(t('deployAllFailed', { count: failedCount }))
     }
   }
   else if (data.type === 'deploy_error') {
@@ -1910,7 +1910,7 @@ const handleRollback = async () => {
     .map(d => d.device_id)
 
   if (rollbackDevices.length === 0) {
-    ElMessage.warning('没有可回滚的设备')
+    ElMessage.warning(t('deployNoRollbackDevices'))
     return
   }
 
@@ -1935,7 +1935,7 @@ const handleRollback = async () => {
     deviceExecutions.value.forEach(d => {
       if (!d.rollback_available) {
         d.status = 'skipped'
-        d.message = '原部署失败，未执行回滚'
+        d.message = t('deployRollbackSkippedMsg')
       }
     })
 
@@ -1944,7 +1944,7 @@ const handleRollback = async () => {
         const device = deviceExecutions.value.find(d => Number(d.device_id) === Number(r.device_id))
         if (device) {
           device.status = r.success ? 'completed' : 'failed'
-          device.message = r.message || (r.success ? '回滚成功' : '回滚失败')
+          device.message = r.message || (r.success ? t('deployRollbackSucceeded') : t('deployRollbackFailed'))
           device.progress = 100
           device.rollback_available = false
           device.cliLogs = []
@@ -1959,7 +1959,7 @@ const handleRollback = async () => {
           if (r.diff) {
             device.cliLogs.push({
               timestamp: new Date().toISOString(),
-              content: `配置变更:\n${r.diff}`,
+              content: t('deployConfigChangeLog', { diff: r.diff }),
               type: 'diff'
             })
           }
@@ -1967,7 +1967,7 @@ const handleRollback = async () => {
             r.errors.forEach(err => {
               device.cliLogs.push({
                 timestamp: new Date().toISOString(),
-                content: `错误: ${err}`,
+                content: t('deployErrorLog', { msg: err }),
                 type: 'error'
               })
             })
