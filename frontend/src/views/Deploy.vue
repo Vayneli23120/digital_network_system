@@ -877,7 +877,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   QuestionFilled,
@@ -1735,9 +1735,7 @@ const executeDeploy = async () => {
     // 开始执行部署
     executionStatus.value = 'running'
     startTime.value = Date.now()
-    timer = setInterval(() => {
-      elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
-    }, 1000)
+    startElapsedTicker()
 
     // 使用 WebSocket 执行部署
     const sessionId = `deploy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -1896,6 +1894,15 @@ const stopTimer = () => {
     clearInterval(timer)
     timer = null
   }
+}
+
+// 启动运行计时器：先清掉旧计时器再启动，避免 executeDeploy / startApprovedDeployment
+// 两处共用同一 timer 变量时后者覆盖前者产生孤儿计时器
+const startElapsedTicker = () => {
+  if (timer) clearInterval(timer)
+  timer = setInterval(() => {
+    elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
+  }, 1000)
 }
 
 const handleRollback = async () => {
@@ -2076,9 +2083,7 @@ const startApprovedDeployment = async () => {
   // 审批通过后开始执行
   executionStatus.value = 'running'
   startTime.value = Date.now()
-  timer = setInterval(() => {
-    elapsedTime.value = Math.floor((Date.now() - startTime.value) / 1000)
-  }, 1000)
+  startElapsedTicker()
 
   // 重新调用部署API
   // 注意：实际实现需要一个新的API端点或在原API中处理
@@ -2117,6 +2122,16 @@ onMounted(async () => {
   await new Promise(r => setTimeout(r, 100))
   loadCompatibleVariables()  // 这个请求失败不影响，可以并行
   loadMaintenanceWindows()   // 这个也不影响，可以并行
+})
+
+// 卸载清理：停止运行计时器并关闭部署 WebSocket，避免切路由后资源残留
+onBeforeUnmount(() => {
+  stopTimer()
+  if (deployWebSocket) {
+    deployWebSocket.onclose = null  // 关闭时不再触发 stopTimer（无副作用，仅避免多余回调）
+    deployWebSocket.close()
+    deployWebSocket = null
+  }
 })
 </script>
 
