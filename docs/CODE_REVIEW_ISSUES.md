@@ -927,7 +927,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（批次五卸载清理）：`theme-change` 改 named `handleThemeChange`，`onBeforeUnmount` 移除；连线 `window` 监听（mousemove/mouseup）在 `onBeforeUnmount` 直接移除（连线中卸载不再泄漏）；`scene.traverse` 改数组材质逐个 dispose + `material.map` 纹理 dispose（覆盖底图）；模块级 `offlineGlowTexture`/`impactGlowTexture` dispose 并置空（重挂载时重建）。
 - [x] **P1** `composables/useLoadControl.js:142,159,165` — `online`/`visibilitychange` 监听从不移除，也不返回清理函数。`[已复核]`
   → 修复（批次五卸载清理）：`useSmartRefresh` 改 named `handleOnline`/`handleVisibility`，新增 `dispose()`（清 interval + 移除两个监听）并返回。注：该 composable 全项目零消费者，改返回形状安全。
-- [ ] **P1** `main.js:16` 装了 Pinia 但全项目 `defineStore` 数为 0；登录态/用户/主题在 12 个文件裸读 localStorage（`views/Layout.vue:78,81`、`api/request.js:68,74` 等），无单一数据源。`[已复核]`
+- [x] **P1** `main.js:16` 装了 Pinia 但全项目 `defineStore` 数为 0；登录态/用户/主题在 12 个文件裸读 localStorage（`views/Layout.vue:78,81`、`api/request.js:68,74` 等），无单一数据源。`[已复核]`
+  → 修复（批次五 Pinia 状态集中切片）：新建 `stores/auth.js`（`useAuthStore`：accessToken / isLoggedIn / currentUser + `setAuth`/`clearAuth`）与 `stores/theme.js`（`useThemeStore`：darkMode + `apply`/`toggle`，toggle 保留 `theme-change` dispatch）。localStorage 键名全部不变（`accessToken`/`isLoggedIn`/`currentUser`/`darkMode`），零迁移。9 处改造 + 探索补 1 处：`request.js` attachAuthToken/401 清 store、`router` 守卫读 store、`Login.vue` `setAuth`、`Layout.vue` storeToRefs/`toggle`/`apply`、`UserMenu.vue` 登出 `clearAuth`、`DeviceDetail.vue` 上传头、`Deploy.vue`/`Monitor3D.vue` deploy/WS body、`FaultDetail.vue` author、`main.js` 暗色初始化 `apply()`。`theme-change` 消费者（ParetoChart/Operations/Monitor3D）与 `isRedirectingToLogin` 401 硬跳转行为不变。
 - [x] **P1** `api/request.js:49` 读 `'language'`，`locales/index.js:6797,6802` 写 `'lang'`，键不一致导致英文界面仍被汉化。`[已复核]`
   → 修复（批次五请求层切片）：`translateSSHError` 改读 `localStorage.getItem('lang')`，与 `locales/index.js:7022` 统一。
 - [x] **P1** `locales/index.js` — 190 组重复键（`zh:dashDevices` L230/L288、`zh:uploadFailed` L742/L1349 等）后者静默覆盖；zh 3065 / en 3015 键，52 键缺英文、2 键缺中文。`[已复核]`
@@ -998,6 +999,19 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `ruff check app/ tests/` 全绿；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败 |
 
 修复说明（932/933，i18n 表重建）：去重 183 组重复键（191 冗余行，同值 keep-first、异值 keep-last 行为保持）+ 修正 en 块 4 处漏进中文 + 补 42 en / 2 zh 缺键，新增 `scripts/validate-locales.mjs` 脚本化校验（`package.json` `validate:locales`）；硬编码中文真实 ~140 处（docs 计数含注释行），全在 script 与 Compliance provider 下拉——Monitor3D ~19 / Deploy ~15 / Compliance ~11 条提示 + 模板下拉，逐处换 `t()`（复用 `faultTransferFailed` 等现成键，新增 `monitor3d*`/`deploy*`/`compliance*` 键含 `{param}` 占位）。排除：后端存储值（复核 notes、转维修 description）、逻辑/存储匹配串（`'起点'`、provider map 键）、zh 回退 map（deviceTypeMap/statusMap）、console 日志。
+
+### 批次五 · Pinia 状态集中切片 · Linux 实测（2026-08-02）
+
+前端改动（仅 `frontend/` + 2 个源码断言测试），验证靠构建 + HTTPS 冒烟 + 代码审查：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run validate:locales` | ✅ 0 违规（无 locales 改动，zh/en 各 3212 键） |
+| `npm run build` | ✅ 13.92s 构建成功；chunk 体积与前序切片一致（500kB 警告为既有大 chunk） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（自起实例精确 PID 启停，未触碰用户 3001 dev server） |
+| 后端门禁 | ✅ `ruff check app/ tests/` 全绿（venv 内 ruff 0.16.0）；`pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败 |
+
+修复说明（930，Pinia 状态集中）：新增 `stores/auth.js` + `stores/theme.js`，localStorage 键名不变、零迁移。2 个源码断言测试随实现更新（`tests/test_deploy_security_step4b.py::test_stream_history_uses_authenticated_username_source`、`tests/test_device_security_step4c.py::test_device_status_frontend_sends_access_token` 原断言 `access_token: localStorage.getItem('accessToken')` → `access_token: authStore.accessToken`，安全意图「前端带 token」不变）；`tests/test_faults_security_step4e_b.py:381` 为否定断言（断言旧 `author: localStorage.getItem('currentUser')` 不存在）仍在 FaultDetail.vue 成立，无需改。注意：全量测试须用 venv 解释器（`.venv/bin/python -m pytest`），系统 python 无 ruff 会误报 `test_ruff_static_analysis_is_clean`/`test_git_config.py` 等环境失败。
 
 ---
 
