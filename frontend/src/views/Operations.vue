@@ -295,7 +295,7 @@
             </div>
             <div class="kpi-body">
               <div class="top5-list">
-                <div class="top5-item" v-for="(d, i) in faultDeviceList" :key="i">
+                <div class="top5-item" v-for="(d, i) in faultDeviceList" :key="d.device_id">
                   <span class="top5-rank">{{ i + 1 }}</span>
                   <span class="top5-name" :title="d.device_name">{{ d.device_name }}</span>
                   <span class="top5-count">{{ d.count }}</span>
@@ -385,7 +385,7 @@
             </div>
             <div class="panel-body">
               <div class="backup-panel-list">
-                <div class="backup-panel-item" v-for="(b, i) in recentBackups" :key="i">
+                <div class="backup-panel-item" v-for="(b, i) in recentBackups" :key="b.device_name + '|' + b.backup_time">
                   <span class="backup-panel-dot" :class="{ changed: b.has_change }"></span>
                   <span class="backup-panel-name">{{ b.device_name }}</span>
                   <span class="backup-panel-time">{{ formatDate(b.backup_time) }}</span>
@@ -414,7 +414,7 @@
               <span v-if="alertCount" class="alert-badge">{{ alertCount }}</span>
             </div>
             <div class="panel-body event-stream">
-              <div class="event-item" v-for="(alert, i) in alerts" :key="i"
+              <div class="event-item" v-for="(alert, i) in alerts" :key="alert.alert_key || (alert.device_name + '|' + alert.time)"
                    @click="alert.link && router.push(alert.link)" :style="{ cursor: alert.link ? 'pointer' : 'default' }">
                 <div class="event-timeline-marker">
                   <span :class="['event-dot', alert.severity]"></span>
@@ -436,7 +436,7 @@
               <h3 class="panel-title">{{ t('dashRecentActivity') }}</h3>
             </div>
             <div class="panel-body activity-feed">
-              <div class="activity-item" v-for="(item, i) in activityFeed" :key="i"
+              <div class="activity-item" v-for="(item, i) in activityFeed" :key="item.type + '|' + item.text"
                    @click="item.link && router.push(item.link)" :style="{ cursor: item.link ? 'pointer' : 'default' }">
                 <div :class="['activity-icon', item.type]">
                   <svg v-if="item.type === 'backup'" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">

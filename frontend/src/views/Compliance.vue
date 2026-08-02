@@ -751,7 +751,7 @@
           <div class="config-lines-container" ref="configLinesRef">
             <div
               v-for="(line, index) in configLineAnalysis"
-              :key="index"
+              :key="line.lineNum"
               class="config-line"
               :class="getLineClass(line)"
               @click="selectConfigLine(line, index)"

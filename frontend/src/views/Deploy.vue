@@ -283,7 +283,7 @@
                 <div class="variables-list">
                   <div
                     v-for="(variable, index) in deployForm.variables"
-                    :key="index"
+                    :key="variable._uid"
                     class="variable-item"
                   >
                     <el-select
@@ -924,6 +924,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
+import { stampUid } from '@/utils/uid.js'
 import DiffViewer from '@/components/DiffViewer.vue'
 
 const { t } = useI18n()
@@ -1157,7 +1158,7 @@ const loadTemplateVariables = async (templateId) => {
         }
 
         availableVariables.value = vars || []
-        deployForm.value.variables = (vars || []).map(v => ({
+        deployForm.value.variables = (vars || []).map(v => stampUid({
           key: v.key,
           value: v.default || ''
         }))
@@ -1197,7 +1198,7 @@ const getVariablePlaceholder = (key) => {
 }
 
 const addVariable = () => {
-  deployForm.value.variables.push({ key: '', value: '' })
+  deployForm.value.variables.push(stampUid({ key: '', value: '' }))
 }
 
 const removeVariable = (index) => {
@@ -1418,9 +1419,9 @@ const handleRedeploy = async (record) => {
     deployForm.value.target_devices = deviceIds
     // variables 可能是对象格式，需要转换为数组
     if (config.variables && typeof config.variables === 'object' && !Array.isArray(config.variables)) {
-      deployForm.value.variables = Object.entries(config.variables).map(([key, value]) => ({ key, value }))
+      deployForm.value.variables = Object.entries(config.variables).map(([key, value]) => stampUid({ key, value }))
     } else {
-      deployForm.value.variables = config.variables || []
+      deployForm.value.variables = (config.variables || []).map(stampUid)
     }
     deployForm.value.dry_run = false
 

@@ -44,20 +44,14 @@
         <span class="limit-label">{{ t('logRecordsLabel') }}</span>
       </div>
 
-      <!-- 日志表格 -->
-      <el-table :data="logList" style="width: 100%" v-loading="loading" height="600px">
-        <el-table-column prop="timestamp" :label="t('logColTime')" width="180">
-          <template #default="{ row }">{{ formatDateTime(row.timestamp) }}</template>
-        </el-table-column>
-        <el-table-column prop="level" :label="t('logColLevel')" width="90">
-          <template #default="{ row }">
-            <el-tag :type="getLevelType(row.level)" size="small">{{ row.level }}</el-tag>
+      <!-- 日志表格（el-table-v2 虚拟滚动，仅渲染可视行） -->
+      <div class="log-table-wrapper" v-loading="loading">
+        <el-auto-resizer>
+          <template #default="{ height, width }">
+            <el-table-v2 :columns="logColumns" :data="logList" :width="width" :height="height" />
           </template>
-        </el-table-column>
-        <el-table-column prop="module" :label="t('logColModule')" width="150" />
-        <el-table-column prop="function" :label="t('logColFunction')" width="120" />
-        <el-table-column prop="message" :label="t('logColMessage')" min-width="400" show-overflow-tooltip />
-      </el-table>
+        </el-auto-resizer>
+      </div>
 
       <!-- 分页 -->
       <div class="pagination-bar">
@@ -102,8 +96,8 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, reactive, computed, h, onMounted, onUnmounted } from 'vue'
+import { ElMessage, ElTag } from 'element-plus'
 import { Search, Refresh, VideoPlay, VideoPause } from '@element-plus/icons-vue'
 import { getLogs, getLogFiles, getLogFileContent, searchLogs, clearOldLogs } from '@/api'
 import { useI18n } from '@/composables/useI18n'
@@ -173,6 +167,39 @@ const getLevelType = (level) => {
   }
   return typeMap[level] || 'info'
 }
+
+// el-table-v2 列定义（computed 随界面语言切换响应式）
+const logColumns = computed(() => [
+  {
+    key: 'timestamp',
+    title: t('logColTime'),
+    width: 180,
+    cellRenderer: ({ row }) => h('span', formatDateTime(row.timestamp))
+  },
+  {
+    key: 'level',
+    title: t('logColLevel'),
+    width: 90,
+    cellRenderer: ({ row }) => h(ElTag, { type: getLevelType(row.level), size: 'small' }, () => row.level)
+  },
+  {
+    key: 'module',
+    title: t('logColModule'),
+    width: 150
+  },
+  {
+    key: 'function',
+    title: t('logColFunction'),
+    width: 120
+  },
+  {
+    key: 'message',
+    title: t('logColMessage'),
+    minWidth: 400,
+    flexGrow: 1,
+    cellRenderer: ({ row }) => h('div', { class: 'log-message-cell', title: row.message }, row.message)
+  }
+])
 
 // 加载日志
 const loadLogs = debounce(async (force = false) => {
@@ -281,10 +308,10 @@ const toggleRealtime = () => {
     isRealtime.value = false
     ElMessage.success(t('logRealtimeStopped'))
   } else {
-    // 开始实时刷新
+    // 开始实时刷新（force 绕过 30s 缓存，否则 interval 读缓存不真刷新）
     isRealtime.value = true
     realtimeTimer.value = setInterval(() => {
-      loadLogs()
+      loadLogs(true)
     }, 3000)
     ElMessage.info(t('logRealtimeStarted'))
   }
@@ -323,6 +350,16 @@ onUnmounted(() => {
 .limit-label {
   color: #909399;
   font-size: 14px;
+}
+
+.log-table-wrapper {
+  height: 600px;
+}
+
+.log-message-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pagination-bar {

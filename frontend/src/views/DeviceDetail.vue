@@ -461,7 +461,7 @@
             <el-tag type="info" size="small">{{ t('deviceFirewallGoVault') }}</el-tag>
           </div>
           <div class="modules-container">
-            <div v-for="(module, index) in editForm.modules" :key="index" class="module-row">
+            <div v-for="(module, index) in editForm.modules" :key="module._uid" class="module-row">
               <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 120px;">
                 <el-option :label="t('deviceMainModule')" value="main" />
                 <el-option :label="t('deviceExpansionModule')" value="expansion" />
@@ -724,6 +724,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
+import { stampUid } from '@/utils/uid.js'
 import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
 import DeviceTrafficChart from '@/components/ui/DeviceTrafficChart.vue'
 import api from '@/api/request.js'
@@ -1002,7 +1003,7 @@ const loadDevice = debounce(async (force = false) => {
       snmp_version: data.snmp_version || '2c',
       snmp_community: data.snmp_community || '',
       snmp_port: data.snmp_port || 161,
-      modules: Array.isArray(normalizedModules) && normalizedModules.length > 0 ? normalizedModules : [{ type: 'main', pid: '', serial_number: '' }]
+      modules: Array.isArray(normalizedModules) && normalizedModules.length > 0 ? normalizedModules.map(stampUid) : [stampUid({ type: 'main', pid: '', serial_number: '' })]
     }
   } catch (error) {
     if (error.name !== 'CanceledError') {
@@ -1047,9 +1048,9 @@ const loadUsers = async () => {
 
 const addModule = () => {
   if (!editForm.value.modules) {
-    editForm.value.modules = [{ type: 'main', pid: '', serial_number: '' }]
+    editForm.value.modules = [stampUid({ type: 'main', pid: '', serial_number: '' })]
   }
-  editForm.value.modules.push({ type: 'other', pid: '', serial_number: '' })
+  editForm.value.modules.push(stampUid({ type: 'other', pid: '', serial_number: '' }))
 }
 
 const removeModule = (index) => {
@@ -1112,7 +1113,7 @@ const fetchDeviceInfoHandler = async () => {
       // 添加获取到的模块信息
       if (result.modules && result.modules.length > 0) {
         // 清空现有模块，用获取到的模块替换
-        editForm.value.modules = result.modules
+        editForm.value.modules = result.modules.map(stampUid)
       }
       ElMessage.success('设备信息获取成功')
     } else {

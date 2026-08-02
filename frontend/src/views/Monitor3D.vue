@@ -141,7 +141,7 @@
     <el-dialog v-model="showWaypointDialog" :title="t('editWaypoints')" width="500px">
       <p class="waypoint-hint">{{ t('waypointHint') }}</p>
       <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingWaypoints" :key="idx" class="waypoint-item">
+        <div v-for="(wp, idx) in editingWaypoints" :key="wp._uid" class="waypoint-item">
           <span class="waypoint-index">{{ idx + 1 }}</span>
           <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
           <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
@@ -167,7 +167,7 @@
     <el-dialog v-model="showTrunkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberTrunk')" width="500px">
       <p class="waypoint-hint">{{ t('waypointHint') }}</p>
       <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingTrunkWaypoints" :key="idx" class="waypoint-item">
+        <div v-for="(wp, idx) in editingTrunkWaypoints" :key="wp._uid" class="waypoint-item">
           <span class="waypoint-index">{{ idx + 1 }}</span>
           <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
           <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
@@ -193,7 +193,7 @@
     <el-dialog v-model="showBranchLinkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberBranchLink')" width="500px">
       <p class="waypoint-hint">{{ t('waypointHint') }}</p>
       <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingBranchLinkWaypoints" :key="idx" class="waypoint-item">
+        <div v-for="(wp, idx) in editingBranchLinkWaypoints" :key="wp._uid" class="waypoint-item">
           <span class="waypoint-index">{{ idx + 1 }}</span>
           <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
           <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
@@ -219,7 +219,7 @@
     <el-dialog v-model="showTopoEdgeWaypointDialog" :title="t('editWaypoints') + ' - TopoEdge'" width="500px">
       <p class="waypoint-hint">{{ t('waypointHint') }}</p>
       <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingTopoEdgeWaypoints" :key="idx" class="waypoint-item">
+        <div v-for="(wp, idx) in editingTopoEdgeWaypoints" :key="wp._uid" class="waypoint-item">
           <span class="waypoint-index">{{ idx + 1 }}</span>
           <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
           <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
@@ -668,6 +668,7 @@ import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, Arr
 import { authenticatedAxios as axios } from '@/api/request.js'
 import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault, getFloorPlanContent } from '@/api'
 import { formatDateTime } from '@/utils/time'
+import { stampUid } from '@/utils/uid.js'
 import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
 
@@ -1660,9 +1661,9 @@ function openWaypointDialog(link) {
   // waypoints 可能是字符串（旧数据）或已解析的数组（新接口）
   try {
     if (typeof link.waypoints === 'string') {
-      editingWaypoints.value = JSON.parse(link.waypoints) || []
+      editingWaypoints.value = (JSON.parse(link.waypoints) || []).map(stampUid)
     } else if (Array.isArray(link.waypoints)) {
-      editingWaypoints.value = link.waypoints
+      editingWaypoints.value = link.waypoints.map(stampUid)
     } else {
       editingWaypoints.value = []
     }
@@ -1674,7 +1675,7 @@ function openWaypointDialog(link) {
 
 // 添加拐点
 function addWaypoint() {
-  editingWaypoints.value.push({ x: 50, y: 50 })
+  editingWaypoints.value.push(stampUid({ x: 50, y: 50 }))
 }
 
 // 移除拐点
@@ -1727,9 +1728,9 @@ function openTrunkWaypointDialog(trunk) {
   editingTrunk.value = trunk
   try {
     if (typeof trunk.waypoints === 'string') {
-      editingTrunkWaypoints.value = JSON.parse(trunk.waypoints) || []
+      editingTrunkWaypoints.value = (JSON.parse(trunk.waypoints) || []).map(stampUid)
     } else if (Array.isArray(trunk.waypoints)) {
-      editingTrunkWaypoints.value = trunk.waypoints
+      editingTrunkWaypoints.value = trunk.waypoints.map(stampUid)
     } else {
       editingTrunkWaypoints.value = []
     }
@@ -1741,10 +1742,10 @@ function openTrunkWaypointDialog(trunk) {
 
 // 添加主干拐点
 function addTrunkWaypoint() {
-  editingTrunkWaypoints.value.push({
+  editingTrunkWaypoints.value.push(stampUid({
     x: 50,
     y: 50
-  })
+  }))
 }
 
 // 删除主干拐点
@@ -1785,9 +1786,9 @@ function openBranchLinkWaypointDialog(link) {
   editingBranchLink.value = link
   try {
     if (typeof link.waypoints === 'string') {
-      editingBranchLinkWaypoints.value = JSON.parse(link.waypoints) || []
+      editingBranchLinkWaypoints.value = (JSON.parse(link.waypoints) || []).map(stampUid)
     } else if (Array.isArray(link.waypoints)) {
-      editingBranchLinkWaypoints.value = link.waypoints
+      editingBranchLinkWaypoints.value = link.waypoints.map(stampUid)
     } else {
       editingBranchLinkWaypoints.value = []
     }
@@ -1799,10 +1800,10 @@ function openBranchLinkWaypointDialog(link) {
 
 // 添加分支光缆拐点
 function addBranchLinkWaypoint() {
-  editingBranchLinkWaypoints.value.push({
+  editingBranchLinkWaypoints.value.push(stampUid({
     x: 50,
     y: 50
-  })
+  }))
 }
 
 // 删除分支光缆拐点
@@ -1849,9 +1850,9 @@ function openTopoEdgeWaypointDialog(edge) {
   editingTopoEdge.value = edge
   try {
     if (typeof edge.waypoints === 'string') {
-      editingTopoEdgeWaypoints.value = JSON.parse(edge.waypoints) || []
+      editingTopoEdgeWaypoints.value = (JSON.parse(edge.waypoints) || []).map(stampUid)
     } else if (Array.isArray(edge.waypoints)) {
-      editingTopoEdgeWaypoints.value = edge.waypoints
+      editingTopoEdgeWaypoints.value = edge.waypoints.map(stampUid)
     } else {
       editingTopoEdgeWaypoints.value = []
     }
@@ -1863,10 +1864,10 @@ function openTopoEdgeWaypointDialog(edge) {
 
 // 添加 TopoEdge 拐点
 function addTopoEdgeWaypoint() {
-  editingTopoEdgeWaypoints.value.push({
+  editingTopoEdgeWaypoints.value.push(stampUid({
     x: 50,
     y: 50
-  })
+  }))
 }
 
 // 删除 TopoEdge 拐点

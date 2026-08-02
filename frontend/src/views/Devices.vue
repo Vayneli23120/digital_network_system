@@ -337,7 +337,7 @@
             <el-tag type="info" size="small">防火墙需要GoVault权限才能SSH连接</el-tag>
           </div>
           <div class="modules-container">
-            <div v-for="(module, index) in newDevice.modules" :key="index" class="module-row">
+            <div v-for="(module, index) in newDevice.modules" :key="module._uid" class="module-row">
               <el-select v-model="module.type" :placeholder="t('deviceModuleType')" size="small" style="width: 120px;">
                 <el-option :label="t('deviceMainModule')" value="main" />
                 <el-option :label="t('deviceExpansionModule')" value="expansion" />
@@ -500,6 +500,7 @@ import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice
 import { useI18n } from '@/composables/useI18n'
 import { debounce, throttle } from '@/utils/requestManager.js'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
+import { stampUid } from '@/utils/uid.js'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -564,7 +565,7 @@ const newDevice = ref({
   monitor_tier: 'normal',
   vendor: 'cisco',
   credential_group: 'default',
-  modules: [{ type: 'main', pid: '', serial_number: '' }]
+  modules: [stampUid({ type: 'main', pid: '', serial_number: '' })]
 })
 
 const addModule = () => {
@@ -673,7 +674,7 @@ const fetchDeviceInfoHandler = async () => {
       // 添加获取到的模块信息
       if (result.modules && result.modules.length > 0) {
         // 清空现有模块，用获取到的模块替换
-        newDevice.value.modules = result.modules
+        newDevice.value.modules = result.modules.map(stampUid)
       }
       ElMessage.success('设备信息获取成功')
     } else {
@@ -698,7 +699,7 @@ const resetNewDevice = () => {
     monitor_tier: 'normal',  // 监控分级
     vendor: 'cisco',
     credential_group: 'default',
-    modules: [{ type: 'main', pid: '', serial_number: '' }]
+    modules: [stampUid({ type: 'main', pid: '', serial_number: '' })]
   }
   // 重置探测状态
   probeResult.value = { ip: null, connection: null }
@@ -969,7 +970,7 @@ const editDevice = (row) => {
   // 解析 modules 数据（兼容旧数据无 pid 字段）
   const modules = row.modules || [{ type: 'main', pid: '', serial_number: '' }]
   // 确保每个模块都有 pid 字段
-  const normalizedModules = modules.map(m => ({
+  const normalizedModules = modules.map(m => stampUid({
     type: m.type || 'other',
     pid: m.pid || '',
     serial_number: m.serial_number || ''
