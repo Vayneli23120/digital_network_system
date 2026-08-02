@@ -1273,14 +1273,14 @@ async function loadFiberData() {
       if (!devicePaths.value || Object.keys(devicePaths.value).length === 0) {
         const diagnostic = topoPathsRes.data?.diagnostic
         if (diagnostic) {
-          ElMessage.info(`数据链路诊断：${diagnostic}`)
+          ElMessage.info(t('monitor3dLinkDiagnostic', { msg: diagnostic }))
         } else {
-          ElMessage.info('暂无数据链路可显示（检查：1. 是否有核心交换机设备，2. 设备间是否已连接）')
+          ElMessage.info(t('monitor3dLinkNoData'))
         }
       }
     } catch (e) {
       console.warn('加载 device-paths 失败:', e)
-      ElMessage.warning('数据链路加载失败，请检查网络连接或服务状态')
+      ElMessage.warning(t('monitor3dLinkLoadFailed'))
       devicePaths.value = {}
     }
     await loadTrafficHeat()
@@ -3374,7 +3374,7 @@ async function finishWiring(targetAnchorData) {
     (e.a_node_id === toNodeId && e.b_node_id === fromNodeId)
   )
   if (duplicate) {
-    ElMessage.warning('这两个端口之间已存在连线')
+    ElMessage.warning(t('monitor3dPortDuplicate'))
     cancelWiring()
     return
   }
@@ -4642,7 +4642,7 @@ function findNearbyDevice(x_percent, y_percent, threshold) {
       return {
         device_id: node.device_id,
         device_name: device ? device.name : null,
-        name: device ? device.name : `设备 ${node.device_id}`
+        name: device ? device.name : t('monitor3dDeviceFallbackName', { id: node.device_id })
       }
     }
   }
@@ -5026,9 +5026,9 @@ function updateHudContent(device) {
         <span>${activeFault.fault_no || 'INC'}</span>
         <b class="sev-${activeFault.severity || 'minor'}">${activeFault.severity || '-'}</b>
       </div>
-      <div class="hud-incident-row">状态：${activeFault.status_label || activeFault.status || '-'}</div>
-      <div class="hud-incident-row">负责人：${activeFault.assigned_to || '-'}</div>
-      <div class="hud-incident-row">建议：${getRecommendationSummary(activeFault.recommendation)}</div>
+      <div class="hud-incident-row">${t('hudStatus')}：${activeFault.status_label || activeFault.status || '-'}</div>
+      <div class="hud-incident-row">${t('faultOwner')}：${activeFault.assigned_to || '-'}</div>
+      <div class="hud-incident-row">${t('complianceRecommendation')}：${getRecommendationSummary(activeFault.recommendation)}</div>
     </div>
     ` : ''}
   `
@@ -5661,11 +5661,11 @@ async function reviewSelectedFault(falsePositive = false) {
       false_positive: falsePositive,
       notes: falsePositive ? '大屏确认：误报' : '大屏确认：故障已复核',
     })
-    ElMessage.success(falsePositive ? '已标记为误报并关闭' : '故障已确认')
+    ElMessage.success(falsePositive ? t('monitor3dFaultMarkedMisreport') : t('monitor3dFaultConfirmed'))
     await loadActiveFaults()
   } catch (e) {
     console.error('故障复核失败:', e)
-    ElMessage.error('故障复核失败')
+    ElMessage.error(t('monitor3dFaultReviewFailed'))
   } finally {
     faultActionLoading.value = false
   }
@@ -5704,11 +5704,11 @@ async function transferSelectedFaultToMaintenance() {
       description: selectedActiveFault.value.recommendation || selectedActiveFault.value.description || '监控大屏转维修',
       maintenance_owner: selectedActiveFault.value.assigned_to || 'Field Engineer',
     })
-    ElMessage.success('已转维修单')
+    ElMessage.success(t('faultTransferSuccess'))
     await loadActiveFaults()
   } catch (e) {
     console.error('转维修失败:', e)
-    ElMessage.error('转维修失败')
+    ElMessage.error(t('faultTransferFailed'))
   } finally {
     faultActionLoading.value = false
   }
@@ -5994,15 +5994,15 @@ function handleInterfaceStatusChange(msg) {
   const device = devices.value.find(d => d.id === msg.device_id)
   const dName = msg.device_name || device?.name || `#${msg.device_id}`
   const ifName = msg.if_name || `if${msg.if_index}`
-  const uplinkTag = msg.is_uplink ? '上行口 ' : ''
+  const uplinkTag = msg.is_uplink ? t('monitor3dUplinkTag') : ''
   if (device && (msg.is_uplink || msg.source === 'trap')) {
     focusDevice(device)
     showHudForDevice(device, 6000)
   }
   if (msg.new_status === 'down') {
-    ElMessage.error({ message: `${uplinkTag}${ifName} 中断：${dName}`, duration: 5000 })
+    ElMessage.error({ message: t('monitor3dIfDown', { tag: uplinkTag, iface: ifName, device: dName }), duration: 5000 })
   } else if (msg.new_status === 'up' && msg.old_status === 'down') {
-    ElMessage.success({ message: `${uplinkTag}${ifName} 恢复：${dName}`, duration: 4000 })
+    ElMessage.success({ message: t('monitor3dIfUp', { tag: uplinkTag, iface: ifName, device: dName }), duration: 4000 })
   }
   loadActiveFaults()
   loadCommandPanelData()
@@ -6024,11 +6024,11 @@ function handleDeviceStatusChange(msg) {
   // 离线/恢复告警提示
   const label = `${msg.device_name || device.name}（${msg.ip || device.ip}）`
   if (msg.new_state === 'unreachable') {
-    ElMessage.error({ message: `设备离线：${label}`, duration: 5000 })
+    ElMessage.error({ message: t('monitor3dDeviceOffline', { label }), duration: 5000 })
     // 自动锁定镜头（去抖：多台同时掉线会合并为框住整片区域，避免镜头乱跳）
     scheduleAutoFocusOffline()
   } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
-    ElMessage.success({ message: `设备恢复：${label}`, duration: 4000 })
+    ElMessage.success({ message: t('monitor3dDeviceRecovered', { label }), duration: 4000 })
     // 逐台恢复时重新框定剩余离线区域；全部恢复则视角复位
     scheduleAutoFocusOffline()
   }
