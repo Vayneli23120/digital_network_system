@@ -254,7 +254,9 @@ class RuleEngine:
     def list_rules(
         self,
         trigger_type: Optional[str] = None,
-        is_active: Optional[bool] = None
+        is_active: Optional[bool] = None,
+        skip: int = 0,
+        limit: int = 100,
     ) -> List[WorkflowRule]:
         """列出规则"""
         query = self.db.query(WorkflowRule)
@@ -265,7 +267,19 @@ class RuleEngine:
         if is_active is not None:
             query = query.filter(WorkflowRule.is_active == is_active)
 
-        return query.order_by(WorkflowRule.priority.asc()).all()
+        return query.order_by(WorkflowRule.priority.asc()).offset(skip).limit(limit).all()
+
+    def count_rules(
+        self,
+        trigger_type: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> int:
+        query = self.db.query(WorkflowRule)
+        if trigger_type:
+            query = query.filter(WorkflowRule.trigger_type == trigger_type)
+        if is_active is not None:
+            query = query.filter(WorkflowRule.is_active == is_active)
+        return query.count()
 
     def get_rule_stats(self) -> Dict:
         """获取规则统计"""

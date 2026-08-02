@@ -512,7 +512,9 @@ async def create_fault(
     background_tasks.add_task(
         trigger_fault_workflow,
         fault.id,
-        request.severity
+        request.severity,
+        principal.username,
+        principal.user_id,
     )
 
     # 严重/重要故障：后台触发 AI 预判（仅在已配置 AI 时生效）
@@ -853,7 +855,8 @@ async def escalate_fault(
     new_severity: str,
     reason: str,
     db: Session = Depends(get_db),
-    _: None = Depends(require_fault_write)
+    _: None = Depends(require_fault_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """
     升级故障严重程度
@@ -891,8 +894,12 @@ async def escalate_fault(
     db.commit()
 
     # 触发工作流（可能需要创建紧急维修单）
-    executor = WorkflowExecutor(db)
-    await executor.trigger_fault_created(fault_id)
+    await _run_fault_workflow(
+        db,
+        fault_id,
+        principal.username,
+        principal.user_id,
+    )
 
     return {
         "id": fault_id,
@@ -1074,7 +1081,12 @@ async def get_incidents_dashboard(
 
 # ===== Background Tasks =====
 
-async def trigger_fault_workflow(fault_id: int, severity: str):
+async def trigger_fault_workflow(
+    fault_id: int,
+    severity: str,
+    actor: str = "system",
+    actor_user_id: Optional[int] = None,
+):
     """后台触发故障工作流"""
     from app.shared.database import get_db_manager
 
@@ -1082,12 +1094,47 @@ async def trigger_fault_workflow(fault_id: int, severity: str):
     db = db_manager.get_session()
 
     try:
-        executor = WorkflowExecutor(db)
-        await executor.trigger_fault_created(fault_id)
+        await _run_fault_workflow(db, fault_id, actor, actor_user_id)
     except Exception:
         logger.exception("Workflow trigger failed for fault {}", fault_id)
     finally:
         db.close()
+
+
+async def _run_fault_workflow(
+    db: Session,
+    fault_id: int,
+    actor: str,
+    actor_user_id: Optional[int],
+):
+    from app.services.workflow import (
+        ACTION_REQUIRED_PERMISSIONS,
+        WorkflowPermissionError,
+    )
+    from app.shared.dependencies import get_user_all_permissions
+
+    action_authorizer = None
+    if actor_user_id is not None:
+        permissions = set(get_user_all_permissions(actor_user_id, db))
+
+        def action_authorizer(action_type: str) -> bool:
+            required = ACTION_REQUIRED_PERMISSIONS.get(action_type)
+            return required is None or "admin:all" in permissions or required in permissions
+
+    executor = WorkflowExecutor(db)
+    try:
+        return await executor.trigger_fault_created(
+            fault_id,
+            actor=actor,
+            action_authorizer=action_authorizer,
+        )
+    except WorkflowPermissionError as exc:
+        logger.warning(
+            "Skipped fault workflow actions for user {} missing permissions: {}",
+            actor,
+            ", ".join(exc.missing_permissions),
+        )
+        return None
 
 
 async def trigger_fault_ai_prediagnosis(fault_id: int):

@@ -7,7 +7,7 @@
 """
 
 import json
-from typing import Dict, List, Optional, Any
+from typing import Any, Callable, Dict, List, Optional
 from datetime import datetime
 from loguru import logger
 
@@ -17,6 +17,19 @@ from app.shared.models import WorkflowRule
 from .rule_engine import RuleEngine, MatchedRule
 from .triggers import TriggerManager
 from .actions import ActionManager
+
+
+ACTION_REQUIRED_PERMISSIONS = {
+    "create_maintenance": "maintenance:write",
+    "create_pm_task": "planned_task:write",
+    "update_health_score": "device:write",
+}
+
+
+class WorkflowPermissionError(PermissionError):
+    def __init__(self, missing_permissions: List[str]):
+        self.missing_permissions = sorted(set(missing_permissions))
+        super().__init__("Missing workflow target permissions")
 
 
 class WorkflowExecutionResult:
@@ -70,7 +83,9 @@ class WorkflowExecutor:
     async def execute(
         self,
         trigger_type: str,
-        event_data: Dict[str, Any]
+        event_data: Dict[str, Any],
+        actor: str = "system",
+        action_authorizer: Optional[Callable[[str], bool]] = None,
     ) -> WorkflowExecutionResult:
         """
         执行工作流
@@ -87,7 +102,7 @@ class WorkflowExecutor:
         Returns:
             WorkflowExecutionResult 执行结果
         """
-        logger.info(f"Workflow triggered: {trigger_type} with data: {event_data}")
+        logger.info("Workflow triggered: {} by {}", trigger_type, actor)
 
         try:
             # 1. 触发器处理事件
@@ -103,6 +118,8 @@ class WorkflowExecutor:
                     error='Trigger not activated'
                 )
 
+            context["workflow_actor"] = actor
+
             # 2. 规则引擎匹配规则
             matched_rules = self.rule_engine.match_rules(trigger_type, context)
 
@@ -114,6 +131,16 @@ class WorkflowExecutor:
                     actions_executed=[],
                     success=True
                 )
+
+            if action_authorizer:
+                missing_permissions = [
+                    ACTION_REQUIRED_PERMISSIONS[matched.rule.action_type]
+                    for matched in matched_rules
+                    if matched.rule.action_type in ACTION_REQUIRED_PERMISSIONS
+                    and not action_authorizer(matched.rule.action_type)
+                ]
+                if missing_permissions:
+                    raise WorkflowPermissionError(missing_permissions)
 
             # 3. 执行动作（按优先级顺序）
             actions_results = []
@@ -152,38 +179,87 @@ class WorkflowExecutor:
 
             self.db.commit()
 
+            success = all(
+                result.get("success") is True for result in actions_results
+            )
+
             return WorkflowExecutionResult(
                 trigger_type=trigger_type,
                 rules_matched=matched_rules,
                 actions_executed=actions_results,
-                success=True
+                success=success,
+                error=None if success else "一个或多个工作流动作执行失败",
             )
 
-        except Exception as e:
-            logger.error(f"Workflow execution error: {e}")
+        except WorkflowPermissionError:
+            self.db.rollback()
+            raise
+        except Exception:
+            self.db.rollback()
+            logger.exception("Workflow execution failed: {}", trigger_type)
             return WorkflowExecutionResult(
                 trigger_type=trigger_type,
                 rules_matched=[],
                 actions_executed=[],
                 success=False,
-                error=str(e)
+                error="工作流执行失败，请查看服务端日志",
             )
 
-    async def trigger_fault_created(self, fault_id: int) -> WorkflowExecutionResult:
+    async def trigger_fault_created(
+        self,
+        fault_id: int,
+        actor: str = "system",
+        action_authorizer: Optional[Callable[[str], bool]] = None,
+    ) -> WorkflowExecutionResult:
         """触发故障创建工作流"""
-        return await self.execute('fault_created', {'fault_id': fault_id})
+        return await self.execute(
+            'fault_created',
+            {'fault_id': fault_id},
+            actor,
+            action_authorizer,
+        )
 
-    async def trigger_health_check(self, device_id: int) -> WorkflowExecutionResult:
+    async def trigger_health_check(
+        self,
+        device_id: int,
+        actor: str = "system",
+        action_authorizer: Optional[Callable[[str], bool]] = None,
+    ) -> WorkflowExecutionResult:
         """触发健康检查工作流"""
-        return await self.execute('device_health_low', {'device_id': device_id})
+        return await self.execute(
+            'device_health_low',
+            {'device_id': device_id},
+            actor,
+            action_authorizer,
+        )
 
-    async def trigger_maintenance_completed(self, maintenance_id: int) -> WorkflowExecutionResult:
+    async def trigger_maintenance_completed(
+        self,
+        maintenance_id: int,
+        actor: str = "system",
+        action_authorizer: Optional[Callable[[str], bool]] = None,
+    ) -> WorkflowExecutionResult:
         """触发维修完成工作流"""
-        return await self.execute('maintenance_completed', {'maintenance_id': maintenance_id})
+        return await self.execute(
+            'maintenance_completed',
+            {'maintenance_id': maintenance_id},
+            actor,
+            action_authorizer,
+        )
 
-    async def trigger_scheduled_check(self, check_type: str = 'health') -> WorkflowExecutionResult:
+    async def trigger_scheduled_check(
+        self,
+        check_type: str = 'health',
+        actor: str = "system",
+        action_authorizer: Optional[Callable[[str], bool]] = None,
+    ) -> WorkflowExecutionResult:
         """触发定时检查工作流"""
-        return await self.execute('scheduled_check', {'check_type': check_type})
+        return await self.execute(
+            'scheduled_check',
+            {'check_type': check_type},
+            actor,
+            action_authorizer,
+        )
 
     def create_default_rules(self) -> List[WorkflowRule]:
         """创建默认工作流规则"""

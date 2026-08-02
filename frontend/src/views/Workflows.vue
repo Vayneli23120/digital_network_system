@@ -465,6 +465,8 @@ const testRule = async (rule) => {
       eventData = { device_id: 1 }
     } else if (rule.trigger_type === 'maintenance_completed') {
       eventData = { maintenance_id: 1 }
+    } else if (rule.trigger_type === 'scheduled_check') {
+      eventData = { check_type: 'health' }
     }
 
     testResult.value = await testWorkflowTrigger({

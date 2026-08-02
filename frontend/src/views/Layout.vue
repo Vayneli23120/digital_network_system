@@ -150,7 +150,7 @@ const sidebarData = computed(() => {
           { path: '/monitor-3d', text: t('menuMonitor3D'), icon: VideoPlay, permission: 'nav_overview:monitor_3d' },
           { path: '/device-health', text: t('menuDeviceHealth'), icon: TrendCharts, permission: 'nav_overview:device_health' },
           { path: '/ai-analysis', text: t('menuAIAnalysis'), icon: Cpu, permission: 'nav_overview:ai_analysis' },
-          { path: '/workflows', text: t('menuWorkflows'), icon: Operation, permission: 'nav_overview:workflows' },
+          { path: '/workflows', text: t('menuWorkflows'), icon: Operation, permission: 'workflow:read' },
         ]
       }
     ],

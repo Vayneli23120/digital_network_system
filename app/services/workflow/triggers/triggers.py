@@ -210,27 +210,30 @@ class ScheduledCheckTrigger(BaseTrigger):
         self.db = db
 
     def get_context(self, event_data: Dict[str, Any]) -> Dict[str, Any]:
-        """构建上下文（扫描所有设备）"""
+        """构建上下文（聚合全部设备，限制返回的设备 ID 数量）"""
         check_type = event_data.get('check_type', 'health')
 
-        # 获取所有活跃设备
-        devices = self.db.query(Device).filter(
+        active_devices = self.db.query(Device).filter(
             Device.status.in_(['online', 'offline', 'maintenance'])
-        ).all()
-
-        # 统计数据
-        health_below_60 = [d for d in devices if (d.health_score or 100) < 60]
-        risk_critical = [d for d in devices if d.risk_level == 'critical']
-        risk_high = [d for d in devices if d.risk_level == 'high']
+        )
+        total_devices = active_devices.count()
+        health_below_60 = active_devices.filter(Device.health_score < 60).count()
+        risk_critical = active_devices.filter(Device.risk_level == 'critical').count()
+        risk_high = active_devices.filter(Device.risk_level == 'high').count()
+        device_ids = [
+            row[0]
+            for row in active_devices.with_entities(Device.id).limit(1000).all()
+        ]
 
         return {
             'check_type': check_type,
-            'total_devices': len(devices),
-            'devices_health_below_60': len(health_below_60),
-            'devices_critical': len(risk_critical),
-            'devices_high_risk': len(risk_high),
+            'total_devices': total_devices,
+            'devices_health_below_60': health_below_60,
+            'devices_critical': risk_critical,
+            'devices_high_risk': risk_high,
             'check_time': datetime.utcnow().isoformat(),
-            'device_ids': [d.id for d in devices]
+            'device_ids': device_ids,
+            'device_ids_truncated': total_devices > len(device_ids),
         }
 
     def should_trigger(self, event_data: Dict[str, Any]) -> bool:

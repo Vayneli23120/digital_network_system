@@ -21,7 +21,7 @@ from loguru import logger
 from sqlalchemy.orm import Session
 
 from app.shared.models import (
-    Device, MaintenanceRecord, FaultRecord,
+    AuditLog, Device, MaintenanceRecord, FaultRecord,
     MaintenanceTask
 )
 from app.services.fault_maintenance import (
@@ -109,7 +109,8 @@ class CreateMaintenanceAction(BaseAction):
             status='pending',
             priority=priority,
             fault_id=fault_id,
-            auto_created=True
+            auto_created=True,
+            operator=context.get("workflow_actor", "system"),
         )
 
         created = True
@@ -124,7 +125,15 @@ class CreateMaintenanceAction(BaseAction):
                     },
                 )
             except FaultMaintenanceConflictError as exc:
-                return {'success': False, 'error': str(exc)}
+                logger.warning(
+                    "Workflow maintenance claim conflict for fault {}: {}",
+                    fault_id,
+                    exc,
+                )
+                return {
+                    'success': False,
+                    'error': '故障维修状态已变化，请刷新后重试',
+                }
         else:
             db.add(maintenance)
             db.commit()
@@ -194,6 +203,7 @@ class CreatePMTaskAction(BaseAction):
                 'trigger_context': context,
                 'reason': config.get('reason', '健康评分低于阈值'),
                 'workflow_rule_id': config.get('rule_id'),
+                'generated_by': context.get('workflow_actor', 'system'),
                 'ai_generated': True
             })
         )
@@ -298,6 +308,18 @@ class UpdateHealthScoreAction(BaseAction):
         else:
             device.risk_level = 'critical'
 
+        db.add(AuditLog(
+            operator=context.get("workflow_actor", "system"),
+            action="workflow.update_health_score",
+            target_type="device",
+            target_id=device.id,
+            details=json.dumps({
+                "previous_score": current_score,
+                "new_score": new_score,
+                "adjustment": score_adjustment,
+                "workflow_rule_id": config.get("rule_id"),
+            }),
+        ))
         db.commit()
 
         logger.info(f"Updated health score for device {device_id}: {current_score} -> {new_score}")
@@ -390,14 +412,17 @@ class ActionManager:
         action = self.get_action(action_type)
         if not action:
             logger.warning(f"Unknown action type: {action_type}")
-            return {'success': False, 'error': f"Unknown action type: {action_type}"}
+            return {'success': False, 'error': '未知工作流动作类型'}
 
         try:
             result = await action.execute(config, context, self.db)
             return result
-        except Exception as e:
-            logger.error(f"Action execution error: {action_type} - {e}")
-            return {'success': False, 'error': str(e)}
+        except Exception:
+            logger.exception("Workflow action failed: {}", action_type)
+            return {
+                'success': False,
+                'error': '工作流动作执行失败，请查看服务端日志',
+            }
 
     def list_actions(self) -> List[str]:
         """列出所有动作类型"""

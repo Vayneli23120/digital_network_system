@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B3（含 permissions/faults/maintenance/planned）已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B4（含 permissions/faults/maintenance/planned/workflows）已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,7 +75,7 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance；workflows、system settings 等仍待步骤 4E-B。
+  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows；system settings 等仍待步骤 4E-B。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
@@ -84,6 +84,8 @@
   → 修复（步骤 4E-B2）：全端点按 `maintenance:read/write/delete/transition` 分层；创建、指派、日志、流转、验证事件的 operator 均取统一 Principal，body 中伪造 operator 直接 422。
 - [x] **P0** `planned_maintenance/router.py` + `aop_router.py` — 旧任务流 17 条与 AOP 年度计划 13 条端点全部只有登录认证，无 `planned_task:*` 功能权限。`[已复核]`
   → 修复（步骤 4E-B3）：30 条端点按 `planned_task:read/write/delete/execute` 分层，覆盖计划、任务、统计、AI/预测生成、AOP 项目/窗口/日历与排程。
+- [x] **P0** `workflows/router.py` — 规则 CRUD、初始化与四条触发路径共 14 条端点全部无功能权限；仅持登录身份即可配置和执行跨域自动化。`[已复核]`
+  → 修复（步骤 4E-B4）：按 `workflow:read/write/delete/trigger` 分层；HTTP 触发在任何动作执行前还必须满足动作目标域权限（maintenance/planned_task/device write），缺失时整次 403 且零副作用。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -418,7 +420,33 @@ Faults/Maintenance 集成回归 **19 passed**，全部已完成安全切片 **15
 - [ ] PostgreSQL 并发重复排程仍保持幂等，既有 approved/locked 更新约束不退化
 - [ ] 浏览器 legacy 与 AOP 新建/编辑/批量窗口/排程/任务完成可用；执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E-B4 Workflows，再覆盖 system settings 等剩余写接口；
+**步骤 4E-B4 验证结果（2026-08-02）**：✅ Workflows 14 条 HTTP 端点全部按
+`workflow:read/write/delete/trigger` 分层；✅ trigger/action 类型限制为注册表中的 4/5 种，规则条件、动作配置和
+event_data 拒绝额外字段、未知操作符、类型错配、超长/深层/过多节点及危险数值；规则列表增加真实 total 与
+`skip/limit` 上限；✅ HTTP 手动 trigger 在匹配全部规则后、执行任何动作前，按动作要求
+`maintenance:write` / `planned_task:write` / `device:write`，缺权限整次 403 且无部分副作用；
+创建、更新、启停跨域写规则以及初始化默认规则时也必须先持有相同目标域权限，不能借 system 自动触发绕过；
+用户发起的 Fault create/escalate 自动化同样检查目标域权限，系统内部自动触发保留 system 语义；
+✅ maintenance operator、PM task generated_by 与健康分 AuditLog 均记录可信 actor；scheduled-check 改为数据库聚合，
+最多返回 1000 个设备 ID 并标记截断；✅ 任一动作失败时整体 `success=false`，异常与维修抢占冲突不再回传内部细节；
+前端 scheduled_check 测试补齐 check_type，菜单使用 `workflow:read`；
+✅ `tests/test_workflows_security_step4e_b.py` **10 passed**，Workflow/Fault/Maintenance 相邻回归 **24 passed**，
+全部已完成安全切片 **185 passed / 4 skipped**；全仓 Ruff、`app.main` 导入和编辑器诊断通过；
+✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 589 passed / 8 skipped / 10 errors**，
+相对 B3 恰好新增 10 passed，失败/错误集合不变。⚠️ 本机缺 Vite，前端构建交 Linux 测试系统。
+
+**步骤 4E-B4 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_workflows_security_step4e_b.py`、工作流维修幂等、Fault/Maintenance 相邻及全量 pytest，失败集合不得新增
+- [ ] 用 workflow read/write/delete/trigger 四个最小权限账号验证 14 条端点；跨权限 403、未认证 401、管理员全放行
+- [ ] 仅 workflow:trigger 命中 create_maintenance/create_pm_task/update_health_score 分别必须 403 且零副作用；补齐对应目标域 write 后才执行
+- [ ] 仅 workflow:write 创建/更新/启停上述跨域规则或初始化默认规则必须 403；补齐目标域 write 后才允许保存
+- [ ] 验证维修单 operator、PM task notes.generated_by、健康分 AuditLog.operator 均等于 token 用户；Fault create/escalate 间接触发同样遵守目标域权限
+- [ ] 未知 trigger/action、错配 event_data、未知条件操作符、超深/超大 JSON、非法 days_offset/adjustment 与额外字段均 422
+- [ ] 强制一个动作失败和一个动作抛内部异常：整体 success 必须 false，响应不得含 SQL、路径、堆栈或内部异常文本
+- [ ] scheduled-check 在大量设备下只返回最多 1000 个 ID、计数正确且有截断标志；规则分页 total 不等于当前页长度
+- [ ] 浏览器 Workflows 列表/创建/编辑/启停/删除/默认规则/四类测试触发可用；执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E-B5 System Settings 与剩余系统管理写接口；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
@@ -593,7 +621,10 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（步骤 4E-B2）：全部迁到 `maintenance/schemas.py` 的严格 Pydantic 模型，额外字段 422，并按数据库列限制枚举、长度和非负金额。
 - [x] **P1** `planned_maintenance/router.py::complete_task` 使用 `Optional[dict]`，成本、结果和文本无权威模型；AOP 模型默认忽略额外字段。`[已复核]`
   → 修复（步骤 4E-B3）：legacy 与 AOP 请求全部 `extra=forbid` 并加边界；前端改显式 payload，避免把服务端只读字段回传导致 422。
-- [ ] **P2** `templates/template_service.py:20`、`workflows/router.py:104`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
+- [x] **P1** `workflows/router.py` 的 trigger_conditions/action_config/event_data 为任意字典，未知 trigger/action 与未知条件操作符可进入执行层；动作失败后 Executor 仍返回整体 success。`[已复核]`
+  → 修复（步骤 4E-B4）：严格限制注册类型、JSON 大小/深度/节点与动作字段；任一动作失败则整体 false，内部异常统一脱敏。
+- [ ] **P2** `templates/template_service.py:20`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
+  → Workflows 已在步骤 4E-B4 改为 count + offset/limit，响应同时返回真实 total、skip、limit。
 - [ ] **P2** 时间字段两套写法：devices/backups 走 `utc_iso()`（带 Z），`faults/router.py:288`、`deploy/router.py:1237`、`credentials/router.py:30` 直接 `isoformat()`（无 Z），`notifications/router.py:57` 手工拼 Z，`deploy/router.py:1105` 用本地 `datetime.now()`。`[已复核]`
 - [ ] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`
 - [ ] **P2** `compliance/router.py:26` — 模块导入期实例化 `ComplianceService()`，其 `__init__` 会访问数据库。`[已复核]`

@@ -13,7 +13,11 @@
 from .rule_engine import RuleEngine, WorkflowRule
 from .triggers import TriggerManager, BaseTrigger
 from .actions import ActionManager, BaseAction
-from .executor import WorkflowExecutor
+from .executor import (
+    ACTION_REQUIRED_PERMISSIONS,
+    WorkflowExecutor,
+    WorkflowPermissionError,
+)
 
 __all__ = [
     'RuleEngine',
@@ -23,4 +27,6 @@ __all__ = [
     'ActionManager',
     'BaseAction',
     'WorkflowExecutor',
+    'WorkflowPermissionError',
+    'ACTION_REQUIRED_PERMISSIONS',
 ]
