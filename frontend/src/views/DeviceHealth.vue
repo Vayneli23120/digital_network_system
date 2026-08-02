@@ -186,7 +186,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Refresh, Top, Bottom, Minus } from '@element-plus/icons-vue'
 import * as echarts from 'echarts'
@@ -215,6 +215,14 @@ const filters = ref({
 const riskChartRef = ref(null)
 const scoreChartRef = ref(null)
 const trendChartRef = ref(null)
+
+// ECharts 实例列表：统一 dispose，避免 initCharts 反复重跑或卸载时泄漏
+const chartInstances = []
+
+const disposeCharts = () => {
+  chartInstances.forEach(chart => chart?.dispose())
+  chartInstances.length = 0
+}
 
 // Computed
 const filteredDevices = computed(() => {
@@ -329,9 +337,13 @@ const viewDeviceHealth = async (deviceId) => {
 }
 
 const initCharts = () => {
+  // initCharts 会在 mount 与每次刷新后重跑，先释放旧实例避免反复泄漏
+  disposeCharts()
+
   // Risk Distribution Pie Chart
   if (riskChartRef.value) {
     const chart = echarts.init(riskChartRef.value)
+    chartInstances.push(chart)
     const riskData = dashboard.value.risk_distribution || {}
 
     chart.setOption({
@@ -363,6 +375,7 @@ const initCharts = () => {
   // Score Distribution Bar Chart
   if (scoreChartRef.value) {
     const chart = echarts.init(scoreChartRef.value)
+    chartInstances.push(chart)
     const scoreData = dashboard.value.score_distribution || {}
 
     chart.setOption({
@@ -389,6 +402,7 @@ const initCharts = () => {
   // Trend Line Chart (placeholder)
   if (trendChartRef.value) {
     const chart = echarts.init(trendChartRef.value)
+    chartInstances.push(chart)
 
     chart.setOption({
       tooltip: { trigger: 'axis' },
@@ -451,6 +465,10 @@ const formatTime = (time) => {
 onMounted(() => {
   fetchDashboard()
   fetchRiskDevices()
+})
+
+onBeforeUnmount(() => {
+  disposeCharts()
 })
 </script>
 
