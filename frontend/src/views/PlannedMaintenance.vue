@@ -721,8 +721,14 @@ const createPlan = async () => {
   try {
     const device = devices.value.find(d => d.id === planForm.value.device_id)
     await createMaintenancePlan({
-      ...planForm.value,
-      device_name: device?.name
+      name: planForm.value.name,
+      device_id: planForm.value.device_id || null,
+      device_name: device?.name || null,
+      plan_type: planForm.value.plan_type,
+      cycle_days: planForm.value.cycle_days,
+      next_date: planForm.value.next_date,
+      data_basis: planForm.value.data_basis || null,
+      auto_generate: planForm.value.auto_generate
     })
     clearCache('plannedMaintenancePlans')
     clearCache('plannedMaintenanceStats')
@@ -754,7 +760,14 @@ const editPlan = (row) => {
 
 const updatePlan = async () => {
   try {
-    await updateMaintenancePlan(planForm.value.id, planForm.value)
+    await updateMaintenancePlan(planForm.value.id, {
+      name: planForm.value.name,
+      cycle_days: planForm.value.cycle_days,
+      next_date: planForm.value.next_date,
+      data_basis: planForm.value.data_basis || null,
+      auto_generate: planForm.value.auto_generate,
+      status: planForm.value.status
+    })
     clearCache('plannedMaintenancePlans')
     ElMessage.success(t('pmMsgPlanUpdateSuccess'))
     showPlanDialog.value = false

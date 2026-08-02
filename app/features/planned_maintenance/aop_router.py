@@ -6,7 +6,8 @@ from decimal import Decimal
 from typing import List, Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, field_validator, model_validator
+from loguru import logger
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,15 +17,20 @@ from app.features.planned_maintenance.aop_service import (
     generate_aop_tasks,
 )
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from app.shared.models import (
     AopMaintenanceWindow,
     AopProgram,
     AopProject,
+    Device,
     MaintenanceTask,
 )
 
 
 router = APIRouter(prefix="/aop", tags=["planned-maintenance-aop"])
+require_planned_read = require_permission("planned_task:read")
+require_planned_write = require_permission("planned_task:write")
+require_planned_execute = require_permission("planned_task:execute")
 
 ProgramStatus = Literal["draft", "submitted", "approved", "active", "closed"]
 ProjectType = Literal["replacement", "maintenance", "upgrade"]
@@ -32,9 +38,14 @@ ProjectStatus = Literal["proposed", "scheduled", "in_progress", "completed", "ca
 ApprovalStatus = Literal["draft", "submitted", "approved", "rejected"]
 WindowType = Literal["shutdown", "holiday", "weekend", "standard"]
 WindowStatus = Literal["draft", "approved", "cancelled"]
+MAX_AOP_TEXT_CHARS = 100_000
 
 
-class ProgramCreate(BaseModel):
+class AopRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class ProgramCreate(AopRequest):
     year: int = Field(ge=2000, le=2100)
     name: str = Field(min_length=1, max_length=200)
     version: int = Field(default=1, ge=1)
@@ -42,7 +53,7 @@ class ProgramCreate(BaseModel):
     owner: Optional[str] = Field(default=None, max_length=100)
     currency: str = Field(default="CNY", min_length=3, max_length=3)
     budget_amount: Decimal = Field(default=Decimal("0"), ge=0)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
     @field_validator("currency")
     @classmethod
@@ -50,13 +61,13 @@ class ProgramCreate(BaseModel):
         return value.upper()
 
 
-class ProgramUpdate(BaseModel):
+class ProgramUpdate(AopRequest):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     status: Optional[ProgramStatus] = None
     owner: Optional[str] = Field(default=None, max_length=100)
     currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
     budget_amount: Optional[Decimal] = Field(default=None, ge=0)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
     @field_validator("currency")
     @classmethod
@@ -64,7 +75,7 @@ class ProgramUpdate(BaseModel):
         return value.upper() if value else value
 
 
-class WindowCreate(BaseModel):
+class WindowCreate(AopRequest):
     name: str = Field(min_length=1, max_length=200)
     window_type: WindowType
     start_at: datetime
@@ -73,7 +84,7 @@ class WindowCreate(BaseModel):
     max_parallel_tasks: int = Field(default=1, ge=1, le=100)
     status: WindowStatus = "draft"
     owner: Optional[str] = Field(default=None, max_length=100)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -82,7 +93,7 @@ class WindowCreate(BaseModel):
         return self
 
 
-class WindowUpdate(BaseModel):
+class WindowUpdate(AopRequest):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     window_type: Optional[WindowType] = None
     start_at: Optional[datetime] = None
@@ -91,20 +102,20 @@ class WindowUpdate(BaseModel):
     max_parallel_tasks: Optional[int] = Field(default=None, ge=1, le=100)
     status: Optional[WindowStatus] = None
     owner: Optional[str] = Field(default=None, max_length=100)
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
 
-class WindowBatchCreate(BaseModel):
+class WindowBatchCreate(AopRequest):
     windows: List[WindowCreate] = Field(min_length=1, max_length=366)
 
 
-class ProjectCreate(BaseModel):
+class ProjectCreate(AopRequest):
     project_code: str = Field(min_length=1, max_length=50)
     name: str = Field(min_length=1, max_length=200)
     project_type: ProjectType
-    device_id: Optional[int] = None
+    device_id: Optional[int] = Field(default=None, gt=0)
     device_name: Optional[str] = Field(default=None, max_length=100)
-    asset_scope: Optional[str] = None
+    asset_scope: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
     current_version: Optional[str] = Field(default=None, max_length=100)
     target_version: Optional[str] = Field(default=None, max_length=100)
     planned_start: datetime
@@ -117,10 +128,10 @@ class ProjectCreate(BaseModel):
     risk_level: Literal["low", "medium", "high", "critical"] = "medium"
     approval_status: ApprovalStatus = "draft"
     status: ProjectStatus = "proposed"
-    dependencies: List[str] = Field(default_factory=list)
-    business_justification: Optional[str] = None
-    rollback_plan: Optional[str] = None
-    notes: Optional[str] = None
+    dependencies: List[str] = Field(default_factory=list, max_length=100)
+    business_justification: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
+    rollback_plan: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
     @model_validator(mode="after")
     def validate_range(self):
@@ -131,12 +142,12 @@ class ProjectCreate(BaseModel):
         return self
 
 
-class ProjectUpdate(BaseModel):
+class ProjectUpdate(AopRequest):
     name: Optional[str] = Field(default=None, min_length=1, max_length=200)
     project_type: Optional[ProjectType] = None
-    device_id: Optional[int] = None
+    device_id: Optional[int] = Field(default=None, gt=0)
     device_name: Optional[str] = Field(default=None, max_length=100)
-    asset_scope: Optional[str] = None
+    asset_scope: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
     current_version: Optional[str] = Field(default=None, max_length=100)
     target_version: Optional[str] = Field(default=None, max_length=100)
     planned_start: Optional[datetime] = None
@@ -149,10 +160,10 @@ class ProjectUpdate(BaseModel):
     risk_level: Optional[Literal["low", "medium", "high", "critical"]] = None
     approval_status: Optional[ApprovalStatus] = None
     status: Optional[ProjectStatus] = None
-    dependencies: Optional[List[str]] = None
-    business_justification: Optional[str] = None
-    rollback_plan: Optional[str] = None
-    notes: Optional[str] = None
+    dependencies: Optional[List[str]] = Field(default=None, max_length=100)
+    business_justification: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
+    rollback_plan: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
+    notes: Optional[str] = Field(default=None, max_length=MAX_AOP_TEXT_CHARS)
 
 
 def _program_or_404(db: Session, program_id: int) -> AopProgram:
@@ -273,6 +284,7 @@ def list_programs(
     year: Optional[int] = None,
     status: Optional[ProgramStatus] = None,
     db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
 ):
     query = db.query(AopProgram)
     if year is not None:
@@ -289,7 +301,11 @@ def list_programs(
 
 
 @router.post("/programs", status_code=201)
-def create_program(data: ProgramCreate, db: Session = Depends(get_db)):
+def create_program(
+    data: ProgramCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     program = AopProgram(**data.model_dump())
     db.add(program)
     try:
@@ -302,7 +318,11 @@ def create_program(data: ProgramCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/programs/{program_id}")
-def get_program(program_id: int, db: Session = Depends(get_db)):
+def get_program(
+    program_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     program = _program_or_404(db, program_id)
     return {
         **_program_dict(program, len(program.projects)),
@@ -312,7 +332,12 @@ def get_program(program_id: int, db: Session = Depends(get_db)):
 
 
 @router.put("/programs/{program_id}")
-def update_program(program_id: int, data: ProgramUpdate, db: Session = Depends(get_db)):
+def update_program(
+    program_id: int,
+    data: ProgramUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     program = _lock_program(db, program_id)
     update_data = data.model_dump(exclude_unset=True)
     has_tasks = db.query(MaintenanceTask.id).join(
@@ -333,7 +358,11 @@ def update_program(program_id: int, data: ProgramUpdate, db: Session = Depends(g
 
 
 @router.get("/programs/{program_id}/windows")
-def list_windows(program_id: int, db: Session = Depends(get_db)):
+def list_windows(
+    program_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     _program_or_404(db, program_id)
     windows = db.query(AopMaintenanceWindow).filter(
         AopMaintenanceWindow.program_id == program_id
@@ -342,7 +371,12 @@ def list_windows(program_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/programs/{program_id}/windows", status_code=201)
-def create_window(program_id: int, data: WindowCreate, db: Session = Depends(get_db)):
+def create_window(
+    program_id: int,
+    data: WindowCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     _lock_program(db, program_id)
     window = AopMaintenanceWindow(program_id=program_id, **data.model_dump())
     db.add(window)
@@ -352,7 +386,12 @@ def create_window(program_id: int, data: WindowCreate, db: Session = Depends(get
 
 
 @router.post("/programs/{program_id}/windows/batch", status_code=201)
-def create_windows_batch(program_id: int, data: WindowBatchCreate, db: Session = Depends(get_db)):
+def create_windows_batch(
+    program_id: int,
+    data: WindowBatchCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     """Bulk import maintenance windows, e.g. an annual holiday/shutdown calendar."""
     _lock_program(db, program_id)
     created = [
@@ -367,7 +406,12 @@ def create_windows_batch(program_id: int, data: WindowBatchCreate, db: Session =
 
 
 @router.put("/windows/{window_id}")
-def update_window(window_id: int, data: WindowUpdate, db: Session = Depends(get_db)):
+def update_window(
+    window_id: int,
+    data: WindowUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     window = _window_or_404(db, window_id)
     _lock_program(db, window.program_id)
     db.refresh(window)
@@ -393,7 +437,11 @@ def update_window(window_id: int, data: WindowUpdate, db: Session = Depends(get_
 
 
 @router.get("/programs/{program_id}/projects")
-def list_projects(program_id: int, db: Session = Depends(get_db)):
+def list_projects(
+    program_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     _program_or_404(db, program_id)
     projects = db.query(AopProject).filter(
         AopProject.program_id == program_id
@@ -402,9 +450,19 @@ def list_projects(program_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/programs/{program_id}/projects", status_code=201)
-def create_project(program_id: int, data: ProjectCreate, db: Session = Depends(get_db)):
+def create_project(
+    program_id: int,
+    data: ProjectCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     _lock_program(db, program_id)
     values = data.model_dump(exclude={"dependencies"})
+    if data.device_id:
+        device = db.query(Device).filter(Device.id == data.device_id).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+        values["device_name"] = device.name
     project = AopProject(
         program_id=program_id,
         dependencies=json.dumps(data.dependencies, ensure_ascii=False),
@@ -421,11 +479,23 @@ def create_project(program_id: int, data: ProjectCreate, db: Session = Depends(g
 
 
 @router.put("/projects/{project_id}")
-def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(get_db)):
+def update_project(
+    project_id: int,
+    data: ProjectUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     project = _project_or_404(db, project_id)
     _lock_program(db, project.program_id)
     db.refresh(project)
     update_data = data.model_dump(exclude_unset=True)
+    if update_data.get("device_id"):
+        device = db.query(Device).filter(
+            Device.id == update_data["device_id"]
+        ).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+        update_data["device_name"] = device.name
     dependencies_provided = "dependencies" in update_data
     dependencies = update_data.pop("dependencies", None)
     planned_start = update_data.get("planned_start", project.planned_start)
@@ -463,14 +533,22 @@ def update_project(project_id: int, data: ProjectUpdate, db: Session = Depends(g
 
 
 @router.post("/programs/{program_id}/generate-tasks")
-def schedule_program(program_id: int, db: Session = Depends(get_db)):
+def schedule_program(
+    program_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
+):
     try:
         result = generate_aop_tasks(db, program_id)
         db.commit()
         return result
     except AopSchedulingError as exc:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(exc))
+        logger.warning("AOP scheduling failed for program {}: {}", program_id, exc)
+        raise HTTPException(
+            status_code=400,
+            detail="AOP 排程失败，请检查批准状态、项目依赖和维护窗口",
+        ) from exc
 
 
 @router.get("/calendar")
@@ -479,6 +557,7 @@ def get_calendar(
     start_at: datetime,
     end_at: datetime,
     db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
 ):
     if end_at <= start_at:
         raise HTTPException(status_code=422, detail="日历结束时间必须晚于开始时间")

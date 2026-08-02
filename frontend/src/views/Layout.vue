@@ -164,7 +164,7 @@ const sidebarData = computed(() => {
           { path: '/backups', text: t('menuBackups'), icon: Download, permission: 'backup:read' },
           { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null, permission: 'fault:read' },
           { path: '/maintenance', text: t('menuMaintenance'), icon: Tools, permission: 'maintenance:read' },
-          { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar, permission: 'nav_devices:planned_maintenance' },
+          { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar, permission: 'planned_task:read' },
         ]
       },
     ],

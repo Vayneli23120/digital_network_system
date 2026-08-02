@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B2（含 permissions/faults/maintenance）已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B3（含 permissions/faults/maintenance/planned）已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,13 +75,15 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance；planned maintenance、workflows、system settings 等仍待步骤 4E-B。
+  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance；workflows、system settings 等仍待步骤 4E-B。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
   → 修复（步骤 4E-B1）：全端点按 `fault:read/write/delete/analyze` 分层；创建者、复核人和转维修 operator 只取统一 Principal，旧客户端身份字段即使传入也不可信；工作日志改为严格限长模型。
 - [x] **P0** `maintenance/router.py` — 13 条维修读写、删除与状态流转端点均无功能权限依赖，且 operator 由客户端 body 提供。`[已复核]`
   → 修复（步骤 4E-B2）：全端点按 `maintenance:read/write/delete/transition` 分层；创建、指派、日志、流转、验证事件的 operator 均取统一 Principal，body 中伪造 operator 直接 422。
+- [x] **P0** `planned_maintenance/router.py` + `aop_router.py` — 旧任务流 17 条与 AOP 年度计划 13 条端点全部只有登录认证，无 `planned_task:*` 功能权限。`[已复核]`
+  → 修复（步骤 4E-B3）：30 条端点按 `planned_task:read/write/delete/execute` 分层，覆盖计划、任务、统计、AI/预测生成、AOP 项目/窗口/日历与排程。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -394,7 +396,29 @@ Faults/Maintenance 集成回归 **19 passed**，全部已完成安全切片 **15
 - [ ] 制造数据库异常时 HTTP 只返回通用文案，不含 SQL、路径或连接信息；确认请求后连接池无泄漏
 - [ ] 浏览器 Maintenance/FaultDetail 创建、编辑、指派、日志、状态流转与验证可用；执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E-B3 Planned Maintenance，再覆盖 workflows、system settings 等剩余写接口；
+**步骤 4E-B3 验证结果（2026-08-02）**：✅ 旧计划/任务流 17 条与 AOP 年度规划 13 条端点全部按
+`planned_task:read/write/delete/execute` 分层；✅ legacy plans 五条路由移除 `next(get_db())`，统一依赖会话；
+列表、任务、历史、预测天数和 AI 扫描数量均有上限；✅ Plan/Task/AI/Complete 与全部 AOP 请求改为严格 Pydantic
+模型，拒绝额外字段并按数据库列限制日期、枚举、文本、金额与 `DECIMAL(5,2)` 工时；前端旧计划与 AOP 项目/窗口
+改为显式 payload，不再 spread 含 id/统计/只读关系的服务端对象；✅ plan/task/AOP project 在提供 device_id 时
+由数据库覆盖 device_name；任务完成创建的维修单 operator 取 token Principal，伪造 operator 422；
+✅ AOP 排程错误只返回通用业务文案，详细原因仅写服务端日志；菜单使用 `planned_task:read`；
+✅ `tests/test_planned_maintenance_security_step4e_b.py` **5 passed**，与既有 AOP 测试合计
+**16 passed**（PostgreSQL 并发测试本机 skip）；全部已完成安全切片 **175 passed / 4 skipped**；全仓 Ruff、
+`app.main` 导入和编辑器诊断通过；✅ Windows 可比较全量 pytest（排除既有挂起 console）为
+**54 failed / 579 passed / 8 skipped / 10 errors**，相对 B2 恰好新增 5 passed，失败/错误集合不变。
+⚠️ 本机缺 Vite，前端构建与 PostgreSQL AOP 并发测试交 Linux 测试系统。
+
+**步骤 4E-B3 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_planned_maintenance_security_step4e_b.py`、`test_aop_planning.py`、PostgreSQL AOP 并发与全量 pytest，失败集合不得新增
+- [ ] 用 planned_task read/write/delete/execute 四个最小权限账号验证 legacy+AOP 30 条端点代表路径；跨权限 403、未认证 401、管理员全放行
+- [ ] 创建 legacy plan/task 与 AOP project 时伪造 device_name，数据库必须保存 device_id 对应真实名称；任务完成伪造 operator 必须 422
+- [ ] 测试非法 plan type/status/date、额外 id/created_by、负金额、超长文本、工时溢出、分页/历史/预测天数/AI 扫描越界均 422
+- [ ] AOP 排程失败响应不得含 SQL、路径或调度内部信息；计划请求后连接池不得泄漏
+- [ ] PostgreSQL 并发重复排程仍保持幂等，既有 approved/locked 更新约束不退化
+- [ ] 浏览器 legacy 与 AOP 新建/编辑/批量窗口/排程/任务完成可用；执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E-B4 Workflows，再覆盖 system settings 等剩余写接口；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
@@ -499,6 +523,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → Backups 两处已在步骤 4E-A 改为 `Depends(get_db)`；其余位置仍待处理。
 - [x] **P0** `maintenance/router.py` 13 条路由全部使用 `db = next(get_db())`，请求完成前的异常路径可能跳过生成器清理并耗尽连接池。`[已复核]`
   → 修复（步骤 4E-B2）：全部改为 `db: Session = Depends(get_db)`，移除手工 close；业务异常保留状态码，未知异常统一回滚/脱敏。
+- [x] **P0** `planned_maintenance/router.py` 的 legacy plans 五条路由使用 `next(get_db())`，与同文件其余依赖注入路径并存。`[已复核]`
+  → 修复（步骤 4E-B3）：全部改为 `Depends(get_db)`，移除手工 close，创建异常改为通用 500 并在服务端记录堆栈。
 - [ ] **P1** `devices/device_service.py:118` — `_sync_modules_to_inventory` 内部自行 commit，与调用方形成嵌套提交，中途失败留半份库存实例。`[已复核]`
 - [ ] **P1** `deploy/router.py:1006-1035` — `create_deploy_history` 内部已 commit（`:1449`），之后再更新 `rollback_status` 二次 commit，中途失败留半状态。`[待验证]`
 - [x] **P1** `backups/router.py:154,163` — 通用 except 里引用可能未绑定的 `device`；且在 `db.commit()` 之后才 `db.rollback()`，顺序无效。`[已复核]`
@@ -553,16 +579,20 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `dashboard/dashboard_service.py:1057,1103` — 变更-故障关联在循环内逐条 COUNT（N+1），且同条件 count 与 all 重复查两次；`:948,962` SLO 计算逐个查设备与故障全集。`[已复核]`
 - [ ] **P1** `faults/router.py:217,222` — 列表接口每条故障各查一次 Device 和 MaintenanceRecord（limit=100 → 约 200 次额外查询）。`[已复核]`
 - [ ] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[已复核]`
+- [ ] **P1** `planned_maintenance` 任务完成与备件出入库由浏览器分成多次请求：后端先 commit completed，前端再逐条调用 spare movement；中途失败会留下“任务已完成但库存只更新一部分”。`[已复核]`
+  → 4E-B3 仅完成权限、身份与输入边界；后续应把任务完成与全部库存动作合并为一个服务端事务，不能继续由前端编排。
 - [ ] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`
 - [ ] **P1** `tasks/backup_tasks.py:139` — 批量任务伪造子 Job ID `f"{job_id}-{i}"`，Job 表无对应记录 → 子任务全部 "Job not found"。`[已复核]`
 - [x] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
   → 修复（步骤 4E-A）：同步与批量日志状态均显式写入 `success` / `failed` 字符串。
 - [ ] **P1** 分页参数普遍无 `ge/le` 约束：`devices/router.py:155`、`devices/device_service.py:150`、`backups/backup_service.py:16`、`faults/router.py:170`、`maintenance/router.py:744`、`deploy/router.py:1205`（`spare_parts/router.py:59` 用了 `Query(ge/le)`，风格不统一）。`[已复核]`
-  → Backups HTTP 路由已在步骤 4E-A、Faults 在 4E-B1、Maintenance 在 4E-B2 增加 `skip >= 0`、`1 <= limit <= 500`；服务层直调及其余列出端点仍待统一。
+  → Backups HTTP 路由已在步骤 4E-A、Faults 在 4E-B1、Maintenance 在 4E-B2、Planned Maintenance 在 4E-B3 增加范围限制；服务层直调及其余列出端点仍待统一。
 - [x] **P1** 高危写操作请求体为裸 `dict`：`deploy/router.py:40,482,915,1134`、`credentials/router.py:41,115`、`templates/router.py:28,42`（后者还 `ConfigTemplate(**data)` 批量赋值）。`[已复核]`
   → 修复：Deploy 在 4B、Credentials 在步骤 1、Templates 在 4E-A 全部迁到 Pydantic 模型；模板服务额外使用字段白名单，禁止覆盖 id/时间戳等内部字段。
 - [x] **P1** `maintenance/router.py` 九类写/建议请求使用裸 `dict`，客户端可提交 operator/status/id 等内部字段，文本、金额与枚举没有边界。`[已复核]`
   → 修复（步骤 4E-B2）：全部迁到 `maintenance/schemas.py` 的严格 Pydantic 模型，额外字段 422，并按数据库列限制枚举、长度和非负金额。
+- [x] **P1** `planned_maintenance/router.py::complete_task` 使用 `Optional[dict]`，成本、结果和文本无权威模型；AOP 模型默认忽略额外字段。`[已复核]`
+  → 修复（步骤 4E-B3）：legacy 与 AOP 请求全部 `extra=forbid` 并加边界；前端改显式 payload，避免把服务端只读字段回传导致 422。
 - [ ] **P2** `templates/template_service.py:20`、`workflows/router.py:104`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
 - [ ] **P2** 时间字段两套写法：devices/backups 走 `utc_iso()`（带 Z），`faults/router.py:288`、`deploy/router.py:1237`、`credentials/router.py:30` 直接 `isoformat()`（无 Z），`notifications/router.py:57` 手工拼 Z，`deploy/router.py:1105` 用本地 `datetime.now()`。`[已复核]`
 - [ ] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`

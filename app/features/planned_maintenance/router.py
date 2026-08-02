@@ -7,17 +7,21 @@
 - 预测性维护建议
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from loguru import logger
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import Optional, List, Dict, Any
+from typing import Any, List, Literal, Optional
 from datetime import datetime, timedelta
+from decimal import Decimal
 import uuid
 import json
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
 
+from app.features.auth.identity import Principal, get_current_principal
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from app.shared.models import (
     AopMaintenanceWindow,
     AopProject,
@@ -34,53 +38,114 @@ from app.features.planned_maintenance.aop_router import router as aop_router
 
 router = APIRouter(prefix="/api/planned-maintenance", tags=["planned-maintenance"])
 router.include_router(aop_router)
+require_planned_read = require_permission("planned_task:read")
+require_planned_write = require_permission("planned_task:write")
+require_planned_delete = require_permission("planned_task:delete")
+require_planned_execute = require_permission("planned_task:execute")
+PLANNED_INTERNAL_ERROR = "计划性运维操作失败，请查看服务端日志"
+PlanType = Literal["routine_check", "parts_replace", "vendor_service"]
+PlanStatus = Literal["active", "paused", "completed"]
+CompletionResult = Literal["success", "partial", "rolled_back"]
+Money = condecimal(ge=0, max_digits=10, decimal_places=2)
+LaborHours = condecimal(ge=0, max_digits=5, decimal_places=2)
+
+
+def _actor_username(principal: Any) -> str:
+    return principal.username if isinstance(principal, Principal) else "system"
+
+
+def _internal_error(operation: str) -> HTTPException:
+    logger.exception("Planned maintenance operation failed: {}", operation)
+    return HTTPException(status_code=500, detail=PLANNED_INTERNAL_ERROR)
 
 
 # ============ Pydantic 模型 ============
 
 class PlanCreate(BaseModel):
-    name: str
-    device_id: Optional[int] = None
-    device_name: Optional[str] = None
-    plan_type: str  # routine_check, parts_replace, vendor_service
-    cycle_days: int = 30
-    next_date: str  # 接收日期字符串，如 "2026-05-01"
-    data_basis: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1, max_length=100)
+    device_id: Optional[int] = Field(default=None, gt=0)
+    device_name: Optional[str] = Field(default=None, max_length=100)
+    plan_type: PlanType
+    cycle_days: int = Field(default=30, ge=1, le=3650)
+    next_date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    data_basis: Optional[str] = Field(default=None, max_length=100_000)
     auto_generate: bool = True
+
+    @field_validator("next_date")
+    @classmethod
+    def validate_next_date(cls, value: str) -> str:
+        datetime.strptime(value, "%Y-%m-%d")
+        return value
 
 
 class PlanUpdate(BaseModel):
-    name: Optional[str] = None
-    cycle_days: Optional[int] = None
-    next_date: Optional[str] = None  # 接收日期字符串
-    data_basis: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    cycle_days: Optional[int] = Field(default=None, ge=1, le=3650)
+    next_date: Optional[str] = Field(default=None, pattern=r"^\d{4}-\d{2}-\d{2}$")
+    data_basis: Optional[str] = Field(default=None, max_length=100_000)
     auto_generate: Optional[bool] = None
-    status: Optional[str] = None
+    status: Optional[PlanStatus] = None
+
+    @field_validator("next_date")
+    @classmethod
+    def validate_next_date(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None:
+            datetime.strptime(value, "%Y-%m-%d")
+        return value
 
 
 class TaskCreate(BaseModel):
-    plan_id: Optional[int] = None
-    device_id: Optional[int] = None
-    device_name: Optional[str] = None
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id: Optional[int] = Field(default=None, gt=0)
+    device_id: Optional[int] = Field(default=None, gt=0)
+    device_name: Optional[str] = Field(default=None, max_length=100)
     scheduled_date: datetime
-    notes: Optional[str] = None
+    notes: Optional[str] = Field(default=None, max_length=100_000)
     ai_generated: bool = False
 
 
 class GenerateAIRequest(BaseModel):
     """AI推荐任务生成请求"""
-    min_health_score: int = 60  # 健康评分低于此值的设备生成巡检任务
-    risk_levels: List[str] = ['high', 'critical']  # 风险等级筛选
-    days_offset: int = 3  # 任务安排在几天后
+    model_config = ConfigDict(extra="forbid")
+
+    min_health_score: int = Field(default=60, ge=0, le=100)
+    risk_levels: List[Literal["low", "medium", "high", "critical"]] = Field(
+        default_factory=lambda: ["high", "critical"],
+        min_length=1,
+        max_length=4,
+    )
+    days_offset: int = Field(default=3, ge=0, le=3650)
+    max_devices: int = Field(default=500, ge=1, le=1000)
+
+
+class TaskCompleteRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    description: Optional[str] = Field(default=None, max_length=100_000)
+    parts_replaced: Optional[str] = Field(default=None, max_length=1_000_000)
+    parts_cost: Money = Decimal("0")
+    labor_hours: LaborHours = Decimal("0")
+    labor_cost: Money = Decimal("0")
+    completion_result: CompletionResult = "success"
+    completion_notes: Optional[str] = Field(default=None, max_length=100_000)
 
 
 # ============ 维护计划 API ============
 
 @router.get("/plans")
-async def list_plans(status: Optional[str] = None, skip: int = 0, limit: int = 100):
+async def list_plans(
+    status: Optional[str] = None,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     """获取维护计划列表"""
-    db: Session = next(get_db())
-
     try:
         query = db.query(MaintenancePlan)
 
@@ -109,23 +174,34 @@ async def list_plans(status: Optional[str] = None, skip: int = 0, limit: int = 1
                 for p in plans
             ]
         }
-    finally:
-        db.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise _internal_error("list plans") from exc
 
 
 @router.post("/plans")
-async def create_plan(plan_data: PlanCreate):
+async def create_plan(
+    plan_data: PlanCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     """创建维护计划"""
-    db: Session = next(get_db())
-
     try:
         # 解析日期字符串，转换为 datetime
         next_date_dt = datetime.strptime(plan_data.next_date, "%Y-%m-%d")
 
+        device_name = plan_data.device_name
+        if plan_data.device_id:
+            device = db.query(Device).filter(Device.id == plan_data.device_id).first()
+            if not device:
+                raise HTTPException(status_code=404, detail="设备不存在")
+            device_name = device.name
+
         plan = MaintenancePlan(
             name=plan_data.name,
             device_id=plan_data.device_id,
-            device_name=plan_data.device_name,
+            device_name=device_name,
             plan_type=plan_data.plan_type,
             cycle_days=plan_data.cycle_days,
             next_date=next_date_dt,
@@ -138,98 +214,96 @@ async def create_plan(plan_data: PlanCreate):
         db.refresh(plan)
 
         return {"id": plan.id, "message": "维护计划创建成功"}
-    except Exception as e:
+    except HTTPException:
         db.rollback()
-        raise HTTPException(status_code=400, detail=str(e))
-    finally:
-        db.close()
+        raise
+    except Exception as exc:
+        db.rollback()
+        raise _internal_error("create plan") from exc
 
 
 @router.get("/plans/{plan_id}")
-async def get_plan(plan_id: int):
+async def get_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     """获取维护计划详情"""
-    db: Session = next(get_db())
+    plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="维护计划不存在")
 
-    try:
-        plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="维护计划不存在")
+    # 获取关联的任务统计
+    task_stats = db.query(
+        MaintenanceTask.status,
+        func.count(MaintenanceTask.id)
+    ).filter(MaintenanceTask.plan_id == plan_id).group_by(MaintenanceTask.status).all()
 
-        # 获取关联的任务统计
-        task_stats = db.query(
-            MaintenanceTask.status,
-            func.count(MaintenanceTask.id)
-        ).filter(MaintenanceTask.plan_id == plan_id).group_by(MaintenanceTask.status).all()
+    stats = {s: c for s, c in task_stats}
 
-        stats = {s: c for s, c in task_stats}
-
-        return {
-            "id": plan.id,
-            "name": plan.name,
-            "device_id": plan.device_id,
-            "device_name": plan.device_name,
-            "plan_type": plan.plan_type,
-            "cycle_days": plan.cycle_days,
-            "next_date": plan.next_date.isoformat() if plan.next_date else None,
-            "data_basis": plan.data_basis,
-            "auto_generate": plan.auto_generate,
-            "status": plan.status,
-            "task_stats": {
-                "pending": stats.get("pending", 0),
-                "in_progress": stats.get("in_progress", 0),
-                "completed": stats.get("completed", 0),
-                "skipped": stats.get("skipped", 0),
-                "overdue": stats.get("overdue", 0)
-            },
-            "created_at": plan.created_at.isoformat() if plan.created_at else None,
-            "updated_at": plan.updated_at.isoformat() if plan.updated_at else None
-        }
-    finally:
-        db.close()
+    return {
+        "id": plan.id,
+        "name": plan.name,
+        "device_id": plan.device_id,
+        "device_name": plan.device_name,
+        "plan_type": plan.plan_type,
+        "cycle_days": plan.cycle_days,
+        "next_date": plan.next_date.isoformat() if plan.next_date else None,
+        "data_basis": plan.data_basis,
+        "auto_generate": plan.auto_generate,
+        "status": plan.status,
+        "task_stats": {
+            "pending": stats.get("pending", 0),
+            "in_progress": stats.get("in_progress", 0),
+            "completed": stats.get("completed", 0),
+            "skipped": stats.get("skipped", 0),
+            "overdue": stats.get("overdue", 0)
+        },
+        "created_at": plan.created_at.isoformat() if plan.created_at else None,
+        "updated_at": plan.updated_at.isoformat() if plan.updated_at else None
+    }
 
 
 @router.put("/plans/{plan_id}")
-async def update_plan(plan_id: int, plan_data: PlanUpdate):
+async def update_plan(
+    plan_id: int,
+    plan_data: PlanUpdate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     """更新维护计划"""
-    db: Session = next(get_db())
+    plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="维护计划不存在")
 
-    try:
-        plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="维护计划不存在")
+    update_data = plan_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if hasattr(plan, key):
+            if key == "next_date" and value:
+                value = datetime.strptime(value, "%Y-%m-%d")
+            setattr(plan, key, value)
 
-        update_data = plan_data.model_dump(exclude_unset=True)
-        for key, value in update_data.items():
-            if hasattr(plan, key):
-                # 处理日期字符串转换
-                if key == "next_date" and value:
-                    value = datetime.strptime(value, "%Y-%m-%d")
-                setattr(plan, key, value)
+    db.commit()
+    db.refresh(plan)
 
-        db.commit()
-        db.refresh(plan)
-
-        return {"id": plan.id, "message": "更新成功"}
-    finally:
-        db.close()
+    return {"id": plan.id, "message": "更新成功"}
 
 
 @router.delete("/plans/{plan_id}")
-async def delete_plan(plan_id: int):
+async def delete_plan(
+    plan_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_delete),
+):
     """删除维护计划"""
-    db: Session = next(get_db())
+    plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="维护计划不存在")
 
-    try:
-        plan = db.query(MaintenancePlan).filter(MaintenancePlan.id == plan_id).first()
-        if not plan:
-            raise HTTPException(status_code=404, detail="维护计划不存在")
+    db.delete(plan)
+    db.commit()
 
-        db.delete(plan)
-        db.commit()
-
-        return {"message": "删除成功"}
-    finally:
-        db.close()
+    return {"message": "删除成功"}
 
 
 # ============ 运维任务 API ============
@@ -242,9 +316,10 @@ async def list_tasks(
     ai_generated: Optional[bool] = None,
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
 ):
     """获取运维任务列表"""
     query = db.query(MaintenanceTask)
@@ -310,8 +385,29 @@ async def list_tasks(
 
 
 @router.post("/tasks")
-async def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
+async def create_task(
+    task_data: TaskCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_write),
+):
     """手动创建运维任务"""
+    plan = None
+    if task_data.plan_id:
+        plan = db.query(MaintenancePlan).filter(
+            MaintenancePlan.id == task_data.plan_id
+        ).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail="维护计划不存在")
+
+    device_name = plan.device_name if plan else task_data.device_name
+    device_id = plan.device_id if plan else task_data.device_id
+    if task_data.device_id:
+        device = db.query(Device).filter(Device.id == task_data.device_id).first()
+        if not device:
+            raise HTTPException(status_code=404, detail="设备不存在")
+        device_id = device.id
+        device_name = device.name
+
     # 自动生成任务编号
     task_no = f"TASK-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
@@ -328,8 +424,8 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
 
     task = MaintenanceTask(
         plan_id=task_data.plan_id,
-        device_id=task_data.device_id,
-        device_name=task_data.device_name,
+        device_id=device_id,
+        device_name=device_name,
         task_no=task_no,
         scheduled_date=task_data.scheduled_date,
         status=status,
@@ -343,7 +439,11 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/tasks/{task_id}")
-async def get_task(task_id: int, db: Session = Depends(get_db)):
+async def get_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
+):
     """获取运维任务详情"""
     task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
     if not task:
@@ -442,7 +542,11 @@ async def get_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/tasks/{task_id}/start")
-async def start_task(task_id: int, db: Session = Depends(get_db)):
+async def start_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
+):
     """开始执行任务"""
     task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
     if not task:
@@ -460,7 +564,13 @@ async def start_task(task_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/tasks/{task_id}/complete")
-async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, db: Session = Depends(get_db)):
+async def complete_task(
+    task_id: int,
+    maintenance_data: Optional[TaskCompleteRequest] = None,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
+    principal: Principal = Depends(get_current_principal),
+):
     """完成任务并可选创建维修单"""
     task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
     if not task:
@@ -469,14 +579,26 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
     if task.status != "in_progress":
         raise HTTPException(status_code=400, detail="任务未处于进行中状态")
 
-    # 如果提供了维修数据，创建维修单
-    if maintenance_data:
-        maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+    completion_data = None
+    if maintenance_data is not None:
+        completion_data = (
+            maintenance_data
+            if isinstance(maintenance_data, TaskCompleteRequest)
+            else TaskCompleteRequest.model_validate(maintenance_data)
+        )
+    completion_values = (
+        completion_data.model_dump(exclude_defaults=True, exclude_none=True)
+        if completion_data
+        else {}
+    )
 
-        # 处理成本字段，确保是数值
-        parts_cost = float(maintenance_data.get("parts_cost", 0) or 0)
-        labor_hours = float(maintenance_data.get("labor_hours", 0) or 0)
-        labor_cost = float(maintenance_data.get("labor_cost", 0) or 0)
+    parts_cost = float(completion_data.parts_cost) if completion_data else 0
+    labor_hours = float(completion_data.labor_hours) if completion_data else 0
+    labor_cost = float(completion_data.labor_cost) if completion_data else 0
+
+    # 如果提供了维修数据，创建维修单
+    if completion_values:
+        maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
 
         maintenance = MaintenanceRecord(
             maint_no=maint_no,
@@ -485,12 +607,13 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
             maint_type="preventive",
             title=f"计划性运维: {task.task_no}",
             problem_description=f"关联任务: {task.task_no}",
-            description=maintenance_data.get("description", f"计划性运维任务 {task.task_no}"),
-            parts_replaced=maintenance_data.get("parts_replaced"),
+            description=completion_data.description or f"计划性运维任务 {task.task_no}",
+            parts_replaced=completion_data.parts_replaced,
             parts_cost=parts_cost,
             labor_hours=labor_hours,
             labor_cost=labor_cost,
-            maint_time=datetime.utcnow()
+            maint_time=datetime.utcnow(),
+            operator=_actor_username(principal),
         )
         db.add(maintenance)
         db.flush()
@@ -507,12 +630,16 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
     if task.aop_project:
         task.aop_project.status = "completed"
         task.aop_project.completed_at = task.actual_date
-        result = (maintenance_data or {}).get("completion_result")
-        task.aop_project.completion_result = result if result in ("success", "partial", "rolled_back") else "success"
-        completion_notes = (maintenance_data or {}).get("completion_notes") or (maintenance_data or {}).get("description")
+        result = completion_data.completion_result if completion_data else "success"
+        task.aop_project.completion_result = result
+        completion_notes = (
+            completion_data.completion_notes or completion_data.description
+            if completion_data
+            else None
+        )
         if completion_notes:
             task.aop_project.completion_notes = completion_notes
-        if maintenance_data:
+        if completion_values:
             task.aop_project.actual_hours = labor_hours
             task.aop_project.actual_cost = parts_cost + labor_cost
 
@@ -529,7 +656,12 @@ async def complete_task(task_id: int, maintenance_data: Optional[dict] = None, d
 
 
 @router.post("/tasks/{task_id}/skip")
-async def skip_task(task_id: int, reason: Optional[str] = None, db: Session = Depends(get_db)):
+async def skip_task(
+    task_id: int,
+    reason: Optional[str] = Query(default=None, max_length=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
+):
     """跳过任务"""
     task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
     if not task:
@@ -557,7 +689,11 @@ async def skip_task(task_id: int, reason: Optional[str] = None, db: Session = De
 
 
 @router.delete("/tasks/{task_id}")
-async def delete_task(task_id: int, db: Session = Depends(get_db)):
+async def delete_task(
+    task_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_delete),
+):
     """删除任务"""
     task = db.query(MaintenanceTask).filter(MaintenanceTask.id == task_id).first()
     if not task:
@@ -580,7 +716,8 @@ async def delete_task(task_id: int, db: Session = Depends(get_db)):
 async def generate_ai_recommended_tasks(
     request: GenerateAIRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
 ):
     """
     AI推荐巡检任务生成
@@ -592,7 +729,7 @@ async def generate_ai_recommended_tasks(
         Device.status.in_(['online', 'offline', 'maintenance'])
     )
 
-    devices = query.all()
+    devices = query.limit(request.max_devices).all()
 
     generated_tasks = []
 
@@ -660,7 +797,8 @@ async def generate_ai_recommended_tasks(
         "criteria": {
             "min_health_score": request.min_health_score,
             "risk_levels": request.risk_levels,
-            "days_offset": request.days_offset
+            "days_offset": request.days_offset,
+            "max_devices": request.max_devices,
         }
     }
 
@@ -668,8 +806,9 @@ async def generate_ai_recommended_tasks(
 @router.post("/devices/{device_id}/predictive-task")
 async def generate_predictive_task_for_device(
     device_id: int,
-    days_offset: int = 7,
-    db: Session = Depends(get_db)
+    days_offset: int = Query(default=7, ge=0, le=3650),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
 ):
     """
     为单个设备生成预测性维护任务
@@ -731,8 +870,9 @@ async def generate_predictive_task_for_device(
 @router.get("/devices/{device_id}/maintenance-history")
 async def get_device_maintenance_history(
     device_id: int,
-    limit: int = 20,
-    db: Session = Depends(get_db)
+    limit: int = Query(default=20, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
 ):
     """获取设备维护历史摘要"""
     device = db.query(Device).filter(Device.id == device_id).first()
@@ -795,7 +935,8 @@ async def get_stats(
     start_date: Optional[datetime] = None,
     end_date: Optional[datetime] = None,
     device_id: Optional[int] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_read),
 ):
     """获取计划性运维统计"""
     # 任务统计
@@ -863,7 +1004,10 @@ async def get_stats(
 
 
 @router.post("/generate-tasks")
-async def generate_tasks_for_plans(db: Session = Depends(get_db)):
+async def generate_tasks_for_plans(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_planned_execute),
+):
     """为活跃计划自动生成任务"""
     now = datetime.utcnow()
     plans = db.query(MaintenancePlan).filter(

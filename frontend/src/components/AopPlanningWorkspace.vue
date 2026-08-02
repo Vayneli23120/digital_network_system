@@ -579,7 +579,28 @@ const submitProject = async () => {
     return ElMessage.warning(t('pmMsgFillRequired'))
   }
   const device = devices.value.find(item => item.id === projectForm.value.device_id)
-  const payload = { ...projectForm.value, device_name: device?.name || null, planned_end: projectForm.value.planned_end || null }
+  const payload = {
+    name: projectForm.value.name,
+    project_type: projectForm.value.project_type,
+    device_id: projectForm.value.device_id || null,
+    device_name: device?.name || null,
+    current_version: projectForm.value.current_version || null,
+    target_version: projectForm.value.target_version || null,
+    planned_start: projectForm.value.planned_start,
+    planned_end: projectForm.value.planned_end || null,
+    preferred_window_type: projectForm.value.preferred_window_type || null,
+    estimated_hours: projectForm.value.estimated_hours,
+    estimated_cost: projectForm.value.estimated_cost,
+    owner: projectForm.value.owner || null,
+    priority: projectForm.value.priority,
+    risk_level: projectForm.value.risk_level,
+    approval_status: projectForm.value.approval_status,
+    dependencies: projectForm.value.dependencies || [],
+    business_justification: projectForm.value.business_justification || null,
+    rollback_plan: projectForm.value.rollback_plan || null
+  }
+  if (!editingProjectId.value) payload.project_code = projectForm.value.project_code
+  else if (projectForm.value.status) payload.status = projectForm.value.status
   if (projectLocked.value) {
     delete payload.project_code
     delete payload.device_id
@@ -617,8 +638,17 @@ const submitWindow = async () => {
   if (!windowForm.value.name || !windowForm.value.start_at || !windowForm.value.end_at) {
     return ElMessage.warning(t('pmMsgFillRequired'))
   }
-  const payload = { ...windowForm.value }
-  delete payload.scheduled_task_count
+  const payload = {
+    name: windowForm.value.name,
+    window_type: windowForm.value.window_type,
+    start_at: windowForm.value.start_at,
+    end_at: windowForm.value.end_at,
+    timezone: windowForm.value.timezone,
+    max_parallel_tasks: windowForm.value.max_parallel_tasks,
+    status: windowForm.value.status,
+    owner: windowForm.value.owner || null,
+    notes: windowForm.value.notes || null
+  }
   if (windowLocked.value) {
     delete payload.window_type
     delete payload.start_at
