@@ -744,30 +744,45 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ### 3.1 阻塞事件循环
 
-- [ ] **P1** `backups/router.py:69,319` — async def 内直接调同步 netmiko SSH（超时 30/60s），`/batch` 还串行遍历全部设备。`[已复核]`
-  → 部分修复（步骤 4E-A）：同步与批量路径的 Netmiko 调用均改为 `asyncio.to_thread`，不再阻塞事件循环；批量仍串行遍历，后续应迁到受控并发执行器。
-- [ ] **P1** `deploy/router.py:971` — `rollback_deploy` 在 async def 内逐台同步调 `napalm_service.rollback_device`（同文件 `execute_deploy` 已正确用线程池，属遗漏）。`[已复核]`
+- [x] **P1** `backups/router.py:69,319` — async def 内直接调同步 netmiko SSH（超时 30/60s），`/batch` 还串行遍历全部设备。`[已复核]`
+  → 修复（批次三 3.1+3.2）：同步与批量路径的 Netmiko 调用改为经统一设备操作执行器 `run_device_op`（`app/shared/device_ops.py`），不再阻塞事件循环；批量保持串行遍历（并发收敛留待后续）。
+- [x] **P1** `deploy/router.py:971` — `rollback_deploy` 在 async def 内逐台同步调 `napalm_service.rollback_device`（同文件 `execute_deploy` 已正确用线程池，属遗漏）。`[已复核]`
+  → 修复（批次三）：改为 `await run_device_op(napalm_service.rollback_device, ..., timeout=180)` 逐台串行；`execute_deploy` 与 `rollback_deploy` 共用统一执行器。
 - [x] **P1** `logs/router.py:66` — WebSocket 迭代同步阻塞生成器 `stream_logs`（内部 `time.sleep(0.5)` 死循环），一条连接占死事件循环。`[已复核]`
   → 修复（步骤 4D）：改为每 0.5 秒异步等待客户端消息，文件读取通过 `asyncio.to_thread` 执行无等待增量轮询；连接断开可及时取消，不再占死事件循环。
-- [ ] **P1** `discovery/router.py:93` — 同步 `ping_sweep`（50 线程 + 阻塞 socket）在 async 内执行；`subnet` 无 CIDR 校验，`/8` 会构造 1600 万 future。`[已复核]`
-- [ ] **P1** `tool_logs/tool_executor.py:101-112` — 协程内直接同步 `ConnectHandler/send_command`，无 `run_in_executor`。`[已复核]`
-- [ ] **P1** `alerts/router.py:131` — `_send_email` 同步 SMTP 在 async 内调用。`[待验证]`
-- [ ] **P1** `console/console_service.py` 全量、`devices/router.py:815` 文件 IO — 同类问题。`[待验证]`
-- [ ] **P1** 统一方案：建立唯一的「设备操作执行器」——强制线程池 + 强制过命令守卫 + `finally` 关连接，把 netmiko / napalm / serial / subprocess 四条路径全部收进去。
+- [x] **P1** `discovery/router.py:93` — 同步 `ping_sweep`（50 线程 + 阻塞 socket）在 async 内执行；`subnet` 无 CIDR 校验，`/8` 会构造 1600 万 future。`[已复核]`
+  → 修复（批次三）：`ping_sweep` 经 `await run_device_op(...)` 移出事件循环；`discovery_service.ping_sweep` 增加 CIDR 守卫 `num_addresses > 65536`（> /16）抛 `ValueError`，`ping-sweep`/`discover` 端点将其映射为 HTTP 400（顺带把非法 CIDR 从 500 修正为 400）。
+- [x] **P1** `tool_logs/tool_executor.py:101-112` — 协程内直接同步 `ConnectHandler/send_command`，无 `run_in_executor`。`[已复核]`
+  → 修复（批次三）：netmiko `ConnectHandler/send_command/disconnect`、napalm `open/方法调用/close`、jira `JIRA/issue/update/close` 全部经 `run_device_op` 在线程池执行。
+- [x] **P1** `alerts/router.py:131` — `_send_email` 同步 SMTP 在 async 内调用。`[已复核]`
+  → 修复（批次三）：`test_alert_channel` 的 SMTP 发送改为 `await asyncio.to_thread(service._send_email, ...)`（与 backups 既有模式一致）。
+- [x] **P1** `console/console_service.py` 全量、`devices/router.py:815` 文件 IO — 同类问题。`[已复核]`
+  → 修复（批次三）：`console/router.py` 的 `list_ports` / `find_console_port` 经 `run_device_op`；`devices/router.py` 探测端点 `test_ssh_connection` / `fetch_device_info`（netmiko SSH）改 `asyncio.to_thread`（文件 IO 已于步骤 4C 线程化）。
+- [x] **P1** 统一方案：建立唯一的「设备操作执行器」——强制线程池 + 强制过命令守卫 + `finally` 关连接，把 netmiko / napalm / serial / subprocess 四条路径全部收进去。
+  → 修复（批次三）：新增 `app/shared/device_ops.py` —— `get_device_executor()`（懒加载全局 ThreadPoolExecutor）+ `run_device_op()`（`loop.run_in_executor` + 可选超时）+ `get_device_executor_pool()`（受控临时池）。netmiko / napalm / serial / subprocess（deploy 回滚、discovery ping-sweep、console 串口、tool_executor 三条路径）均已接入；命令守卫由 deploy 引擎既有 `CommandGuard` 承担；`finally` 关连接由各工具自身 `disconnect/close` 保证。
 
 ### 3.2 数据库会话与事务
 
-- [ ] **P0** `db = next(get_db())` 绕过依赖注入共 9+ 处：`main.py:277`、`services/reachability_monitor.py:194,248,436,497`、`services/snmp_discovery.py:139,197`、`services/trap_receiver.py:264`、`shared/db_init.py:14,49`、`tool_logs/tool_executor.py:99`、`devices/router.py:800,835,857`。`get_db`（`shared/database.py:135`）是包了 `session_scope` 的生成器，`next()` 后 commit/rollback/close 永不执行，连接靠 GC 归还，`pool_size=10` 在后台线程长跑下会耗尽。`[已复核]`
-  → Backups 两处已在步骤 4E-A 改为 `Depends(get_db)`；其余位置仍待处理。
+- [x] **P0** `db = next(get_db())` 绕过依赖注入共 9+ 处：`main.py:277`、`services/reachability_monitor.py:194,248,436,497`、`services/snmp_discovery.py:139,197`、`services/trap_receiver.py:264`、`shared/db_init.py:14,49`、`tool_logs/tool_executor.py:99`、`devices/router.py:800,835,857`。`get_db`（`shared/database.py:135`）是包了 `session_scope` 的生成器，`next()` 后 commit/rollback/close 永不执行，连接靠 GC 归还，`pool_size=10` 在后台线程长跑下会耗尽。`[已复核]`
+  → 修复（批次三 3.2）：`main.py` 已先期解决；后台服务 `reachability_monitor`（4 处）、`snmp_discovery`（2 处）、`trap_receiver`（1 处）、`db_init`（2 处）、`tool_logs/tool_executor`（3 处）全部改为 `with get_db_manager().session_scope() as db:`（成功提交/异常回滚/始终 close），异常路径显式 `db.rollback()` 后 return；`devices/router.py` 6 个端点（`test_device_connection`/`fetch_device_info`/`export_devices`/`import_devices`/`manual_check_reachability`/`get_reachability_stats`）改为 `db: Session = Depends(get_db)` 并删除手工 close。`adk/`、`compliance/`、`deploy` 其余 `next(get_db())` 属后续统一项。
 - [x] **P0** `maintenance/router.py` 13 条路由全部使用 `db = next(get_db())`，请求完成前的异常路径可能跳过生成器清理并耗尽连接池。`[已复核]`
   → 修复（步骤 4E-B2）：全部改为 `db: Session = Depends(get_db)`，移除手工 close；业务异常保留状态码，未知异常统一回滚/脱敏。
 - [x] **P0** `planned_maintenance/router.py` 的 legacy plans 五条路由使用 `next(get_db())`，与同文件其余依赖注入路径并存。`[已复核]`
   → 修复（步骤 4E-B3）：全部改为 `Depends(get_db)`，移除手工 close，创建异常改为通用 500 并在服务端记录堆栈。
-- [ ] **P1** `devices/device_service.py:118` — `_sync_modules_to_inventory` 内部自行 commit，与调用方形成嵌套提交，中途失败留半份库存实例。`[已复核]`
-- [ ] **P1** `deploy/router.py:1006-1035` — `create_deploy_history` 内部已 commit（`:1449`），之后再更新 `rollback_status` 二次 commit，中途失败留半状态。`[待验证]`
+- [x] **P1** `devices/device_service.py:118` — `_sync_modules_to_inventory` 内部自行 commit，与调用方形成嵌套提交，中途失败留半份库存实例。`[已复核]`
+  → 修复（批次三）：`_sync_modules_to_inventory` 移除内部 commit（保留 `db.flush()` 拿 part_id），`create_device`/`update_device` 改为 flush → sync → 统一 commit，设备行 + 模块资产实例单事务提交，中途失败整批回滚。
+- [x] **P1** `deploy/router.py:1006-1035` — `create_deploy_history` 内部已 commit（`:1449`），之后再更新 `rollback_status` 二次 commit，中途失败留半状态。`[已复核]`
+  → 修复（批次三）：`create_deploy_history` 删除内部 `db.commit()`（保留两处 `db.flush()`），由调用方 `execute_deploy`/`rollback_deploy` 各自保持最终一次 commit，消除同一 session 二次提交。
 - [x] **P1** `backups/router.py:154,163` — 通用 except 里引用可能未绑定的 `device`；且在 `db.commit()` 之后才 `db.rollback()`，顺序无效。`[已复核]`
   → 修复（步骤 4E-A）：进入 try 前初始化 `device`，异常路径先 rollback，再写通用失败日志；HTTP 响应不回显底层异常。
-- [ ] **P1** `deploy/router.py:907` — `except: pass` 吞掉 rollback/close 阶段全部异常。`[已复核]`
+- [x] **P1** `deploy/router.py:907` — `except: pass` 吞掉 rollback/close 阶段全部异常。`[已复核]`
+  → 修复（批次三）：改 `except Exception as e:` + `logger.warning(f"清理部署会话异常: {e}")`，不再吞异常。
+
+**批次三 3.1+3.2 Linux 实测（2026-08-02，HEAD 提交前，真实服务器）**：
+- ✅ 静态：`ruff check app/ tests/` → All checks passed。
+- ✅ 回归（SQLite 默认）：`tests/test_batch1_regressions.py` 15 项全过；discovery/devices/deploy/tool_executor/alerts/backups 相关单测通过；全量 pytest（跳过既有挂起 `test_console_service.py`）为 **53 failed / 625 passed / 4 skipped**，失败集合与 4E 基线逐项 diff 完全一致（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败。`tests/test_backups_templates_security_step4e.py` 与 `tests/test_secure_template_renderer.py` 的 2 个源码断言随实现更新（`asyncio.to_thread`→统一执行器、db_init 的 `get_db`→`get_db_manager`）。
+- ✅ 真实服务器（systemd `nas-backend`，PG，`auth_enabled=true`）`/tmp/smoke_3_arch.py` 全过（9/9）：ping-sweep `127.0.0.1/30`→200；ping-sweep `10.0.0.0/8`→400（CIDR 守卫，返回「子网过大，最多允许 65536 个地址（/16）」）；设备导出→200（Excel，5480B）；reachability-stats→200；单设备 check-reachability→200（顺带修复 `manual_check_reachability` 调用不存在的 `check_device_reachability` 的既存 500 错误，改走 `_detect_reachability`+`_update_device_status` 经 `asyncio.to_thread`）；console /ports→200；rollback 空设备列表→400（不 500）；alert /test（SMTP 未启用→`"未启用"`）；连续 30 次请求无连接池报错。
+- ✅ 重启后既有 4E 冒烟无回归：`smoke_4ea_backups_templates.py`（4E-A 权限矩阵）、`smoke_4e_rest.py`（4E-B/C 矩阵）、`smoke_4ec1_atomic.py`（PASS=22）、`smoke_4ec1_behavior.py`（PASS=41）全部通过。
 
 ### 3.3 Schema 权威源
 
@@ -920,7 +935,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
 2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC
-3. **批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）—— 这两项一起做，收益最大
+3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. **批次三 3.3**（schema 基线）—— 独立于代码，可并行推进
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
