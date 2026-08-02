@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pathlib import Path
@@ -18,6 +18,7 @@ from app.shared.template_renderer import (
 from app.features.auth.identity import Principal, get_current_principal
 from app.shared.models import Device, ConfigTemplate, CredentialGroup, BackupRecord, AuditLog, DeployHistory, DeployDeviceResult, User, LogEntry
 from app.shared.config import get_config
+from app.shared.time_utils import utc_iso
 from app.shared.dependencies import require_permission
 from app.features.auth.router import get_current_user_from_token
 from app.features.credentials.credential_service import decrypt_password
@@ -510,11 +511,13 @@ async def execute_deploy(
         "dry_run": false
     }
     """
-    deploy_data = deploy_request.model_dump()
+    return await _run_deploy_impl(deploy_request.model_dump(), principal.username)
+
+
+async def _run_deploy_impl(deploy_data: dict, current_username: str):
+    """配置部署实现主体（execute_deploy 与定时调度任务共用）"""
     db: Session = next(get_db())
     history_id = None  # 部署历史记录 ID
-
-    current_username = principal.username
 
     try:
         mode = deploy_data.get('mode', 'backup')
@@ -1165,12 +1168,21 @@ async def get_maintenance_windows(
 @router.post("/schedule")
 async def schedule_deploy(
     schedule_request: ScheduleDeployRequest,
+    principal: Principal = Depends(get_current_principal),
     _: None = Depends(require_config_deploy),
     db: Session = Depends(get_db),
 ):
     """
     预约部署任务
+
+    落库 Job 记录并提交 celery 定时任务（eta=维护窗口），返回真实 job_id/task_id。
+    需要常驻 celery worker（`celery -A app.core.celery_app worker -Q device_ops`）
+    才会在到点后真实执行；未运行 worker 时 Job 停留在 pending/queued。
     """
+    from datetime import timezone
+    from app.shared.models_jobs import JobType, create_job
+    from app.tasks.deploy_tasks import deploy_scheduled
+
     try:
         schedule_data = schedule_request.model_dump()
         window_id = schedule_data["window_id"]
@@ -1190,13 +1202,52 @@ async def schedule_deploy(
         else:
             scheduled_time = date.replace(hour=22, minute=0)
 
-        # 创建预约任务（这里简化处理，实际应创建定时任务）
+        # 落库 Job 记录（celery 未运行也会保留预约单）
+        job = create_job(
+            db,
+            job_type=JobType.DEPLOY,
+            device_ids=deploy_data.get("target_devices", []),
+            operator=principal.username if isinstance(principal, Principal) else "system",
+            parameters={
+                "window_id": window_id,
+                "scheduled_at": scheduled_time.isoformat(),
+                "deploy_data": deploy_data,
+            },
+        )
+
+        # 提交 celery 定时任务：eta 用 UTC aware（celery timezone=UTC），
+        # 入参保持本地墙钟 naive ISO 语义
+        try:
+            celery_task = deploy_scheduled.apply_async(
+                args=[job.id, principal.username if isinstance(principal, Principal) else "system"],
+                eta=scheduled_time.astimezone(timezone.utc),
+            )
+        except Exception as exc:
+            logger.error(f"提交部署调度任务失败: {exc}")
+            job.status = "failed"
+            job.error_message = f"Celery unavailable: {exc}"
+            db.commit()
+            raise HTTPException(status_code=503, detail="任务队列不可用，无法预约部署")
+
+        # 写回 celery 任务 ID
+        job.celery_task_id = celery_task.id
+        db.commit()
+
+        logger.info(
+            f"预约部署成功: job={job.id}, task={celery_task.id}, "
+            f"window={window_id}, scheduled_at={scheduled_time.isoformat()}"
+        )
+
         return {
             "success": True,
-            "task_id": f"scheduled_{window_id}",
-            "scheduled_at": scheduled_time.isoformat()
+            "scheduled": True,
+            "job_id": job.id,
+            "task_id": celery_task.id,
+            "scheduled_at": scheduled_time.isoformat(),
         }
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"预约部署失败：{e}")
         raise HTTPException(status_code=500, detail=f"Scheduling failed: {str(e)}")
@@ -1204,8 +1255,8 @@ async def schedule_deploy(
 
 @router.get("/history")
 async def get_deploy_history(
-    limit: int = 50,
-    offset: int = 0,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
     operation_type: Optional[str] = None,
     _: None = Depends(require_config_read),
     db: Session = Depends(get_db)
@@ -1236,7 +1287,7 @@ async def get_deploy_history(
 
             history_list.append({
                 "id": record.id,
-                "timestamp": record.created_at.isoformat() if record.created_at else None,
+                "timestamp": utc_iso(record.created_at),
                 "success": record.success,
                 "engine": record.engine,
                 "mode": record.mode,
@@ -1287,7 +1338,7 @@ async def get_deploy_history_detail(
 
         return {
             "id": record.id,
-            "timestamp": record.created_at.isoformat() if record.created_at else None,
+            "timestamp": utc_iso(record.created_at),
             "success": record.success,
             "engine": record.engine,
             "mode": record.mode,
