@@ -1741,12 +1741,13 @@ const executeDeploy = async () => {
     const sessionId = `deploy_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const wsHost = window.location.host
-    const wsUrl = `${wsProtocol}//${wsHost}/ws/deploy/${sessionId}`
+    // VITE_WS_URL 为可选覆盖（远程访问或后端不同域时设置），缺省按 location.host 拼
+    const wsBase = import.meta.env.VITE_WS_URL || `${wsProtocol}//${wsHost}`
+    const wsUrl = `${wsBase}/ws/deploy/${sessionId}`
 
     deployWebSocket = new WebSocket(wsUrl)
 
     deployWebSocket.onopen = () => {
-      console.log('WebSocket 连接已建立:', sessionId)
       // 发送部署请求
       deployWebSocket.send(JSON.stringify(deployData))
     }
@@ -1764,7 +1765,6 @@ const executeDeploy = async () => {
     }
 
     deployWebSocket.onclose = () => {
-      console.log('WebSocket 连接已关闭')
       stopTimer()
     }
 
@@ -1778,8 +1778,6 @@ const executeDeploy = async () => {
 
 // 处理 WebSocket 消息
 const handleDeployMessage = (data) => {
-  console.log('收到 WebSocket 消息:', data.type)
-
   if (data.type === 'deploy_started') {
     // 部署开始
     ElMessage.info(`开始部署 ${data.total_count} 台设备`)

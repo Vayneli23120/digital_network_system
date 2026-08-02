@@ -1224,13 +1224,6 @@ async function createFiberTrunk() {
   // 起点靠近核心交换机时，自动把主干起点关联到核心设备（后端会生成 trunk_to_core 边）
   const nearbyCore = findNearbyCoreDevice(trunkStartPoint.value.x, trunkStartPoint.value.y, 5)
 
-  console.log('创建主干:', {
-    planId: currentPlanId.value,
-    start: trunkStartPoint.value,
-    end: trunkEndPoint.value,
-    start_device_id: nearbyCore?.device_id || null,
-  })
-
   try {
     // 使用新的 topo API 创建主干
     const res = await axios.post(`/api/floor-plans/${currentPlanId.value}/topo/trunk`, {
@@ -1241,7 +1234,6 @@ async function createFiberTrunk() {
       end_x: trunkEndPoint.value.x,
       end_y: trunkEndPoint.value.y,
     })
-    console.log('创建主干成功:', res.data)
     ElMessage.success(t('msgSaveSuccess'))
 
     // 重新加载数据
@@ -3305,7 +3297,6 @@ function onPortAnchorMouseDown(anchorData) {
 
   if (!topoNode) {
     // 没有拓扑节点，需要先创建
-    console.log('需要先创建拓扑节点')
     ElMessage.warning(t('msgUpdateFailed'))
     return
   }
@@ -3365,7 +3356,6 @@ async function finishWiring(targetAnchorData) {
   )
 
   if (!targetTopoNode) {
-    console.log('目标设备没有拓扑节点')
     cancelWiring()
     return
   }
@@ -6051,9 +6041,10 @@ function connectDeviceStatusWs() {
     // WebSocket 连接地址：
     // 开发环境：通过 vite 代理（wss://），代理会转发到后端 ws://
     // 生产环境：使用当前 host（前端与后端同域部署）
-    let wsUrl
+    // VITE_WS_URL 为可选覆盖（远程访问或后端不同域时设置），缺省按 location.host 拼
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    wsUrl = `${proto}://${location.host}/ws/device-status`
+    const base = import.meta.env.VITE_WS_URL || `${proto}://${location.host}`
+    const wsUrl = `${base}/ws/device-status`
     deviceStatusWs = new WebSocket(wsUrl)
     deviceStatusWs.onopen = () => {
       deviceStatusWs.send(JSON.stringify({
