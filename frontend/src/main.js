@@ -11,6 +11,7 @@ import * as ElementPlusIconsVue from '@element-plus/icons-vue'
 
 import App from './App.vue'
 import router from './router'
+import { useThemeStore } from '@/stores/theme'
 
 const app = createApp(App)
 const pinia = createPinia()
@@ -28,10 +29,7 @@ app.use(ElementPlus, {
   locale: appLang === 'en' ? en : zhCn
 })
 
-// 初始化暗色模式
-const darkMode = localStorage.getItem('darkMode') === 'true'
-if (darkMode) {
-  document.documentElement.classList.add('dark')
-}
+// 初始化暗色模式（读 theme store，状态初始化即同步 localStorage）
+useThemeStore().apply()
 
 app.mount('#app')

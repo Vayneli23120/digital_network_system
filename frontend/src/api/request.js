@@ -8,6 +8,7 @@ import {
   withRetry,
   showNetworkError
 } from '@/utils/requestManager.js'
+import { useAuthStore } from '@/stores/auth'
 
 // SSH 错误翻译映射
 const SSH_ERROR_MAP_ZH = {
@@ -66,7 +67,7 @@ const api = axios.create({
 export const authenticatedAxios = axios.create({ timeout: 30000 })
 
 function attachAuthToken(config) {
-  const token = localStorage.getItem('accessToken')
+  const token = useAuthStore().accessToken
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
@@ -81,9 +82,7 @@ function handleAuthFailure(error) {
     if (!isRedirectingToLogin) {
       isRedirectingToLogin = true
       ElMessage.error('登录已过期，请重新登录')
-      localStorage.removeItem('accessToken')
-      localStorage.removeItem('isLoggedIn')
-      localStorage.removeItem('currentUser')
+      useAuthStore().clearAuth()
       window.location.href = '/login'
     }
   }

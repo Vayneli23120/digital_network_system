@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
 import Layout from '@/views/Layout.vue'
 import Login from '@/views/Login.vue'
 
@@ -428,7 +429,7 @@ const router = createRouter({
 
 // Navigation guard - check authentication
 router.beforeEach((to, from, next) => {
-  const isLoggedIn = localStorage.getItem('isLoggedIn') === 'true'
+  const isLoggedIn = useAuthStore().isLoggedIn
 
   // If route doesn't require auth and user is not logged in, allow access
   if (to.meta.noAuth) {

@@ -115,9 +115,11 @@ import { ElMessage } from 'element-plus'
 import { Monitor, WarningFilled, Right } from '@element-plus/icons-vue'
 import { login, getSsoStatus } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 
 const { t, currentLang, setLang } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const loginFormRef = ref(null)
 const loading = ref(false)
@@ -199,11 +201,11 @@ const validateTokenFormat = (token) => {
  * - 不在 URL 参数中传递 token
  * - 不在日志中打印 token
  */
-const secureStoreToken = (token) => {
+const secureStoreToken = (token, username) => {
   validateTokenFormat(token)
-  // 存储到 localStorage（短期方案）
+  // 存入 auth store（内部写 localStorage，短期方案）
   // 中期目标：后端使用 httpOnly Cookie，前端不再手动管理 token
-  localStorage.setItem('accessToken', token)
+  authStore.setAuth(token, username)
 }
 
 const handleLogin = async () => {
@@ -214,18 +216,14 @@ const handleLogin = async () => {
 
     const result = await login(loginForm)
 
-    // 安全存储 Token
+    // 安全存储 Token 与登录态（含用户名，优先用后端返回值保持一致）
     try {
-      secureStoreToken(result.access_token)
+      secureStoreToken(result.access_token, result.username || loginForm.username)
     } catch (tokenError) {
       console.error('Token validation failed')
       errorMsg.value = t('loginFailed')
       return
     }
-
-    // Store login state and username (use backend returned username for consistency)
-    localStorage.setItem('isLoggedIn', 'true')
-    localStorage.setItem('currentUser', result.username || loginForm.username)
 
     ElMessage.success(t('loginSuccess'))
 

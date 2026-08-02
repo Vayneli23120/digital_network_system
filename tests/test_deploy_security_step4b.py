@@ -423,7 +423,7 @@ def test_stream_history_uses_authenticated_username_source():
     assert 'created_by="Web"' not in stream_source
     assert "username=principal.username" in websocket_source
     assert "user_id=principal.user_id" in websocket_source
-    assert "access_token: localStorage.getItem('accessToken')" in frontend_source
+    assert "access_token: authStore.accessToken" in frontend_source
 
 
 def test_all_product_template_paths_use_shared_renderer():

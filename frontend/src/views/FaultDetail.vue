@@ -830,11 +830,13 @@ import {
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 import api from '@/api/request'
 import ScanSession from '@/components/ScanSession.vue'
 // API imports are in the composables
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 const route = useRoute()
 const router = useRouter()
@@ -1054,7 +1056,7 @@ const submitNoteOnly = async () => {
     })
     // 添加到本地日志
     workNotes.value.unshift({
-      author: localStorage.getItem('currentUser') || fault.value.assigned_to || 'Web',
+      author: authStore.currentUser || fault.value.assigned_to || 'Web',
       content: newNoteContent.value,
       created_at: new Date().toISOString(),
       note_type: 'diagnosis'
@@ -1075,7 +1077,7 @@ const submitNoteAndResolve = async () => {
       await diagnoseFault(fault.value.id, { diagnosis_text: newNoteContent.value })
       // 添加日志
       workNotes.value.push({
-        author: localStorage.getItem('currentUser') || fault.value.assigned_to,
+        author: authStore.currentUser || fault.value.assigned_to,
         content: newNoteContent.value,
         created_at: new Date().toISOString(),
         note_type: 'diagnosis'

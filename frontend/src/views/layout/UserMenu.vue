@@ -24,10 +24,12 @@ import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Setting, SwitchButton } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 import { logout } from '@/api'
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const props = defineProps({
   darkMode: {
@@ -85,16 +87,12 @@ const closeMenu = () => {
 const handleLogout = async () => {
   try {
     await logout()
-    localStorage.removeItem('isLoggedIn')
-    localStorage.removeItem('currentUser')
-    localStorage.removeItem('accessToken')
+    authStore.clearAuth()
     ElMessage.success(t('userLogout') + '成功')
     router.push('/login')
   } catch (e) {
-    // Even if API fails, clear local storage and redirect
-    localStorage.removeItem('isLoggedIn')
-    localStorage.removeItem('currentUser')
-    localStorage.removeItem('accessToken')
+    // Even if API fails, clear auth store and redirect
+    authStore.clearAuth()
     router.push('/login')
   }
 }

@@ -921,11 +921,13 @@ import {
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import DiffViewer from '@/components/DiffViewer.vue'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 
 // 暗黑模式检测
 const isDark = computed(() => document.documentElement.classList.contains('dark'))
@@ -1712,7 +1714,7 @@ const executeDeploy = async () => {
     // 准备部署数据
     const deployData = {
       action: 'start_deploy',
-      access_token: localStorage.getItem('accessToken') || undefined,
+      access_token: authStore.accessToken || undefined,
       mode: deployForm.value.mode,
       engine: deployForm.value.engine,
       napalm_mode: deployForm.value.napalm_mode,

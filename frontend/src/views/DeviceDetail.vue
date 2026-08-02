@@ -721,6 +721,7 @@ import { Connection, Download, Upload, Picture, View, Tools, Delete, Monitor, Bo
 import { getDeviceDetail, createFault, createMaintenance, updateMaintenance, deleteMaintenance, updateFault, updateDevice as updateDeviceApi, getDeviceInventory, deleteDevice, getCredentials, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo, getUsers, getDeviceMetrics, listDeviceInterfaces, updateDeviceInterface, getInterfaceTraffic, discoverDeviceInterfaces, discoverDeviceNeighbors, diagnoseDeviceSnmp } from '@/api'
 import { formatDateTime, formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import MaintenanceFormDialog from '@/components/MaintenanceFormDialog.vue'
@@ -728,6 +729,7 @@ import DeviceTrafficChart from '@/components/ui/DeviceTrafficChart.vue'
 import api from '@/api/request.js'
 
 const { t } = useI18n()
+const authStore = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 const device = ref(null)
@@ -896,7 +898,7 @@ const editForm = ref({})
 
 const uploadUrl = computed(() => `/api/devices/${route.params.id}/photos`)
 const uploadHeaders = computed(() => {
-  const token = localStorage.getItem('accessToken')
+  const token = authStore.accessToken
   return token ? { Authorization: `Bearer ${token}` } : {}
 })
 

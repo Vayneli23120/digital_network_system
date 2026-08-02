@@ -669,8 +669,10 @@ import { authenticatedAxios as axios } from '@/api/request.js'
 import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault, getFloorPlanContent } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
+const authStore = useAuthStore()
 const canvasHost = ref(null)
 const selectedDevice = ref(null)
 const filterType = ref('')
@@ -6049,7 +6051,7 @@ function connectDeviceStatusWs() {
     deviceStatusWs.onopen = () => {
       deviceStatusWs.send(JSON.stringify({
         action: 'authenticate',
-        access_token: localStorage.getItem('accessToken') || undefined
+        access_token: authStore.accessToken || undefined
       }))
     }
     deviceStatusWs.onmessage = (ev) => {

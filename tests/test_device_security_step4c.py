@@ -659,4 +659,4 @@ def test_device_status_frontend_sends_access_token():
     source = (root / "frontend/src/views/Monitor3D.vue").read_text(encoding="utf-8")
 
     assert "deviceStatusWs.onopen" in source
-    assert "access_token: localStorage.getItem('accessToken')" in source
+    assert "access_token: authStore.accessToken" in source

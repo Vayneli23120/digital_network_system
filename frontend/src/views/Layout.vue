@@ -60,11 +60,14 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key, Aim, Box, Checked, List, Delete, Calendar, Bell, User, Cpu, TrendCharts, Operation, Sort, Lock, Odometer, VideoPlay, Setting, QuestionFilled } from '@element-plus/icons-vue'
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
+import { useThemeStore } from '@/stores/theme'
 import { getFaults, getUnreadCount, getMyPermissions } from '@/api'
 import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
@@ -72,13 +75,15 @@ import { debounce } from '@/utils/requestManager.js'
 const route = useRoute()
 const router = useRouter()
 const { t, currentLang, toggleLang } = useI18n()
+const authStore = useAuthStore()
+const themeStore = useThemeStore()
 
 // State
 const collapsed = ref(false)
-const darkMode = ref(localStorage.getItem('darkMode') === 'true')
+const { darkMode } = storeToRefs(themeStore)
 const isMobile = ref(window.innerWidth < 768)
 const unreadNotifCount = ref(0)
-const currentUser = ref(localStorage.getItem('currentUser') || 'Admin')
+const currentUser = computed(() => authStore.currentUser || 'Admin')
 const activeTopTab = ref('dashboard')
 const showSearchOverlay = ref(false)
 const faultTimerId = ref(null)
@@ -259,15 +264,7 @@ const setTopTab = (key) => {
 }
 
 const toggleDark = () => {
-  darkMode.value = !darkMode.value
-  localStorage.setItem('darkMode', darkMode.value)
-  if (darkMode.value) {
-    document.documentElement.classList.add('dark')
-  } else {
-    document.documentElement.classList.remove('dark')
-  }
-  // Trigger global event for Dashboard to refresh charts
-  window.dispatchEvent(new CustomEvent('theme-change', { detail: { dark: darkMode.value } }))
+  themeStore.toggle()
 }
 
 const handleResize = () => {
@@ -285,10 +282,8 @@ onMounted(() => {
   window.addEventListener('resize', handleResize)
   window.addEventListener('fault-status-change', loadFaultBadge)
   handleResize()
-  // Check localStorage for dark mode preference
-  if (darkMode.value) {
-    document.documentElement.classList.add('dark')
-  }
+  // Apply dark mode preference from theme store
+  themeStore.apply()
   // Load user permissions for nav filtering
   getMyPermissions().then(data => {
     userPermissions.value = data.permissions || []
