@@ -343,21 +343,43 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 失败/错误集合不变。⚠️ 原始全量命令仍挂在既有 console 测试；本机 `frontend/node_modules` 不完整，
 `npm run build` 因找不到 Vite 未执行成功，交由测试系统执行。
 
+**步骤 4E-A 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_backups_templates_security_step4e.py` **21 passed**；批次一 15 项全过；
+  全量 pytest **53 failed / 625 passed / 4 skipped**，失败集合与 4D 基线逐项 diff 完全一致
+  （compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1），无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4ea_backups_templates.py` 全过）：新建 backup read/execute/batch/delete 与
+  template read/write/delete/render 最小权限账号逐端点探测——Backups 列表/内容/下载/差异=reader 200、
+  同步与异步执行=executor、批量=batcher、删除=deleter；Templates 列表=reader、创建=writer、删除=deleter、
+  渲染=renderer；跨权限一律 403、管理员全放行。
+- ✅ 下载必须携带 Bearer 且返回 `backup-{id}.cfg`；`../`、根目录外绝对路径与符号链接逃逸由单测覆盖，
+  HTTP 错误与 Job 结果均为通用文案，不含服务器路径；异步执行成功结果不含 `file_path`。
+- ✅ operator 只取 token 用户，同步/批量/异步备份无伪造 operator 通道。
+- ✅ 前端构建：`npm run build` 成功（13.94s，仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Backups/Templates 页交互未执行，需真实浏览器验证。
+
 **步骤 4E-A 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_backups_templates_security_step4e.py`、既有 backup/template/netmiko/批次一回归及全量 pytest，失败集合不得新增
-- [ ] 使用 backup read/execute/batch/delete 四种最小权限账号逐端点验证；跨权限 403，管理员全部放行，执行只允许实验设备
-- [ ] 使用 template read/write/delete/render 四种最小权限账号验证列表/详情/创建/更新/删除/渲染；跨权限 403
-- [ ] 备份列表、内容、diff、下载、错误响应和 Job 结果不得含服务器绝对路径；下载必须要求 Bearer 且返回 `backup-{id}.cfg`
-- [ ] 验证合法旧备份路径可读；`../`、根目录外绝对路径、符号链接逃逸及恶意设备名不得越过 `storage.backup_dir`
-- [ ] 同步/批量/异步备份的 operator 必须等于 token 用户，伪造 query/body operator 无效；异步 Job 成功结果不得含 `file_path`，失败信息必须脱敏
-- [ ] 模板 create/update 拒绝 `id/created_at` 等额外字段；对象、数组和字符串形式变量超过 100 KB 均 422；合法模板仍可经共享沙箱渲染
+- [x] Linux 跑 Ruff、`test_backups_templates_security_step4e.py`、既有 backup/template/netmiko/批次一回归及全量 pytest，失败集合不得新增
+- [x] 使用 backup read/execute/batch/delete 四种最小权限账号逐端点验证；跨权限 403，管理员全部放行，执行只允许实验设备
+- [x] 使用 template read/write/delete/render 四种最小权限账号验证列表/详情/创建/更新/删除/渲染；跨权限 403
+- [x] 备份列表、内容、diff、下载、错误响应和 Job 结果不得含服务器绝对路径；下载必须要求 Bearer 且返回 `backup-{id}.cfg`
+- [x] 验证合法旧备份路径可读；`../`、根目录外绝对路径、符号链接逃逸及恶意设备名不得越过 `storage.backup_dir`
+- [x] 同步/批量/异步备份的 operator 必须等于 token 用户，伪造 query/body operator 无效；异步 Job 成功结果不得含 `file_path`，失败信息必须脱敏
+- [x] 模板 create/update 拒绝 `id/created_at` 等额外字段；对象、数组和字符串形式变量超过 100 KB 均 422；合法模板仍可经共享沙箱渲染
 - [ ] 浏览器 Backups 页列表/查看/diff/认证下载/批量执行可用，菜单与按钮权限表现正确，401/403 提示可理解
-- [ ] 前端环境执行 `npm ci && npm run build`
+- [x] 前端环境执行 `npm ci && npm run build`
 
 **步骤 4E-B0 验证结果（2026-08-02）**：✅ 权限定义、角色 CRUD/clone 与用户角色分配九条写路由全部挂功能权限；
 ✅ `tests/test_permissions_security_step4e_b.py` 3 项真实 HTTP 回归覆盖普通用户创建权限、创建管理员角色、给自己绑定管理员角色均 403，
 并验证 `role:write` 与 `user:write` 职责隔离；与统一认证回归合计 **23 passed**；全仓 Ruff、`app.main` 导入和编辑器诊断通过。
 Linux 测试系统需重跑该测试，并以普通账号复核上述三条自提权路径 403、管理员仍可正常管理角色。
+
+**步骤 4E-B0 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_permissions_security_step4e_b.py` **3 passed**，与统一认证回归合并全过；
+  全量 pytest **53 failed / 625 passed / 4 skipped**，失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 复核（`/tmp/smoke_4e_rest.py`）：role create 中仅 usr_writer（无 role:write）→ 403，
+  role_writer / usr_role_writer / admin → 201；roles 列表无权限门槛（供角色分配下拉框）三类账号均 200；
+  user create 仅 usr_writer → 201、usr_reader → 403；user delete 仅 usr_writer / role_writer → 403、admin → 404，
+  证明 `role:write` 与 `user:write` 职责隔离且写路由均已挂功能权限。三条自提权路径 403 由上述 3 项自动测试覆盖。
 
 **步骤 4E-B1 验证结果（2026-08-02）**：✅ Faults 23 条 HTTP 路由全部挂 `fault:read/write/delete/analyze`；
 ✅ reporter、reviewed_by 与转维修 operator 由 JWT Principal 覆盖，前端不再发送 `Web/Monitor3D/author` 审计身份；
@@ -370,12 +392,23 @@ Layout 故障角标改走认证 API 客户端并统计全部非 closed 状态，
 ✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 567 passed / 8 skipped / 10 errors**，
 相对 4E-A 恰好新增 B0+B1 的 10 passed，失败/错误集合不变。⚠️ 本机缺 Vite 可执行文件，前端构建留给 Linux。
 
+**步骤 4E-B1 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_faults_security_step4e_b.py` **7 passed**，故障相邻回归全过；
+  全量 pytest **53 failed / 625 passed / 4 skipped**，失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：fault list 与 incidents/dashboard=reader 200；
+  create/get=writer；delete=deleter；analyze=analyzer；work-note=writer；跨权限一律 403、admin 全放行
+  （bogus id 在权限门后解析为 404，证明权限先于资源解析）。
+- ✅ 单测覆盖伪造 reporter/reviewed_by/operator 均取 Principal 落库、工作日志空白/额外字段/超长与
+  分页越界均 422、列表 severity 业务排序、dashboard 全状态机分布之和等于 total。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Faults/FaultDetail/Monitor3D 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B1 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_permissions_security_step4e_b.py`、`test_faults_security_step4e_b.py`、故障幂等与全量 pytest，失败集合不得新增
-- [ ] 用 fault read/write/delete/analyze 四个最小权限账号验证 23 条端点代表路径；跨权限 403，未认证 401，管理员全部放行
-- [ ] 创建故障时伪造 reporter、复核时伪造 reviewed_by、转维修时伪造 operator 均不得落库，DB 必须记录 token 用户
-- [ ] 工作日志空白、额外 author/operator、>10,000 字符均 422；合法日志可保存；分页越界均 422
-- [ ] 实测列表严重度顺序与 dashboard 全状态总数/活跃数；状态分布之和必须等于 total
+- [x] Linux 跑 Ruff、`test_permissions_security_step4e_b.py`、`test_faults_security_step4e_b.py`、故障幂等与全量 pytest，失败集合不得新增
+- [x] 用 fault read/write/delete/analyze 四个最小权限账号验证 23 条端点代表路径；跨权限 403，未认证 401，管理员全部放行
+- [x] 创建故障时伪造 reporter、复核时伪造 reviewed_by、转维修时伪造 operator 均不得落库，DB 必须记录 token 用户
+- [x] 工作日志空白、额外 author/operator、>10,000 字符均 422；合法日志可保存；分页越界均 422
+- [x] 实测列表严重度顺序与 dashboard 全状态总数/活跃数；状态分布之和必须等于 total
 - [ ] 浏览器 Faults/FaultDetail/Monitor3D 创建、复核、日志、转维修可用，故障角标携带 Bearer；执行 `npm ci && npm run build`
 
 **步骤 4E-B2 验证结果（2026-08-02）**：✅ Maintenance 13 条 HTTP 路由全部挂
@@ -393,14 +426,26 @@ Faults/Maintenance 集成回归 **19 passed**，全部已完成安全切片 **15
 **54 failed / 574 passed / 8 skipped / 10 errors**，相对 B1 恰好新增 7 passed，失败/错误集合不变。
 ⚠️ 本机无 Vite 可执行文件，前端构建交给 Linux 测试系统。
 
+**步骤 4E-B2 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_maintenance_security_step4e_b.py` **7 passed**，Faults/Maintenance 集成回归全过；
+  全量 pytest **53 failed / 625 passed / 4 skipped**，失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：maint list=reader 200；create/get=writer；
+  delete=deleter；transition=transition 权限；跨权限一律 403、admin 全放行
+  （bogus id 在权限门后解析为 404，证明权限先于资源解析）。
+- ✅ 单测覆盖三条完成路径（transition/verify-pass/auto-transition）关联 fault 置为 resolved 且 verify_passed、
+  create/update 覆盖 id/status/operator、负金额、非法类型/优先级与超长文本均 422、内部异常 500 脱敏
+  不含 SQL/路径、依赖会话管理无连接池泄漏。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Maintenance/FaultDetail 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B2 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_maintenance_security_step4e_b.py`、Faults/转维修幂等与全量 pytest，失败集合不得新增
-- [ ] 用 maintenance read/write/delete/transition 四个最小权限账号验证 13 条端点代表路径；跨权限 403、未认证 401、管理员全放行
-- [ ] create/transition/work-note/submit-verification/verify-pass/auto-transition 伪造 operator 均 422，事件表 operator 必须等于 token 用户
-- [ ] create/update 尝试覆盖 id/status/operator、负金额、非法维修类型/优先级、超长文本均 422；分页越界 422
-- [ ] 分别通过 transition、verify-pass、auto-transition 完成三张关联维修单，Maintenance 必须 completed 且关联 Fault 必须 resolved
-- [ ] 实测 created/pending 列表快捷动作进入 repairing；Fault 转维修的描述、诊断、预估备件与 owner 均正确落库
-- [ ] 制造数据库异常时 HTTP 只返回通用文案，不含 SQL、路径或连接信息；确认请求后连接池无泄漏
+- [x] Linux 跑 Ruff、`test_maintenance_security_step4e_b.py`、Faults/转维修幂等与全量 pytest，失败集合不得新增
+- [x] 用 maintenance read/write/delete/transition 四个最小权限账号验证 13 条端点代表路径；跨权限 403、未认证 401、管理员全放行
+- [x] create/transition/work-note/submit-verification/verify-pass/auto-transition 伪造 operator 均 422，事件表 operator 必须等于 token 用户
+- [x] create/update 尝试覆盖 id/status/operator、负金额、非法维修类型/优先级、超长文本均 422；分页越界 422
+- [x] 分别通过 transition、verify-pass、auto-transition 完成三张关联维修单，Maintenance 必须 completed 且关联 Fault 必须 resolved
+- [x] 实测 created/pending 列表快捷动作进入 repairing；Fault 转维修的描述、诊断、预估备件与 owner 均正确落库
+- [x] 制造数据库异常时 HTTP 只返回通用文案，不含 SQL、路径或连接信息；确认请求后连接池无泄漏
 - [ ] 浏览器 Maintenance/FaultDetail 创建、编辑、指派、日志、状态流转与验证可用；执行 `npm ci && npm run build`
 
 **步骤 4E-B3 验证结果（2026-08-02）**：✅ 旧计划/任务流 17 条与 AOP 年度规划 13 条端点全部按
@@ -416,13 +461,28 @@ Faults/Maintenance 集成回归 **19 passed**，全部已完成安全切片 **15
 **54 failed / 579 passed / 8 skipped / 10 errors**，相对 B2 恰好新增 5 passed，失败/错误集合不变。
 ⚠️ 本机缺 Vite，前端构建与 PostgreSQL AOP 并发测试交 Linux 测试系统。
 
+**步骤 4E-B3 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_planned_maintenance_security_step4e_b.py` **5 passed**、
+  `test_aop_planning.py` **11 passed**；全量 pytest **53 failed / 625 passed / 4 skipped**，
+  失败集合与 4D 基线完全一致，无新增失败。
+- ✅ PostgreSQL 并发（scratch 库 `nas_test`，`TEST_DATABASE_URL`）：`test_postgresql_concurrency.py`
+  **2 passed**（并发出库不产生负库存、并发 Fault→Maintenance 只复用一条记录）、
+  `test_postgresql_aop_planning.py` **1 passed**（并发 AOP 生成只创建一条任务，排程幂等、
+  approved/locked 更新约束不退化）。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：plans/tasks 列表=reader 200；plan/task create=writer；
+  task complete=executor；跨权限一律 403、admin 全放行（bogus id 在权限门后解析为 404）。
+- ✅ 单测覆盖伪造 device_name 由数据库覆盖为 device_id 真实名称、任务完成伪造 operator 422、
+  非法输入与分页/历史/预测天数/AI 扫描越界 422、排程错误脱敏不含 SQL/路径且依赖会话管理。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 legacy/AOP 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B3 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_planned_maintenance_security_step4e_b.py`、`test_aop_planning.py`、PostgreSQL AOP 并发与全量 pytest，失败集合不得新增
-- [ ] 用 planned_task read/write/delete/execute 四个最小权限账号验证 legacy+AOP 30 条端点代表路径；跨权限 403、未认证 401、管理员全放行
-- [ ] 创建 legacy plan/task 与 AOP project 时伪造 device_name，数据库必须保存 device_id 对应真实名称；任务完成伪造 operator 必须 422
-- [ ] 测试非法 plan type/status/date、额外 id/created_by、负金额、超长文本、工时溢出、分页/历史/预测天数/AI 扫描越界均 422
-- [ ] AOP 排程失败响应不得含 SQL、路径或调度内部信息；计划请求后连接池不得泄漏
-- [ ] PostgreSQL 并发重复排程仍保持幂等，既有 approved/locked 更新约束不退化
+- [x] Linux 跑 Ruff、`test_planned_maintenance_security_step4e_b.py`、`test_aop_planning.py`、PostgreSQL AOP 并发与全量 pytest，失败集合不得新增
+- [x] 用 planned_task read/write/delete/execute 四个最小权限账号验证 legacy+AOP 30 条端点代表路径；跨权限 403、未认证 401、管理员全放行
+- [x] 创建 legacy plan/task 与 AOP project 时伪造 device_name，数据库必须保存 device_id 对应真实名称；任务完成伪造 operator 必须 422
+- [x] 测试非法 plan type/status/date、额外 id/created_by、负金额、超长文本、工时溢出、分页/历史/预测天数/AI 扫描越界均 422
+- [x] AOP 排程失败响应不得含 SQL、路径或调度内部信息；计划请求后连接池不得泄漏
+- [x] PostgreSQL 并发重复排程仍保持幂等，既有 approved/locked 更新约束不退化
 - [ ] 浏览器 legacy 与 AOP 新建/编辑/批量窗口/排程/任务完成可用；执行 `npm ci && npm run build`
 
 **步骤 4E-B4 验证结果（2026-08-02）**：✅ Workflows 14 条 HTTP 端点全部按
@@ -440,15 +500,27 @@ event_data 拒绝额外字段、未知操作符、类型错配、超长/深层/�
 ✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 589 passed / 8 skipped / 10 errors**，
 相对 B3 恰好新增 10 passed，失败/错误集合不变。⚠️ 本机缺 Vite，前端构建交 Linux 测试系统。
 
+**步骤 4E-B4 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_workflows_security_step4e_b.py` **10 passed**，
+  Workflow/Fault/Maintenance 相邻回归全过；全量 pytest **53 failed / 625 passed / 4 skipped**，
+  失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：rules 列表/stats=reader 200；rule create/get=writer；
+  trigger=trigger 权限（bogus device 未命中规则返回 200 “Trigger not activated”）；跨权限一律 403、admin 全放行。
+- ✅ 单测覆盖跨域写权限：仅 workflow:trigger 命中 create_maintenance/update_health_score 缺目标域 write 时 403 且零副作用、
+  创建/更新/启停跨域规则或初始化默认规则需先持目标域 write、Fault create/escalate 间接触发同样受限、
+  动作失败整体 success=false 且异常脱敏不含 SQL/路径/堆栈、scheduled-check 大量设备只返回截断列表、规则分页 total 真实。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Workflows 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B4 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_workflows_security_step4e_b.py`、工作流维修幂等、Fault/Maintenance 相邻及全量 pytest，失败集合不得新增
-- [ ] 用 workflow read/write/delete/trigger 四个最小权限账号验证 14 条端点；跨权限 403、未认证 401、管理员全放行
-- [ ] 仅 workflow:trigger 命中 create_maintenance/create_pm_task/update_health_score 分别必须 403 且零副作用；补齐对应目标域 write 后才执行
-- [ ] 仅 workflow:write 创建/更新/启停上述跨域规则或初始化默认规则必须 403；补齐目标域 write 后才允许保存
-- [ ] 验证维修单 operator、PM task notes.generated_by、健康分 AuditLog.operator 均等于 token 用户；Fault create/escalate 间接触发同样遵守目标域权限
-- [ ] 未知 trigger/action、错配 event_data、未知条件操作符、超深/超大 JSON、非法 days_offset/adjustment 与额外字段均 422
-- [ ] 强制一个动作失败和一个动作抛内部异常：整体 success 必须 false，响应不得含 SQL、路径、堆栈或内部异常文本
-- [ ] scheduled-check 在大量设备下只返回最多 1000 个 ID、计数正确且有截断标志；规则分页 total 不等于当前页长度
+- [x] Linux 跑 Ruff、`test_workflows_security_step4e_b.py`、工作流维修幂等、Fault/Maintenance 相邻及全量 pytest，失败集合不得新增
+- [x] 用 workflow read/write/delete/trigger 四个最小权限账号验证 14 条端点；跨权限 403、未认证 401、管理员全放行
+- [x] 仅 workflow:trigger 命中 create_maintenance/create_pm_task/update_health_score 分别必须 403 且零副作用；补齐对应目标域 write 后才执行
+- [x] 仅 workflow:write 创建/更新/启停上述跨域规则或初始化默认规则必须 403；补齐目标域 write 后才允许保存
+- [x] 验证维修单 operator、PM task notes.generated_by、健康分 AuditLog.operator 均等于 token 用户；Fault create/escalate 间接触发同样遵守目标域权限
+- [x] 未知 trigger/action、错配 event_data、未知条件操作符、超深/超大 JSON、非法 days_offset/adjustment 与额外字段均 422
+- [x] 强制一个动作失败和一个动作抛内部异常：整体 success 必须 false，响应不得含 SQL、路径、堆栈或内部异常文本
+- [x] scheduled-check 在大量设备下只返回最多 1000 个 ID、计数正确且有截断标志；规则分页 total 不等于当前页长度
 - [ ] 浏览器 Workflows 列表/创建/编辑/启停/删除/默认规则/四类测试触发可用；执行 `npm ci && npm run build`
 
 **步骤 4E-B5A 验证结果（2026-08-02）**：✅ Auth Users 的列表/详情、创建/编辑、删除与角色目录分别使用
@@ -464,12 +536,25 @@ superuser/admin:all 目标；✅ 管理员密码重置、停用账号和用户�
 ✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 596 passed / 8 skipped / 10 errors**，
 相对 B4 恰好新增 7 passed，失败/错误集合不变。
 
+**步骤 4E-B5A 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_auth_users_security_step4e_b.py` **7 passed**，
+  permissions/auth/workflow/alerts 相邻回归全过；全量 pytest **53 failed / 625 passed / 4 skipped**，
+  失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：users 列表=reader 200；user create 仅 usr_writer → 201、
+  usr_reader → 403；role create 仅 usr_writer（无 role:write）→ 403、role_writer/usr_role_writer → 201；
+  user delete 仅 usr_writer/role_writer → 403、admin → 404；roles 目录无权限门槛三类账号均 200。
+- ✅ 单测覆盖委派安全策略：仅 user:write 分配/清空角色 403、增加 role:write 后只能授予自身权限子集且
+  admin:all/越权/重复/不存在角色均拒绝、委派管理员不得修改/删除 superuser 或 admin:all 账号、
+  密码重置/停用/自改密码后旧 token 401、删除带活动 Session/角色用户不 500。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 Users 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B5A 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_auth_users_security_step4e_b.py`、permissions/auth/workflow 相邻及全量 pytest，失败集合不得新增
-- [ ] 用 user read/write/delete 与 role read/write 最小权限组合验证用户 CRUD、角色目录和两套角色分配 API；跨权限 403、未认证 401
-- [ ] 仅 user:write 分配/清空角色必须 403；增加 role:write 后只能授予自身权限子集，admin:all、越权、重复/不存在角色均拒绝
-- [ ] 委派管理员不得更新/删除 superuser 或持 admin:all 的账号；超级管理员仍可正常管理
-- [ ] 管理员重置密码、停用账号、用户自改密码后复用旧 access token 必须 401；删除带活动 Session/角色的用户不得 500
+- [x] Linux 跑 Ruff、`test_auth_users_security_step4e_b.py`、permissions/auth/workflow 相邻及全量 pytest，失败集合不得新增
+- [x] 用 user read/write/delete 与 role read/write 最小权限组合验证用户 CRUD、角色目录和两套角色分配 API；跨权限 403、未认证 401
+- [x] 仅 user:write 分配/清空角色必须 403；增加 role:write 后只能授予自身权限子集，admin:all、越权、重复/不存在角色均拒绝
+- [x] 委派管理员不得更新/删除 superuser 或持 admin:all 的账号；超级管理员仍可正常管理
+- [x] 管理员重置密码、停用账号、用户自改密码后复用旧 access token 必须 401；删除带活动 Session/角色的用户不得 500
 - [ ] 浏览器 Users 列表、创建、编辑、角色分配、密码重置、停用和删除可用；执行 `npm ci && npm run build`
 
 **步骤 4E-B5B 验证结果（2026-08-02）**：✅ SystemConfig GET/PUT 使用 `system_config:read/write`，
@@ -487,17 +572,30 @@ system settings 导航权限，新权限默认仅由 admin:all 放行；
 ✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 602 passed / 8 skipped / 10 errors**，
 相对 B5A 恰好新增 6 passed，失败/错误集合不变。⚠️ 本机缺 Vite，前端构建交 Linux 测试系统。
 
+**步骤 4E-B5B 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_system_settings_security_step4e_b.py` **6 passed**，
+  users/permissions/alerts/auth 相邻回归全过；全量 pytest **53 failed / 625 passed / 4 skipped**，
+  失败集合与 4D 基线完全一致，无新增失败。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：system config 读=sc_reader、写=sc_writer；
+  SLO 列表=slo_reader；diagnostics=so_reader；跨权限一律 403、admin 全放行。
+- ✅ 单测覆盖配置白名单与原子更新（未知 key 拒绝、timezone/URL 非法与额外字段 422、updated_by 取 token 用户）、
+  SLO 目标 90–100/窗口 1–365/重复超长设备类型/额外 operator 校验、system_ops 分层与请求边界、
+  Grafana 代理不向上游转发 NAS Authorization/Cookie 且流关闭、readiness 真实 503 且错误脱敏不含 SQL/路径、
+  前端一次 PUT 保存无半写。
+- ✅ 前端构建：`npm run build` 成功（仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 SystemSettings 交互未执行，需真实浏览器验证。
+
 **步骤 4E-B5B 测试系统 AI 接手清单**：
-- [ ] Linux 跑 Ruff、`test_system_settings_security_step4e_b.py`、users/permissions/alerts/auth 相邻及全量 pytest，失败集合不得新增
-- [ ] 用 system_config/slo/system_ops read/write 六个最小权限账号验证配置、SLO、cache、diagnostics、Grafana；跨权限 403、未认证 401
-- [ ] SystemConfig 尝试读/写未知 key、JWT/数据库/密钥字段必须拒绝或隐藏；timezone/URL 非法、null、额外字段均 422；合法两项一次提交且 updated_by=token 用户
-- [ ] SLO 非法 key、目标 <90 或 >100、窗口越界、重复/超长设备类型、额外 operator 均 422；合法 CRUD 可用
-- [ ] readiness 在数据库/Prometheus 失败时真实返回 503，响应不得含 SQL、路径、连接串或异常文本；diagnostics 同样脱敏且连接池无泄漏
-- [ ] Grafana GET 只需 system_ops:read，POST/PUT/DELETE/PATCH 需 write；超长路径/查询、>5 MB/非法 Content-Length 被拒且不上游
-- [ ] 抓取上游请求确认不含 NAS Authorization/Cookie；流结束、上游失败和客户端断开后 response/client 均关闭
+- [x] Linux 跑 Ruff、`test_system_settings_security_step4e_b.py`、users/permissions/alerts/auth 相邻及全量 pytest，失败集合不得新增
+- [x] 用 system_config/slo/system_ops read/write 六个最小权限账号验证配置、SLO、cache、diagnostics、Grafana；跨权限 403、未认证 401
+- [x] SystemConfig 尝试读/写未知 key、JWT/数据库/密钥字段必须拒绝或隐藏；timezone/URL 非法、null、额外字段均 422；合法两项一次提交且 updated_by=token 用户
+- [x] SLO 非法 key、目标 <90 或 >100、窗口越界、重复/超长设备类型、额外 operator 均 422；合法 CRUD 可用
+- [x] readiness 在数据库/Prometheus 失败时真实返回 503，响应不得含 SQL、路径、连接串或异常文本；diagnostics 同样脱敏且连接池无泄漏
+- [x] Grafana GET 只需 system_ops:read，POST/PUT/DELETE/PATCH 需 write；超长路径/查询、>5 MB/非法 Content-Length 被拒且不上游
+- [x] 抓取上游请求确认不含 NAS Authorization/Cookie；流结束、上游失败和客户端断开后 response/client 均关闭
 - [ ] 浏览器 SystemSettings 配置与 SLO CRUD 均携带 Bearer、一次保存无半写；执行 `npm ci && npm run build`
 
-**步骤 4E-C1 Spare Parts / Movements 代码收口（2026-08-02，本提交，待服务器验证）**：
+**步骤 4E-C1 Spare Parts / Movements 代码收口（2026-08-02，服务器已验证）**：
 ✅ Spare Parts 11 条端点按 `spare_part:read/write/delete` 分层，Movements 5 条端点按
 `spare_movement:read/write` 分层；新增 read 权限并同步 operator/viewer 预置角色；✅ Create/Update/Manual
 Stock/Movement 请求改为拒绝额外字段且有枚举、长度、金额、数量和查询参数边界的 Pydantic 模型；所有写入
@@ -517,17 +615,46 @@ serialized quantity != 1 的必失败库存动作，避免已知校验错误发�
 - ✅ `git diff --check` 与 VS Code 受影响文件诊断通过
 - ⚠️ **未执行任何 pytest、PostgreSQL/并发测试、真实数据库写入、前端 Vite build 或浏览器操作**；以下全部由服务器端 AI 接手，不能把静态门禁当成行为验收
 
+**步骤 4E-C1 测试系统 Linux 实测补充（2026-08-02，HEAD `2d6552a`，真实服务器）**：
+- ✅ 门禁全过：ruff 零告警；`test_spare_security_step4e_c1.py` **7 passed**、`test_spare_atomic_step4e_c1.py`
+  **11 passed**；批次一 15 项全过；全量 pytest **53 failed / 625 passed / 4 skipped**，失败集合与 4D 基线
+  逐项 diff 完全一致，无新增失败。`tests/test_spare_part_service.py` 既有 3 个分类/估值失败
+  （`test_get_part_success`、`test_stats_basic`、`test_stats_by_category`，类别中英文/估值旧契约差异）
+  在 HEAD `2d6552a` 基线同样失败，与本次安全逻辑改动无关，未改测试或基线掩盖。
+- ✅ 真实 API 权限矩阵（`/tmp/smoke_4e_rest.py`）：spare-parts 列表=sp_reader、创建=sp_writer、删除=sp_deleter；
+  spare-movements 列表=mv_reader、创建=mv_writer；跨权限一律 403、admin 全放行（bogus id 权限门后 404）。
+- ✅ 行为验收（`/tmp/smoke_4ec1_behavior.py` **41/41 PASS**，真实 PostgreSQL）：serial 属于同一/另一 part_id、
+  serial 不存在、quantity != 1、serialized 备件无 serial 出入库、重复 manual-in 等拒绝路径库存/实例/movement
+  均不变；状态机 `in_stock→out/inuse→in_stock` 与 `inuse→pending_scrap→scrapped`、聚合不变量
+  `quantity_in_stock == count(in_stock)`；manual-in 新建/重新入库、manual-out、扫码快速出入库、跨型号 serial、
+  PO/单价/安装与拆卸设备、审计 operator=token 用户；Movement PUT 仅 reason/reference/单价可改且 part_id+serial
+  绑定、DELETE 一律 409 并保留审计轨迹；并发同一 serial 双出库一次成功一次 4xx 且库存 0、
+  并发聚合出库不产生负库存（真实 PostgreSQL `with_for_update`）。
+- ✅ PostgreSQL 并发单测（scratch 库 `nas_test`，`TEST_DATABASE_URL`）：`test_postgresql_concurrency.py`
+  **2 passed**、`test_postgresql_aop_planning.py` **1 passed**。
+- ✅ **跨 API 原子事务（docs 清单第 9 项非原子流程修复）**：新增服务端单事务端点 `POST /api/spare-movements/batch`，
+  并把 spare movements 折入 `complete_task`/`update_maintenance` 主记录事务，全程一个 commit，缺
+  `spare_movement:write` 整次 403 零副作用。`/tmp/smoke_4ec1_atomic.py` **22/22 PASS**：(a) 完成任务带 2 条
+  movement、第 2 条故意失败（序列号属于他型号）→ 400、任务仍 in_progress、0 条落库（整批回滚）；
+  (b) 全部合法 → completed + 2 条落库 + 实例 out + operator=admin；(c) 缺 spare_movement:write 的账号提交
+  带 movement 的完成 → 403 且零副作用；(d) batch 合法/非法/权限；(e) update_maintenance 失败回滚 + 成功落库。
+  前端四个视图（TaskDetail/PlannedMaintenance/MaintenanceDetail/FaultDetail）改为单次请求携带 `spare_movements`，
+  删除逐条 createMovement 循环。
+- ✅ 前端构建：`npm run build` 成功（13.94s，仅既有 chunk 体积告警）。
+- ⚠️ 浏览器端 PartsTable/ScanInput/FaultDetail/MaintenanceDetail/PlannedMaintenance/TaskDetail/ScrapInventory
+  交互未执行，需真实浏览器验证。
+
 **步骤 4E-C1 服务器端 AI 必做清单**：
-- [ ] 拉取本提交，记录 SHA/环境；运行全仓 Ruff、`test_spare_part_service.py`、`test_spare_part_service.py` 的既有基线对比及全量 pytest（仍忽略已知挂起 console 时须注明）
-- [ ] 新增 `tests/test_spare_security_step4e_c1.py`，对 Parts 11 条 + Movements 5 条路由做依赖矩阵、未认证 401、跨权限 403、admin 放行和 Principal operator 落库测试
-- [ ] PostgreSQL 分别验证 serial 属于同一/另一 `part_id`、serial 不存在、重复 out/in/scrap_in/scrap_out、quantity != 1；所有拒绝路径库存、实例和 movement 数量均不得变化
-- [ ] 验证实例状态机和聚合不变量：每次成功/失败后 `SparePart.quantity_in_stock == count(instance.status == 'in_stock')`；旧无实例聚合备件仍可按数量 in/out，有实例备件无 serial 必须拒绝
-- [ ] 并发两次对同一 serial 出库只能成功一次；并发聚合出库不得负库存；SQLite 与 PostgreSQL 的 `with_for_update` 差异必须记录
-- [ ] 验证 manual-in 新建/重新入库、manual-out、扫码快速入/出、跨型号 serial、PO/单价/安装设备/拆卸设备与审计 operator 全生命周期
-- [ ] 验证 Movement PUT 只能改 reason/reference/实例单价且 part_id+serial 绑定；DELETE 一律 409，ScrapInventory 通过 scrap_out 移除报废库存并保留 scrap_in/out 历史与实例记录
+- [x] 拉取本提交，记录 SHA/环境；运行全仓 Ruff、`test_spare_part_service.py`、`test_spare_part_service.py` 的既有基线对比及全量 pytest（仍忽略已知挂起 console 时须注明）
+- [x] 新增 `tests/test_spare_security_step4e_c1.py`，对 Parts 11 条 + Movements 5 条路由做依赖矩阵、未认证 401、跨权限 403、admin 放行和 Principal operator 落库测试
+- [x] PostgreSQL 分别验证 serial 属于同一/另一 `part_id`、serial 不存在、重复 out/in/scrap_in/scrap_out、quantity != 1；所有拒绝路径库存、实例和 movement 数量均不得变化
+- [x] 验证实例状态机和聚合不变量：每次成功/失败后 `SparePart.quantity_in_stock == count(instance.status == 'in_stock')`；旧无实例聚合备件仍可按数量 in/out，有实例备件无 serial 必须拒绝
+- [x] 并发两次对同一 serial 出库只能成功一次；并发聚合出库不得负库存；SQLite 与 PostgreSQL 的 `with_for_update` 差异必须记录
+- [x] 验证 manual-in 新建/重新入库、manual-out、扫码快速入/出、跨型号 serial、PO/单价/安装设备/拆卸设备与审计 operator 全生命周期
+- [x] 验证 Movement PUT 只能改 reason/reference/实例单价且 part_id+serial 绑定；DELETE 一律 409，ScrapInventory 通过 scrap_out 移除报废库存并保留 scrap_in/out 历史与实例记录
 - [ ] 浏览器验证 PartsTable、ScanInput、FaultDetail、MaintenanceDetail、PlannedMaintenance、TaskDetail、ScrapInventory 全流程并执行 `npm ci && npm run build`
-- [ ] **重点复现既存非原子流程**：任务/维修记录更新与后续多条 spare movement 仍是跨 API 多事务；在第 N 条 movement 故障时记录半提交结果。服务器 AI 应设计并实现单个服务端事务端点或明确补偿机制后再判定该项完成
-- [ ] 核对 `tests/test_spare_part_service.py` 既有 3 个分类/估值失败，确认仍为旧契约差异，禁止通过修改新安全逻辑或更新基线掩盖
+- [x] **重点复现既存非原子流程**：任务/维修记录更新与后续多条 spare movement 仍是跨 API 多事务；在第 N 条 movement 故障时记录半提交结果。服务器 AI 应设计并实现单个服务端事务端点或明确补偿机制后再判定该项完成
+- [x] 核对 `tests/test_spare_part_service.py` 既有 3 个分类/估值失败，确认仍为旧契约差异，禁止通过修改新安全逻辑或更新基线掩盖
 
 **下一切片**：服务器端 AI 先完成 C1 行为验收与跨 API 原子事务，再继续 Scan Sessions、Notifications、Jobs、Compliance 与权限读取面；
 完成长尾写接口后再进入步骤 5 的会话级 SSH 凭证、二次确认和独立加密密钥。
