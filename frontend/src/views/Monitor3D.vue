@@ -1056,10 +1056,11 @@ const selectedTopoBranchPoint = ref(null) // 选中的分支点（新 topo 模�
 const expandedTrunks = reactive({})
 const expandedBranchPoints = reactive({})
 
-// 监听全局主题变化
-window.addEventListener('theme-change', (e) => {
+// 监听全局主题变化（named handler 以便卸载时移除）
+const handleThemeChange = (e) => {
   isDark.value = e.detail.dark
-})
+}
+window.addEventListener('theme-change', handleThemeChange)
 
 // 编辑模式切换时自动禁用/启用轨道控制 + 显示/隐藏拐点
 watch(isEditMode, (editMode) => {
@@ -6183,6 +6184,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   cancelAnimationFrame(raf)
   window.removeEventListener('resize', onResize)
+  window.removeEventListener('theme-change', handleThemeChange)
+  // 连线拖拽可能在卸载时进行中，直接移除其 window 监听（不只依赖 cancelWiring）
+  window.removeEventListener('mousemove', onWiringMouseMove)
+  window.removeEventListener('mouseup', onWiringMouseUp)
 
   if (hudAutoHideTimer) {
     clearTimeout(hudAutoHideTimer)
@@ -6234,11 +6239,26 @@ onBeforeUnmount(() => {
   controls?.dispose()
   renderer?.dispose()
 
-  // 清除场景
+  // 清除场景：材质可能是数组（MeshBasicMaterial[]），需逐个 dispose；
+  // 同时释放材质上的纹理（如底图 map），避免 GPU 纹理残留
   scene?.traverse(obj => {
     obj.geometry?.dispose()
-    obj.material?.dispose()
+    const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
+    materials.forEach(mat => {
+      mat?.dispose()
+      if (mat?.map) mat.map.dispose()
+    })
   })
+
+  // 释放模块级纹理并置空，重挂载时 buildOfflineGlow / impact 逻辑会重建，不复用已释放实例
+  if (offlineGlowTexture) {
+    offlineGlowTexture.dispose()
+    offlineGlowTexture = null
+  }
+  if (impactGlowTexture) {
+    impactGlowTexture.dispose()
+    impactGlowTexture = null
+  }
 
   // 移除 DOM
   if (renderer?.domElement) host?.removeChild(renderer.domElement)
