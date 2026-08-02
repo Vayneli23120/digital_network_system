@@ -786,20 +786,27 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ### 3.3 Schema 权威源
 
-- [ ] **P0** `main.py:353` + `shared/database.py:95` — 启动时 `init_db()` 调 `Base.metadata.create_all`，与 alembic 双轨；`models.py` 45 张表中 alembic 仅覆盖约 28 张（`spare_part_instances`、`device_interfaces`、`interface_traffic_samples`、`notifications`、`deploy_history`、`compliance_*`、`ai_configs`、`system_config`、`service_slo`、`jobs` 等全靠 create_all 兜底）→ **全新 PG 库执行 `alembic upgrade head` 得不到完整 schema**。`[已复核]`
-- [ ] **P0** 8 个"迁移"脚本硬编码 `sqlite3` + `data/nas.db`：`migrations/add_monitor_tier.py:12`、`add_service_slo_key.py:10`、`add_spare_part_fields.py:10`、`add_service_slo.py:17`、`create_device_links.py:14`、`fix_slo_fields.py:7`、`scripts/migrate_device_reachability.py:17`。在 PG 生产上执行会静默创建/修改一个空 SQLite 文件，改错库且不报错。建议删除或移入 `scripts/legacy_sqlite/`。`[已复核]`
-- [ ] **P1** `migrations/versions/b7a8c9d0e1f2_*.py:16` 与 `c1d2e3f4g5h6_*.py:16` 都是 `down_revision = None`，存在多个 base 根，分支执行顺序不确定。`[已复核]`
-- [ ] **P1** `migrations/env.py:13` — 只 import `app.shared.models`，`models_jobs.Job` 未注册进 `target_metadata`，autogenerate 会生成 `drop_table('jobs')`。`[已复核]`
-- [ ] **P1** `migrations/versions/f3a4b5c6d7e8_*.py:41` — 对 `topo_edges/topo_nodes/device_ports` 只有 `DELETE FROM`，这三张表从未被任何 `create_table` 创建。`[已复核]`
-- [ ] **P1** `models.py:32,38,62,67,72` — `deployment_status/reachability/monitor_tier/risk_level/lifecycle_stage` 声明 `index=True`，但列是通过裸 ALTER 加的，PG 上索引实际不存在。`[待验证]` 用 `\d devices` 确认
-- [ ] **P1** `models.py:154,237,771,1153` — `fault_records.maintenance_id` 等 4 处 FK 无 `ondelete`，且 fault↔maintenance 构成环形 FK，删设备时会被 FK 违例挡住。`[已复核]`
-- [ ] **P1** `models.py:23` — `devices.serial_number` 既无唯一约束也无索引；`models.py:332` — `audit_logs` 除主键外零索引。`[已复核]`
-- [ ] **P2** `models.py` 全文 0 处 `server_default`，默认值只在 Python 侧；raw SQL 路径写 NULL 而 `filter(x == False)` 在 PG 下不匹配 NULL。`[已复核]`
+- [x] **P0** `main.py:353` + `shared/database.py:95` — 启动时 `init_db()` 调 `Base.metadata.create_all`，与 alembic 双轨；`models.py` 45 张表中 alembic 仅覆盖约 28 张（`spare_part_instances`、`device_interfaces`、`interface_traffic_samples`、`notifications`、`deploy_history`、`compliance_*`、`ai_configs`、`system_config`、`service_slo`、`jobs` 等全靠 create_all 兜底）→ **全新 PG 库执行 `alembic upgrade head` 得不到完整 schema**。`[已复核]` `[已修复]`：基线迁移 `ed628a533673`（autogenerate 补齐 17 张缺失表 + 缺失列/索引）+ 修复迁移 `5d16fa030a9a`（FK ondelete / 索引 / server_default）；PG 启动 create_all 已移除，改 fail-fast 校验 alembic head。
+- [x] **P0** 8 个"迁移"脚本硬编码 `sqlite3` + `data/nas.db`：`migrations/add_monitor_tier.py:12`、`add_service_slo_key.py:10`、`add_spare_part_fields.py:10`、`add_service_slo.py:17`、`create_device_links.py:14`、`fix_slo_fields.py:7`、`scripts/migrate_device_reachability.py:17`。在 PG 生产上执行会静默创建/修改一个空 SQLite 文件，改错库且不报错。建议删除或移入 `scripts/legacy_sqlite/`。`[已复核]` `[已修复]`：8 个脚本 + 3 个 .sql（`006_asset_tracking.sql` 等）已 `git mv` 至 `scripts/legacy_sqlite/`；`migrations/` 下保留 3 个 dialect-safe 脚本（`add_incident_automation_fields.py`/`add_interface_neighbor_fields.py`/`add_snmp_interface_monitoring.py`）。
+- [x] **P1** `migrations/versions/b7a8c9d0e1f2_*.py:16` 与 `c1d2e3f4g5h6_*.py:16` 都是 `down_revision = None`，存在多个 base 根，分支执行顺序不确定。`[已复核]` `[已修复]`：全新 PG 库实测 `alembic upgrade head` 按确定顺序跑完整个链（3 根在 `383cadd7b057` 合并为单 head `5d16fa030a9a`），`alembic check` 无漂移，顺序风险实测消除。
+- [x] **P1** `migrations/env.py:13` — 只 import `app.shared.models`，`models_jobs.Job` 未注册进 `target_metadata`，autogenerate 会生成 `drop_table('jobs')`。`[已复核]` `[已修复]`：`env.py` 与 `app/shared/database.py` 均 import `models_jobs.Job`，autogenerate/create_all 与运行期 metadata 一致。
+- [x] **P1** `migrations/versions/f3a4b5c6d7e8_*.py:41` — 对 `topo_edges/topo_nodes/device_ports` 只有 `DELETE FROM`，这三张表从未被任何 `create_table` 创建。`[已复核]` `[已修复]`：基线迁移 `ed628a533673` 创建全部 17 张链外缺失表（含 `topo_nodes`/`topo_edges`/`device_ports`/`device_interfaces`/`interface_traffic_samples`/`jobs` 等）。
+- [x] **P1** `models.py:32,38,62,67,72` — `deployment_status/reachability/monitor_tier/risk_level/lifecycle_stage` 声明 `index=True`，但列是通过裸 ALTER 加的，PG 上索引实际不存在。`[待验证]` 用 `\d devices` 确认 `[已修复]`：修复迁移 `5d16fa030a9a` 以 `CREATE INDEX IF NOT EXISTS` 建 5 个 device 列索引 + `ix_devices_serial_number` + `ix_audit_logs_created_at` + `ix_audit_logs_operator`；真实 PG `pg_indexes` 实测：5 个 device 列索引已存在（无新增），serial_number 与 audit_logs 2 索引缺失已补齐。
+- [x] **P1** `models.py:154,237,771,1153` — `fault_records.maintenance_id` 等 4 处 FK 无 `ondelete`，且 fault↔maintenance 构成环形 FK，删设备时会被 FK 违例挡住。`[已复核]` `[已修复]`：4 处 FK 均改 `ondelete="SET NULL"`；真实 PG 已落地（含历史孤儿数据清理：2 条 `maintenance_tasks` 引用不存在父行 → 置 NULL 后重建约束）。
+- [x] **P1** `models.py:23` — `devices.serial_number` 既无唯一约束也无索引；`models.py:332` — `audit_logs` 除主键外零索引。`[已复核]` `[已修复]`：`serial_number` 改 `index=True`（不 unique，避免既有重复数据迁移失败）；`audit_logs` 加 `ix_audit_logs_created_at`/`ix_audit_logs_operator`；真实 PG `pg_indexes` 实测 3 索引均在。
+- [x] **P2** `models.py` 全文 0 处 `server_default`，默认值只在 Python 侧；raw SQL 路径写 NULL 而 `filter(x == False)` 在 PG 下不匹配 NULL。`[已复核]` `[已修复]`（有界子集）：`review_required→true`、`snmp_enabled/is_uplink/monitored/false_positive/auto_created/ai_recommended/verify_passed/notifications.read→false` 补 `server_default` + 迁移回填既有 NULL；其余 True 默认列（`is_active`/`is_auto_created`/`auto_generate` 等）留待 797 后续批次。
 - [ ] **P2** `models.py:187,1011,1050,1239,1374`、`models_jobs.py:34` — 裸 Integer 伪外键，会产生孤儿数据。`[已复核]`
-- [ ] **P2** `shared/config.py:137` — `pool_timeout` 配置项从未传入 `create_engine`（`database.py:73-78`），无效配置。`[已复核]`
-- [ ] **P2** `models.py:1207` — `deploy_history.children` 的 `remote_side=[id]` + `backref="parent"` 自引用方向反了。`[待验证]`
+- [x] **P2** `shared/config.py:137` — `pool_timeout` 配置项从未传入 `create_engine`（`database.py:73-78`），无效配置。`[已复核]` `[已修复]`：`DatabaseManager.__init__` 增加 `pool_timeout` 参数并传入 PG `create_engine`，`get_db_manager()` 从 `config.database.pool_timeout` 取值。
+- [x] **P2** `models.py:1207` — `deploy_history.children` 的 `remote_side=[id]` + `backref="parent"` 自引用方向反了。`[待验证]` `[已核实为误报]`：这是 SQLAlchemy 标准 adjacency-list 写法（children 以 id 为 remote_side），无需修改。
 - [ ] **P2** `interface_traffic_samples` / `device_metric_samples` 无分区、无保留策略，单表无限增长。`[已复核]`
-- [ ] **P2** 目标动作：以当前 PG 实际结构 autogenerate 一个基线迁移并 `alembic stamp`，然后移除启动期 `create_all`。
+- [x] **P2** 目标动作：以当前 PG 实际结构 autogenerate 一个基线迁移并 `alembic stamp`，然后移除启动期 `create_all`。`[已修复]`：基线 `ed628a533673`（autogenerate）+ 修复迁移 `5d16fa030a9a`；真实 nas 库 `stamp ed628a533673` → `upgrade head`（仅跑 5d16fa030a9a）；PG `init_db()` 移除 create_all 改 head 校验 fail-fast；重启后冒烟全过（见下方实测）。
+
+**批次三 3.3 Linux 实测（2026-08-02，HEAD 后，真实服务器 systemd nas-backend / PG / auth_enabled=true）**：
+- 全新 scratch PG `nas_scratch`：`alembic upgrade head` 从空库一步到位（修复链上 `e2f3g4h5i6j7`/`c30eb4f78004` 对链外表的裸 ALTER、`c1d2e3f4g5h6`/`d1e2f3g4h5i6` 对 `spare_part_instances`/`device_links` 的裸引用 → `_has_table` 守卫）；`alembic check` 无漂移；Inspector vs `Base.metadata` 差异脚本零 diff（仅 `alembic_version`）。
+- 真实 `nas` 库：diff 脚本仅见预期差异（3 缺失索引 + 4 处 FK 无 ondelete + 3 张遗留 Gen2 拓扑表）→ `alembic stamp ed628a533673` → `upgrade head` 跑 `5d16fa030a9a`；`pg_indexes`/`pg_constraint`/`information_schema` 实测：3 索引补齐、4 处 FK 均 `ON DELETE SET NULL`、`review_required=true` 等 server_default 落地、NULL 回填清零、孤儿 `maintenance_tasks` 2 条清理为 0。
+- `init_db()` 三条路径实测：真实 nas（head）启动通过；空库 → `RuntimeError`（缺少 alembic_version）；stamp 回旧版 → `RuntimeError`（未到达期望 head）。
+- 重启 nas-backend 后冒烟：`/tmp/smoke_3_arch.py` **9/9**；`smoke_4ea_backups_templates.py` **ALL PASS**；`smoke_4e_rest.py` **4E-B/C ALL PASS**；`smoke_4ec1_behavior.py` **41 PASS / 0 FAIL**；`smoke_4ec1_atomic.py` **22 PASS / 0 FAIL**。
+- ruff `app/ tests/ migrations/` 全绿；`pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**（与 4D 基线完全一致，无新增）。
 
 ### 3.4 缓存
 
@@ -936,7 +943,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
 2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
-4. **批次三 3.3**（schema 基线）—— 独立于代码，可并行推进
+4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项**
