@@ -297,7 +297,7 @@ def create_movement(
     target_device_id: Optional[int] = None,
     source_device_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """创建备件出入库记录
+    """创建单条备件出入库记录（提交事务）。
 
     Args:
         db: 数据库会话
@@ -317,6 +317,85 @@ def create_movement(
     Raises:
         ResourceNotFoundException: 备件不存在
         ValueError: 数量或类型无效
+    """
+    movements = [{
+        "part_id": part_id,
+        "movement_type": movement_type,
+        "quantity": quantity,
+        "serial_number": serial_number,
+        "reason": reason,
+        "reference": reference,
+        "target_device_id": target_device_id,
+        "source_device_id": source_device_id,
+    }]
+    result = create_movements(db, movements, operator)
+    db.commit()
+    return result[0]
+
+
+def create_movements(
+    db: Session,
+    movements: List[Dict[str, Any]],
+    operator: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """在单个事务内应用多条备件出入库，不提交。
+
+    逐条复用 create_movement 的校验与应用逻辑，但事务边界由调用方控制：
+    全部成功调用方 `db.commit()`，任一条失败抛出 ValueError /
+    ResourceNotFoundException，调用方 `db.rollback()` 实现全有或全无。
+
+    Args:
+        db: 数据库会话
+        movements: 出入库请求列表，每项含 part_id / movement_type /
+            quantity / serial_number / reason / reference /
+            target_device_id / source_device_id
+        operator: 操作人
+
+    Returns:
+        每条出入库记录信息列表
+
+    Raises:
+        ResourceNotFoundException: 备件不存在
+        ValueError: 数量或类型无效
+    """
+    created = []
+    for item in movements:
+        movement = _apply_movement(
+            db,
+            part_id=item["part_id"],
+            movement_type=item["movement_type"],
+            quantity=item["quantity"],
+            serial_number=item.get("serial_number"),
+            reason=item.get("reason"),
+            operator=operator,
+            reference=item.get("reference"),
+            target_device_id=item.get("target_device_id"),
+            source_device_id=item.get("source_device_id"),
+        )
+        created.append(movement)
+        # 逐条 flush：使本条改动在事务内对后续语句可见
+        # （in 为 ORM 侧增量、out 为条件 UPDATE，若不 flush，
+        #  同 part 的 in 增量对后续 out 的条件 UPDATE 不可见）
+        db.flush()
+    return [_movement_dict(m) for m in created]
+
+
+def _apply_movement(
+    db: Session,
+    *,
+    part_id: int,
+    movement_type: str,
+    quantity: int,
+    serial_number: Optional[str] = None,
+    reason: Optional[str] = None,
+    operator: Optional[str] = None,
+    reference: Optional[str] = None,
+    target_device_id: Optional[int] = None,
+    source_device_id: Optional[int] = None,
+) -> SparePartMovement:
+    """校验并应用一条出入库（不提交，不刷新）。
+
+    返回已加入会话的 SparePartMovement ORM 对象，由调用方统一 flush/commit。
     """
     part = db.query(SparePart).filter(SparePart.id == part_id).first()
     if not part:
@@ -445,9 +524,10 @@ def create_movement(
         source_device_id=source_device_id,
     )
     db.add(movement)
-    db.commit()
-    db.refresh(movement)
+    return movement
 
+
+def _movement_dict(movement: SparePartMovement) -> Dict[str, Any]:
     return {
         "id": movement.id,
         "part_id": movement.part_id,

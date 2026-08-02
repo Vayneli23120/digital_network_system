@@ -1,9 +1,11 @@
 """Validated request models for maintenance operations."""
 
 from datetime import datetime
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, condecimal, field_validator
+
+from app.features.spare_movements.schemas import SpareMovementInput
 
 MAX_MAINTENANCE_TEXT_CHARS = 100_000
 MAX_MAINTENANCE_JSON_CHARS = 1_000_000
@@ -73,6 +75,7 @@ class MaintenanceUpdateRequest(BaseModel):
         max_length=MAX_MAINTENANCE_TEXT_CHARS,
     )
     verify_passed: Optional[bool] = None
+    spare_movements: Optional[List[SpareMovementInput]] = None
 
     def to_record_dict(self) -> dict:
         return self.model_dump(exclude_unset=True)

@@ -12,6 +12,10 @@ from app.shared.database import get_db
 from app.shared.dependencies import require_permission
 from app.shared.models import MaintenanceRecord, MaintenanceEvent, FaultRecord
 from app.features.faults.router import send_maintenance_completed_notification
+from app.features.spare_movements.router import require_movement_write_for_side_effect
+from app.features.spare_parts.spare_part_service import (
+    create_movements as svc_create_movements,
+)
 from .schemas import (
     MaintenanceAssignRequest,
     MaintenanceCreateRequest,
@@ -966,6 +970,8 @@ async def update_maintenance(
             raise HTTPException(status_code=404, detail="维修记录不存在")
 
         maint_data = request.to_record_dict()
+        # 备件动作不写入维修记录字段，仅在单事务内一并落库
+        spare_movements = maint_data.pop("spare_movements", None)
         old_diagnosis = maint.diagnosis_text or ''
         for key, value in maint_data.items():
             if hasattr(maint, key):
@@ -1003,10 +1009,24 @@ async def update_maintenance(
             )
             db.add(event)
 
+        # 备件动作与维修记录更新在同一事务内原子落库：
+        # 任一条失败整批回滚（记录保持原状、无任何 movement 落库）
+        if spare_movements:
+            require_movement_write_for_side_effect(principal, db)
+            svc_create_movements(
+                db,
+                spare_movements,
+                _actor_username(principal),
+            )
+
         db.commit()
         db.refresh(maint)
 
         return {"id": maint.id, "message": "更新成功"}
+    except ValueError as exc:
+        db.rollback()
+        message = exc.args[0] if exc.args else "备件出入库失败，请检查序列号与库存"
+        raise HTTPException(status_code=400, detail=message)
     except HTTPException:
         db.rollback()
         raise

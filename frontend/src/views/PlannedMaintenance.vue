@@ -566,7 +566,7 @@ import { Plus, Refresh, Document, Clock, CircleCheck, Warning, WarningFilled, Ar
 import {
   getMaintenancePlans, createMaintenancePlan, updateMaintenancePlan, deleteMaintenancePlan as deletePlanApi,
   getMaintenanceTasks, startMaintenanceTask, completeMaintenanceTask, skipMaintenanceTask, deleteMaintenanceTask as deleteTaskApi,
-  getPlannedMaintenanceStats, generateTasksForPlans, getDevices, getPartList, createMovement
+  getPlannedMaintenanceStats, generateTasksForPlans, getDevices, getPartList
 } from '@/api'
 import { formatDate } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -980,39 +980,36 @@ const completeTask = async () => {
       ...completeForm.value.return_parts.map(p => ({ ...p, is_return: true }))
     ]
 
-    await completeMaintenanceTask(currentTask.value.id, {
-      description: completeForm.value.description,
-      parts_replaced: JSON.stringify(combinedParts),
-      parts_cost: completeForm.value.parts_cost,
-      labor_hours: completeForm.value.labor_hours,
-      labor_cost: completeForm.value.labor_cost
-    })
-
-    // 处理备件出库
-    for (const part of completeForm.value.parts) {
-      await createMovement({
+    // 备件动作随任务完成单事务原子提交：任一条失败整批回滚，避免半提交
+    const spare_movements = [
+      ...completeForm.value.parts.map(part => ({
         part_id: part.part_id,
         movement_type: 'out',
         quantity: part.quantity,
         serial_number: part.serial_number,
         reason: `${t('pmTitle')} - ${currentTask.value.task_no}`,
         reference: currentTask.value.device_name || t('pmTitle')
-      })
-    }
-
-    // 处理返回件入报废库
-    for (const part of completeForm.value.return_parts) {
-      if (part.scrap_in && part.part_id) {
-        await createMovement({
+      })),
+      ...completeForm.value.return_parts
+        .filter(part => part.scrap_in && part.part_id)
+        .map(part => ({
           part_id: part.part_id,
           movement_type: 'scrap_in',
           quantity: part.quantity,
           serial_number: part.serial_number,
           reason: `${t('pmReturnPartsSection')} - ${t('scrapScrap')}`,
           reference: currentTask.value.device_name || t('pmTitle')
-        })
-      }
-    }
+        }))
+    ]
+
+    await completeMaintenanceTask(currentTask.value.id, {
+      description: completeForm.value.description,
+      parts_replaced: JSON.stringify(combinedParts),
+      parts_cost: completeForm.value.parts_cost,
+      labor_hours: completeForm.value.labor_hours,
+      labor_cost: completeForm.value.labor_cost,
+      spare_movements
+    })
 
     ElMessage.success(t('pmMsgTaskCompleteSuccess'))
     showCompleteDialogFlag.value = false

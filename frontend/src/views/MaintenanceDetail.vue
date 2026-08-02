@@ -691,7 +691,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   getMaintenanceDetail, updateMaintenance,
-  getDevices, getPartList, createMovement, getPartBySerialNumber, searchInStockParts
+  getDevices, getPartList, getPartBySerialNumber, searchInStockParts
 } from '@/api'
 import ScanSession from '@/components/ScanSession.vue'
 import dayjs from 'dayjs'
@@ -913,6 +913,15 @@ const updateMaintenanceRecord = async () => {
   }
   try {
     const combinedParts = [...editForm.value.spare_parts.map(p => ({ ...p, is_return: false })), ...editForm.value.return_parts.map(p => ({ ...p, is_return: true }))]
+    // 备件动作随维修记录更新单事务原子提交：任一条失败整批回滚，避免半提交
+    const spare_movements = [
+      ...editForm.value.spare_parts
+        .filter(part => !part.is_from_scan && part.part_id)
+        .map(part => ({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity || 1, serial_number: part.serial_number, reason: `${t('spareReasonMaintenancePartReplace')} - ${maintenance.value.maint_no}`, reference: maintenance.value.maint_no, target_device_id: maintenance.value.device_id })),
+      ...editForm.value.return_parts
+        .filter(part => !part.is_from_scan && part.scrap_in && part.part_id)
+        .map(part => ({ part_id: part.part_id, movement_type: 'scrap_in', quantity: part.quantity, serial_number: part.serial_number, reason: t('spareReasonReturnPartScrap'), reference: maintenance.value.maint_no, source_device_id: maintenance.value.device_id }))
+    ]
     await updateMaintenance(maintenance.value.id, {
       parts_replaced: JSON.stringify(combinedParts),
       parts_cost: editForm.value.parts_cost,
@@ -921,18 +930,9 @@ const updateMaintenanceRecord = async () => {
       vendor: editForm.value.vendor,
       description: editForm.value.description,
       verification_result: editForm.value.verification_result || null,
-      verification_notes: editForm.value.verification_notes
+      verification_notes: editForm.value.verification_notes,
+      spare_movements
     })
-    for (const part of editForm.value.spare_parts) {
-      if (!part.is_from_scan && part.part_id) {
-        await createMovement({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity || 1, serial_number: part.serial_number, reason: `${t('spareReasonMaintenancePartReplace')} - ${maintenance.value.maint_no}`, reference: maintenance.value.maint_no, target_device_id: maintenance.value.device_id })
-      }
-    }
-    for (const part of editForm.value.return_parts) {
-      if (!part.is_from_scan && part.scrap_in && part.part_id) {
-        await createMovement({ part_id: part.part_id, movement_type: 'scrap_in', quantity: part.quantity, serial_number: part.serial_number, reason: t('spareReasonReturnPartScrap'), reference: maintenance.value.maint_no, source_device_id: maintenance.value.device_id })
-      }
-    }
     ElMessage.success(t('maintRecordUpdated'))
     showEditDialog.value = false
     loadMaintenance()

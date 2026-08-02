@@ -1446,65 +1446,44 @@ const saveMaintEdit = async () => {
       ...maintEditForm.value.return_parts.map(p => ({ ...p, is_return: true }))
     ]
 
+    // 备件动作随维修记录更新单事务原子提交：任一条失败整批回滚，避免半提交
+    const spare_movements = [
+      ...maintEditForm.value.spare_parts
+        .filter(part => part.part_id && !part.is_from_scan)
+        .map(part => ({
+          part_id: part.part_id,
+          movement_type: 'out',
+          quantity: part.quantity || 1,
+          serial_number: part.serial_number,
+          reason: `维修出库 - ${maintenanceInfo.value.maint_no}`,
+          reference: maintenanceInfo.value.maint_no,
+          target_device_id: fault.value.device_id
+        })),
+      ...maintEditForm.value.return_parts
+        .filter(part => part.part_id && part.scrap_in)
+        .map(part => ({
+          part_id: part.part_id,
+          movement_type: 'scrap_in',
+          quantity: part.quantity,
+          serial_number: part.serial_number,
+          reason: '返回件入报废库',
+          reference: maintenanceInfo.value.maint_no,
+          source_device_id: fault.value.device_id
+        }))
+    ]
+
     const updateData = {
       parts_replaced: JSON.stringify(combinedParts),
       parts_cost: maintEditForm.value.parts_cost,
       labor_hours: maintEditForm.value.labor_hours,
       labor_cost: maintEditForm.value.labor_cost,
-      description: maintEditForm.value.description
+      description: maintEditForm.value.description,
+      spare_movements
     }
 
     await updateMaintenance(maintenanceInfo.value.id, updateData)
 
-    // 处理备件出库（如果需要）
-    const outErrors = []
-    for (const part of maintEditForm.value.spare_parts) {
-      if (part.part_id && !part.is_from_scan) {
-        try {
-          await api.post('/spare-movements/', {
-            part_id: part.part_id,
-            movement_type: 'out',
-            quantity: part.quantity || 1,
-            serial_number: part.serial_number,
-            reason: `维修出库 - ${maintenanceInfo.value.maint_no}`,
-            reference: maintenanceInfo.value.maint_no,
-            target_device_id: fault.value.device_id
-          })
-        } catch (spareError) {
-          const errMsg = spareError.response?.data?.detail || spareError.message
-          outErrors.push(`备件 ${part.serial_number}: ${errMsg}`)
-        }
-      }
-    }
-
-    // 处理返回件入报废库（如果需要）
-    const returnErrors = []
-    for (const part of maintEditForm.value.return_parts) {
-      if (part.part_id && part.scrap_in) {
-        try {
-          await api.post('/spare-movements/', {
-            part_id: part.part_id,
-            movement_type: 'scrap_in',
-            quantity: part.quantity,
-            serial_number: part.serial_number,
-            reason: '返回件入报废库',
-            reference: maintenanceInfo.value.maint_no,
-            source_device_id: fault.value.device_id
-          })
-        } catch (returnError) {
-          const errMsg = returnError.response?.data?.detail || returnError.message
-          returnErrors.push(`返回件 ${part.serial_number}: ${errMsg}`)
-        }
-      }
-    }
-
-    // 显示结果
-    if (outErrors.length > 0 || returnErrors.length > 0) {
-      ElMessage.warning(t('maintRecordUpdated') + '，但部分库存操作失败：\n' + [...outErrors, ...returnErrors].join('\n'))
-    } else {
-      ElMessage.success(t('maintRecordUpdated'))
-    }
-
+    ElMessage.success(t('maintRecordUpdated'))
     showMaintEditDialog.value = false
     loadMaintenanceInfo()
   } catch (e) {

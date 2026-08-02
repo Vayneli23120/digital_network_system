@@ -30,6 +30,11 @@ from app.shared.models import (
     MaintenanceRecord,
     Device,
 )
+from app.features.spare_movements.schemas import SpareMovementInput
+from app.features.spare_movements.router import require_movement_write_for_side_effect
+from app.features.spare_parts.spare_part_service import (
+    create_movements as svc_create_movements,
+)
 
 # ADK 导入（预测性维护功能）
 from app.services.adk.runner import adk_runner
@@ -133,6 +138,7 @@ class TaskCompleteRequest(BaseModel):
     labor_cost: Money = Decimal("0")
     completion_result: CompletionResult = "success"
     completion_notes: Optional[str] = Field(default=None, max_length=100_000)
+    spare_movements: Optional[List[SpareMovementInput]] = None
 
 
 # ============ 维护计划 API ============
@@ -591,6 +597,12 @@ async def complete_task(
         if completion_data
         else {}
     )
+    # 备件动作单独处理：不参与"是否创建维修单"的判定，仅在单事务内一并落库
+    spare_movements = completion_values.pop("spare_movements", None)
+    # 权限前置检查：带备件动作时须持有 spare_movement:write，
+    # 在任何状态变更（任务完成/维修单创建）之前失败，保证 403 零副作用
+    if spare_movements:
+        require_movement_write_for_side_effect(principal, db)
 
     parts_cost = float(completion_data.parts_cost) if completion_data else 0
     labor_hours = float(completion_data.labor_hours) if completion_data else 0
@@ -642,6 +654,20 @@ async def complete_task(
         if completion_values:
             task.aop_project.actual_hours = labor_hours
             task.aop_project.actual_cost = parts_cost + labor_cost
+
+    # 备件动作与任务完成在同一事务内原子落库：
+    # 任一条失败整批回滚（任务保持 in_progress、无任何 movement 落库）
+    if spare_movements:
+        try:
+            svc_create_movements(
+                db,
+                spare_movements,
+                _actor_username(principal),
+            )
+        except ValueError as exc:
+            db.rollback()
+            message = exc.args[0] if exc.args else "备件出入库失败，请检查序列号与库存"
+            raise HTTPException(status_code=400, detail=message)
 
     db.commit()
 
