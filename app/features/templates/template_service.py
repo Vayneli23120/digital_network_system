@@ -15,6 +15,8 @@ from app.shared.template_renderer import (
 from app.shared.models import ConfigTemplate
 from app.shared.exceptions import ResourceNotFoundException, ConflictException
 
+TEMPLATE_FIELDS = frozenset({"name", "description", "template_content", "variables"})
+
 
 def list_templates(db: Session) -> Dict[str, Any]:
     """获取配置模板列表
@@ -90,7 +92,8 @@ def create_template(db: Session, template_data: Dict[str, Any]) -> Dict[str, Any
     if existing:
         raise ConflictException(f"模板名称 '{name}' 已存在")
 
-    template = ConfigTemplate(**template_data)
+    safe_data = {key: value for key, value in template_data.items() if key in TEMPLATE_FIELDS}
+    template = ConfigTemplate(**safe_data)
     db.add(template)
     db.commit()
     db.refresh(template)
@@ -128,7 +131,7 @@ def update_template(db: Session, template_id: int, update_data: Dict[str, Any]) 
             raise ConflictException(f"模板名称 '{new_name}' 已存在")
 
     for key, value in update_data.items():
-        if hasattr(template, key):
+        if key in TEMPLATE_FIELDS:
             setattr(template, key, value)
 
     db.commit()

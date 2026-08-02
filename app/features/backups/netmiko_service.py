@@ -152,12 +152,16 @@ def backup_device_config(device: Device, credentials: Dict[str, str],
         # 获取配置
         config = service.get_running_config()
 
-        # 生成文件名
+        device_id = int(device.id)
+        if device_id <= 0:
+            raise ValueError("设备 ID 无效")
+
+        # 生成服务端控制的文件名
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{device.name}_{timestamp}.cfg"
+        filename = f"device-{device_id}_{timestamp}.cfg"
 
         # 确保目录存在
-        device_backup_dir = os.path.join(backup_dir, device.name)
+        device_backup_dir = os.path.join(backup_dir, f"device-{device_id}")
         os.makedirs(device_backup_dir, exist_ok=True)
 
         file_path = os.path.join(device_backup_dir, filename)

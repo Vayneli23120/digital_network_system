@@ -161,7 +161,7 @@ const sidebarData = computed(() => {
         items: [
           { path: '/devices', text: t('menuDevices'), icon: Connection, permission: 'nav_devices:list' },
           { path: '/discovery', text: t('menuDiscovery'), icon: Aim, permission: 'nav_devices:discovery' },
-          { path: '/backups', text: t('menuBackups'), icon: Download, permission: 'nav_devices:backups' },
+          { path: '/backups', text: t('menuBackups'), icon: Download, permission: 'backup:read' },
           { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null, permission: 'nav_devices:faults' },
           { path: '/maintenance', text: t('menuMaintenance'), icon: Tools, permission: 'nav_devices:maintenance' },
           { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar, permission: 'nav_devices:planned_maintenance' },
@@ -175,7 +175,7 @@ const sidebarData = computed(() => {
         items: [
           { path: '/console', text: t('menuConsole'), icon: Connection, permission: 'nav_config:console' },
           { path: '/deploy', text: t('menuDeploy'), icon: Upload, permission: 'nav_config:deploy' },
-          { path: '/templates', text: t('menuTemplates'), icon: Document, permission: 'nav_config:templates' },
+          { path: '/templates', text: t('menuTemplates'), icon: Document, permission: 'template:read' },
           { path: '/credentials', text: t('menuCredentials'), icon: Key, permission: 'nav_config:credentials' },
           { path: '/compliance', text: t('menuCompliance'), icon: Checked, permission: 'nav_config:compliance' },
           { path: '/tool-logs', text: t('menuToolLogs'), icon: List, permission: 'nav_config:tool_logs' },

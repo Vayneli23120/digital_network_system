@@ -142,17 +142,14 @@ export function diagnoseDeviceSnmp(deviceId) {
 }
 
 // 备份相关
-export function backupDevice(deviceId, operator) {
+export function backupDevice(deviceId) {
   return api.post(`/backups/backup/${deviceId}`, null, {
-    params: { operator },
     timeout: 120000  // 备份操作可能需要较长时间（SSH连接设备）
   })
 }
 
-export function batchBackup(deviceIds, operator) {
-  return api.post('/backups/batch', deviceIds, {
-    params: { operator }
-  })
+export function batchBackup(deviceIds) {
+  return api.post('/backups/batch', deviceIds)
 }
 
 export function getBackups(params) {
@@ -165,6 +162,14 @@ export function getBackupContent(backupId) {
 
 export function getBackupDiff(backupId) {
   return api.get(`/backups/${backupId}/diff`)
+}
+
+export function downloadBackupFile(backupId) {
+  return api.get(`/backups/${backupId}/download`, { responseType: 'blob' })
+}
+
+export function deleteBackup(backupId) {
+  return api.delete(`/backups/${backupId}`)
 }
 
 // 故障相关

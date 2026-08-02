@@ -1,28 +1,53 @@
 """Backup management router"""
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-from typing import Optional, List
-from pathlib import Path
-from loguru import logger
+import asyncio
 import difflib
-from datetime import datetime
 import time
+from datetime import datetime
+from typing import Optional
 
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
+from loguru import logger
+from sqlalchemy.orm import Session
+
+from app.features.auth.identity import Principal, get_current_principal
+from app.features.credentials.credential_service import decrypt_password
+from app.shared.config import get_config
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from app.shared.models import BackupRecord, Device, CredentialGroup, LogEntry
 from app.shared.time_utils import utc_iso
+from .backup_service import delete_backup as svc_delete_backup
 from .netmiko_service import backup_device_config
-from app.features.credentials.credential_service import decrypt_password
+from .schemas import BatchBackupRequest
+from .security import (
+    UnsafeBackupRecordPathError,
+    delete_backup_file,
+    read_backup_bytes,
+    read_backup_text,
+    resolve_backup_record_file,
+    safe_backup_reference,
+)
 
 router = APIRouter(prefix="/api/backups", tags=["backups"])
+require_backup_read = require_permission("backup:read")
+require_backup_execute = require_permission("backup:execute")
+require_backup_batch = require_permission("backup:batch")
+require_backup_delete = require_permission("backup:delete")
 
 
 @router.post("/backup/{device_id}")
-async def backup_device(device_id: int, operator: Optional[str] = None):
+async def backup_device(
+    device_id: int,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_execute),
+):
     """备份单个设备配置"""
-    db: Session = next(get_db())
+    operator = principal.username
     start_time = time.time()
+    device = None
 
     try:
         device = db.query(Device).filter(Device.id == device_id).first()
@@ -65,9 +90,13 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             )
 
         # 执行备份
-        from app.shared.config import get_config
         config = get_config()
-        result = backup_device_config(device, credentials, config.storage.backup_dir)
+        result = await asyncio.to_thread(
+            backup_device_config,
+            device,
+            credentials,
+            config.storage.backup_dir,
+        )
 
         duration_ms = int((time.time() - start_time) * 1000)
 
@@ -76,7 +105,7 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             tool_type="netmiko",
             operation="备份配置",
             target=device.name,
-            status=result["success"] if result["success"] else "failed",
+            status="success" if result["success"] else "failed",
             log_content=f"[INFO] 开始备份设备配置: {device.name} ({device.ip})\n"
                        f"[INFO] 使用凭证组: {cred_group_name}\n"
                        f"[INFO] 执行命令: show running-config\n"
@@ -86,7 +115,7 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
                        f"[INFO] MD5: {result.get('md5_hash', 'N/A')}\n"
                        f"[INFO] 配置变更: {'有' if result.get('has_change') else '无'}",
             duration_ms=duration_ms,
-            created_by=operator or "system"
+            created_by=operator,
         )
         db.add(log_entry)
 
@@ -99,7 +128,7 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
                 file_size=result["file_size"],
                 md5_hash=result["md5_hash"],
                 has_change=result["has_change"],
-                operator=operator
+                operator=operator,
             )
             db.add(backup_record)
 
@@ -113,7 +142,8 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
                 from app.shared.git_config_service import get_git_config_service
                 git_service = get_git_config_service()
                 if git_service.available:
-                    git_commit = git_service.commit_backup(
+                    git_commit = await asyncio.to_thread(
+                        git_service.commit_backup,
                         device_name=device.name,
                         backup_file=result["file_path"],
                         has_change=result["has_change"],
@@ -132,7 +162,12 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
         else:
             # 发送多渠道告警
             from app.services.notification_service import get_notification_service
-            get_notification_service().notify_backup_failure(device.name, result["message"], operator)
+            await asyncio.to_thread(
+                get_notification_service().notify_backup_failure,
+                device.name,
+                result["message"],
+                operator,
+            )
 
             db.commit()
 
@@ -140,38 +175,36 @@ async def backup_device(device_id: int, operator: Optional[str] = None):
             from app.shared.cache import cache
             cache.invalidate_prefix("dashboard:")
 
-            raise HTTPException(status_code=500, detail=result["message"])
+            raise HTTPException(status_code=500, detail="备份失败，请查看服务端日志")
 
     except HTTPException:
         # HTTPException 直接重新抛出，不拦截
         raise
 
-    except Exception as e:
+    except Exception:
         # 记录失败日志
+        db.rollback()
         duration_ms = int((time.time() - start_time) * 1000)
         log_entry = LogEntry(
             tool_type="netmiko",
             operation="备份配置",
             target=device.name if device else f"device_id:{device_id}",
             status="failed",
-            log_content=f"[ERROR] 备份失败\n[ERROR] 错误信息: {str(e)}\n[INFO] 耗时: {duration_ms}ms",
+            log_content=f"[ERROR] 备份失败，详见服务端日志\n[INFO] 耗时: {duration_ms}ms",
             duration_ms=duration_ms,
-            created_by=operator or "system"
+            created_by=operator,
         )
         db.add(log_entry)
         db.commit()
-
-        db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        db.close()
+        raise HTTPException(status_code=500, detail="备份失败，请查看服务端日志")
 
 
 @router.post("/backup/{device_id}/async")
 async def backup_device_async(
     device_id: int,
-    operator: Optional[str] = "system",
-    db: Session = Depends(get_db)
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_execute),
 ):
     """
     异步备份设备配置（推荐方式）
@@ -179,7 +212,6 @@ async def backup_device_async(
     将备份任务提交到 Celery 队列，返回 job_id 供轮询状态。
     适用场景：大批量备份、长时间操作、避免阻塞 HTTP 请求。
     """
-    import uuid
     from app.shared.models_jobs import Job, JobType, JobStatus, create_job
     from app.tasks.backup_tasks import backup_device as backup_task
 
@@ -193,13 +225,17 @@ async def backup_device_async(
         db,
         job_type=JobType.BACKUP,
         device_id=device_id,
-        operator=operator or "system",
+        operator=principal.username,
         parameters={"device_name": device.name, "ip": device.ip}
     )
 
     # 提交 Celery 任务
     try:
-        backup_task.delay(job_id=job.id, device_id=device_id, operator=operator or "system")
+        backup_task.delay(
+            job_id=job.id,
+            device_id=device_id,
+            operator=principal.username,
+        )
     except Exception as e:
         # Celery 可能不可用，回退到同步模式
         logger.warning(f"Celery unavailable, falling back to sync: {e}")
@@ -219,27 +255,44 @@ async def backup_device_async(
 
 
 @router.get("")
-async def list_backups(device_id: Optional[int] = None, skip: int = 0, limit: int = 50, db: Session = Depends(get_db)):
+async def list_backups(
+    device_id: Optional[int] = Query(default=None, ge=1),
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_read),
+):
     """获取备份记录列表"""
     from .backup_service import list_backups as svc_list_backups
-    return svc_list_backups(db, device_id=device_id, skip=skip, limit=limit)
+    result = svc_list_backups(db, device_id=device_id, skip=skip, limit=limit)
+    for item in result["items"]:
+        try:
+            item["backup_file"] = safe_backup_reference(item["backup_file"])
+        except UnsafeBackupRecordPathError:
+            item["backup_file"] = None
+    return result
 
 
 @router.get("/{backup_id}/content")
-async def get_backup_content(backup_id: int):
+async def get_backup_content(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_read),
+):
     """获取备份配置内容"""
-    db: Session = next(get_db())
     backup = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
 
     if not backup:
         raise HTTPException(status_code=404, detail="备份记录不存在")
 
-    backup_path = Path(backup.backup_file)
-    if not backup_path.exists():
-        raise HTTPException(status_code=404, detail="备份文件不存在")
-
-    with open(backup_path, "r", encoding="utf-8") as f:
-        content = f.read()
+    try:
+        content = await asyncio.to_thread(read_backup_text, backup.backup_file)
+    except UnsafeBackupRecordPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="备份文件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
 
     return {
         "backup_id": backup_id,
@@ -249,10 +302,42 @@ async def get_backup_content(backup_id: int):
     }
 
 
+@router.get("/{backup_id}/download")
+async def download_backup(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_read),
+):
+    """下载受管备份文件。"""
+    backup = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
+    if not backup:
+        raise HTTPException(status_code=404, detail="备份记录不存在")
+
+    try:
+        content = await asyncio.to_thread(read_backup_bytes, backup.backup_file)
+    except UnsafeBackupRecordPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="备份文件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+
+    return Response(
+        content=content,
+        media_type="text/plain",
+        headers={
+            "Content-Disposition": f'attachment; filename="backup-{backup_id}.cfg"'
+        },
+    )
+
+
 @router.get("/{backup_id}/diff")
-async def get_backup_diff(backup_id: int):
+async def get_backup_diff(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_read),
+):
     """获取配置差异对比"""
-    db: Session = next(get_db())
     backup = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
 
     if not backup:
@@ -266,16 +351,26 @@ async def get_backup_diff(backup_id: int):
     if not prev_backup:
         return {"diff": "这是第一个备份，没有可对比的配置"}
 
-    with open(backup.backup_file, "r", encoding="utf-8") as f:
-        new_lines = f.readlines()
-    with open(prev_backup.backup_file, "r", encoding="utf-8") as f:
-        old_lines = f.readlines()
+    try:
+        new_content, old_content = await asyncio.gather(
+            asyncio.to_thread(read_backup_text, backup.backup_file),
+            asyncio.to_thread(read_backup_text, prev_backup.backup_file),
+        )
+    except UnsafeBackupRecordPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail="备份文件不存在") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
+
+    new_lines = new_content.splitlines(keepends=True)
+    old_lines = old_content.splitlines(keepends=True)
 
     diff = difflib.unified_diff(
         old_lines,
         new_lines,
-        fromfile=prev_backup.backup_file,
-        tofile=backup.backup_file,
+        fromfile=f"backup-{prev_backup.id}",
+        tofile=f"backup-{backup.id}",
         lineterm=""
     )
 
@@ -287,9 +382,15 @@ async def get_backup_diff(backup_id: int):
 
 
 @router.post("/batch")
-async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
+async def batch_backup(
+    request: BatchBackupRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_batch),
+):
     """批量备份设备配置"""
-    db: Session = next(get_db())
+    device_ids = request.root
+    operator = principal.username
     try:
         devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
 
@@ -314,9 +415,13 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
             else:
                 credentials = {"username": "admin", "password": "", "secret": ""}
 
-            from app.shared.config import get_config
             config = get_config()
-            result = backup_device_config(device, credentials, config.storage.backup_dir)
+            result = await asyncio.to_thread(
+                backup_device_config,
+                device,
+                credentials,
+                config.storage.backup_dir,
+            )
 
             duration_ms = int((time.time() - start_time) * 1000)
 
@@ -325,12 +430,12 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
                 tool_type="netmiko",
                 operation="批量备份配置",
                 target=device.name,
-                status=result["success"] if result["success"] else "failed",
+                status="success" if result["success"] else "failed",
                 log_content=f"[INFO] 批量备份: {device.name} ({device.ip})\n"
                            f"[{result['success'] if result['success'] else 'ERROR'}] {result['message']}\n"
                            f"[INFO] 耗时: {duration_ms}ms",
                 duration_ms=duration_ms,
-                created_by=operator or "system"
+                created_by=operator,
             )
             db.add(log_entry)
 
@@ -342,7 +447,7 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
                     file_size=result["file_size"],
                     md5_hash=result["md5_hash"],
                     has_change=result["has_change"],
-                    operator=operator
+                    operator=operator,
                 )
                 db.add(backup_record)
                 device.last_backup_time = datetime.utcnow()
@@ -350,7 +455,11 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
             results.append({
                 "device_name": device.name,
                 "success": result["success"],
-                "message": result["message"]
+                "message": (
+                    result["message"]
+                    if result["success"]
+                    else "备份失败，请查看服务端日志"
+                ),
             })
 
         db.commit()
@@ -360,5 +469,31 @@ async def batch_backup(device_ids: List[int], operator: Optional[str] = None):
         cache.invalidate_prefix("dashboard:")
 
         return {"results": results}
-    finally:
-        db.close()
+    except Exception:
+        db.rollback()
+        raise
+
+
+@router.delete("/{backup_id}")
+async def delete_backup(
+    backup_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_delete),
+):
+    """删除备份记录及其受管文件。"""
+    backup = db.query(BackupRecord).filter(BackupRecord.id == backup_id).first()
+    if not backup:
+        raise HTTPException(status_code=404, detail="备份记录不存在")
+
+    try:
+        backup_path = resolve_backup_record_file(backup.backup_file, must_exist=False)
+    except UnsafeBackupRecordPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    result = svc_delete_backup(db, backup_id)
+    if backup_path.exists():
+        try:
+            await asyncio.to_thread(delete_backup_file, backup_path)
+        except OSError:
+            logger.warning("备份记录已删除，但文件清理失败")
+    return result

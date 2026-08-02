@@ -1320,7 +1320,7 @@ const refreshMetrics = async () => {
 const backupNow = async () => {
   try {
     const { backupDevice } = await import('@/api')
-    await backupDevice(route.params.id, 'Web')
+    await backupDevice(route.params.id)
     ElMessage.success(t('msgBackupSuccessShort'))
     clearCache('device_detail')
     loadDevice(true)

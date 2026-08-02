@@ -288,7 +288,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getBackups, getBackupContent, getBackupDiff, batchBackup, getDevices } from '@/api'
+import { getBackups, getBackupContent, getBackupDiff, downloadBackupFile, batchBackup, getDevices } from '@/api'
 import { Search, Download, Refresh, Document, WarningFilled, CircleCheck, Clock, View, DocumentCopy, Connection, Warning } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -472,13 +472,21 @@ const viewDiff = async (backupId) => {
   }
 }
 
-const downloadBackup = (row) => {
-  // 创建下载链接
-  const link = document.createElement('a')
-  link.href = `/api/backups/${row.id}/download`
-  link.download = `${row.device_name}_${row.backup_time}.cfg`
-  link.click()
-  ElMessage.info(`${t('backupDownloadMsg')}: ${row.backup_file}`)
+const downloadBackup = async (row) => {
+  try {
+    const blob = await downloadBackupFile(row.id)
+    const url = window.URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `backup-${row.id}.cfg`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    ElMessage.success(t('backupDownloadMsg'))
+  } catch (error) {
+    ElMessage.error(t('msgOpFailed'))
+  }
 }
 
 const doBatchBackup = async () => {
@@ -488,7 +496,7 @@ const doBatchBackup = async () => {
   }
 
   try {
-    await batchBackup(selectedDeviceIds.value, 'Web')
+    await batchBackup(selectedDeviceIds.value)
     clearCache('backups')
     ElMessage.success(t('backupBatchComplete'))
     showBatchBackupDialog.value = false

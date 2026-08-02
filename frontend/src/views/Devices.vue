@@ -924,7 +924,7 @@ const viewDevice = (id) => {
 
 const backupDevice = async (row) => {
   try {
-    await backupDeviceApi(row.id, 'Web')
+    await backupDeviceApi(row.id)
     ElMessage.success(t('msgBackupSuccess', { name: row.name }))
     loadDevices()
   } catch (error) {
@@ -954,7 +954,7 @@ const batchBackup = async () => {
       type: 'warning'
     })
 
-    await batchBackupApi(selectedDevices.value, 'Web')
+    await batchBackupApi(selectedDevices.value)
     ElMessage.success(t('msgBatchBackupSuccess'))
     loadDevices()
   } catch (error) {

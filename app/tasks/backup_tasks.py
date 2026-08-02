@@ -32,6 +32,7 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
     from app.shared.models_jobs import Job, JobStatus, update_job_status
     from app.shared.models import BackupRecord, Device
     from app.features.backups.netmiko_service import backup_device_config
+    from app.features.backups.security import read_backup_text
     from app.features.credentials.credential_service import resolve_device_credentials
 
     db_manager = get_db_manager()
@@ -70,7 +71,7 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
             # 更新 Job 状态
             if result.get("success"):
                 # 落库备份记录 —— 否则异步备份不会出现在备份列表里
-                db.add(BackupRecord(
+                backup_record = BackupRecord(
                     device_id=device.id,
                     device_name=device.name,
                     backup_file=result.get("file_path"),
@@ -78,13 +79,22 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
                     md5_hash=result.get("md5_hash"),
                     has_change=result.get("has_change", False),
                     operator=operator,
-                ))
+                )
+                db.add(backup_record)
                 device.last_backup_time = datetime.utcnow()
                 db.commit()
 
+                public_result = {
+                    "success": True,
+                    "backup_id": backup_record.id,
+                    "file_size": result.get("file_size", 0),
+                    "md5_hash": result.get("md5_hash"),
+                    "has_change": result.get("has_change", False),
+                    "message": "备份成功",
+                }
                 update_job_status(
                     db, job_id, JobStatus.SUCCESS,
-                    result=result
+                    result=public_result
                 )
                 logger.info(f"Backup job {job_id} completed successfully for device {device.name}")
 
@@ -99,9 +109,8 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
                     backup_path = result.get("file_path")
                     if backup_path:
                         try:
-                            with open(backup_path, "r", encoding="utf-8") as fh:
-                                backup_content = fh.read()
-                        except OSError as read_err:
+                            backup_content = read_backup_text(backup_path)
+                        except (OSError, ValueError) as read_err:
                             logger.warning(f"读取备份文件用于 RAG 索引失败: {read_err}")
                     if backup_content:
                         index_device_config_task.delay(
@@ -112,28 +121,38 @@ def backup_device(self, job_id: str, device_id: int, operator: str = "system"):
                         )
                         logger.info(f"RAG indexing task triggered for device {device.name}")
 
+                return public_result
+
             else:
                 # backup_device_config 用 message 承载失败原因，没有 error 字段
+                logger.error(
+                    f"Backup job {job_id} failed for device {device.name}: "
+                    f"{result.get('message') or result.get('error') or 'Unknown error'}"
+                )
                 update_job_status(
                     db, job_id, JobStatus.FAILED,
-                    error_message=result.get("message") or result.get("error") or "Unknown error"
+                    error_message="备份失败，请查看服务端日志"
                 )
-                logger.error(f"Backup job {job_id} failed for device {device.name}")
-
-            return result
+                return {
+                    "success": False,
+                    "message": "备份失败，请查看服务端日志",
+                }
 
         except Exception as exc:
             logger.error(f"Backup task failed for device {device_id}: {exc}")
             try:
                 update_job_status(
                     db, job_id, JobStatus.FAILED,
-                    error_message=str(exc)
+                    error_message="备份失败，请查看服务端日志"
                 )
                 # 重试任务
                 self.retry(exc=exc)
             except self.MaxRetriesExceededError:
                 logger.error(f"Backup job {job_id} exceeded max retries")
-                return {"success": False, "error": str(exc)}
+                return {
+                    "success": False,
+                    "message": "备份失败，请查看服务端日志",
+                }
 
 
 @celery_app.task(

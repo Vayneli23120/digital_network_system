@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices、4D logs 已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A alerts、4B deploy、4C devices、4D logs、4E-A backups/templates 已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,6 +75,7 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
+  → 已分切片完成 alerts、deploy、devices、logs、backups、templates；faults、maintenance、planned maintenance、workflows、system settings 等仍待步骤 4E-B。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -310,8 +311,35 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 - [ ] 浏览器 Logs 页列表、搜索、文件查看、清理按钮权限与 401/403 提示正常
 - [x] 前端环境执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E remaining writes——优先 backups（read/execute/batch/delete）和 templates
-（read/write/delete/render），再覆盖 faults、maintenance、planned maintenance、workflows、system settings 等剩余写接口；
+**步骤 4E-A 验证结果（2026-08-02）**：✅ Backups 的列表/内容/差异/下载使用 `backup:read`，
+同步与异步执行使用 `backup:execute`，批量执行使用 `backup:batch`，删除使用 `backup:delete`；operator
+只取可信 Principal，前端不再发送 `Web`；所有 Netmiko、通知、Git 提交和文件读取均移入工作线程；
+✅ 新备份目录与文件名只使用服务端设备 ID，读/下载/差异/删除均约束在 `storage.backup_dir`，
+拒绝 `../`、根目录外绝对路径与符号链接逃逸，并以 5 MB 上限读取；列表、diff、下载文件名、HTTP
+错误和 Celery Job 结果不再泄露服务器绝对路径或底层异常；认证 Blob 下载替换原先不存在且不带 Bearer
+的直接链接；✅ 批量请求限制 1–100 个正整数 ID，列表分页增加范围限制；✅ Templates 的读/写/删/渲染
+分别使用 `template:read/write/delete/render`，Create/Update/Render 使用拒绝额外字段且有大小上限的 Pydantic
+模型，服务层仅允许模型字段，继续复用 4B 不可变 Jinja 沙箱；✅ 菜单可见性改用功能 read 权限；
+✅ `tests/test_backups_templates_security_step4e.py` 为 **20 passed / 1 skipped**（Windows 符号链接权限），
+既有 Backups/Templates/Netmiko 与异步任务回归合计 **65 passed / 1 skipped**，全部安全切片
+**117 passed / 4 skipped**；Ruff 与 `app.main` 导入通过；
+✅ Windows 可比较全量 pytest（排除既有挂起的 `test_console_service.py`）为
+**54 failed / 557 passed / 8 skipped / 10 errors**，相对 4D 恰好新增 20 passed / 1 skipped，
+失败/错误集合不变。⚠️ 原始全量命令仍挂在既有 console 测试；本机 `frontend/node_modules` 不完整，
+`npm run build` 因找不到 Vite 未执行成功，交由测试系统执行。
+
+**步骤 4E-A 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_backups_templates_security_step4e.py`、既有 backup/template/netmiko/批次一回归及全量 pytest，失败集合不得新增
+- [ ] 使用 backup read/execute/batch/delete 四种最小权限账号逐端点验证；跨权限 403，管理员全部放行，执行只允许实验设备
+- [ ] 使用 template read/write/delete/render 四种最小权限账号验证列表/详情/创建/更新/删除/渲染；跨权限 403
+- [ ] 备份列表、内容、diff、下载、错误响应和 Job 结果不得含服务器绝对路径；下载必须要求 Bearer 且返回 `backup-{id}.cfg`
+- [ ] 验证合法旧备份路径可读；`../`、根目录外绝对路径、符号链接逃逸及恶意设备名不得越过 `storage.backup_dir`
+- [ ] 同步/批量/异步备份的 operator 必须等于 token 用户，伪造 query/body operator 无效；异步 Job 成功结果不得含 `file_path`，失败信息必须脱敏
+- [ ] 模板 create/update 拒绝 `id/created_at` 等额外字段；对象、数组和字符串形式变量超过 100 KB 均 422；合法模板仍可经共享沙箱渲染
+- [ ] 浏览器 Backups 页列表/查看/diff/认证下载/批量执行可用，菜单与按钮权限表现正确，401/403 提示可理解
+- [ ] 前端环境执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E-B remaining writes——覆盖 faults、maintenance、planned maintenance、workflows、system settings 等剩余写接口；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
@@ -400,6 +428,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ### 3.1 阻塞事件循环
 
 - [ ] **P1** `backups/router.py:69,319` — async def 内直接调同步 netmiko SSH（超时 30/60s），`/batch` 还串行遍历全部设备。`[已复核]`
+  → 部分修复（步骤 4E-A）：同步与批量路径的 Netmiko 调用均改为 `asyncio.to_thread`，不再阻塞事件循环；批量仍串行遍历，后续应迁到受控并发执行器。
 - [ ] **P1** `deploy/router.py:971` — `rollback_deploy` 在 async def 内逐台同步调 `napalm_service.rollback_device`（同文件 `execute_deploy` 已正确用线程池，属遗漏）。`[已复核]`
 - [x] **P1** `logs/router.py:66` — WebSocket 迭代同步阻塞生成器 `stream_logs`（内部 `time.sleep(0.5)` 死循环），一条连接占死事件循环。`[已复核]`
   → 修复（步骤 4D）：改为每 0.5 秒异步等待客户端消息，文件读取通过 `asyncio.to_thread` 执行无等待增量轮询；连接断开可及时取消，不再占死事件循环。
@@ -411,10 +440,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ### 3.2 数据库会话与事务
 
-- [ ] **P0** `db = next(get_db())` 绕过依赖注入共 9+ 处：`main.py:277`、`services/reachability_monitor.py:194,248,436,497`、`services/snmp_discovery.py:139,197`、`services/trap_receiver.py:264`、`shared/db_init.py:14,49`、`tool_logs/tool_executor.py:99`、`devices/router.py:800,835,857`、`backups/router.py:231,255`。`get_db`（`shared/database.py:135`）是包了 `session_scope` 的生成器，`next()` 后 commit/rollback/close 永不执行，连接靠 GC 归还，`pool_size=10` 在后台线程长跑下会耗尽。`[已复核]`
+- [ ] **P0** `db = next(get_db())` 绕过依赖注入共 9+ 处：`main.py:277`、`services/reachability_monitor.py:194,248,436,497`、`services/snmp_discovery.py:139,197`、`services/trap_receiver.py:264`、`shared/db_init.py:14,49`、`tool_logs/tool_executor.py:99`、`devices/router.py:800,835,857`。`get_db`（`shared/database.py:135`）是包了 `session_scope` 的生成器，`next()` 后 commit/rollback/close 永不执行，连接靠 GC 归还，`pool_size=10` 在后台线程长跑下会耗尽。`[已复核]`
+  → Backups 两处已在步骤 4E-A 改为 `Depends(get_db)`；其余位置仍待处理。
 - [ ] **P1** `devices/device_service.py:118` — `_sync_modules_to_inventory` 内部自行 commit，与调用方形成嵌套提交，中途失败留半份库存实例。`[已复核]`
 - [ ] **P1** `deploy/router.py:1006-1035` — `create_deploy_history` 内部已 commit（`:1449`），之后再更新 `rollback_status` 二次 commit，中途失败留半状态。`[待验证]`
-- [ ] **P1** `backups/router.py:154,163` — 通用 except 里引用可能未绑定的 `device`；且在 `db.commit()` 之后才 `db.rollback()`，顺序无效。`[已复核]`
+- [x] **P1** `backups/router.py:154,163` — 通用 except 里引用可能未绑定的 `device`；且在 `db.commit()` 之后才 `db.rollback()`，顺序无效。`[已复核]`
+  → 修复（步骤 4E-A）：进入 try 前初始化 `device`，异常路径先 rollback，再写通用失败日志；HTTP 响应不回显底层异常。
 - [ ] **P1** `deploy/router.py:907` — `except: pass` 吞掉 rollback/close 阶段全部异常。`[已复核]`
 
 ### 3.3 Schema 权威源
@@ -465,9 +496,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[已复核]`
 - [ ] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`
 - [ ] **P1** `tasks/backup_tasks.py:139` — 批量任务伪造子 Job ID `f"{job_id}-{i}"`，Job 表无对应记录 → 子任务全部 "Job not found"。`[已复核]`
-- [ ] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
+- [x] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
+  → 修复（步骤 4E-A）：同步与批量日志状态均显式写入 `success` / `failed` 字符串。
 - [ ] **P1** 分页参数普遍无 `ge/le` 约束：`devices/router.py:155`、`devices/device_service.py:150`、`backups/backup_service.py:16`、`faults/router.py:170`、`maintenance/router.py:744`、`deploy/router.py:1205`（`spare_parts/router.py:59` 用了 `Query(ge/le)`，风格不统一）。`[已复核]`
-- [ ] **P1** 高危写操作请求体为裸 `dict`：`deploy/router.py:40,482,915,1134`、`credentials/router.py:41,115`、`templates/router.py:28,42`（后者还 `ConfigTemplate(**data)` 批量赋值）。`[已复核]`
+  → Backups HTTP 路由已在步骤 4E-A 增加 `skip >= 0`、`1 <= limit <= 500`；服务层直调及其余列出端点仍待统一。
+- [x] **P1** 高危写操作请求体为裸 `dict`：`deploy/router.py:40,482,915,1134`、`credentials/router.py:41,115`、`templates/router.py:28,42`（后者还 `ConfigTemplate(**data)` 批量赋值）。`[已复核]`
+  → 修复：Deploy 在 4B、Credentials 在步骤 1、Templates 在 4E-A 全部迁到 Pydantic 模型；模板服务额外使用字段白名单，禁止覆盖 id/时间戳等内部字段。
 - [ ] **P2** `templates/template_service.py:20`、`workflows/router.py:104`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
 - [ ] **P2** 时间字段两套写法：devices/backups 走 `utc_iso()`（带 Z），`faults/router.py:288`、`deploy/router.py:1237`、`credentials/router.py:30` 直接 `isoformat()`（无 Z），`notifications/router.py:57` 手工拼 Z，`deploy/router.py:1105` 用本地 `datetime.now()`。`[已复核]`
 - [ ] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`
@@ -484,6 +518,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
 - [x] **P0** `views/layout/SearchDropdown.vue:174-198` — 用原生 `fetch('/api/...')` 绕过 axios 实例，不带 Authorization、不过 401 拦截器。`[已复核]`
   → 修复（安全步骤 3）：设备、模板、备份搜索全部改走统一 Axios 客户端并使用结构化 `params`，自动携带 JWT 与复用 401 处理。
+- [ ] **P1** `views/Layout.vue:96` — 故障角标仍用原生 `fetch('/api/faults?...')`，绕过统一 Bearer/401 客户端；严格认证下角标会静默失效或保持旧值。`[已复核]`
 - [ ] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
 - [ ] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
 - [ ] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`
