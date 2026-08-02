@@ -5,9 +5,16 @@
 通过 config.yaml 中的 security.auth_enabled 控制
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    EmailStr,
+    Field,
+    PositiveInt,
+    field_validator,
+)
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime, timedelta
 from typing import Optional, List
@@ -20,6 +27,11 @@ from app.features.auth.identity import (
     Principal,
     development_auth_bypass_enabled,
     get_current_principal,
+    get_current_user_from_token,
+)
+from app.features.permissions.security import (
+    ensure_user_manageable,
+    resolve_assignable_roles,
 )
 
 config = get_config()
@@ -63,20 +75,34 @@ class UserLogin(BaseModel):
 
 
 class UserCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(..., min_length=3, max_length=100)
     email: Optional[EmailStr] = None
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8, max_length=128)
     full_name: Optional[str] = Field(None, max_length=100)
-    role_ids: List[int] = []
+    role_ids: List[PositiveInt] = Field(default_factory=list, max_length=50)
     is_active: bool = True
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return None if value in (None, "") else value
 
 
 class UserUpdate(BaseModel):
-    email: Optional[str] = None  # 使用 str 而非 EmailStr，允许空字符串
+    model_config = ConfigDict(extra="forbid")
+
+    email: Optional[EmailStr] = None
     full_name: Optional[str] = Field(None, max_length=100)
-    role_ids: Optional[List[int]] = None
+    role_ids: Optional[List[PositiveInt]] = Field(default=None, max_length=50)
     is_active: Optional[bool] = None
-    password: Optional[str] = Field(None, min_length=6)  # 管理员重置密码
+    password: Optional[str] = Field(None, min_length=8, max_length=128)
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value):
+        return None if value in (None, "") else value
 
 
 class UserResponse(BaseModel):
@@ -104,7 +130,7 @@ class TokenResponse(BaseModel):
 
 class PasswordChange(BaseModel):
     old_password: str
-    new_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 # =============================================================================
@@ -179,13 +205,6 @@ def decode_token(token: str) -> dict:
         raise AuthenticationException("Invalid token")
 
 
-def get_current_user_from_token(
-    principal: Principal = Depends(get_current_principal),
-) -> Optional[User]:
-    """兼容旧依赖名称；身份解析统一由 get_current_principal 完成。"""
-    return principal.user
-
-
 def get_current_active_user(
     current_user: User = Depends(get_current_user_from_token)
 ) -> User:
@@ -215,6 +234,29 @@ def _user_to_response(user: User) -> dict:
         "created_at": user.created_at,
         "updated_at": user.updated_at
     }
+
+
+# Imported after get_current_user_from_token is defined to avoid the dependency
+# module's compatibility import observing a partially initialized auth router.
+from app.shared.dependencies import (  # noqa: E402
+    require_permission,
+)
+
+require_user_read = require_permission("user:read")
+require_user_write = require_permission("user:write")
+require_user_delete = require_permission("user:delete")
+require_role_read = require_permission("role:read")
+
+
+def _revoke_user_sessions(db: Session, user_id: int) -> int:
+    now = datetime.utcnow()
+    return db.query(UserSession).filter(
+        UserSession.user_id == user_id,
+        UserSession.revoked == False,
+    ).update(
+        {UserSession.revoked: True, UserSession.revoked_at: now},
+        synchronize_session=False,
+    )
 
 
 # =============================================================================
@@ -458,10 +500,11 @@ async def get_current_user_info(
 
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
     is_active: Optional[bool] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_user_read),
 ):
     """获取用户列表"""
     query = db.query(User).options(joinedload(User.roles))
@@ -474,7 +517,11 @@ async def list_users(
 
 
 @router.get("/users/{user_id}", response_model=UserResponse)
-async def get_user(user_id: int, db: Session = Depends(get_db)):
+async def get_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_user_read),
+):
     """获取用户详情"""
     user = db.query(User).options(joinedload(User.roles)).filter(User.id == user_id).first()
 
@@ -485,7 +532,12 @@ async def get_user(user_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/users", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-async def _create_user_endpoint(user_data: UserCreate, db: Session = Depends(get_db)):
+async def _create_user_endpoint(
+    user_data: UserCreate,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_user_write),
+    principal: Principal = Depends(get_current_principal),
+):
     """创建新用户"""
     # 检查用户名是否已存在
     existing = db.query(User).filter(User.username == user_data.username).first()
@@ -509,8 +561,7 @@ async def _create_user_endpoint(user_data: UserCreate, db: Session = Depends(get
 
     # 分配角色
     if user_data.role_ids:
-        roles = db.query(Role).filter(Role.id.in_(user_data.role_ids)).all()
-        user.roles = roles
+        user.roles = resolve_assignable_roles(db, user_data.role_ids, principal)
 
     db.add(user)
     db.commit()
@@ -523,18 +574,25 @@ async def _create_user_endpoint(user_data: UserCreate, db: Session = Depends(get
 async def update_user(
     user_id: int,
     user_data: UserUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_user_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """更新用户信息"""
-    user = db.query(User).filter(User.id == user_id).first()
+    user = ensure_user_manageable(db, user_id, principal)
 
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    assigned_roles = None
+    if user_data.role_ids is not None:
+        assigned_roles = resolve_assignable_roles(
+            db,
+            user_data.role_ids,
+            principal,
+        )
 
     # 更新邮箱（只有真正变化时才检查）
     if user_data.email is not None:
         # 处理空字符串 -> 转为 None
-        new_email = user_data.email if user_data.email.strip() else None
+        new_email = str(user_data.email) if user_data.email else None
         if new_email != user.email:
             if new_email:
                 existing = db.query(User).filter(User.email == new_email).first()
@@ -551,13 +609,15 @@ async def update_user(
         user.is_active = user_data.is_active
 
     # 更新角色
-    if user_data.role_ids is not None:
-        roles = db.query(Role).filter(Role.id.in_(user_data.role_ids)).all()
-        user.roles = roles
+    if assigned_roles is not None:
+        user.roles = assigned_roles
 
     # 重置密码（管理员功能）
     if user_data.password is not None:
         user.password_hash = get_password_hash(user_data.password)
+
+    if user_data.password is not None or user_data.is_active is False:
+        _revoke_user_sessions(db, user.id)
 
     user.updated_at = datetime.utcnow()
     db.commit()
@@ -567,16 +627,23 @@ async def update_user(
 
 
 @router.delete("/users/{user_id}")
-async def delete_user(user_id: int, db: Session = Depends(get_db)):
+async def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_user_delete),
+    principal: Principal = Depends(get_current_principal),
+):
     """删除用户"""
-    user = db.query(User).filter(User.id == user_id).first()
-
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = ensure_user_manageable(db, user_id, principal)
 
     if user.is_superuser:
         raise HTTPException(status_code=403, detail="不能删除超级用户")
 
+    db.query(UserSession).filter(UserSession.user_id == user.id).delete(
+        synchronize_session=False
+    )
+    user.roles = []
+    db.flush()
     db.delete(user)
     db.commit()
 
@@ -607,6 +674,7 @@ async def change_password(
     # 更新密码
     current_user.password_hash = get_password_hash(password_data.new_password)
     current_user.updated_at = datetime.utcnow()
+    _revoke_user_sessions(db, current_user.id)
     db.commit()
 
     return {"message": "密码修改成功"}
@@ -624,7 +692,10 @@ async def get_auth_status():
 
 
 @router.get("/roles")
-async def list_roles(db: Session = Depends(get_db)):
+async def list_roles(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_role_read),
+):
     """获取角色列表"""
     roles = db.query(Role).all()
     return [{"id": r.id, "name": r.name, "description": r.description} for r in roles]

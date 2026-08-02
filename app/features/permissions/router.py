@@ -19,6 +19,10 @@ from app.shared.dependencies import (
 )
 from app.features.auth.router import get_current_user_from_token
 from app.features.auth.identity import Principal, get_current_principal
+from app.features.permissions.security import (
+    ensure_user_manageable,
+    resolve_assignable_roles,
+)
 
 router = APIRouter(prefix="/api/permissions", tags=["permissions"])
 require_role_write = require_permission("role:write")
@@ -986,17 +990,15 @@ async def update_user_roles(
     user_id: int,
     role_update: UserRoleUpdate,
     _: None = Depends(require_user_write),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
 ):
     """
     更新用户的角色分配
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = ensure_user_manageable(db, user_id, principal)
 
-    roles = db.query(Role).filter(Role.id.in_(role_update.role_ids)).all()
-    user.roles = roles
+    user.roles = resolve_assignable_roles(db, role_update.role_ids, principal)
 
     db.commit()
 
@@ -1013,18 +1015,15 @@ async def add_role_to_user(
     user_id: int,
     role_id: int,
     _: None = Depends(require_user_write),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
 ):
     """
     为用户添加单个角色
     """
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = ensure_user_manageable(db, user_id, principal)
 
-    role = db.query(Role).filter(Role.id == role_id).first()
-    if not role:
-        raise HTTPException(status_code=404, detail="角色不存在")
+    role = resolve_assignable_roles(db, [role_id], principal)[0]
 
     if role in user.roles:
         raise HTTPException(status_code=400, detail="用户已拥有该角色")
@@ -1040,18 +1039,15 @@ async def remove_role_from_user(
     user_id: int,
     role_id: int,
     _: None = Depends(require_user_write),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    principal: Principal = Depends(get_current_principal),
 ):
     """
     移除用户的某个角色
     """
-    user = db.query(User).options(joinedload(User.roles)).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="用户不存在")
+    user = ensure_user_manageable(db, user_id, principal)
 
-    role = db.query(Role).filter(Role.id == role_id).first()
-    if not role:
-        raise HTTPException(status_code=404, detail="角色不存在")
+    role = resolve_assignable_roles(db, [role_id], principal)[0]
 
     if role not in user.roles:
         raise HTTPException(status_code=400, detail="用户未拥有该角色")

@@ -203,7 +203,7 @@ const sidebarData = computed(() => {
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell, permission: 'alert:manage' },
           { path: '/system-settings', text: t('menuSystemSettings'), icon: Setting, permission: 'nav_system:system_settings' },
           { path: '/system-help', text: t('menuSystemHelp'), icon: QuestionFilled, permission: 'nav_system:system_help' },
-          { path: '/users', text: t('menuUsers'), icon: User, permission: 'nav_system:users' },
+          { path: '/users', text: t('menuUsers'), icon: User, permission: 'user:read' },
           { path: '/permissions', text: t('menuPermissions'), icon: Lock, permission: 'nav_system:permissions' },
         ]
       },

@@ -185,6 +185,13 @@ async def get_current_principal(
     return principal
 
 
+def get_current_user_from_token(
+    principal: Principal = Depends(get_current_principal),
+) -> Optional[User]:
+    """Compatibility user dependency backed by the unified Principal."""
+    return principal.user
+
+
 async def get_optional_principal(
     request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),

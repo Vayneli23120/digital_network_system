@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.shared.database import get_db
 from app.shared.models import User, Role, Permission
-from app.features.auth.router import get_current_user_from_token
-from app.features.auth.identity import development_auth_bypass_enabled
+from app.features.auth.identity import (
+    development_auth_bypass_enabled,
+    get_current_user_from_token,
+)
 
 
 def check_user_permission(user_id: int, permission_name: str, db: Session) -> bool:

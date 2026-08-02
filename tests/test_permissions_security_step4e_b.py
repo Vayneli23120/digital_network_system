@@ -14,16 +14,28 @@ def _create_user(db_session, username: str, *, permission=None, superuser=False)
         is_active=True,
         is_superuser=superuser,
     )
-    if permission:
+    permission_names = (
+        [permission]
+        if isinstance(permission, str)
+        else list(permission or [])
+    )
+    if permission_names:
         role = Role(name=f"role-{username}", description="test role")
-        permission_record = Permission(
-            name=permission,
-            resource=permission.split(":", 1)[0],
-            action=permission.split(":", 1)[1],
-        )
-        role.permissions.append(permission_record)
+        new_permissions = []
+        for permission_name in permission_names:
+            permission_record = db_session.query(Permission).filter(
+                Permission.name == permission_name
+            ).first()
+            if permission_record is None:
+                permission_record = Permission(
+                    name=permission_name,
+                    resource=permission_name.split(":", 1)[0],
+                    action=permission_name.split(":", 1)[1],
+                )
+                new_permissions.append(permission_record)
+            role.permissions.append(permission_record)
         user.roles.append(role)
-        db_session.add_all([role, permission_record])
+        db_session.add_all([role, *new_permissions])
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)
@@ -35,6 +47,7 @@ def _permissions_client(current_user, db_session):
     from fastapi.testclient import TestClient
 
     from app.features.auth.router import get_current_user_from_token
+    from app.features.auth.identity import get_current_principal, Principal
     from app.features.permissions import router as permissions_router
     from app.shared.database import get_db
 
@@ -42,6 +55,13 @@ def _permissions_client(current_user, db_session):
     app.include_router(permissions_router.router)
     app.dependency_overrides[get_current_user_from_token] = lambda: current_user
     app.dependency_overrides[get_db] = lambda: db_session
+    if current_user is not None:
+        app.dependency_overrides[get_current_principal] = lambda: Principal(
+            username=current_user.username,
+            user_id=current_user.id,
+            user=current_user,
+            auth_source="test",
+        )
     return TestClient(app)
 
 
@@ -139,6 +159,11 @@ def test_role_and_user_writers_cannot_cross_responsibility(db_session, monkeypat
         "user-writer",
         permission="user:write",
     )
+    role_user_writer = _create_user(
+        db_session,
+        "role-user-writer",
+        permission=["user:write", "role:write"],
+    )
     target_user = _create_user(db_session, "role-assignment-target")
     assignable_role = Role(name="assignable-role", description="benign role")
     db_session.add(assignable_role)
@@ -159,6 +184,12 @@ def test_role_and_user_writers_cannot_cross_responsibility(db_session, monkeypat
             "/api/permissions/roles",
             json={"name": "user-writer-created-role", "permission_ids": []},
         )
+        denied_assignment = client.put(
+            f"/api/permissions/users/{target_user.id}/roles",
+            json={"role_ids": [assignable_role.id]},
+        )
+
+    with _permissions_client(role_user_writer, db_session) as client:
         allowed_assignment = client.put(
             f"/api/permissions/users/{target_user.id}/roles",
             json={"role_ids": [assignable_role.id]},
@@ -167,6 +198,7 @@ def test_role_and_user_writers_cannot_cross_responsibility(db_session, monkeypat
     assert create_role.status_code == 201
     assert assign_user.status_code == 403
     assert forbidden_role_create.status_code == 403
+    assert denied_assignment.status_code == 403
     assert allowed_assignment.status_code == 200
     db_session.refresh(target_user)
     assert [role.id for role in target_user.roles] == [assignable_role.id]

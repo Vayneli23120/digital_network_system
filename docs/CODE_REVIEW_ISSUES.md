@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B4（含 permissions/faults/maintenance/planned/workflows）已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B5A（含 users）已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -86,6 +86,8 @@
   → 修复（步骤 4E-B3）：30 条端点按 `planned_task:read/write/delete/execute` 分层，覆盖计划、任务、统计、AI/预测生成、AOP 项目/窗口/日历与排程。
 - [x] **P0** `workflows/router.py` — 规则 CRUD、初始化与四条触发路径共 14 条端点全部无功能权限；仅持登录身份即可配置和执行跨域自动化。`[已复核]`
   → 修复（步骤 4E-B4）：按 `workflow:read/write/delete/trigger` 分层；HTTP 触发在任何动作执行前还必须满足动作目标域权限（maintenance/planned_task/device write），缺失时整次 403 且零副作用。
+- [x] **P0** `auth/router.py` — 用户列表/详情/创建/编辑/密码重置/停用/删除与角色目录只有登录认证，任意已登录用户可管理其他账号。`[已复核]`
+  → 修复（步骤 4E-B5A）：按 `user:read/write/delete` 与 `role:read` 分层；委派角色同时要求 `role:write` 且只能授予自身权限子集，禁止 admin:all、重复/不存在角色和修改管理员目标。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -446,7 +448,28 @@ event_data 拒绝额外字段、未知操作符、类型错配、超长/深层/�
 - [ ] scheduled-check 在大量设备下只返回最多 1000 个 ID、计数正确且有截断标志；规则分页 total 不等于当前页长度
 - [ ] 浏览器 Workflows 列表/创建/编辑/启停/删除/默认规则/四类测试触发可用；执行 `npm ci && npm run build`
 
-**下一切片**：步骤 4E-B5 System Settings 与剩余系统管理写接口；
+**步骤 4E-B5A 验证结果（2026-08-02）**：✅ Auth Users 的列表/详情、创建/编辑、删除与角色目录分别使用
+`user:read/write/delete`、`role:read`；用户列表分页限制 `skip >= 0`、`1 <= limit <= 500`；
+✅ UserCreate/UserUpdate/PasswordChange 严格拒绝额外字段，验证 Email、正整数角色 ID、最多 50 个角色及 8–128 位密码，
+前端校验与中英文文案同步；✅ Auth 与 Permissions 两套角色分配 API 共用同一委派安全策略：必须同时持有
+`user:write + role:write`，只能授予自身权限子集，禁止 admin:all、重复/不存在 ID，并阻止委派管理员修改或删除
+superuser/admin:all 目标；✅ 管理员密码重置、停用账号和用户自改密码都会撤销该用户全部活动会话；删除用户前
+显式清理 Session 与角色关联；✅ 统一 current-user 兼容依赖移入 identity，消除 Auth↔Dependencies 导入循环且保持
+既有 FastAPI dependency override 函数对象不变；Users 菜单使用 `user:read`；
+✅ `tests/test_auth_users_security_step4e_b.py` **7 passed**，与 permissions/auth/workflow/alerts 相邻回归
+**57 passed**，全部安全切片 **192 passed / 4 skipped**；全仓 Ruff、`app.main` 导入和编辑器诊断通过；
+✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 596 passed / 8 skipped / 10 errors**，
+相对 B4 恰好新增 7 passed，失败/错误集合不变。
+
+**步骤 4E-B5A 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_auth_users_security_step4e_b.py`、permissions/auth/workflow 相邻及全量 pytest，失败集合不得新增
+- [ ] 用 user read/write/delete 与 role read/write 最小权限组合验证用户 CRUD、角色目录和两套角色分配 API；跨权限 403、未认证 401
+- [ ] 仅 user:write 分配/清空角色必须 403；增加 role:write 后只能授予自身权限子集，admin:all、越权、重复/不存在角色均拒绝
+- [ ] 委派管理员不得更新/删除 superuser 或持 admin:all 的账号；超级管理员仍可正常管理
+- [ ] 管理员重置密码、停用账号、用户自改密码后复用旧 access token 必须 401；删除带活动 Session/角色的用户不得 500
+- [ ] 浏览器 Users 列表、创建、编辑、角色分配、密码重置、停用和删除可用；执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E-B5B System Settings、SLO 与系统运维端点；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单

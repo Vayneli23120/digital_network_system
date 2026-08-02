@@ -201,7 +201,7 @@ const passwordForm = ref({
 // 表单验证规则
 const addRules = {
   username: [{ required: true, message: t('userUsernamePrompt'), trigger: 'blur' }, { min: 3, message: t('userUsernameMinLength'), trigger: 'blur' }],
-  password: [{ required: true, message: t('userPasswordPrompt'), trigger: 'blur' }, { min: 6, message: t('userPasswordMinLength'), trigger: 'blur' }],
+  password: [{ required: true, message: t('userPasswordPrompt'), trigger: 'blur' }, { min: 8, message: t('userPasswordMinLength'), trigger: 'blur' }],
   email: [{ type: 'email', message: t('userEmailInvalidFormat'), trigger: 'blur' }]
 }
 
@@ -210,7 +210,7 @@ const editRules = {
 }
 
 const passwordRules = {
-  new_password: [{ required: true, message: t('userNewPasswordPrompt'), trigger: 'blur' }, { min: 6, message: t('userPasswordMinLength'), trigger: 'blur' }]
+  new_password: [{ required: true, message: t('userNewPasswordPrompt'), trigger: 'blur' }, { min: 8, message: t('userPasswordMinLength'), trigger: 'blur' }]
 }
 
 // 加载用户列表
