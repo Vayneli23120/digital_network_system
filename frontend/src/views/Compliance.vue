@@ -1500,11 +1500,22 @@ const parseDocumentSections = (content) => {
   sectionRefs.value = []
 }
 
+// HTML 转义：v-html 渲染前先惰性化用户内容，防止存储型 XSS
+const escapeHtml = (str) => {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 // 渲染章节内容（简单的 Markdown 渲染）
 const renderSectionContent = (content) => {
   if (!content) return ''
 
-  let html = content
+  // 先整体转义，正则只作用于白名单标签的生成，捕获内容均为惰性化文本
+  let html = escapeHtml(content)
 
   // 渲染代码块
   html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
