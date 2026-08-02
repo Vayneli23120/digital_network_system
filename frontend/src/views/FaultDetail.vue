@@ -1730,7 +1730,12 @@ const submitResolution = async () => {
 // 转维修
 const transferToMaintenance = async () => {
   try {
-    const result = await transferFaultToMaintenance(fault.value.id, transferForm.value)
+    const result = await transferFaultToMaintenance(fault.value.id, {
+      diagnosis_text: transferForm.value.diagnosis_text,
+      description: transferForm.value.maintenance_description,
+      estimated_parts: transferForm.value.estimated_parts,
+      maintenance_owner: transferForm.value.maintenance_owner
+    })
     ElMessage.success(`${t('faultTransferSuccess')} ${result.maint_no || ''}`)
     showTransferDialog.value = false
     transferForm.value = { diagnosis_text: '', maintenance_description: '', estimated_parts: '', maintenance_owner: '' }
@@ -1783,8 +1788,7 @@ const updateFaultSubmit = async () => {
     if (editForm.value.work_note && editForm.value.work_note.trim()) {
       try {
         await api.post(`/faults/${fault.value.id}/work-note`, {
-          note: editForm.value.work_note.trim(),
-          author: localStorage.getItem('currentUser') || 'Web'
+          note: editForm.value.work_note.trim()
         })
       } catch (e) {
         console.error('Failed to add work note:', e)

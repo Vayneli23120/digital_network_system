@@ -930,8 +930,8 @@ const beforePhotoUpload = (file) => {
 
 const getStatusType = (status) => ({ online: 'success', offline: 'danger', maintenance: 'warning', retired: 'info' }[status] || 'info')
 const getStatusText = (status) => ({ online: t('statusOnline'), offline: t('statusOffline'), maintenance: t('statusMaintenance'), retired: t('statusRetired') }[status] || status)
-const getFaultStatusType = (status) => ({ open: 'info', investigating: 'warning', resolved: 'success', closed: 'info' }[status] || 'info')
-const getFaultStatusText = (status) => ({ open: t('faultStatusOpen'), investigating: t('faultStatusInvestigating'), resolved: t('faultStatusResolved'), closed: t('faultStatusClosed') }[status] || status)
+const getFaultStatusType = (status) => ({ open: 'info', assigned: 'info', accepted: 'primary', diagnosing: 'warning', resolving: 'primary', transferred: 'success', resolved: 'success', closed: 'info', reassigned: 'warning', investigating: 'warning' }[status] || 'info')
+const getFaultStatusText = (status) => ({ open: t('faultStatusOpen'), assigned: t('faultStatusAssigned'), accepted: t('faultStatusAccepted'), diagnosing: t('faultStatusDiagnosing'), resolving: t('faultStatusResolving'), transferred: t('faultStatusTransferred'), resolved: t('faultStatusResolved'), closed: t('faultStatusClosed'), reassigned: t('faultReassign'), investigating: t('faultStatusInvestigating') }[status] || status)
 const getRoleText = (role) => ({ access: t('deviceRoleAccess'), distribution: t('deviceRoleDistribution'), core: t('deviceRoleCore') }[role] || role)
 const getVendorText = (vendor) => ({ cisco: 'Cisco', huawei: t('vendorHuawei'), '华为': t('vendorHuawei'), h3c: 'H3C', juniper: 'Juniper' }[vendor?.toLowerCase()] || vendor || 'Cisco')
 const getVendorTagType = (vendor) => ({ cisco: '', huawei: 'success', h3c: 'warning', juniper: 'danger' }[vendor?.toLowerCase()] || '')
@@ -1402,8 +1402,7 @@ const addFault = async () => {
       device_id: device.value.id,
       device_name: device.value.name,
       ...faultForm.value,
-      status,
-      reporter: 'Web'
+      status
     })
     clearCache('device_detail')
     ElMessage.success(t('msgFaultAddSuccess'))

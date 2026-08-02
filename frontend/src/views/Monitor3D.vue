@@ -5667,7 +5667,6 @@ async function reviewSelectedFault(falsePositive = false) {
   faultActionLoading.value = true
   try {
     await reviewFault(selectedActiveFault.value.id, {
-      reviewed_by: 'Monitor3D',
       false_positive: falsePositive,
       notes: falsePositive ? '大屏确认：误报' : '大屏确认：故障已复核',
     })

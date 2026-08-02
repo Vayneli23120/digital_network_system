@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-A + 4E-B0 permissions 已完成（2026-08-02） |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 4A–4E-B1（含 permissions/faults）已完成（2026-08-02） |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,9 +75,11 @@
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
 - [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
-  → 已分切片完成 alerts、deploy、devices、logs、backups、templates；faults、maintenance、planned maintenance、workflows、system settings 等仍待步骤 4E-B。
+  → 已分切片完成 alerts、deploy、devices、logs、backups、templates、faults；maintenance、planned maintenance、workflows、system settings 等仍待步骤 4E-B。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
+- [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
+  → 修复（步骤 4E-B1）：全端点按 `fault:read/write/delete/analyze` 分层；创建者、复核人和转维修 operator 只取统一 Principal，旧客户端身份字段即使传入也不可信；工作日志改为严格限长模型。
 - [x] **P0** `logs/router.py:36` + `logs/log_service.py:47` — `filename` 直接拼进 `log_dir / filename`，`../../` 可读任意文件；同文件 `:74` 的 `clear_old_logs` 无鉴权可删文件。`[已复核]`
   → 修复（步骤 4D）：日志文件解析只接受根目录内的单层 `.log` 文件名，拒绝 `../`、子目录、绝对路径和符号链接逃逸；文件列表不再返回服务器绝对路径，读取/搜索/清理仅遍历安全路径且错误不回显路径。列表/读取/搜索与三条日志 WebSocket 统一使用 `log:read`，清理使用 `log:clear`；参数增加范围限制，HTTP 文件 IO 移入工作线程。
 - [x] **P0** `deploy/router.py:76,570`、`templates/template_service.py:171` — 裸 `jinja2.Template` 渲染用户可写模板与变量，无沙箱，等价 SSTI（可达 RCE）。`[已验证]`
@@ -346,7 +348,26 @@ access token，部署历史、审计与工具日志统一记录 token 用户名�
 并验证 `role:write` 与 `user:write` 职责隔离；与统一认证回归合计 **23 passed**；全仓 Ruff、`app.main` 导入和编辑器诊断通过。
 Linux 测试系统需重跑该测试，并以普通账号复核上述三条自提权路径 403、管理员仍可正常管理角色。
 
-**下一切片**：步骤 4E-B1 Faults，再覆盖 Maintenance、planned maintenance、workflows、system settings 等剩余写接口；
+**步骤 4E-B1 验证结果（2026-08-02）**：✅ Faults 23 条 HTTP 路由全部挂 `fault:read/write/delete/analyze`；
+✅ reporter、reviewed_by 与转维修 operator 由 JWT Principal 覆盖，前端不再发送 `Web/Monitor3D/author` 审计身份；
+✅ 工作日志拒绝空值、额外字段与 >10,000 字符，列表限制 `skip >= 0`、`1 <= limit <= 500`；
+✅ 严重度改为显式 `critical > major > warning > minor` 排序，dashboard 统计完整状态机且除 closed 外均计为活跃；
+✅ 转维修表单的维修描述与诊断文本不再被静默丢弃；五条后台工作流/AI/通知异常由 `print()` 改为结构化服务端异常日志；
+Layout 故障角标改走认证 API 客户端并统计全部非 closed 状态，菜单使用 `fault:read`；
+✅ `tests/test_faults_security_step4e_b.py` **7 passed**，故障相邻回归 **23 passed**，全部已完成安全切片
+**152 passed / 4 skipped**；全仓 Ruff、`app.main` 导入和编辑器诊断通过；
+✅ Windows 可比较全量 pytest（排除既有挂起 console）为 **54 failed / 567 passed / 8 skipped / 10 errors**，
+相对 4E-A 恰好新增 B0+B1 的 10 passed，失败/错误集合不变。⚠️ 本机缺 Vite 可执行文件，前端构建留给 Linux。
+
+**步骤 4E-B1 测试系统 AI 接手清单**：
+- [ ] Linux 跑 Ruff、`test_permissions_security_step4e_b.py`、`test_faults_security_step4e_b.py`、故障幂等与全量 pytest，失败集合不得新增
+- [ ] 用 fault read/write/delete/analyze 四个最小权限账号验证 23 条端点代表路径；跨权限 403，未认证 401，管理员全部放行
+- [ ] 创建故障时伪造 reporter、复核时伪造 reviewed_by、转维修时伪造 operator 均不得落库，DB 必须记录 token 用户
+- [ ] 工作日志空白、额外 author/operator、>10,000 字符均 422；合法日志可保存；分页越界均 422
+- [ ] 实测列表严重度顺序与 dashboard 全状态总数/活跃数；状态分布之和必须等于 total
+- [ ] 浏览器 Faults/FaultDetail/Monitor3D 创建、复核、日志、转维修可用，故障角标携带 Bearer；执行 `npm ci && npm run build`
+
+**下一切片**：步骤 4E-B2 Maintenance，再覆盖 planned maintenance、workflows、system settings 等剩余写接口；
 同时把各模块仍在使用的裸 `dict` 请求体换成 Pydantic 模型。完成步骤 4 后再进入步骤 5 的会话级 SSH 凭证与独立加密密钥。
 
 ### 步骤 3 未完成测试：测试系统 AI 接手清单
@@ -494,8 +515,10 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 批次四 · 数据正确性（页面数字目前不可信）
 
 - [ ] **P1** `compliance/compliance_service.py:341` — `max([severity 字符串])` 按字典序，结果 `medium > low > high > critical`，行级严重度标注全错。`[已复核]`
-- [ ] **P1** `faults/router.py:210` — `order_by(severity.desc())` 是字符串倒序（`warning > minor > major > critical`），与注释声称的 critical 优先相反。`[已复核]`
-- [ ] **P1** `faults/router.py:938-955` — 统计只覆盖 `open/investigating/resolved/closed`，实际状态机含 `assigned/accepted/diagnosing/resolving/transferred`（`models.py:154` 注释），活跃数低估、分布不等于总数。`[已复核]`
+- [x] **P1** `faults/router.py:210` — `order_by(severity.desc())` 是字符串倒序（`warning > minor > major > critical`），与注释声称的 critical 优先相反。`[已复核]`
+  → 修复（步骤 4E-B1）：使用 SQLAlchemy `case` 显式映射业务优先级，SQLite/PostgreSQL 均按 critical、major、warning、minor 排序。
+- [x] **P1** `faults/router.py:938-955` — 统计只覆盖 `open/investigating/resolved/closed`，实际状态机含 `assigned/accepted/diagnosing/resolving/transferred`（`models.py:154` 注释），活跃数低估、分布不等于总数。`[已复核]`
+  → 修复（步骤 4E-B1）：状态分布覆盖完整 `FAULT_STATUS_LABELS`，除 closed 外全部计为活跃，严重度与最近事件使用同一活跃集合。
 - [ ] **P1** `compliance/compliance_service.py:421` vs `compliance/router.py:283` — service 返回 `results`，router 读 `security_issues/compliance_issues/config_errors/recommendations`，`/quick-check` 永远返回空数组。`[已复核]`
 - [ ] **P1** `dashboard/dashboard_service.py:51-78` — 按 10 种设备类型循环执行约 8 条 COUNT，单次 summary 近 80 次查询。`[已复核]`
 - [ ] **P1** `dashboard/dashboard_service.py:1057,1103` — 变更-故障关联在循环内逐条 COUNT（N+1），且同条件 count 与 all 重复查两次；`:948,962` SLO 计算逐个查设备与故障全集。`[已复核]`
@@ -506,7 +529,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
   → 修复（步骤 4E-A）：同步与批量日志状态均显式写入 `success` / `failed` 字符串。
 - [ ] **P1** 分页参数普遍无 `ge/le` 约束：`devices/router.py:155`、`devices/device_service.py:150`、`backups/backup_service.py:16`、`faults/router.py:170`、`maintenance/router.py:744`、`deploy/router.py:1205`（`spare_parts/router.py:59` 用了 `Query(ge/le)`，风格不统一）。`[已复核]`
-  → Backups HTTP 路由已在步骤 4E-A 增加 `skip >= 0`、`1 <= limit <= 500`；服务层直调及其余列出端点仍待统一。
+  → Backups HTTP 路由已在步骤 4E-A、Faults 在 4E-B1 增加 `skip >= 0`、`1 <= limit <= 500`；服务层直调及其余列出端点仍待统一。
 - [x] **P1** 高危写操作请求体为裸 `dict`：`deploy/router.py:40,482,915,1134`、`credentials/router.py:41,115`、`templates/router.py:28,42`（后者还 `ConfigTemplate(**data)` 批量赋值）。`[已复核]`
   → 修复：Deploy 在 4B、Credentials 在步骤 1、Templates 在 4E-A 全部迁到 Pydantic 模型；模板服务额外使用字段白名单，禁止覆盖 id/时间戳等内部字段。
 - [ ] **P2** `templates/template_service.py:20`、`workflows/router.py:104`、`notifications/router.py:78` — 把页大小当 `total`，分页总数失真。`[待验证]`
@@ -514,7 +537,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P2** `discovery/discovery_service.py:245` — 单例缓存首次的 `timeout/workers`，后续请求传参被静默忽略。`[待验证]`
 - [ ] **P2** `compliance/router.py:26` — 模块导入期实例化 `ComplianceService()`，其 `__init__` 会访问数据库。`[已复核]`
 - [ ] **P2** `deploy/router.py:815,985` — 审计日志 `operator` 硬编码 `"Web"`，同函数内已解析出 `current_username`，审计不可追溯。`[已复核]`
-- [ ] **P2** `faults/router.py:1015,1042,1069,1096,1125` — 五个后台任务用 `print()` 吞异常，工作流/AI/通知失败完全不可见。`[已复核]`
+- [x] **P2** `faults/router.py:1015,1042,1069,1096,1125` — 五个后台任务用 `print()` 吞异常，工作流/AI/通知失败完全不可见。`[已复核]`
+  → 修复（步骤 4E-B1）：全部改为 Loguru `logger.exception`，保留 fault/maintenance ID 并记录堆栈。
 
 ---
 
@@ -525,7 +549,8 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P0** `api/request.js:130-165` — `apiWithRetry` 对 post/put/patch/delete 默认重试，非幂等写操作（部署、入库）可能重复下发。`[已复核]`
 - [x] **P0** `views/layout/SearchDropdown.vue:174-198` — 用原生 `fetch('/api/...')` 绕过 axios 实例，不带 Authorization、不过 401 拦截器。`[已复核]`
   → 修复（安全步骤 3）：设备、模板、备份搜索全部改走统一 Axios 客户端并使用结构化 `params`，自动携带 JWT 与复用 401 处理。
-- [ ] **P1** `views/Layout.vue:96` — 故障角标仍用原生 `fetch('/api/faults?...')`，绕过统一 Bearer/401 客户端；严格认证下角标会静默失效或保持旧值。`[已复核]`
+- [x] **P1** `views/Layout.vue:96` — 故障角标仍用原生 `fetch('/api/faults?...')`，绕过统一 Bearer/401 客户端；严格认证下角标会静默失效或保持旧值。`[已复核]`
+  → 修复（步骤 4E-B1）：改用统一 `getFaults()` Axios 客户端，自动附加 Bearer 并复用 401 处理。
 - [ ] **P1** `views/Compliance.vue:696,1504` — `v-html` 渲染自写 markdown 转换结果，`renderSectionContent` 只做正则替换不转义 HTML。`[待验证]`
 - [ ] **P1** `utils/cache.js:121-130` — localStorage 回填内存缓存时重算 `Date.now()+ttl`，等于每次读取都续期，数据可无限存活。`[已复核]`
 - [ ] **P1** `utils/cache.js:26-31` — 缓存键把 `JSON.stringify(params)` 非字母数字全替换为 `_`，不同参数可产出同键，且键顺序敏感。`[已复核]`

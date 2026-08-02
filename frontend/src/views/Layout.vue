@@ -65,7 +65,7 @@ import { DataBoard, Connection, Download, Warning, Tools, Upload, Document, Key,
 import Topbar from './layout/Topbar.vue'
 import Sidebar from './layout/Sidebar.vue'
 import { useI18n } from '@/composables/useI18n'
-import { getUnreadCount, getMyPermissions } from '@/api'
+import { getFaults, getUnreadCount, getMyPermissions } from '@/api'
 import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
@@ -90,12 +90,12 @@ const faultBadge = ref(0)
 const loadFaultBadge = debounce(async (force = false) => {
   try {
     const res = await cachedRequest(
-      () => fetch('/api/faults?status=open&status=investigating&limit=100').then(r => r.json()),
+      () => getFaults({ limit: 500 }),
       'layout_fault_badge',
       {},
       { forceRefresh: force, ttl: 60 }
     )
-    faultBadge.value = res.items?.filter(f => f.status === 'open' || f.status === 'investigating').length || 0
+    faultBadge.value = res.items?.filter(f => f.status !== 'closed').length || 0
   } catch (err) {
     if (err.name !== 'CanceledError') {
       console.error('Failed to load fault badge:', err)
@@ -162,7 +162,7 @@ const sidebarData = computed(() => {
           { path: '/devices', text: t('menuDevices'), icon: Connection, permission: 'nav_devices:list' },
           { path: '/discovery', text: t('menuDiscovery'), icon: Aim, permission: 'nav_devices:discovery' },
           { path: '/backups', text: t('menuBackups'), icon: Download, permission: 'backup:read' },
-          { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null, permission: 'nav_devices:faults' },
+          { path: '/faults', text: t('menuFaults'), icon: Warning, badge: faultBadge.value > 0 ? faultBadge.value : null, permission: 'fault:read' },
           { path: '/maintenance', text: t('menuMaintenance'), icon: Tools, permission: 'nav_devices:maintenance' },
           { path: '/planned-maintenance', text: t('menuPlannedMaintenance'), icon: Calendar, permission: 'nav_devices:planned_maintenance' },
         ]

@@ -7,15 +7,19 @@
 - 故障生命周期管理
 """
 
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
+from sqlalchemy import case
 from sqlalchemy.orm import Session
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+from loguru import logger
 import uuid
 import json
 
+from app.features.auth.identity import Principal, get_current_principal
 from app.shared.database import get_db
+from app.shared.dependencies import require_permission
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
 from app.services.fault_maintenance import (
     FaultMaintenanceConflictError,
@@ -35,6 +39,10 @@ except Exception:
     ADK_AVAILABLE = False
 
 router = APIRouter(prefix="/api/faults", tags=["faults"])
+require_fault_read = require_permission("fault:read")
+require_fault_write = require_permission("fault:write")
+require_fault_delete = require_permission("fault:delete")
+require_fault_analyze = require_permission("fault:analyze")
 
 
 # ===== 状态流转规则 =====
@@ -76,6 +84,10 @@ FAULT_STATUS_COLORS = {
     'investigating': 'warning',
 }
 
+FAULT_ACTIVE_STATUSES = tuple(
+    status for status in FAULT_STATUS_LABELS if status != "closed"
+)
+
 FAULT_DIAGNOSIS_RESULTS = {
     'config_issue': '配置问题',
     'software_issue': '软件问题',
@@ -94,7 +106,6 @@ class CreateFaultRequest(BaseModel):
     severity: str = "minor"  # minor/warning/major/critical
     description: str
     impact: Optional[str] = None
-    reporter: Optional[str] = None
     fault_time: Optional[datetime] = None
     fault_type: Optional[str] = None  # hardware/software/config/network/other
     assigned_to: Optional[str] = None  # 指派负责人
@@ -121,6 +132,7 @@ class TransferToMaintenanceRequest(BaseModel):
     """转维修请求"""
     maintenance_type: str = "corrective"  # corrective/preventive/emergency
     description: Optional[str] = None
+    diagnosis_text: Optional[str] = Field(default=None, max_length=10_000)
     priority: Optional[str] = "P3"
     maintenance_owner: Optional[str] = None  # 维修负责人，默认继承诊断负责人
     estimated_parts: Optional[str] = None  # 预估需要的备件
@@ -152,9 +164,28 @@ class AnalyzeFaultRequest(BaseModel):
 
 class ReviewFaultRequest(BaseModel):
     """管理员复核监控自动创建的故障"""
-    reviewed_by: str = "Admin"
     false_positive: bool = False
     notes: Optional[str] = None
+
+
+class WorkNoteRequest(BaseModel):
+    """故障工作日志请求。"""
+
+    model_config = ConfigDict(extra="forbid")
+
+    note: str = Field(min_length=1, max_length=10_000)
+
+    @field_validator("note")
+    @classmethod
+    def normalize_note(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("日志内容不能为空")
+        return normalized
+
+
+def _actor_username(principal: Any) -> str:
+    return principal.username if isinstance(principal, Principal) else "system"
 
 
 # ===== Basic CRUD =====
@@ -166,9 +197,10 @@ async def list_faults(
     severity: Optional[str] = None,
     has_ai_analysis: Optional[bool] = None,
     need_repair: Optional[str] = None,
-    skip: int = 0,
-    limit: int = 100,
-    db: Session = Depends(get_db)
+    skip: int = Query(default=0, ge=0),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read)
 ):
     """
     获取故障记录列表
@@ -205,11 +237,16 @@ async def list_faults(
         query = query.filter(FaultRecord.ai_recommendation == need_repair)
 
     total = query.count()
+    severity_rank = case(
+        (FaultRecord.severity == "critical", 4),
+        (FaultRecord.severity == "major", 3),
+        (FaultRecord.severity == "warning", 2),
+        (FaultRecord.severity == "minor", 1),
+        else_=0,
+    )
     faults = query.order_by(
-        # 严重程度排序：critical > major > warning > minor
-        FaultRecord.severity.desc()
-    ).order_by(
-        FaultRecord.created_at.desc()
+        severity_rank.desc(),
+        FaultRecord.created_at.desc(),
     ).offset(skip).limit(limit).all()
 
     items = []
@@ -291,7 +328,11 @@ async def list_faults(
 
 
 @router.get("/{fault_id}")
-async def get_fault(fault_id: int, db: Session = Depends(get_db)):
+async def get_fault(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read),
+):
     """获取单个故障详情"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
 
@@ -416,7 +457,9 @@ async def get_fault(fault_id: int, db: Session = Depends(get_db)):
 async def create_fault(
     request: CreateFaultRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """
     创建故障记录（Incident）
@@ -453,7 +496,7 @@ async def create_fault(
         status=initial_status,
         description=request.description,
         impact=request.impact,
-        reporter=request.reporter,
+        reporter=_actor_username(principal),
         fault_time=fault_time,
         fault_type=request.fault_type,
         assigned_to=request.assigned_to,
@@ -500,7 +543,8 @@ async def create_fault(
 async def update_fault(
     fault_id: int,
     request: UpdateFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """更新故障记录"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
@@ -524,7 +568,11 @@ async def update_fault(
 
 
 @router.delete("/{fault_id}")
-async def delete_fault(fault_id: int, db: Session = Depends(get_db)):
+async def delete_fault(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_delete),
+):
     """删除故障记录"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
 
@@ -550,7 +598,8 @@ async def delete_fault(fault_id: int, db: Session = Depends(get_db)):
 async def analyze_fault(
     fault_id: int,
     request: AnalyzeFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_analyze)
 ):
     """
     AI分析故障（使用 ADK Agent）
@@ -628,7 +677,11 @@ async def analyze_fault(
 
 
 @router.get("/{fault_id}/root-cause")
-async def get_root_cause(fault_id: int, db: Session = Depends(get_db)):
+async def get_root_cause(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read),
+):
     """获取故障根因分析"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
 
@@ -653,7 +706,11 @@ async def get_root_cause(fault_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/{fault_id}/ai-pre-diagnose")
-async def ai_pre_diagnose(fault_id: int, db: Session = Depends(get_db)):
+async def ai_pre_diagnose(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_analyze),
+):
     """一键 AI 预判故障原因（轻量、可降级）。
 
     把设备、故障、近期温度与故障历史一键投喂给已配置的模型，返回预判根因和
@@ -678,7 +735,8 @@ async def auto_create_maintenance(
     fault_id: int,
     maint_type: str = "corrective",
     priority: str = "normal",
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_analyze)
 ):
     """
     根据AI建议自动创建维修单
@@ -746,7 +804,8 @@ async def update_fault_status(
     fault_id: int,
     status: str,
     resolution: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """
     更新故障状态
@@ -792,7 +851,8 @@ async def escalate_fault(
     fault_id: int,
     new_severity: str,
     reason: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """
     升级故障严重程度
@@ -844,7 +904,11 @@ async def escalate_fault(
 # ===== Convert to Maintenance =====
 
 @router.post("/{fault_id}/convert-to-maintenance")
-async def convert_to_maintenance(fault_id: int, db: Session = Depends(get_db)):
+async def convert_to_maintenance(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write),
+):
     """手动将故障转换为维修单"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
 
@@ -886,7 +950,11 @@ async def convert_to_maintenance(fault_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{fault_id}/maintenance")
-async def get_fault_maintenance(fault_id: int, db: Session = Depends(get_db)):
+async def get_fault_maintenance(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read),
+):
     """获取故障关联的维修单详情"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
 
@@ -924,7 +992,10 @@ async def get_fault_maintenance(fault_id: int, db: Session = Depends(get_db)):
 # ===== Dashboard =====
 
 @router.get("/incidents/dashboard")
-async def get_incidents_dashboard(db: Session = Depends(get_db)):
+async def get_incidents_dashboard(
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read),
+):
     """
     Incident Center Dashboard统计
 
@@ -940,12 +1011,12 @@ async def get_incidents_dashboard(db: Session = Depends(get_db)):
 
     # 活跃故障（未关闭）
     active_faults = db.query(FaultRecord).filter(
-        FaultRecord.status.in_(['open', 'investigating', 'resolved'])
+        FaultRecord.status.in_(FAULT_ACTIVE_STATUSES)
     ).count()
 
     # 各状态统计
     status_counts = {}
-    for status in ['open', 'investigating', 'resolved', 'closed']:
+    for status in FAULT_STATUS_LABELS:
         count = db.query(FaultRecord).filter(FaultRecord.status == status).count()
         status_counts[status] = count
 
@@ -954,7 +1025,7 @@ async def get_incidents_dashboard(db: Session = Depends(get_db)):
     for severity in ['critical', 'major', 'warning', 'minor']:
         count = db.query(FaultRecord).filter(
             FaultRecord.severity == severity,
-            FaultRecord.status.in_(['open', 'investigating'])
+            FaultRecord.status.in_(FAULT_ACTIVE_STATUSES)
         ).count()
         severity_counts[severity] = count
 
@@ -971,7 +1042,7 @@ async def get_incidents_dashboard(db: Session = Depends(get_db)):
 
     # 最近的活跃故障
     recent_faults = db.query(FaultRecord).filter(
-        FaultRecord.status.in_(['open', 'investigating'])
+        FaultRecord.status.in_(FAULT_ACTIVE_STATUSES)
     ).order_by(FaultRecord.created_at.desc()).limit(10).all()
 
     recent_incidents = [
@@ -1012,8 +1083,8 @@ async def trigger_fault_workflow(fault_id: int, severity: str):
     try:
         executor = WorkflowExecutor(db)
         await executor.trigger_fault_created(fault_id)
-    except Exception as e:
-        print(f"Workflow trigger error: {e}")
+    except Exception:
+        logger.exception("Workflow trigger failed for fault {}", fault_id)
     finally:
         db.close()
 
@@ -1039,8 +1110,8 @@ async def trigger_fault_ai_prediagnosis(fault_id: int):
         if result.get("available") and result.get("probable_cause"):
             fault.ai_root_cause = result["probable_cause"]
             db.commit()
-    except Exception as e:
-        print(f"AI pre-diagnosis error: {e}")
+    except Exception:
+        logger.exception("AI pre-diagnosis failed for fault {}", fault_id)
     finally:
         db.close()
 
@@ -1066,8 +1137,8 @@ async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
                 reference_type="fault",
                 reference_id=fault_id
             )
-    except Exception as e:
-        print(f"Notification send error: {e}")
+    except Exception:
+        logger.exception("Assignment notification failed for fault {}", fault_id)
     finally:
         db.close()
 
@@ -1093,8 +1164,11 @@ async def send_maintenance_assigned_notification(maintenance_id: int, assigned_t
                 reference_type="maintenance",
                 reference_id=maintenance_id
             )
-    except Exception as e:
-        print(f"Maintenance notification send error: {e}")
+    except Exception:
+        logger.exception(
+            "Assignment notification failed for maintenance {}",
+            maintenance_id,
+        )
     finally:
         db.close()
 
@@ -1122,8 +1196,11 @@ async def send_maintenance_completed_notification(fault_id: int, maintenance_id:
                     reference_type="fault",
                     reference_id=fault_id
                 )
-    except Exception as e:
-        print(f"Maintenance completed notification send error: {e}")
+    except Exception:
+        logger.exception(
+            "Completion notification failed for maintenance {}",
+            maintenance_id,
+        )
     finally:
         db.close()
 
@@ -1135,7 +1212,8 @@ async def assign_fault(
     fault_id: int,
     request: AssignFaultRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """指派故障给负责人"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
@@ -1179,7 +1257,8 @@ async def assign_fault(
 async def accept_fault(
     fault_id: int,
     request: AcceptFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """接收故障（负责人确认）"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
@@ -1208,7 +1287,9 @@ async def accept_fault(
 async def review_fault(
     fault_id: int,
     request: ReviewFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """管理员复核监控自动创建的故障（大屏/邮件复核入口）"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
@@ -1217,7 +1298,8 @@ async def review_fault(
 
     fault.review_required = False
     fault.reviewed_at = datetime.utcnow()
-    fault.reviewed_by = request.reviewed_by
+    reviewer = _actor_username(principal)
+    fault.reviewed_by = reviewer
     fault.false_positive = request.false_positive
     fault.updated_at = datetime.utcnow()
 
@@ -1233,7 +1315,7 @@ async def review_fault(
         fault.resolution = note
     elif fault.status == "open":
         fault.status = "assigned"
-        fault.assigned_to = fault.assigned_to or request.reviewed_by
+        fault.assigned_to = fault.assigned_to or reviewer
         fault.assigned_at = fault.assigned_at or datetime.utcnow()
 
     db.commit()
@@ -1255,7 +1337,8 @@ async def review_fault(
 async def diagnose_fault(
     fault_id: int,
     request: DiagnoseFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """开始诊断并填写诊断信息
 
@@ -1301,8 +1384,9 @@ async def diagnose_fault(
 @router.post("/{fault_id}/work-note")
 async def add_fault_work_note(
     fault_id: int,
-    request: dict,
-    db: Session = Depends(get_db)
+    request: WorkNoteRequest,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """添加工作日志（在故障未关闭前都可以添加）
 
@@ -1316,9 +1400,7 @@ async def add_fault_work_note(
     if fault.status == 'closed':
         raise HTTPException(status_code=400, detail="已关闭的故障不能添加日志")
 
-    note_text = request.get("note")
-    if not note_text:
-        raise HTTPException(status_code=400, detail="缺少日志内容")
+    note_text = request.note
 
     # 追加到诊断内容（用换行分隔多条日志）
     if fault.diagnosis_text:
@@ -1341,7 +1423,9 @@ async def transfer_to_maintenance(
     fault_id: int,
     request: TransferToMaintenanceRequest,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write),
+    principal: Principal = Depends(get_current_principal),
 ):
     """转维修（创建维修单）
 
@@ -1385,7 +1469,7 @@ async def transfer_to_maintenance(
         status="repairing",  # 直接进入维修状态（故障已诊断）
         priority=request.priority,
         current_owner=maintenance_owner,
-        operator="Web",
+        operator=_actor_username(principal),
         repairing_at=datetime.utcnow()  # 设置维修开始时间
     )
 
@@ -1394,8 +1478,8 @@ async def transfer_to_maintenance(
         maintenance.notes = f"预估备件: {request.estimated_parts}"
 
     # 复制故障的诊断内容到维修单，方便维修参考
-    if fault.diagnosis_text:
-        maintenance.diagnosis_text = fault.diagnosis_text
+    if request.diagnosis_text or fault.diagnosis_text:
+        maintenance.diagnosis_text = request.diagnosis_text or fault.diagnosis_text
     if fault.diagnosis_result:
         maintenance.diagnosis_result = fault.diagnosis_result
 
@@ -1447,7 +1531,8 @@ async def transfer_to_maintenance(
 async def resolve_fault(
     fault_id: int,
     request: ResolveFaultRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write)
 ):
     """直接解决故障（技术问题，无需备件）"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
@@ -1475,7 +1560,11 @@ async def resolve_fault(
 
 
 @router.post("/{fault_id}/close")
-async def close_fault(fault_id: int, db: Session = Depends(get_db)):
+async def close_fault(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_write),
+):
     """关闭故障"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
     if not fault:
@@ -1508,7 +1597,11 @@ async def close_fault(fault_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/{fault_id}/transitions")
-async def get_fault_transitions(fault_id: int, db: Session = Depends(get_db)):
+async def get_fault_transitions(
+    fault_id: int,
+    db: Session = Depends(get_db),
+    _: None = Depends(require_fault_read),
+):
     """获取故障可用的状态流转选项"""
     fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
     if not fault:

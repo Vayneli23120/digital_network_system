@@ -740,7 +740,6 @@ const addFault = async () => {
     const data = {
       ...faultForm.value,
       device_name: device?.name,
-      reporter: 'Web',
       status: faultForm.value.assigned_to ? 'assigned' : 'open'
     }
     await createFault(data)
