@@ -18,6 +18,10 @@ from app.shared.database import get_db
 from app.shared.models import ComplianceRule, ComplianceAuditLog, AIConfig
 from app.features.compliance.builtin_rules import get_all_rules_for_audit, init_builtin_rules
 
+# 严重度等级排序：用于取一组问题中的最高等级。
+# 字符串 max() 按字典序会得到 medium > low > high > critical，必须显式映射业务优先级。
+SEVERITY_RANK = {"critical": 5, "high": 4, "medium": 3, "low": 2, "info": 1, "ok": 0}
+
 # 使用 ADK runner
 from app.services.adk.runner import adk_runner
 
@@ -77,7 +81,8 @@ class ComplianceService:
         device_name: str = "",
         device_ip: str = "",
         audit_mode: str = "full",
-        use_ai: bool = True
+        use_ai: bool = True,
+        operator: str = "system",
     ) -> ComplianceReport:
         """
         执行配置审核（优化版）
@@ -88,6 +93,7 @@ class ComplianceService:
             device_ip: 设备 IP
             audit_mode: 审核模式 (full, basic, ai_only)
             use_ai: 是否使用 AI 审核
+            operator: 操作人（写入审计日志，默认 system）
 
         Returns:
             ComplianceReport 审核报告
@@ -127,7 +133,7 @@ class ComplianceService:
         self._generate_config_analysis(report, config_text)
 
         # Step 4: 保存审核记录
-        self._save_audit_log(report, config_text)
+        self._save_audit_log(report, config_text, operator)
 
         return report
 
@@ -338,12 +344,16 @@ class ComplianceService:
                 "line_number": line_num,
                 "content": line,
                 "issues": issues,
-                "severity": max([i["severity"] for i in issues], default="ok")
+                "severity": max(
+                    (i["severity"] for i in issues),
+                    key=lambda s: SEVERITY_RANK.get(s, 0),
+                    default="ok",
+                )
             })
 
         report.config_analysis = analysis
 
-    def _save_audit_log(self, report: ComplianceReport, config_text: str):
+    def _save_audit_log(self, report: ComplianceReport, config_text: str, operator: str = "system"):
         """保存审核记录"""
         db = next(get_db())
         try:
@@ -377,7 +387,7 @@ class ComplianceService:
                     "config_analysis": report.config_analysis[:200]  # 只保存前200行
                 }),
                 created_at=datetime.utcnow(),
-                created_by="Web"
+                created_by=operator
             )
             db.add(log)
             db.commit()

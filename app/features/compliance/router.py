@@ -18,12 +18,23 @@ from loguru import logger
 from app.features.compliance.compliance_service import ComplianceService, ComplianceReport
 from app.features.compliance.config_parser_service import ConfigParserService
 from app.features.compliance.standard_service import StandardService
+from app.features.auth.identity import Principal, get_current_principal
 
 router = APIRouter(prefix="/api/compliance", tags=["配置合规"])
 
-compliance_service = ComplianceService()
 config_parser_service = ConfigParserService()
 standard_service = StandardService()
+
+# ComplianceService.__init__ 会访问数据库（init_builtin_rules），模块导入期实例化
+# 会在启动时触发 DB 访问；改为首次使用时懒加载。
+_compliance_service: ComplianceService | None = None
+
+
+def get_compliance_service() -> ComplianceService:
+    global _compliance_service
+    if _compliance_service is None:
+        _compliance_service = ComplianceService()
+    return _compliance_service
 
 
 # ==================== 请求/响应模型 ====================
@@ -110,7 +121,10 @@ class AIConfigRequest(BaseModel):
 # ==================== 配置审核 API ====================
 
 @router.post("/check", response_model=ComplianceReportResponse)
-async def run_compliance_check(request: ComplianceCheckRequest):
+async def run_compliance_check(
+    request: ComplianceCheckRequest,
+    principal: Principal = Depends(get_current_principal),
+):
     """
     运行配置合规检查
 
@@ -120,16 +134,18 @@ async def run_compliance_check(request: ComplianceCheckRequest):
 
     Args:
         request: 审核请求，包含配置文本和审核模式
+        principal: 当前登录用户（写入审计日志）
     """
     if not request.config_text.strip():
         raise HTTPException(status_code=400, detail="配置文本不能为空")
 
-    report = await compliance_service.audit_config(
+    report = await get_compliance_service().audit_config(
         config_text=request.config_text,
         device_name=request.device_name or "",
         device_ip=request.device_ip or "",
         audit_mode=request.audit_mode,
-        use_ai=request.use_ai
+        use_ai=request.use_ai,
+        operator=principal.username if isinstance(principal, Principal) else "system",
     )
 
     return ComplianceReportResponse(
@@ -171,7 +187,10 @@ async def run_compliance_check(request: ComplianceCheckRequest):
 
 
 @router.post("/upload")
-async def upload_config_file(file: UploadFile = File(...)):
+async def upload_config_file(
+    file: UploadFile = File(...),
+    principal: Principal = Depends(get_current_principal),
+):
     """
     上传配置文件进行审核
 
@@ -181,6 +200,7 @@ async def upload_config_file(file: UploadFile = File(...)):
 
     Args:
         file: 上传的配置文件
+        principal: 当前登录用户（写入审计日志）
     """
     # 读取文件内容
     content = await file.read()
@@ -192,16 +212,19 @@ async def upload_config_file(file: UploadFile = File(...)):
     if not parse_result.get("success"):
         raise HTTPException(status_code=400, detail=parse_result.get("error", "文件解析失败"))
 
+    operator = principal.username if isinstance(principal, Principal) else "system"
+
     # 如果是多设备配置，批量审核
     if parse_result.get("format") == "multi_device":
         devices = parse_result.get("devices", [])
         audit_results = []
 
         for device in devices:
-            report = await compliance_service.audit_config(
+            report = await get_compliance_service().audit_config(
                 config_text=device["config_text"],
                 device_name=device["device_name"],
-                device_ip=device.get("ip", "")
+                device_ip=device.get("ip", ""),
+                operator=operator,
             )
             audit_results.append({
                 "device_name": device["device_name"],
@@ -225,10 +248,11 @@ async def upload_config_file(file: UploadFile = File(...)):
     # 单设备配置，直接审核
     config_text = parse_result.get("config_text", "")
 
-    report = await compliance_service.audit_config(
+    report = await get_compliance_service().audit_config(
         config_text=config_text,
         device_name=parse_result.get("hostname", ""),
-        audit_mode="full"
+        audit_mode="full",
+        operator=operator,
     )
 
     return {
@@ -272,7 +296,7 @@ async def quick_compliance_check(request: ComplianceCheckRequest):
     """
     快速审核（仅 AI 审核，不依赖规则库）
     """
-    result = await compliance_service.quick_audit(request.config_text)
+    result = await get_compliance_service().quick_audit(request.config_text)
 
     if not result.get("success"):
         return {"success": False, "error": result.get("error", "AI 服务不可用")}
@@ -280,10 +304,7 @@ async def quick_compliance_check(request: ComplianceCheckRequest):
     return {
         "success": True,
         "score": result.get("score", 50),
-        "security_issues": result.get("security_issues", []),
-        "compliance_issues": result.get("compliance_issues", []),
-        "config_errors": result.get("config_errors", []),
-        "recommendations": result.get("recommendations", [])
+        "results": result.get("results", []),
     }
 
 
@@ -374,12 +395,16 @@ async def update_rules_for_standard(standard_id: int):
 
 
 @router.post("/standards/upload")
-async def upload_standard_document(file: UploadFile = File(...)):
+async def upload_standard_document(
+    file: UploadFile = File(...),
+    principal: Principal = Depends(get_current_principal),
+):
     """
     上传标准文档（支持 txt, pdf 等）
 
     Args:
         file: 标准文档文件
+        principal: 当前登录用户（写入 created_by）
     """
     content = await file.read()
     filename = file.filename or "standard.txt"
@@ -397,11 +422,13 @@ async def upload_standard_document(file: UploadFile = File(...)):
     version = "1.0"
     name = filename.rsplit('.', 1)[0] if '.' in filename else filename
 
+    operator = principal.username if isinstance(principal, Principal) else "system"
+
     standard = standard_service.create_standard(
         name=name,
         version=version,
         content=text_content,
-        created_by="Web"
+        created_by=operator
     )
 
     return {
