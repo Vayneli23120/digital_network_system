@@ -18,6 +18,7 @@ import uuid
 import json
 
 from app.features.auth.identity import Principal, get_current_principal
+from app.features.maintenance.schemas import MaintenancePriority, MaintenanceType
 from app.shared.database import get_db
 from app.shared.dependencies import require_permission
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
@@ -130,12 +131,12 @@ class DiagnoseFaultRequest(BaseModel):
 
 class TransferToMaintenanceRequest(BaseModel):
     """转维修请求"""
-    maintenance_type: str = "corrective"  # corrective/preventive/emergency
-    description: Optional[str] = None
+    maintenance_type: MaintenanceType = "corrective"
+    description: Optional[str] = Field(default=None, max_length=100_000)
     diagnosis_text: Optional[str] = Field(default=None, max_length=10_000)
-    priority: Optional[str] = "P3"
-    maintenance_owner: Optional[str] = None  # 维修负责人，默认继承诊断负责人
-    estimated_parts: Optional[str] = None  # 预估需要的备件
+    priority: MaintenancePriority = "P3"
+    maintenance_owner: Optional[str] = Field(default=None, max_length=100)
+    estimated_parts: Optional[str] = Field(default=None, max_length=10_000)
 
 
 class ResolveFaultRequest(BaseModel):
@@ -1458,6 +1459,11 @@ async def transfer_to_maintenance(
 
     # 创建维修单 - 状态直接设为 repairing（跳过诊断，故障已诊断过）
     maint_no = f"MAINT-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
+    maintenance_description = request.description or fault.description
+    if request.estimated_parts:
+        maintenance_description = (
+            f"{maintenance_description}\n\n预估备件: {request.estimated_parts}"
+        )
 
     maintenance = MaintenanceRecord(
         maint_no=maint_no,
@@ -1465,17 +1471,13 @@ async def transfer_to_maintenance(
         device_name=fault.device_name,
         fault_id=fault_id,
         maint_type=request.maintenance_type,
-        description=request.description or fault.description,
+        description=maintenance_description,
         status="repairing",  # 直接进入维修状态（故障已诊断）
         priority=request.priority,
         current_owner=maintenance_owner,
         operator=_actor_username(principal),
         repairing_at=datetime.utcnow()  # 设置维修开始时间
     )
-
-    # 存储预估备件信息（如果有的话）
-    if request.estimated_parts:
-        maintenance.notes = f"预估备件: {request.estimated_parts}"
 
     # 复制故障的诊断内容到维修单，方便维修参考
     if request.diagnosis_text or fault.diagnosis_text:

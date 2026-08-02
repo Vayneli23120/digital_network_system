@@ -905,7 +905,16 @@ const updateMaintenanceRecord = async () => {
   if (!editForm.value.description) { ElMessage.warning(t('maintEnterDescription')); return }
   try {
     const combinedParts = [...editForm.value.spare_parts.map(p => ({ ...p, is_return: false })), ...editForm.value.return_parts.map(p => ({ ...p, is_return: true }))]
-    await updateMaintenance(maintenance.value.id, { ...editForm.value, parts_replaced: JSON.stringify(combinedParts) })
+    await updateMaintenance(maintenance.value.id, {
+      parts_replaced: JSON.stringify(combinedParts),
+      parts_cost: editForm.value.parts_cost,
+      labor_hours: editForm.value.labor_hours,
+      labor_cost: editForm.value.labor_cost,
+      vendor: editForm.value.vendor,
+      description: editForm.value.description,
+      verification_result: editForm.value.verification_result || null,
+      verification_notes: editForm.value.verification_notes
+    })
     for (const part of editForm.value.spare_parts) {
       if (!part.is_from_scan && part.part_id) {
         await createMovement({ part_id: part.part_id, movement_type: 'out', quantity: part.quantity || 1, serial_number: part.serial_number, reason: `${t('spareReasonMaintenancePartReplace')} - ${maintenance.value.maint_no}`, operator: 'Web', reference: maintenance.value.maint_no, target_device_id: maintenance.value.device_id })
@@ -1027,7 +1036,7 @@ const removeReturnPart = (index) => { editForm.value.return_parts.splice(index, 
 const handleVerifyPass = async () => {
   try {
     await ElMessageBox.confirm(t('maintVerifyConfirm'), t('msgConfirm'), { type: 'success' })
-    await api.post(`/maintenance/${maintenance.value.id}/verify-pass`, { operator: 'Web' })
+    await api.post(`/maintenance/${maintenance.value.id}/verify-pass`, {})
     ElMessage.success(t('maintVerified'))
     loadMaintenance()
   } catch (e) { if (e !== 'cancel') ElMessage.error(t('maintVerifyFailed') + ': ' + (e.response?.data?.detail || e.message)) }

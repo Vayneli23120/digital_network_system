@@ -1512,7 +1512,7 @@ const saveMaintEdit = async () => {
 const submitMaintVerification = async () => {
   try {
     await ElMessageBox.confirm(t('maintSubmitConfirm'), t('msgConfirm'), { type: 'info' })
-    await api.post(`/maintenance/${maintenanceInfo.value.id}/submit-verification`, { operator: 'Web' })
+    await api.post(`/maintenance/${maintenanceInfo.value.id}/submit-verification`, {})
     ElMessage.success(t('maintSubmitted'))
     loadMaintenanceInfo()
   } catch (e) {
@@ -1525,7 +1525,7 @@ const submitMaintVerification = async () => {
 const verifyMaintPass = async () => {
   try {
     await ElMessageBox.confirm(t('maintVerifyConfirm'), t('msgConfirm'), { type: 'success' })
-    await api.post(`/maintenance/${maintenanceInfo.value.id}/verify-pass`, { operator: 'Web' })
+    await api.post(`/maintenance/${maintenanceInfo.value.id}/verify-pass`, {})
     ElMessage.success(t('maintVerified'))
     loadMaintenanceInfo()
     // 同时刷新故障数据

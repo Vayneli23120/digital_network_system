@@ -210,6 +210,7 @@ def test_fault_actor_fields_come_from_principal(db_session, monkeypatch):
                 "maintenance_owner": "field-engineer",
                 "description": "maintenance description",
                 "diagnosis_text": "transfer diagnosis",
+                "estimated_parts": "SFP-10G x1",
             },
         )
 
@@ -219,7 +220,7 @@ def test_fault_actor_fields_come_from_principal(db_session, monkeypatch):
     ).one()
     assert maintenance.operator == writer.username
     assert maintenance.current_owner == "field-engineer"
-    assert maintenance.description == "maintenance description"
+    assert maintenance.description == "maintenance description\n\n预估备件: SFP-10G x1"
     assert maintenance.diagnosis_text == "transfer diagnosis"
 
 
@@ -260,6 +261,18 @@ def test_fault_work_note_and_pagination_are_bounded(db_session, monkeypatch):
             f"/api/faults/{fault.id}/work-note",
             json={"note": " bounded note "},
         ).status_code == 200
+        assert client.post(
+            f"/api/faults/{fault.id}/transfer-to-maintenance",
+            json={"maintenance_type": "invalid"},
+        ).status_code == 422
+        assert client.post(
+            f"/api/faults/{fault.id}/transfer-to-maintenance",
+            json={"priority": "urgent"},
+        ).status_code == 422
+        assert client.post(
+            f"/api/faults/{fault.id}/transfer-to-maintenance",
+            json={"maintenance_owner": "x" * 101},
+        ).status_code == 422
 
     with _fault_client(reader, db_session) as client:
         assert client.get("/api/faults?skip=-1").status_code == 422

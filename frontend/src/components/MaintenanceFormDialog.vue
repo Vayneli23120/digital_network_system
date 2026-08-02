@@ -404,10 +404,20 @@ const submitForm = async () => {
   submitting.value = true
   try {
     const deviceName = props.presetDeviceName || devices.value.find(d => d.id === maintForm.value.device_id)?.name || ''
+    const combinedParts = [
+      ...maintForm.value.spare_parts.map(part => ({ ...part, is_return: false })),
+      ...maintForm.value.return_parts.map(part => ({ ...part, is_return: true }))
+    ]
     const submitData = {
-      ...maintForm.value,
       device_id: props.presetDeviceId || maintForm.value.device_id,
-      device_name: deviceName
+      device_name: deviceName,
+      maint_type: maintForm.value.maint_type,
+      parts_replaced: JSON.stringify(combinedParts),
+      parts_cost: maintForm.value.parts_cost,
+      labor_hours: maintForm.value.labor_hours,
+      labor_cost: maintForm.value.labor_cost,
+      vendor: maintForm.value.vendor,
+      description: maintForm.value.description
     }
 
     if (editMode.value) {

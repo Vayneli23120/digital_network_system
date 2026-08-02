@@ -499,8 +499,8 @@ const tableRowClassName = ({ row }) => {
 const viewDetail = (row) => { router.push(`/maintenance/${row.id}`) }
 
 const ACTION_BUTTONS = {
-  'created': { action: 'diagnosing', label: '开始诊断', icon: 'Search' },
-  'diagnosing': { action: 'repairing', label: '开始维修', icon: 'Setting' },
+  'created': { action: 'repairing', label: '开始维修', icon: 'Setting' },
+  'pending': { action: 'repairing', label: '开始维修', icon: 'Setting' },
   'repairing': { action: 'verifying', label: '提交验证', icon: 'CircleCheck' },
   'verifying': { action: 'completed', label: '完成维修', icon: 'SuccessFilled' },
   'completed': { action: null, label: '查看详情', icon: 'View' },
@@ -522,7 +522,7 @@ const handleStatusAction = async (row) => {
       '状态流转确认',
       { confirmButtonText: '确认', cancelButtonText: '取消', type: 'info' }
     )
-    const result = await api.post(`/maintenance/${row.id}/auto-transition`, { status: nextAction, operator: 'Web' })
+    const result = await api.post(`/maintenance/${row.id}/auto-transition`, { status: nextAction })
     ElMessage.success(result.message || `状态已更新为 ${result.status_label}`)
     await loadMaintenances()
   } catch (e) {
@@ -531,7 +531,7 @@ const handleStatusAction = async (row) => {
 }
 
 const getNextStatusLabel = (status) => {
-  const labels = { 'diagnosing': '诊断', 'repairing': '维修', 'verifying': '验证', 'completed': '完成', 'cancelled': '取消' }
+  const labels = { 'repairing': '维修', 'verifying': '验证', 'completed': '完成', 'cancelled': '取消' }
   return labels[status] || status
 }
 
