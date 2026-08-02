@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 from app.shared.database import get_db
 from app.shared.dependencies import require_permission
 from app.shared.models import CredentialGroup
+from app.shared.time_utils import utc_iso
 from .credential_service import encrypt_password
 
 router = APIRouter(prefix="/api/credentials", tags=["credentials"])
@@ -59,8 +60,8 @@ def _to_public_dict(c: CredentialGroup) -> dict:
         # 只暴露"是否已设置"，不暴露内容
         "has_password": bool(c.password_encrypted),
         "has_enable_password": bool(c.enable_password_encrypted),
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "created_at": utc_iso(c.created_at),
+        "updated_at": utc_iso(c.updated_at),
     }
 
 

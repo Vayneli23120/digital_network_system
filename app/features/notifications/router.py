@@ -6,6 +6,7 @@ from typing import Optional
 
 from app.shared.database import get_db
 from app.shared.models import Notification
+from app.shared.time_utils import utc_iso
 from app.features.auth.identity import Principal, get_current_principal
 from app.services.system_notification import SystemNotificationService
 
@@ -26,13 +27,8 @@ async def get_notifications(
 
     items = []
     for n in notifications:
-        # Append 'Z' suffix to indicate UTC time for proper frontend timezone handling
-        created_at_iso = n.created_at.isoformat() if n.created_at else None
-        if created_at_iso and not created_at_iso.endswith('Z'):
-            created_at_iso += 'Z'
-        read_at_iso = n.read_at.isoformat() if n.read_at else None
-        if read_at_iso and not read_at_iso.endswith('Z'):
-            read_at_iso += 'Z'
+        created_at_iso = utc_iso(n.created_at)
+        read_at_iso = utc_iso(n.read_at)
 
         items.append({
             "id": n.id,
