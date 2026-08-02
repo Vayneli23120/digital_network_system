@@ -9,7 +9,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy import case
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from typing import Optional, List, Dict, Any
 from datetime import datetime, timedelta
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -20,6 +20,7 @@ import json
 from app.features.auth.identity import Principal, get_current_principal
 from app.features.maintenance.schemas import MaintenancePriority, MaintenanceType
 from app.shared.database import get_db
+from app.shared.time_utils import utc_iso
 from app.shared.dependencies import require_permission
 from app.shared.models import FaultRecord, MaintenanceRecord, Device, AIAnalysisRecord
 from app.services.fault_maintenance import (
@@ -245,21 +246,24 @@ async def list_faults(
         (FaultRecord.severity == "minor", 1),
         else_=0,
     )
-    faults = query.order_by(
+    faults = query.options(
+        selectinload(FaultRecord.device),
+        selectinload(FaultRecord.maintenance),
+    ).order_by(
         severity_rank.desc(),
         FaultRecord.created_at.desc(),
     ).offset(skip).limit(limit).all()
 
     items = []
     for f in faults:
-        device = db.query(Device).filter(Device.id == f.device_id).first()
+        # 关联已由 selectinload 批量预加载，避免逐条查询 Device/MaintenanceRecord
+        device = f.device
 
         # 获取关联维修单成本
         maintenance_cost = 0
-        if f.maintenance_id:
-            maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == f.maintenance_id).first()
-            if maintenance:
-                maintenance_cost = float(maintenance.parts_cost or 0) + float(maintenance.labor_cost or 0)
+        if f.maintenance_id and f.maintenance:
+            maintenance = f.maintenance
+            maintenance_cost = float(maintenance.parts_cost or 0) + float(maintenance.labor_cost or 0)
 
         # 计算SLA剩余时间（根据严重程度设置不同SLA时长）
         sla_hours = {"critical": 4, "major": 24, "minor": 72, "warning": 168}
@@ -304,20 +308,20 @@ async def list_faults(
             "peer_device_id": f.peer_device_id,
             "peer_if_name": f.peer_if_name,
             "event_count": f.event_count or 1,
-            "last_event_at": f.last_event_at.isoformat() if f.last_event_at else None,
+            "last_event_at": utc_iso(f.last_event_at),
             "recommendation": f.recommendation,
             "assigned_email": f.assigned_email,
             "review_required": bool(f.review_required) if f.review_required is not None else False,
-            "reviewed_at": f.reviewed_at.isoformat() if f.reviewed_at else None,
+            "reviewed_at": utc_iso(f.reviewed_at),
             "reviewed_by": f.reviewed_by,
             "false_positive": bool(f.false_positive) if f.false_positive is not None else False,
             "has_ai_analysis": f.ai_analysis_result is not None,
             "ai_recommendation": f.ai_recommendation,
             "ai_root_cause": f.ai_root_cause,
             "ai_confidence": float(f.ai_confidence) if f.ai_confidence else None,
-            "fault_time": f.fault_time.isoformat() if f.fault_time else None,
-            "created_at": f.created_at.isoformat(),
-            "updated_at": f.updated_at.isoformat() if f.updated_at else None
+            "fault_time": utc_iso(f.fault_time),
+            "created_at": utc_iso(f.created_at),
+            "updated_at": utc_iso(f.updated_at)
         })
 
     return {
