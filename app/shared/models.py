@@ -20,7 +20,7 @@ class Device(Base):
     name = Column(String(100), unique=True, nullable=False, index=True)
     ip = Column(String(50), index=True)
     model = Column(String(100))
-    serial_number = Column(String(100))
+    serial_number = Column(String(100), index=True)
     location = Column(String(200))
     role = Column(String(50), index=True)  # access, distribution, core
 
@@ -74,7 +74,7 @@ class Device(Base):
     ai_last_analyzed = Column(DateTime)  # AI最后分析时间
 
     # ===== SNMP 监控配置（接口状态/流量采集）=====
-    snmp_enabled = Column(Boolean, default=False)          # 是否启用 SNMP 采集
+    snmp_enabled = Column(Boolean, default=False, server_default='0')  # 是否启用 SNMP 采集
     snmp_version = Column(String(10), default="2c")        # SNMP 版本：2c / 3
     snmp_community = Column(String(200))                   # v2c 只读团体名（如 gyread）
     snmp_port = Column(Integer, default=161)               # SNMP 端口
@@ -151,7 +151,7 @@ class FaultRecord(Base):
     cost = Column(DECIMAL(10, 2), default=0)
     reporter = Column(String(100))
     status = Column(String(20), default="open", index=True)  # open, assigned, accepted, diagnosing, resolving, transferred, resolved, closed
-    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联的维修单
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id", ondelete="SET NULL"), nullable=True)  # 关联的维修单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     device_name = Column(String(100))
@@ -190,10 +190,10 @@ class FaultRecord(Base):
     last_event_at = Column(DateTime)                   # 最近一次事件时间
     recommendation = Column(Text)                      # 系统建议处理方案
     assigned_email = Column(String(200))               # 指派人邮箱
-    review_required = Column(Boolean, default=True)    # 是否需要管理员复核
+    review_required = Column(Boolean, default=True, server_default='1')  # 是否需要管理员复核
     reviewed_at = Column(DateTime)
     reviewed_by = Column(String(100))
-    false_positive = Column(Boolean, default=False)
+    false_positive = Column(Boolean, default=False, server_default='0')
 
     # 关系
     device = relationship("Device", back_populates="faults")
@@ -234,14 +234,14 @@ class MaintenanceRecord(Base):
     description = Column(Text)
     post_status = Column(String(50))
     operator = Column(String(100))
-    fault_id = Column(Integer, ForeignKey("fault_records.id"), nullable=True)  # 关联的故障单
+    fault_id = Column(Integer, ForeignKey("fault_records.id", ondelete="SET NULL"), nullable=True)  # 关联的故障单
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     device_name = Column(String(100))
 
     # ===== 自动化/AI增强字段 =====
-    auto_created = Column(Boolean, default=False)  # 是否由工作流自动创建
-    ai_recommended = Column(Boolean, default=False)  # 是否由AI推荐创建
+    auto_created = Column(Boolean, default=False, server_default='0')  # 是否由工作流自动创建
+    ai_recommended = Column(Boolean, default=False, server_default='0')  # 是否由AI推荐创建
 
     # ===== 状态流转系统字段 =====
     # 维修状态
@@ -268,7 +268,7 @@ class MaintenanceRecord(Base):
     # 验证信息
     verification_result = Column(String(20))  # passed, failed, partial
     verification_notes = Column(Text)  # 验证备注
-    verify_passed = Column(Boolean, default=False)  # 是否通过验证
+    verify_passed = Column(Boolean, default=False, server_default='0')  # 是否通过验证
 
     # 关系
     device = relationship("Device", back_populates="maintenances")
@@ -332,6 +332,10 @@ class DevicePhoto(Base):
 class AuditLog(Base):
     """操作审计表"""
     __tablename__ = "audit_logs"
+    __table_args__ = (
+        Index("ix_audit_logs_created_at", "created_at"),
+        Index("ix_audit_logs_operator", "operator"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     operator = Column(String(100))
@@ -768,7 +772,7 @@ class MaintenanceTask(Base):
     schedule_source = Column(String(30), default="legacy_plan", nullable=False, index=True)
     actual_date = Column(DateTime)
     status = Column(String(20), default="pending", index=True)  # pending, in_progress, completed, skipped, overdue
-    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id", ondelete="SET NULL"), nullable=True)
     notes = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -1005,8 +1009,8 @@ class DeviceInterface(Base):
     admin_status = Column(String(20), default="unknown") # up/down（区分人为 shutdown）
     speed_mbps = Column(Integer)                         # ifHighSpeed（Mbps）
     # 监控控制
-    is_uplink = Column(Boolean, default=False, index=True)  # 是否上行口
-    monitored = Column(Boolean, default=False, index=True)  # 是否纳入轮询采集
+    is_uplink = Column(Boolean, default=False, server_default='0', index=True)  # 是否上行口
+    monitored = Column(Boolean, default=False, server_default='0', index=True)  # 是否纳入轮询采集
     # 邻居发现（CDP/LLDP 自动推断的对端关联）
     peer_device_id = Column(Integer, index=True)          # 对端设备（匹配上系统内设备时）
     peer_device_name = Column(String(200))                # 对端主机名（CDP/LLDP 上报）
@@ -1150,7 +1154,7 @@ class DeviceSpareRelation(Base):
     removed_at = Column(DateTime)  # 移除时间
     removed_by = Column(String(100))  # 移除操作人
     removal_reason = Column(String(200))  # 移除原因
-    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id"), nullable=True)  # 关联维修单
+    maintenance_id = Column(Integer, ForeignKey("maintenance_records.id", ondelete="SET NULL"), nullable=True)  # 关联维修单
     notes = Column(String(500))  # 备注
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -1175,7 +1179,7 @@ class Notification(Base):
     content = Column(Text)
     reference_type = Column(String(50))  # fault/maintenance/device
     reference_id = Column(Integer)  # 关联记录ID
-    read = Column(Boolean, default=False, index=True)
+    read = Column(Boolean, default=False, server_default='0', index=True)
     read_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 

@@ -25,6 +25,11 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_table(bind, name: str) -> bool:
+    inspector = sa.inspect(bind)
+    return name in inspector.get_table_names()
+
+
 def upgrade() -> None:
     """Upgrade schema"""
     # ===== Device 表扩展字段 =====
@@ -131,39 +136,45 @@ def upgrade() -> None:
     op.create_index('ix_workflow_rules_is_active', 'workflow_rules', ['is_active'], unique=False)
 
     # ===== DeviceSpareRelation 设备-备件关系表 =====
-    op.create_table(
-        'device_spare_relations',
-        sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column('device_id', sa.Integer(), nullable=False),
-        sa.Column('spare_instance_id', sa.Integer(), nullable=True),
-        sa.Column('part_number', sa.String(100), nullable=True),
-        sa.Column('part_name', sa.String(200), nullable=True),
-        sa.Column('serial_number', sa.String(100), nullable=True),
-        sa.Column('position', sa.String(100), nullable=True),
-        sa.Column('installed_at', sa.DateTime(), nullable=False),
-        sa.Column('installed_by', sa.String(100), nullable=True),
-        sa.Column('status', sa.String(20), nullable=True, server_default='active'),
-        sa.Column('removed_at', sa.DateTime(), nullable=True),
-        sa.Column('removed_by', sa.String(100), nullable=True),
-        sa.Column('removal_reason', sa.String(200), nullable=True),
-        sa.Column('maintenance_id', sa.Integer(), nullable=True),
-        sa.Column('notes', sa.String(500), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
-        sa.Column('updated_at', sa.DateTime(), nullable=True, onupdate=sa.text('CURRENT_TIMESTAMP')),
-        sa.ForeignKeyConstraint(['device_id'], ['devices.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['spare_instance_id'], ['spare_part_instances.id'], ondelete='SET NULL'),
-        sa.ForeignKeyConstraint(['maintenance_id'], ['maintenance_records.id'], ondelete='SET NULL'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index('ix_device_spare_relations_device_id', 'device_spare_relations', ['device_id'], unique=False)
-    op.create_index('ix_device_spare_relations_spare_instance_id', 'device_spare_relations', ['spare_instance_id'], unique=False)
-    op.create_index('ix_device_spare_relations_status', 'device_spare_relations', ['status'], unique=False)
+    # spare_part_instances 不在本迁移链中创建（由后续基线迁移统一建表），
+    # 全新库上该表尚不存在，FK 引用会报 `relation does not exist`，此处跳过。
+    bind = op.get_bind()
+    if _has_table(bind, 'spare_part_instances'):
+        op.create_table(
+            'device_spare_relations',
+            sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+            sa.Column('device_id', sa.Integer(), nullable=False),
+            sa.Column('spare_instance_id', sa.Integer(), nullable=True),
+            sa.Column('part_number', sa.String(100), nullable=True),
+            sa.Column('part_name', sa.String(200), nullable=True),
+            sa.Column('serial_number', sa.String(100), nullable=True),
+            sa.Column('position', sa.String(100), nullable=True),
+            sa.Column('installed_at', sa.DateTime(), nullable=False),
+            sa.Column('installed_by', sa.String(100), nullable=True),
+            sa.Column('status', sa.String(20), nullable=True, server_default='active'),
+            sa.Column('removed_at', sa.DateTime(), nullable=True),
+            sa.Column('removed_by', sa.String(100), nullable=True),
+            sa.Column('removal_reason', sa.String(200), nullable=True),
+            sa.Column('maintenance_id', sa.Integer(), nullable=True),
+            sa.Column('notes', sa.String(500), nullable=True),
+            sa.Column('created_at', sa.DateTime(), nullable=True, server_default=sa.text('CURRENT_TIMESTAMP')),
+            sa.Column('updated_at', sa.DateTime(), nullable=True, onupdate=sa.text('CURRENT_TIMESTAMP')),
+            sa.ForeignKeyConstraint(['device_id'], ['devices.id'], ondelete='CASCADE'),
+            sa.ForeignKeyConstraint(['spare_instance_id'], ['spare_part_instances.id'], ondelete='SET NULL'),
+            sa.ForeignKeyConstraint(['maintenance_id'], ['maintenance_records.id'], ondelete='SET NULL'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index('ix_device_spare_relations_device_id', 'device_spare_relations', ['device_id'], unique=False)
+        op.create_index('ix_device_spare_relations_spare_instance_id', 'device_spare_relations', ['spare_instance_id'], unique=False)
+        op.create_index('ix_device_spare_relations_status', 'device_spare_relations', ['status'], unique=False)
 
 
 def downgrade() -> None:
     """Downgrade schema"""
     # 删除新表
-    op.drop_table('device_spare_relations')
+    bind = op.get_bind()
+    if _has_table(bind, 'device_spare_relations'):
+        op.drop_table('device_spare_relations')
     op.drop_table('workflow_rules')
     op.drop_table('ai_analysis_records')
     op.drop_table('device_health_scores')

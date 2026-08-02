@@ -11,6 +11,7 @@ from alembic import context
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app.shared.models import Base  # noqa: E402
+from app.shared.models_jobs import Job  # noqa: E402, F401  # 注册 jobs 表进 metadata
 
 # Alembic Config
 config = context.config

@@ -16,8 +16,18 @@ branch_labels = None
 depends_on = None
 
 
+def _has_table(bind, name: str) -> bool:
+    inspector = sa.inspect(bind)
+    return name in inspector.get_table_names()
+
+
 def upgrade():
-    # Add cable_id column to topo_edges
+    # Add cable_id column to topo_edges。
+    # topo_edges 不在本迁移链中创建（由后续基线迁移统一建表），
+    # 全新库上该表尚不存在，跳过以免 `relation does not exist`。
+    bind = op.get_bind()
+    if not _has_table(bind, 'topo_edges'):
+        return
     op.add_column('topo_edges', sa.Column('cable_id', sa.Integer(), nullable=True))
     op.create_index('ix_topo_edges_cable_id', 'topo_edges', ['cable_id'], unique=False)
 
@@ -26,6 +36,9 @@ def upgrade():
 
 
 def downgrade():
+    bind = op.get_bind()
+    if not _has_table(bind, 'topo_edges'):
+        return
     # Remove cable_no column
     op.drop_column('topo_edges', 'cable_no')
 

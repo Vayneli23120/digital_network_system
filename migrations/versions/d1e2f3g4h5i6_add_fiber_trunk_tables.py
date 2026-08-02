@@ -20,6 +20,11 @@ branch_labels = None
 depends_on = None
 
 
+def _has_table(bind, name: str) -> bool:
+    inspector = sa.inspect(bind)
+    return name in inspector.get_table_names()
+
+
 def upgrade():
     # 创建 fiber_trunk_links 表
     op.create_table(
@@ -56,31 +61,35 @@ def upgrade():
     )
     op.create_index('ix_fiber_branch_points_trunk_link_id', 'fiber_branch_points', ['trunk_link_id'])
 
-    # DeviceLink 表新增字段
-    op.add_column('device_links', sa.Column('branch_point_id', sa.Integer(), nullable=True))
-    op.add_column('device_links', sa.Column('logical_uplink_device_id', sa.Integer(), nullable=True))
-    op.create_index('ix_device_links_branch_point_id', 'device_links', ['branch_point_id'])
-    op.create_foreign_key(
-        'fk_device_links_branch_point_id',
-        'device_links', 'fiber_branch_points',
-        ['branch_point_id'], ['id'],
-        ondelete='SET NULL'
-    )
-    op.create_foreign_key(
-        'fk_device_links_logical_uplink',
-        'device_links', 'devices',
-        ['logical_uplink_device_id'], ['id'],
-        ondelete='SET NULL'
-    )
+    # DeviceLink 表新增字段（device_links 不在本迁移链中创建，全新库上跳过）
+    bind = op.get_bind()
+    if _has_table(bind, 'device_links'):
+        op.add_column('device_links', sa.Column('branch_point_id', sa.Integer(), nullable=True))
+        op.add_column('device_links', sa.Column('logical_uplink_device_id', sa.Integer(), nullable=True))
+        op.create_index('ix_device_links_branch_point_id', 'device_links', ['branch_point_id'])
+        op.create_foreign_key(
+            'fk_device_links_branch_point_id',
+            'device_links', 'fiber_branch_points',
+            ['branch_point_id'], ['id'],
+            ondelete='SET NULL'
+        )
+        op.create_foreign_key(
+            'fk_device_links_logical_uplink',
+            'device_links', 'devices',
+            ['logical_uplink_device_id'], ['id'],
+            ondelete='SET NULL'
+        )
 
 
 def downgrade():
     # 删除 DeviceLink 新增字段
-    op.drop_constraint('fk_device_links_logical_uplink', 'device_links', type_='foreignkey')
-    op.drop_constraint('fk_device_links_branch_point_id', 'device_links', type_='foreignkey')
-    op.drop_index('ix_device_links_branch_point_id', 'device_links')
-    op.drop_column('device_links', 'logical_uplink_device_id')
-    op.drop_column('device_links', 'branch_point_id')
+    bind = op.get_bind()
+    if _has_table(bind, 'device_links'):
+        op.drop_constraint('fk_device_links_logical_uplink', 'device_links', type_='foreignkey')
+        op.drop_constraint('fk_device_links_branch_point_id', 'device_links', type_='foreignkey')
+        op.drop_index('ix_device_links_branch_point_id', 'device_links')
+        op.drop_column('device_links', 'logical_uplink_device_id')
+        op.drop_column('device_links', 'branch_point_id')
 
     # 删除 fiber_branch_points 表
     op.drop_index('ix_fiber_branch_points_trunk_link_id', 'fiber_branch_points')

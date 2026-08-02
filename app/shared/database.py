@@ -16,6 +16,7 @@ from typing import Generator
 from loguru import logger
 
 from app.shared.models import Base
+from app.shared.models_jobs import Job  # noqa: F401  # 注册 jobs 表进 Base.metadata
 
 
 class DatabaseManager:
@@ -32,6 +33,7 @@ class DatabaseManager:
         pool_size: int = 5,
         max_overflow: int = 10,
         pool_recycle: int = 1800,
+        pool_timeout: int = 30,
         echo: bool = False
     ):
         self.db_url = db_url
@@ -75,6 +77,7 @@ class DatabaseManager:
                 max_overflow=max_overflow,
                 pool_recycle=pool_recycle,
                 pool_pre_ping=True,  # 连接健康检查
+                pool_timeout=pool_timeout,  # 等待池连接超时
                 echo=echo,
             )
 
@@ -91,8 +94,33 @@ class DatabaseManager:
         logger.info(f"数据库引擎初始化完成: {db_type} -> {describe_db_url(sync_url)}")
 
     def init_db(self):
-        """初始化数据库，创建所有表"""
-        Base.metadata.create_all(bind=self.engine)
+        """初始化数据库
+
+        - SQLite（测试/开发）：保留 create_all 兜底建表。
+        - PostgreSQL（生产）：alembic 是唯一 schema 权威源，启动时不 create_all；
+          校验 `alembic_version` 已到达期望 head，未到达则 fail-fast 并提示先执行
+          `alembic upgrade head`，避免「代码假设的 schema」与「库实际 schema」漂移。
+        """
+        if self.is_sqlite:
+            Base.metadata.create_all(bind=self.engine)
+            return
+
+        from sqlalchemy import inspect as sa_inspect, text as sa_text
+        insp = sa_inspect(self.engine)
+        if 'alembic_version' not in insp.get_table_names():
+            raise RuntimeError(
+                "PostgreSQL 库缺少 alembic_version 表：数据库 schema 未经 alembic 管理。"
+                "请先执行: alembic upgrade head"
+            )
+        with self.engine.connect() as conn:
+            version_num = conn.execute(
+                sa_text("SELECT version_num FROM alembic_version")
+            ).scalar()
+        if version_num != EXPECTED_ALEMBIC_HEAD:
+            raise RuntimeError(
+                f"数据库 schema 未到达期望 head（{EXPECTED_ALEMBIC_HEAD}），当前 {version_num!r}。"
+                "请先执行: alembic upgrade head"
+            )
 
     def get_session(self) -> Session:
         """获取数据库 Session"""
@@ -112,6 +140,11 @@ class DatabaseManager:
             session.close()
 
 
+# 期望的 alembic head revision（与 migrations/versions 链保持同步；
+# 每次新增迁移后更新为最新 head）
+EXPECTED_ALEMBIC_HEAD = '5d16fa030a9a'
+
+
 # 全局数据库实例
 _db_manager: DatabaseManager | None = None
 
@@ -127,6 +160,7 @@ def get_db_manager() -> DatabaseManager:
             pool_size=config.database.pool_size,
             max_overflow=config.database.max_overflow,
             pool_recycle=config.database.pool_recycle,
+            pool_timeout=config.database.pool_timeout,
             echo=config.database.echo,
         )
     return _db_manager

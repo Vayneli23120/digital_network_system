@@ -17,8 +17,18 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
+def _has_table(bind, name: str) -> bool:
+    inspector = sa.inspect(bind)
+    return name in inspector.get_table_names()
+
+
 def upgrade() -> None:
     """Upgrade schema."""
+    # device_interfaces 不在本迁移链中创建（由后续基线迁移统一建表），
+    # 全新库上该表尚不存在，跳过以免 `relation does not exist`。
+    bind = op.get_bind()
+    if not _has_table(bind, 'device_interfaces'):
+        return
     op.add_column('device_interfaces', sa.Column('peer_device_id', sa.Integer(), nullable=True))
     op.add_column('device_interfaces', sa.Column('peer_device_name', sa.String(length=200), nullable=True))
     op.add_column('device_interfaces', sa.Column('peer_ip', sa.String(length=64), nullable=True))
@@ -30,6 +40,9 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
+    bind = op.get_bind()
+    if not _has_table(bind, 'device_interfaces'):
+        return
     op.drop_index(op.f('ix_device_interfaces_peer_device_id'), table_name='device_interfaces')
     op.drop_column('device_interfaces', 'neighbor_updated_at')
     op.drop_column('device_interfaces', 'neighbor_source')
