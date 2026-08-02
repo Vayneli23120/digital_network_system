@@ -317,19 +317,19 @@
         <div class="form-section">
           <el-form-item :label="t('complianceAIProvider')">
             <el-select v-model="aiConfigForm.provider" style="width: 100%" @change="onProviderChange">
-              <el-option-group label="🌐 官方 API">
-                <el-option value="openai" label="OpenAI (GPT-4, GPT-3.5)" />
-                <el-option value="anthropic" label="Anthropic (Claude, Kimi)" />
+              <el-option-group :label="t('complianceAIProviderGroupOfficial')">
+                <el-option value="openai" :label="t('complianceAIProviderOpenAI')" />
+                <el-option value="anthropic" :label="t('complianceAIProviderAnthropic')" />
                 <el-option value="groq" label="Groq API" />
                 <el-option value="deepseek" label="DeepSeek" />
                 <el-option value="cohere" label="Cohere" />
               </el-option-group>
-              <el-option-group label="💻 本地/自托管">
-                <el-option value="ollama" label="Ollama (本地模型)" />
-                <el-option value="llmstudio" label="LM Studio (本地模型)" />
-                <el-option value="local" label="本地 OpenAI 兼容端点" />
+              <el-option-group :label="t('complianceAIProviderGroupLocal')">
+                <el-option value="ollama" :label="t('complianceAIProviderOllama')" />
+                <el-option value="llmstudio" :label="t('complianceAIProviderLMStudio')" />
+                <el-option value="local" :label="t('complianceAIProviderLocal')" />
               </el-option-group>
-              <el-option-group label="☁️ 其他云服务">
+              <el-option-group :label="t('complianceAIProviderGroupCloud')">
                 <el-option value="azure" label="Azure OpenAI" />
                 <el-option value="together" label="Together AI" />
                 <el-option value="replicate" label="Replicate" />
@@ -344,7 +344,7 @@
               :placeholder="apiKeyPlaceholder" 
             />
             <div v-if="!isApiKeyRequired" class="form-hint">
-              {{ t('complianceAIApiKeyOptional') || '此提供商可选' }}
+              {{ t('complianceAIApiKeyOptional') }}
             </div>
           </el-form-item>
           <el-form-item :label="t('complianceAIBaseUrl')">
@@ -982,15 +982,15 @@ const getBaseUrlPlaceholder = () => {
     groq: 'https://api.groq.com/openai/v1 (官方 API，通常不需要)',
     deepseek: 'https://api.deepseek.com/v1 (官方 API，通常不需要)',
     cohere: 'https://api.cohere.com/v1 (官方 API，通常不需要)',
-    ollama: 'http://localhost:11434/v1 (本地 Ollama)',
-    llmstudio: 'http://localhost:1234/v1 (LM Studio 默认端口)',
-    lmstudio: 'http://localhost:1234/v1 (LM Studio 默认端口)',
+    ollama: t('compliancePhOllama'),
+    llmstudio: t('compliancePhLlmStudio'),
+    lmstudio: t('compliancePhLlmStudio'),
     local: 'http://localhost:8000/v1 (vLLM / text-generation-webui)',
-    azure: 'https://{resource-name}.openai.azure.com/ (Azure 资源)',
-    together: 'https://api.together.xyz/v1 (官方 API，通常不需要)',
-    replicate: 'https://api.replicate.com/v1 (官方 API，通常不需要)',
+    azure: t('compliancePhAzure'),
+    together: t('compliancePhTogether'),
+    replicate: t('compliancePhReplicate'),
   }
-  return placeholders[provider] || 'API Base URL (仅本地模型和自定义端点需要填写)'
+  return placeholders[provider] || t('complianceAIBaseUrlFallback')
 }
 
 // 根据提供商返回 Base URL 的提示
@@ -1000,11 +1000,11 @@ const getBaseUrlHint = () => {
   const cloudProviders = ['openai', 'anthropic', 'groq', 'deepseek', 'cohere', 'together', 'replicate', 'cohere']
   
   if (localProviders.includes(provider)) {
-    return '✓ 本地模型：必须填写本地端点 URL'
+    return t('complianceAIHintLocalModel')
   } else if (provider === 'azure') {
-    return '⚠ Azure：必须填写 Azure 资源 URL'
+    return t('complianceAIHintAzure')
   }
-  return '💡 官方 API：通常可留空（使用默认 URL）'
+  return t('complianceAIHintOfficial')
 }
 
 // 判断 API Key 是否必需
@@ -1018,9 +1018,9 @@ const isApiKeyRequired = computed(() => {
 const apiKeyPlaceholder = computed(() => {
   const provider = aiConfigForm.provider
   if (provider === 'ollama') {
-    return '可选（本地 Ollama 通常不需要）'
+    return t('complianceAIApiKeyOptionalPlaceholder')
   }
-  return '输入 API Key'
+  return t('complianceAIApiKeyInput')
 })
 
 // Provider 变化时的回调
