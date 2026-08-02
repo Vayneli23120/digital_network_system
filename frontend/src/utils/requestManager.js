@@ -4,9 +4,6 @@ import { ElMessage } from 'element-plus'
 // 存储正在进行的请求控制器
 const pendingRequests = new Map()
 
-// 请求去重存储
-const requestCache = new Map()
-
 /**
  * 生成请求唯一标识
  */
@@ -102,6 +99,11 @@ export async function withRetry(fn, options = {}) {
         throw error
       }
 
+      // 调用方策略明确不重试，直接抛出
+      if (shouldRetry(error) === false) {
+        throw error
+      }
+
       // 最后一次尝试失败，抛出错误
       if (i === retries) {
         throw error
@@ -150,13 +152,3 @@ export function showNetworkError(error) {
     return
   }
 }
-
-// 清理过期的请求缓存
-setInterval(() => {
-  const now = Date.now()
-  for (const [key, { timestamp }] of requestCache.entries()) {
-    if (now - timestamp > 5000) { // 5秒后清理
-      requestCache.delete(key)
-    }
-  }
-}, 10000)

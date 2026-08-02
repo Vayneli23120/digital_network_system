@@ -46,7 +46,7 @@ const SSH_ERROR_MAP_ZH = {
 
 // 翻译 SSH 错误信息
 function translateSSHError(message) {
-  const language = localStorage.getItem('language') || 'zh'
+  const language = localStorage.getItem('lang') || 'zh'
   if (language !== 'zh') return message  // 英文模式下不翻译
 
   // 检查是否包含 SSH 相关错误
@@ -73,13 +73,19 @@ function attachAuthToken(config) {
   return config
 }
 
+// 401 去重守卫：并发多个 401 只弹一次提示、只触发一次跳转
+let isRedirectingToLogin = false
+
 function handleAuthFailure(error) {
   if (error.response?.status === 401) {
-    ElMessage.error('登录已过期，请重新登录')
-    localStorage.removeItem('accessToken')
-    localStorage.removeItem('isLoggedIn')
-    localStorage.removeItem('currentUser')
-    window.location.href = '/login'
+    if (!isRedirectingToLogin) {
+      isRedirectingToLogin = true
+      ElMessage.error('登录已过期，请重新登录')
+      localStorage.removeItem('accessToken')
+      localStorage.removeItem('isLoggedIn')
+      localStorage.removeItem('currentUser')
+      window.location.href = '/login'
+    }
   }
   return Promise.reject(error)
 }
@@ -91,11 +97,13 @@ authenticatedAxios.interceptors.response.use(response => response, handleAuthFai
 api.interceptors.request.use(config => {
   attachAuthToken(config)
 
-  // 为 GET 请求自动取消之前的相同请求
-  if (config.method?.toLowerCase() === 'get') {
-    cancelPreviousRequest(config)
-    const controller = createRequestController(config)
-    config.signal = controller.signal
+  // 为 GET 请求自动取消之前的相同请求。
+  // 逃生口：调用方传 config.noAutoCancel=true 关闭；已自带 config.signal 时不覆盖。
+  if (config.method?.toLowerCase() === 'get' && config.noAutoCancel !== true) {
+    if (!config.signal) {
+      cancelPreviousRequest(config)
+      config.signal = createRequestController(config).signal
+    }
   }
 
   return config
@@ -138,7 +146,9 @@ api.interceptors.response.use(
   }
 )
 
-// 包装 API 方法，添加自动重试
+// 包装 API 方法，添加自动重试。
+// 写操作（post/put/patch/delete）默认不重试：非幂等请求在超时后重发可能重复
+// 下发（部署、入库），要重试请显式传 retries 覆盖。
 export const apiWithRetry = {
   async get(url, config = {}) {
     return withRetry(() => api.get(url, config), {
@@ -153,30 +163,30 @@ export const apiWithRetry = {
     })
   },
 
-  async post(url, data, config = {}) {
+  async post(url, data, config = {}, retries = 0) {
     return withRetry(() => api.post(url, data, config), {
-      retries: 1,
+      retries,
       delay: 500
     })
   },
 
-  async put(url, data, config = {}) {
+  async put(url, data, config = {}, retries = 0) {
     return withRetry(() => api.put(url, data, config), {
-      retries: 1,
+      retries,
       delay: 500
     })
   },
 
-  async patch(url, data, config = {}) {
+  async patch(url, data, config = {}, retries = 0) {
     return withRetry(() => api.patch(url, data, config), {
-      retries: 1,
+      retries,
       delay: 500
     })
   },
 
-  async delete(url, config = {}) {
+  async delete(url, config = {}, retries = 0) {
     return withRetry(() => api.delete(url, config), {
-      retries: 1,
+      retries,
       delay: 500
     })
   }
