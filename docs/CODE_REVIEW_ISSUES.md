@@ -820,8 +820,10 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `faults/router.py:217,222` — 列表接口每条故障各查一次 Device 和 MaintenanceRecord（limit=100 → 约 200 次额外查询）。`[已复核]`
 - [x] **P1** `spare_parts/router.py:334`（出库）/ `:258`（入库）— 仅按 `serial_number` 定位实例，未约束 `part_id`，可把 B 备件实例按 A 备件出库，两个 `quantity_in_stock` 同时写错。`[代码已修复，待服务器验证]`
   → 修复（步骤 4E-C1）：所有实例查询同时约束 part_id+serial 并在库存变更前校验归属/状态；serial 操作强制 quantity=1，聚合库存与实例状态同步。未跑行为/并发测试，验收见 C1 服务器清单。
-- [ ] **P1** `planned_maintenance` 任务完成与备件出入库由浏览器分成多次请求：后端先 commit completed，前端再逐条调用 spare movement；中途失败会留下“任务已完成但库存只更新一部分”。`[已复核]`
-  → 4E-B3 仅完成权限、身份与输入边界；后续应把任务完成与全部库存动作合并为一个服务端事务，不能继续由前端编排。
+- [x] **P1** `planned_maintenance` 任务完成与备件出入库由浏览器分成多次请求：后端先 commit completed，前端再逐条调用 spare movement；中途失败会留下“任务已完成但库存只更新一部分”。`[已复核]`
+  → 修复（步骤 4E-C1）：spare movements 折入 `complete_task`/`update_maintenance` 主记录单事务，新增
+  `POST /api/spare-movements/batch`，任一条失败整批回滚；前端四个视图改为单次请求携带 `spare_movements`，
+  不再由前端逐条编排。真实服务器 22/22 PASS，见 4E-C1 清单第 9 项。
 - [ ] **P1** `deploy/router.py:1143` — `window_id.split('_')[1]` 缺参数即异常；该接口返回 success 但**不创建任何定时任务**（注释自承"简化处理"）。`[已复核]`
 - [ ] **P1** `tasks/backup_tasks.py:139` — 批量任务伪造子 Job ID `f"{job_id}-{i}"`，Job 表无对应记录 → 子任务全部 "Job not found"。`[已复核]`
 - [x] **P1** `backups/router.py:78,328` — `status=result["success"] if ... else "failed"` 把布尔 `True` 写进 String 状态列。`[已复核]`
