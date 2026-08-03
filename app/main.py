@@ -9,7 +9,6 @@ Network Automation System - FastAPI 主程序
 - 健康检查 / 优雅关闭
 """
 
-import signal
 import sys
 import uuid
 from typing import Optional
@@ -84,11 +83,13 @@ app.add_middleware(
     expose_headers=["X-RateLimit-Limit", "X-RateLimit-Remaining", "X-Request-ID"],
 )
 
+# 限流先注册（后注册者在外层）：入站先认证后限流，
+# 使 RateLimitMiddleware 能读取 scope["state"]["user_id"] 按用户限流。
+app.add_middleware(RateLimitMiddleware)
+
 # 始终注册：认证关闭但未显式开启 debug 时也必须拒绝受保护请求，
 # 避免配置遗漏导致整套 API 静默裸奔。
 app.middleware("http")(auth_middleware)
-
-app.add_middleware(RateLimitMiddleware)
 
 
 @app.middleware("http")
@@ -459,11 +460,15 @@ async def startup_event():
 
 # ============ 优雅关闭 ============
 
+# uvicorn 收到 SIGTERM/SIGINT 均触发 lifespan shutdown 事件，
+# 覆盖 python app/main.py（uvicorn.run）与 python -m uvicorn 两条启动路径。
+# 不再用模块级 signal.signal（会被 uvicorn 自身 handler 覆盖，注册无效）。
 
-def handle_shutdown(signum, frame):
-    """处理 SIGTERM/SIGINT 信号"""
-    sig_name = signal.Signals(signum).name
-    logger.info(f"收到 {sig_name} 信号，开始优雅关闭...")
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """应用关闭时执行（优雅清理后台服务/连接池/缓存）"""
+    logger.info("开始优雅关闭...")
 
     # 停止可达性监控服务
     try:
@@ -501,10 +506,6 @@ def handle_shutdown(signum, frame):
     except Exception as e:
         logger.error(f"清空缓存失败: {e}")
     logger.info("优雅关闭完成")
-
-
-signal.signal(signal.SIGTERM, handle_shutdown)
-signal.signal(signal.SIGINT, handle_shutdown)
 
 
 if __name__ == "__main__":

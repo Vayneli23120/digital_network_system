@@ -11,6 +11,7 @@ Prometheus 连接器 — 替代自定义 SNMP 轮询
 import logging
 import math
 import os
+import threading
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -74,6 +75,7 @@ class PrometheusConnector:
         self._running = False
         self._scheduler = BackgroundScheduler()
         self._last_counters: Dict[str, Dict[int, Dict[str, int | float]]] = {}
+        self._counters_lock = threading.Lock()
         self._last_metric_sample_at: Dict[int, datetime] = {}
         self._metric_sample_interval = max(1, metric_sample_interval)
         self._metric_retention_days = max(1, metric_retention_days)
@@ -241,7 +243,8 @@ class PrometheusConnector:
                 iface.last_out_octets = curr_out
                 iface.last_sample_at = now
 
-                prev = self._last_counters.get(device_key, {}).get(if_idx)
+                with self._counters_lock:
+                    prev = self._last_counters.get(device_key, {}).get(if_idx)
                 if prev is not None:
                     dt = now.timestamp() - prev["ts"]
                     if dt > 0:
@@ -276,11 +279,12 @@ class PrometheusConnector:
                                 ))
 
                 # 保存当前计数器供下次计算
-                self._last_counters.setdefault(device_key, {})[if_idx] = {
-                    "in": curr_in,
-                    "out": curr_out,
-                    "ts": now.timestamp(),
-                }
+                with self._counters_lock:
+                    self._last_counters.setdefault(device_key, {})[if_idx] = {
+                        "in": curr_in,
+                        "out": curr_out,
+                        "ts": now.timestamp(),
+                    }
 
             # oper_status 变化记录（TODO: 后续可接入 WebSocket 推送 / 故障工单）
             if old_oper and old_oper != new_oper and new_oper in ("up", "down"):
@@ -501,14 +505,16 @@ class PrometheusConnector:
     def start(self):
         if self._running:
             return
-        # 启动后立即执行一次，避免等到下一个调度周期
-        self.poll_once()
+        # 轮询 job 设 next_run_time 立即首跑（不阻塞启动），max_instances/coalesce 防重叠
         self._scheduler.add_job(
             self.poll_once,
             trigger=IntervalTrigger(seconds=POLL_INTERVAL),
             id="prometheus_connector_poll",
             name="Prometheus SNMP connector",
             replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+            next_run_time=datetime.now(),
         )
         self._scheduler.add_job(
             self.cleanup_old_metric_samples,

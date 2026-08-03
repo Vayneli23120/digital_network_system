@@ -220,6 +220,9 @@ class TrapReceiver:
             except OSError:
                 pass
             self._sock = None
+        # join 接收线程：_serve 在 sock=None 时自然退出，不阻塞超时
+        if self._thread and self._thread.is_alive():
+            self._thread.join(timeout=2.0)
         logger.info("SNMP Trap 接收器已停止")
 
     def diagnostics(self) -> Dict[str, Any]:
