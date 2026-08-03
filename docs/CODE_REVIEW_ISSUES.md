@@ -1191,9 +1191,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 已完成：新增 `ruff.toml`（门禁规则 F821/F822/F823/F811/F632/E9，刻意不启用 E712 因为 SQLAlchemy 的 `filter(Column == True)` 是必要写法），`requirements.txt` 钉 `ruff==0.16.0`，并用 `tests/test_batch1_regressions.py::test_ruff_static_analysis_is_clean` 把门禁接进测试
   → 未纳入门禁的技术债：F401 未使用导入约 200 处、F841 未使用局部变量约 20 处（其中少数指向真实死逻辑，如 `deploy/router.py:1140` 的 `deploy_data`）
 - [ ] **P1** 测试覆盖结构性偏斜：38 个测试文件 / 430 个用例，`pytest --collect-only` 干净通过，但全部集中在 service 层；router、streaming service、celery task 三条链路零覆盖，正是批次一全部故障的所在。`[已复核]`
-- [ ] **P0**（执行中新发现）`tests/test_console_service.py` 会**挂起**（collect 17 项后无进展，>45s 无输出），导致 `pytest` 全量跑不完 —— 该文件之后的用例长期从未执行过。原因指向 console 服务的同步串口 IO（批次三 3.1）。当前 CI 需先 `--ignore=tests/test_console_service.py` 才能拿到完整结果。`[已复核]`
-- [ ] **P1** `core/celery_app.py:36-48` + `tasks/__init__.py:30` — 任务路由指向三个空占位模块，全局无 `beat_schedule`；`tasks/__init__.py` 在导入时写磁盘生成占位文件。`[已复核]`
-- [ ] **P1** `frontend/npm ci` 在当前网络下失败（`SELF_SIGNED_CERT_IN_CHAIN`，registry 指向 npmmirror）→ 前端无法构建验证。需决定：配置企业 CA 证书，或改用内网镜像。`[已复核]`
+- [x] **P0**（执行中新发现）`tests/test_console_service.py` 会**挂起**（collect 17 项后无进展，>45s 无输出），导致 `pytest` 全量跑不完 —— 该文件之后的用例长期从未执行过。原因指向 console 服务的同步串口 IO（批次三 3.1）。当前 CI 需先 `--ignore=tests/test_console_service.py` 才能拿到完整结果。`[已复核]` `[已修复]`
+  → 修复（批次六切片 A）：真因不在 service 而在测试自身——① 9 处 `patch` 目标仍是旧路径 `app.services.console_service`（`app/services/console_service.py` 已删，代码在 `app/features/console/console_service.py`），4 个用例 fast-fail（AttributeError）；② `test_send_command_success` 把 `mock_serial.in_waiting = 20` 设为常量，`send_command` 的 `while in_waiting:` 读循环永不耗尽 → 死循环挂死（非 collect 挂起）。修复：9 处 patch 路径改 `app.features.console.console_service`；`in_waiting` 改 `type(mock_serial).in_waiting = PropertyMock(side_effect=[20, 20, 0])` 模拟耗尽。17/17 通过，全量 pytest 不再需要 `--ignore`。
+- [x] **P1** `core/celery_app.py:36-48` + `tasks/__init__.py:30` — 任务路由指向三个空占位模块，全局无 `beat_schedule`；`tasks/__init__.py` 在导入时写磁盘生成占位文件。`[已复核]` `[已修复]`
+  → 修复（批次六切片 A）：`tasks/__init__.py` 导入期写占位文件的副作用已先期消除（当前为纯 docstring + `__all__`，占位模块是仓库真实文件）。本切片清掉残留悬挂 route `"app.tasks.discovery_tasks.*": {"queue": "device_ops"}`（`app/tasks/discovery_tasks.py` 不存在，路由永不命中属死配置）；`celery_app` 导入验证通过、routes 归一为 5 个真实模块。`notification_tasks`/`scheduled_tasks` 空占位与全局无 `beat_schedule` 保留——属「功能未实现」而非缺陷，见下方实测。
+- [x] **P1** `frontend/npm ci` 在当前网络下失败（`SELF_SIGNED_CERT_IN_CHAIN`，registry 指向 npmmirror）→ 前端无法构建验证。需决定：配置企业 CA 证书，或改用内网镜像。`[已复核]` `[已验证]`
+  → 已随网络/镜像状态变化解决（批次六切片 A）：真实 `npm ci` 98 包 6s 成功（`--dry-run` 3s 先行确认 registry 可达），随后 `npm run build` 18.54s、`validate:locales` 3212/3212 全过，前端构建验证链恢复。无需再配置企业 CA 或改镜像。
 - [ ] **P2** `frontend-react/`（17 文件、5 个页面骨架、独立 vite/tsconfig）是停滞的并行重写，构成第二套事实标准，建议归档或删除。`[已复核]`
 - [ ] **P2** `backend/`（22 文件）已在 `README_ARCHIVED.md` 中标注"自 2026-06-05 废弃、不可运行"，但仍在仓库内，建议删除或移出。`[已复核]`
 - [ ] **P2** `frontend/src/locales/index.js.backup`（2277 行）留在 `src/` 内，会被 vite 扫描。`[已复核]`
@@ -1205,6 +1208,28 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P2** 裸 `except:` 静默降级：`compliance/compliance_service.py:279`、`faults/router.py:335`、`discovery/discovery_service.py:130`、`shared/models.py:207`、`deploy/router.py:907`。`[已复核]`
 - [x] **P2** `maintenance/router.py:735,807` — `""` 与 `"/"` 双装饰器重复注册同一处理器。`[已复核]`
   → 修复（步骤 4E-B2）：仅保留 canonical collection 路由，回归测试确认 GET/POST 各注册一次。
+
+### 批次六 · 切片 A · Linux 实测（2026-08-03）
+
+验证（HEAD `b57da61` → 切片 A 后）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `pytest tests/test_console_service.py -q` | ✅ **17 passed**（0.83s，不再挂起） |
+| `pytest tests/test_batch1_regressions.py -q` | ✅ 15 passed |
+| 全量 `pytest -q`（**不再 --ignore**） | ✅ **53 failed / 642 passed / 4 skipped / 0 errors**，失败集合与批次七基线逐条一致 |
+| `ruff check app tests scripts migrations` | ✅ All checks passed |
+| `frontend/npm ci` | ✅ 98 包 6s（真实安装），1196 已随网络状态解决 |
+| `frontend/npm run build` | ✅ 18.54s |
+| `frontend/npm run validate:locales` | ✅ 3212 zh / 3212 en，0 违规 |
+| `celery_app` 导入 | ✅ routes 归一为 5 个真实模块，无悬挂 |
+
+修复说明：
+- **1194 真因**：非 console service 阻塞（批次三 3.1 已线程化），而是测试自身两处缺陷——9 处 `patch` 旧路径 `app.services.console_service`（`app/services/console_service.py` 已删）→ 4 个用例 AttributeError fast-fail；`test_send_command_success` 的 `mock_serial.in_waiting` 常量 20 使 `send_command` 的 `while in_waiting:` 读循环永不耗尽 → 死循环。修 `app.features.console.console_service` 路径 + `PropertyMock(side_effect=[20, 20, 0])`。
+- **1195**：导入期写盘副作用先期已除；本切片清掉 `discovery_tasks` 悬挂 route（模块不存在）。`notification_tasks`/`scheduled_tasks` 空占位与无 `beat_schedule` 是「功能未实现」现状（定时任务未接入），非缺陷，保留。
+- **1196**：`npm ci --dry-run` 3s 确认 registry 可达 → 真实 `npm ci` 98 包 6s → build + validate 全过，前端构建验证链恢复，无需 CA/镜像决策。
+- **批次五遗留修复**：全量 pytest 暴出 2 个过期前端源码断言——`test_deploy_security_step4b.py::test_stream_history_uses_authenticated_username_source` 扫描 `Deploy.vue` 的 `access_token: authStore.accessToken`（946 切片 5 后迁入 `useDeployExecution.js`）；`test_device_security_step4c.py::test_photo_static_mount_...` 扫描 `Monitor3D.vue` 的 `getFloorPlanContent(currentPlan.value.id)`（946 切片 9a 后迁入 `useThreeScene.js`，变 `deps.currentPlan.value.id`）。按「源码断言随实现更新」先例（批次三 3.1）改扫描新位置，2 项通过。全量失败集合回到 53 基线（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1）。
+- docs「日常校验命令」全量测试命令已去掉 `--ignore=tests/test_console_service.py`。
 
 ---
 
@@ -1244,6 +1269,6 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 # 批次一回归用例
 .\.venv\Scripts\python.exe -m pytest tests/test_batch1_regressions.py -q
 
-# 全量测试（必须跳过会挂起的 console 用例，见批次六）
-.\.venv\Scripts\python.exe -m pytest -q --ignore=tests/test_console_service.py
+# 全量测试
+.\.venv\Scripts\python.exe -m pytest -q
 ```
