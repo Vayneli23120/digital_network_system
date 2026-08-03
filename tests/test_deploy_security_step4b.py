@@ -53,30 +53,6 @@ def test_deploy_model_rejects_invalid_payload(payload):
         DeployRequest.model_validate(payload)
 
 
-def test_schedule_window_format_is_validated():
-    from app.features.deploy.schemas import ScheduleDeployRequest
-
-    valid = ScheduleDeployRequest.model_validate({
-        "window_id": "20260802_morning",
-        "deploy_data": {
-            "mode": "snippet",
-            "snippet": "ntp server 192.0.2.1",
-            "target_devices": [1],
-        },
-    })
-    assert valid.window_id == "20260802_morning"
-
-    with pytest.raises(ValidationError):
-        ScheduleDeployRequest.model_validate({
-            "window_id": "tomorrow_anytime",
-            "deploy_data": {
-                "mode": "snippet",
-                "snippet": "x",
-                "target_devices": [1],
-            },
-        })
-
-
 def test_deploy_model_limits_variable_count_and_key_length():
     from app.features.deploy.schemas import DeployRequest
 
@@ -152,7 +128,6 @@ def test_deploy_http_endpoints_have_expected_permission_dependencies():
         "get_deploy_history": "require_config_read",
         "get_deploy_history_detail": "require_config_read",
         "execute_deploy": "require_config_deploy",
-        "schedule_deploy": "require_config_deploy",
         "rollback_deploy": "require_config_rollback",
     }
     for function_name, dependency_name in expected.items():

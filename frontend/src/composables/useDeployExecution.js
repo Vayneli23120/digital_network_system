@@ -8,6 +8,7 @@ import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
 import { rollbackDeploy as rollbackDeployApi } from '@/api'
 import { clearCache } from '@/utils/cache.js'
+import { getSessionCredentials } from '@/composables/useSessionCredentials'
 
 export function useDeployExecution(form, hooks = {}) {
   const { t } = useI18n()
@@ -112,10 +113,13 @@ export function useDeployExecution(form, hooks = {}) {
 
   const executeDeploy = async () => {
     try {
+      // 操作者会话级 SSH 凭证：缺少时先弹对话框收集（取消则中止部署）
+      if (!(await hooks.ensureCredentials?.())) return
+
       // 初始化设备执行列表
       deviceExecutions.value = buildDeviceExecutions(deployForm.value.target_devices)
 
-      // 准备部署数据
+      // 准备部署数据（携带操作者会话级凭证，仅 WebSocket 会话内存传输）
       const deployData = {
         action: 'start_deploy',
         access_token: authStore.accessToken || undefined,
@@ -131,7 +135,8 @@ export function useDeployExecution(form, hooks = {}) {
         target_devices: deployForm.value.target_devices,
         variables: {},
         dry_run: deployForm.value.dry_run,
-        parallel_limit: executionMode.value === 'serial' ? 1 : parallelLimit.value
+        parallel_limit: executionMode.value === 'serial' ? 1 : parallelLimit.value,
+        credentials: getSessionCredentials()
       }
 
       deployForm.value.variables.forEach(v => {
@@ -319,6 +324,9 @@ export function useDeployExecution(form, hooks = {}) {
       return
     }
 
+    // 操作者会话级 SSH 凭证：缺少时先弹对话框收集（取消则中止回滚）
+    if (!(await hooks.ensureCredentials?.())) return
+
     try {
       await ElMessageBox.confirm(
         t('deployRollbackConfirm'),
@@ -328,7 +336,8 @@ export function useDeployExecution(form, hooks = {}) {
 
       const rollbackData = {
         target_devices: rollbackDevices,
-        parent_id: hooks.getSelectedHistoryId?.() || hooks.getCurrentHistoryId?.() || null
+        parent_id: hooks.getSelectedHistoryId?.() || hooks.getCurrentHistoryId?.() || null,
+        credentials: getSessionCredentials()
       }
 
       executionStatus.value = 'running'

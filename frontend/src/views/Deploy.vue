@@ -108,18 +108,7 @@
       v-model:selected-preview-device="selectedPreviewDevice"
       :impact-analysis="impactAnalysis"
       :is-dark="isDark"
-      @schedule="openScheduleDialog"
       @deploy="confirmDeployFromPreview"
-    />
-
-    <!-- 维护窗口预约对话框 -->
-    <DeployScheduleDialog
-      v-model="showScheduleDialog"
-      :maintenance-windows="maintenanceWindows"
-      v-model:selected-window="selectedWindow"
-      :is-scheduled="isScheduled"
-      :scheduled-time="scheduledTime"
-      @schedule="scheduleDeployTask"
     />
 
     <!-- 变量说明对话框 -->
@@ -127,6 +116,9 @@
       v-model="showVariableHelp"
       :all-variables="allVariables"
     />
+
+    <!-- 操作者会话级 SSH 凭证 -->
+    <SSHCredentialDialog ref="credDialog" />
   </div>
 </template>
 
@@ -140,15 +132,9 @@ import {
   CircleClose,
   CircleCloseFilled
 } from '@element-plus/icons-vue'
-import {
-  previewDeploy as previewDeployApi,
-  getMaintenanceWindows,
-  scheduleDeploy
-} from '@/api'
+import { previewDeploy as previewDeployApi } from '@/api'
 import { useI18n } from '@/composables/useI18n'
-import { cachedRequest } from '@/utils/cache.js'
 import DeployPreviewDialog from '@/components/DeployPreviewDialog.vue'
-import DeployScheduleDialog from '@/components/DeployScheduleDialog.vue'
 import DeployVariableHelpDialog from '@/components/DeployVariableHelpDialog.vue'
 import DeployFormPanel from '@/components/DeployFormPanel.vue'
 import DeployExecutionPanel from '@/components/DeployExecutionPanel.vue'
@@ -156,6 +142,8 @@ import DeployHistoryPanel from '@/components/DeployHistoryPanel.vue'
 import { useDeployForm } from '@/composables/useDeployForm'
 import { useDeployExecution } from '@/composables/useDeployExecution'
 import { useDeployHistory } from '@/composables/useDeployHistory'
+import SSHCredentialDialog from '@/components/SSHCredentialDialog.vue'
+import { getSessionCredentials, setSessionCredentials } from '@/composables/useSessionCredentials'
 
 const { t } = useI18n()
 // 暗黑模式检测
@@ -163,6 +151,16 @@ const isDark = computed(() => document.documentElement.classList.contains('dark'
 
 // 变量说明对话框显隐
 const showVariableHelp = ref(false)
+
+// 操作者会话级 SSH 凭证（密码不存储在服务器上，仅浏览器会话 sessionStorage 复用）
+const credDialog = ref(null)
+const ensureDeployCredentials = async () => {
+  const stored = getSessionCredentials()
+  if (stored) return stored
+  const creds = await credDialog.value.open()
+  if (creds) setSessionCredentials(creds)
+  return creds
+}
 
 // 配置表单状态（收拢于 useDeployForm，item 946 切片 4）
 const {
@@ -227,6 +225,7 @@ const {
 } = history
 
 // 晚绑定接线（构造完成后；实际调用发生在用户交互时，闭包惰性求值）
+execHooks.ensureCredentials = () => ensureDeployCredentials()
 execHooks.reloadHistory = () => history.loadHistory()
 execHooks.setCurrentHistoryId = (id) => history.setCurrentHistoryId(id)
 execHooks.getSelectedHistoryId = () => history.getSelectedHistoryId()
@@ -247,13 +246,6 @@ const previewResults = ref([])
 const showPreviewDialog = ref(false)
 const previewLoading = ref(false)
 const selectedPreviewDevice = ref(null)
-
-// Phase 3: 维护窗口
-const maintenanceWindows = ref([])
-const selectedWindow = ref(null)
-const showScheduleDialog = ref(false)
-const isScheduled = ref(false)
-const scheduledTime = ref(null)
 
 // Phase 3: 影响分析
 const impactAnalysis = ref({
@@ -316,66 +308,15 @@ const previewDeploy = async () => {
   }
 }
 
-// 加载维护窗口
-const loadMaintenanceWindows = async () => {
-  try {
-    const data = await cachedRequest(
-      () => getMaintenanceWindows(),
-      'maintenanceWindows',
-      {},
-      { ttl: 300000 }  // 缓存 5 分钟
-    )
-    maintenanceWindows.value = data.windows || []
-  } catch (error) {
-    console.error('Load maintenance windows failed:', error)
-  }
-}
-
-// 预约部署
-const scheduleDeployTask = async () => {
-  if (!selectedWindow.value) {
-    ElMessage.warning(t('deploySelectWindow'))
-    return
-  }
-
-  const deployData = {
-    mode: deployForm.value.mode,
-    engine: deployForm.value.engine,
-    napalm_mode: deployForm.value.napalm_mode,
-    backup_file: deployForm.value.backup_file,
-    template_id: deployForm.value.template_id,
-    snippet: deployForm.value.snippet,
-    snippet_position: deployForm.value.snippet_position,
-    base_backup_file: deployForm.value.base_backup_file,
-    target_devices: deployForm.value.target_devices,
-    variables: {}
-  }
-
-  deployForm.value.variables.forEach(v => {
-    if (v.key) deployData.variables[v.key] = v.value
-  })
-
-  try {
-    const result = await scheduleDeploy({
-      window_id: selectedWindow.value,
-      deploy_data: deployData
-    })
-
-    isScheduled.value = true
-    scheduledTime.value = result.scheduled_at
-    showScheduleDialog.value = false
-    ElMessage.success(t('deployScheduled'))
-  } catch (error) {
-    ElMessage.error(t('deployScheduleFailed'))
-  }
-}
-
 // 执行部署
 const confirmDeploy = async () => {
   if (!canDeploy.value) {
     ElMessage.warning(t('deploySelectModeAndDevice'))
     return
   }
+
+  // 操作者会话级 SSH 凭证：缺少时先弹对话框收集（取消则中止部署）
+  if (!(await ensureDeployCredentials())) return
 
   // 计算实际并行数量：串行模式为1，并行模式使用用户设置的值
   const actualParallelLimit = executionMode.value === 'serial' ? 1 : parallelLimit.value
@@ -414,12 +355,6 @@ const confirmDeploy = async () => {
 }
 
 
-// 打开预约对话框
-const openScheduleDialog = () => {
-  showPreviewDialog.value = false
-  showScheduleDialog.value = true
-}
-
 // 从预览确认部署
 const confirmDeployFromPreview = async () => {
   showPreviewDialog.value = false
@@ -438,7 +373,6 @@ onMounted(async () => {
   await loadTemplates()
   await new Promise(r => setTimeout(r, 100))
   loadCompatibleVariables()  // 这个请求失败不影响，可以并行
-  loadMaintenanceWindows()   // 这个也不影响，可以并行
 })
 
 </script>

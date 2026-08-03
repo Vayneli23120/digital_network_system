@@ -23,7 +23,7 @@ from app.shared.dependencies import require_permission
 from app.features.auth.router import get_current_user_from_token
 from app.features.credentials.credential_service import decrypt_password
 from app.core.command_guard import CommandGuardError
-from .schemas import DeployRequest, RollbackRequest, ScheduleDeployRequest
+from .schemas import DeployRequest, RollbackRequest
 from .security import (
     UnsafeBackupPathError,
     resolve_backup_file,
@@ -535,27 +535,31 @@ async def _run_deploy_impl(deploy_data: dict, current_username: str):
         if not devices:
             raise HTTPException(status_code=404, detail="未找到指定的设备")
 
-        # 获取凭证组列表
-        credential_groups_data = db.query(CredentialGroup).all()
-        credential_groups = []
-        for g in credential_groups_data:
-            try:
-                password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
-                enable_password = decrypt_password(g.enable_password_encrypted) if g.enable_password_encrypted else None
-                credential_groups.append({
-                    'id': g.id,
-                    'name': g.name,
-                    'username': g.username,
-                    'password': password,
-                    'enable_password': enable_password
-                })
-            except Exception as cred_error:
-                logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
-                # 跳过无法解密的凭证组
-                continue
+        # 凭证解析：操作者会话级凭证优先（单个 default 组覆盖全部目标设备）；
+        # 未提供且开关开 → 400；开关关 → 显式降级回退服务器存储的凭证组。
+        from .operator_credentials import resolve_operator_credentials
+        credential_groups = resolve_operator_credentials(deploy_data.get('credentials'))
+        if credential_groups is None:
+            credential_groups_data = db.query(CredentialGroup).all()
+            credential_groups = []
+            for g in credential_groups_data:
+                try:
+                    password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
+                    enable_password = decrypt_password(g.enable_password_encrypted) if g.enable_password_encrypted else None
+                    credential_groups.append({
+                        'id': g.id,
+                        'name': g.name,
+                        'username': g.username,
+                        'password': password,
+                        'enable_password': enable_password
+                    })
+                except Exception as cred_error:
+                    logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
+                    # 跳过无法解密的凭证组
+                    continue
 
-        if not credential_groups:
-            raise HTTPException(status_code=500, detail="无法解密任何凭证组，请检查加密密钥配置")
+            if not credential_groups:
+                raise HTTPException(status_code=500, detail="无法解密任何凭证组，请检查加密密钥配置")
 
         # 获取配置内容
         config_content = None
@@ -967,21 +971,25 @@ async def rollback_deploy(
         if not devices:
             raise HTTPException(status_code=404, detail="未找到指定的设备")
 
-        # 获取凭证组列表
-        credential_groups_data = db.query(CredentialGroup).all()
-        credential_groups = []
-        for g in credential_groups_data:
-            try:
-                password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
-                credential_groups.append({
-                    'id': g.id,
-                    'name': g.name,
-                    'username': g.username,
-                    'password': password,
-                })
-            except Exception as cred_error:
-                logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
-                continue
+        # 凭证解析：操作者会话级凭证优先（单个 default 组覆盖全部目标设备）；
+        # 未提供且开关开 → 400；开关关 → 显式降级回退服务器存储的凭证组。
+        from .operator_credentials import resolve_operator_credentials
+        credential_groups = resolve_operator_credentials(rollback_data.get('credentials'))
+        if credential_groups is None:
+            credential_groups_data = db.query(CredentialGroup).all()
+            credential_groups = []
+            for g in credential_groups_data:
+                try:
+                    password = decrypt_password(g.password_encrypted) if g.password_encrypted else ''
+                    credential_groups.append({
+                        'id': g.id,
+                        'name': g.name,
+                        'username': g.username,
+                        'password': password,
+                    })
+                except Exception as cred_error:
+                    logger.warning(f"凭证组 {g.name} 解密失败: {cred_error}")
+                    continue
 
         # 使用 NAPALM 服务回滚（经统一设备操作执行器，避免阻塞事件循环；逐台串行 await）
         napalm_service = get_napalm_service()
@@ -1165,92 +1173,8 @@ async def get_maintenance_windows(
     return {"windows": windows}
 
 
-@router.post("/schedule")
-async def schedule_deploy(
-    schedule_request: ScheduleDeployRequest,
-    principal: Principal = Depends(get_current_principal),
-    _: None = Depends(require_config_deploy),
-    db: Session = Depends(get_db),
-):
-    """
-    预约部署任务
-
-    落库 Job 记录并提交 celery 定时任务（eta=维护窗口），返回真实 job_id/task_id。
-    需要常驻 celery worker（`celery -A app.core.celery_app worker -Q device_ops`）
-    才会在到点后真实执行；未运行 worker 时 Job 停留在 pending/queued。
-    """
-    from datetime import timezone
-    from app.shared.models_jobs import JobType, create_job
-    from app.tasks.deploy_tasks import deploy_scheduled
-
-    try:
-        schedule_data = schedule_request.model_dump()
-        window_id = schedule_data["window_id"]
-        deploy_data = schedule_data["deploy_data"]
-
-        # 解析维护窗口时间
-        parts = window_id.split('_')
-        date_str = parts[0]
-        period = parts[1]
-
-        date = datetime.strptime(date_str, "%Y%m%d")
-
-        if period == "morning":
-            scheduled_time = date.replace(hour=2, minute=0)
-        elif period == "afternoon":
-            scheduled_time = date.replace(hour=14, minute=0)
-        else:
-            scheduled_time = date.replace(hour=22, minute=0)
-
-        # 落库 Job 记录（celery 未运行也会保留预约单）
-        job = create_job(
-            db,
-            job_type=JobType.DEPLOY,
-            device_ids=deploy_data.get("target_devices", []),
-            operator=principal.username if isinstance(principal, Principal) else "system",
-            parameters={
-                "window_id": window_id,
-                "scheduled_at": scheduled_time.isoformat(),
-                "deploy_data": deploy_data,
-            },
-        )
-
-        # 提交 celery 定时任务：eta 用 UTC aware（celery timezone=UTC），
-        # 入参保持本地墙钟 naive ISO 语义
-        try:
-            celery_task = deploy_scheduled.apply_async(
-                args=[job.id, principal.username if isinstance(principal, Principal) else "system"],
-                eta=scheduled_time.astimezone(timezone.utc),
-            )
-        except Exception as exc:
-            logger.error(f"提交部署调度任务失败: {exc}")
-            job.status = "failed"
-            job.error_message = f"Celery unavailable: {exc}"
-            db.commit()
-            raise HTTPException(status_code=503, detail="任务队列不可用，无法预约部署")
-
-        # 写回 celery 任务 ID
-        job.celery_task_id = celery_task.id
-        db.commit()
-
-        logger.info(
-            f"预约部署成功: job={job.id}, task={celery_task.id}, "
-            f"window={window_id}, scheduled_at={scheduled_time.isoformat()}"
-        )
-
-        return {
-            "success": True,
-            "scheduled": True,
-            "job_id": job.id,
-            "task_id": celery_task.id,
-            "scheduled_at": scheduled_time.isoformat(),
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"预约部署失败：{e}")
-        raise HTTPException(status_code=500, detail=f"Scheduling failed: {str(e)}")
+# 注：定时部署端点已下线（celery worker 无法携带操作者会话级凭证，
+# 与「密码不存储在服务器上」原则互斥）。部署统一走同步端点。
 
 
 @router.get("/history")

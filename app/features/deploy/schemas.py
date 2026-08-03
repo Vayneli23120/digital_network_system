@@ -19,6 +19,14 @@ TransferMode = Literal["inline", "scp"]
 SnippetPosition = Literal["smart", "append", "prepend", "replace"]
 
 
+class OperatorCredentials(BaseModel):
+    """操作者会话级 SSH 凭证（仅请求内存，不落库/不入日志）。"""
+
+    username: Optional[str] = None
+    password: Optional[str] = None
+    secret: Optional[str] = None
+
+
 class DeployRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -36,6 +44,8 @@ class DeployRequest(BaseModel):
     dry_run: bool = False
     parallel_limit: int = Field(default=1, ge=1, le=5)
     parent_id: Optional[PositiveInt] = None
+    # 操作者会话级 SSH 凭证（密码不落服务器；默认 credential_session_required=True）
+    credentials: Optional[OperatorCredentials] = None
 
     @field_validator(
         "backup_file",
@@ -74,10 +84,5 @@ class RollbackRequest(BaseModel):
 
     target_devices: list[PositiveInt] = Field(min_length=1, max_length=100)
     parent_id: Optional[PositiveInt] = None
-
-
-class ScheduleDeployRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    window_id: str = Field(pattern=r"^\d{8}_(morning|afternoon|evening)$")
-    deploy_data: DeployRequest
+    # 操作者会话级 SSH 凭证（密码不落服务器；默认 credential_session_required=True）
+    credentials: Optional[OperatorCredentials] = None

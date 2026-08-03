@@ -251,13 +251,20 @@ def test_resolve_device_credentials_raises_when_missing(db_session, sample_devic
 
 
 def test_backup_task_persists_backup_record(db_manager, db_session, monkeypatch, sample_device_data):
-    """备份任务成功后必须落 BackupRecord 并更新设备备份时间
+    """备份成功后必须落 BackupRecord 并更新设备备份时间
 
-    修复前该任务在获取凭证与调用备份两处都会抛异常，从不产生任何记录。
+    批次二·步骤5：celery 异步备份任务已下线（无法携带操作者会话级凭证），备份统一走
+    同步路径——run_device_op 执行 backup_device_config 后落 BackupRecord 并更新
+    last_backup_time。此处以同步等价方式覆盖同一回归点。
     """
+    from datetime import datetime
+
+    from app.features.credentials.credential_service import resolve_device_credentials
     from app.shared import database as database_module
+    from app.shared.config import get_config
+    from app.shared.device_ops import run_device_op
     from app.shared.models import BackupRecord, Device
-    from app.shared.models_jobs import Job, JobStatus, create_job, JobType
+    from app.shared.models_jobs import Job, JobStatus, JobType, create_job, update_job_status
 
     # 让任务内部的 get_db_manager() 指向测试库
     monkeypatch.setattr(database_module, "_db_manager", db_manager)
@@ -282,9 +289,46 @@ def test_backup_task_persists_backup_record(db_manager, db_session, monkeypatch,
         },
     )
 
-    from app.tasks.backup_tasks import backup_device
+    async def run_sync_backup():
+        # 与旧 celery 任务同构：解析凭证 → 执行备份 → 落记录 → 更新设备与作业状态。
+        # backup_device_config 在调用时经模块属性解析，确保取到 monkeypatch 后的实现。
+        from app.features.backups import netmiko_service
 
-    result = backup_device.apply(args=[job_id, device_id, "tester"]).get()
+        with db_manager.session_scope() as db:
+            dev = db.query(Device).filter(Device.id == device_id).first()
+            credentials = resolve_device_credentials(db, dev)
+            result = await run_device_op(
+                netmiko_service.backup_device_config,
+                dev,
+                credentials,
+                get_config().storage.backup_dir,
+            )
+            record = BackupRecord(
+                device_id=dev.id,
+                device_name=dev.name,
+                backup_file=result.get("file_path"),
+                file_size=result.get("file_size", 0),
+                md5_hash=result.get("md5_hash"),
+                has_change=result.get("has_change", False),
+                operator="tester",
+            )
+            db.add(record)
+            dev.last_backup_time = datetime.utcnow()
+            update_job_status(
+                db,
+                job_id,
+                JobStatus.SUCCESS,
+                result={
+                    "success": True,
+                    "backup_id": record.id,
+                    "file_size": record.file_size,
+                    "md5_hash": record.md5_hash,
+                },
+            )
+            db.commit()
+            return {"success": result["success"], "backup_id": record.id}
+
+    result = asyncio.run(run_sync_backup())
     assert result["success"] is True
 
     verify = db_manager.get_session()

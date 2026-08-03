@@ -517,24 +517,29 @@ async def websocket_batch_deploy(websocket: WebSocket, session_id: str):
                     for d in devices
                 ]
 
-                # 获取凭证组
-                credential_records = db.query(CredentialGroup).all()
-                credential_groups = []
+                # 凭证解析：操作者会话级凭证优先（仅 WS 会话内存，不写日志）；
+                # 未提供且开关开 → 400；开关关 → 显式降级回退服务器存储的凭证组。
+                from app.features.deploy.operator_credentials import resolve_operator_credentials
 
-                for cred in credential_records:
-                    try:
-                        password = decrypt_password(cred.password_encrypted) if cred.password_encrypted else ''
-                        enable_password = decrypt_password(cred.enable_password_encrypted) if cred.enable_password_encrypted else None
-                    except Exception:
-                        password = ''
-                        enable_password = None
+                credential_groups = resolve_operator_credentials(deploy_request.credentials)
+                if credential_groups is None:
+                    credential_records = db.query(CredentialGroup).all()
+                    credential_groups = []
 
-                    credential_groups.append({
-                        'name': cred.name,
-                        'username': cred.username or '',
-                        'password': password,
-                        'enable_password': enable_password
-                    })
+                    for cred in credential_records:
+                        try:
+                            password = decrypt_password(cred.password_encrypted) if cred.password_encrypted else ''
+                            enable_password = decrypt_password(cred.enable_password_encrypted) if cred.enable_password_encrypted else None
+                        except Exception:
+                            password = ''
+                            enable_password = None
+
+                        credential_groups.append({
+                            'name': cred.name,
+                            'username': cred.username or '',
+                            'password': password,
+                            'enable_password': enable_password
+                        })
 
                 # 获取配置内容
                 config_content = None

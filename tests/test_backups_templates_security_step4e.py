@@ -487,39 +487,32 @@ def test_backup_api_redacts_internal_failure_details(
     assert secret_detail not in batch.text
 
 
-def test_async_backup_job_redacts_paths_and_failure_details(
+def test_backup_sync_redacts_paths_and_failure_details(
     db_manager, db_session, sample_device_data, tmp_path, monkeypatch
 ):
-    from app.features.credentials.credential_service import encrypt_password
-    from app.shared import database as database_module
-    from app.shared.config import get_config
-    from app.shared.models import CredentialGroup, Device
-    from app.shared.models_jobs import Job, JobType, create_job
-    from app.tasks.backup_tasks import backup_device as backup_task
+    """同步备份（HTTP 路径）不泄露落盘绝对路径与内部失败详情
 
-    monkeypatch.setattr(database_module, "_db_manager", db_manager)
+    批次二·步骤5：celery 异步备份任务已下线（无法携带操作者会话级凭证），原异步 job
+    结果脱敏测试改写为同步等价覆盖：成功响应与 LogEntry 不含绝对路径；失败被归一封皮
+    为通用消息且不含内部详情。
+    """
+    from app.features.backups import router as backup_router
+    from app.shared.config import get_config
+    from app.shared.models import Device, LogEntry
+
     root = tmp_path / "backups"
     backup_file = root / "device-17" / "config.cfg"
     backup_file.parent.mkdir(parents=True)
-    backup_file.write_text("hostname async-safe\n", encoding="utf-8")
+    backup_file.write_text("hostname sync-safe\n", encoding="utf-8")
     monkeypatch.setattr(get_config().storage, "backup_dir", str(root))
-    credential = CredentialGroup(
-        name="default",
-        username="netops",
-        password_encrypted=encrypt_password("secret"),
-    )
     device = Device(**sample_device_data)
-    db_session.add_all([credential, device])
+    db_session.add(device)
     db_session.commit()
+    admin = _create_user(db_session, "backup-sync-redact", superuser=True)
 
-    success_job = create_job(
-        db_session,
-        JobType.BACKUP,
-        device_id=device.id,
-        operator="async-operator",
-    )
     monkeypatch.setattr(
-        "app.features.backups.netmiko_service.backup_device_config",
+        backup_router,
+        "backup_device_config",
         lambda *_args: {
             "success": True,
             "file_path": str(backup_file),
@@ -530,38 +523,46 @@ def test_async_backup_job_redacts_paths_and_failure_details(
         },
     )
 
-    success = backup_task.apply(
-        args=[success_job.id, device.id, "async-operator"]
-    ).get()
-    db_session.expire_all()
-    stored_success = db_session.query(Job).filter(Job.id == success_job.id).one()
+    creds = {"username": "netops", "password": "secret"}
+    with _backup_client(admin, db_session) as client:
+        resp = client.post(f"/api/backups/backup/{device.id}", json=creds)
 
-    assert success["success"] is True
-    assert "file_path" not in success
-    assert "file_path" not in stored_success.get_result()
-    assert str(root) not in stored_success.result_json
+    assert resp.status_code == 200
+    assert "file_path" not in resp.json()
+    assert str(root) not in resp.text
+    assert "config.cfg" not in resp.text
 
+    log_entry = (
+        db_session.query(LogEntry)
+        .filter(LogEntry.operation == "备份配置")
+        .order_by(LogEntry.id.desc())
+        .first()
+    )
+    assert log_entry is not None
+    assert str(root) not in log_entry.log_content
+    assert "config.cfg" not in log_entry.log_content
+
+    # 失败路径：内部错误详情被归一封皮为通用消息
     secret_detail = f"Permission denied: {tmp_path / 'private.cfg'}"
-    failed_job = create_job(
-        db_session,
-        JobType.BACKUP,
-        device_id=device.id,
-        operator="async-operator",
-    )
     monkeypatch.setattr(
-        "app.features.backups.netmiko_service.backup_device_config",
-        lambda *_args: {"success": False, "message": secret_detail},
+        backup_router,
+        "backup_device_config",
+        lambda *_args: {
+            "success": False,
+            "file_path": "",
+            "file_size": 0,
+            "md5_hash": "",
+            "has_change": False,
+            "message": secret_detail,
+        },
     )
 
-    failure = backup_task.apply(
-        args=[failed_job.id, device.id, "async-operator"]
-    ).get()
-    db_session.expire_all()
-    stored_failure = db_session.query(Job).filter(Job.id == failed_job.id).one()
+    with _backup_client(admin, db_session) as client:
+        resp2 = client.post(f"/api/backups/backup/{device.id}", json=creds)
 
-    assert failure == {"success": False, "message": "备份失败，请查看服务端日志"}
-    assert stored_failure.error_message == "备份失败，请查看服务端日志"
-    assert secret_detail not in stored_failure.error_message
+    assert resp2.status_code == 500
+    assert resp2.json()["detail"] == "备份失败，请查看服务端日志"
+    assert secret_detail not in resp2.text
 
 
 def test_backup_delete_removes_record_and_managed_file(

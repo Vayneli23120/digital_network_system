@@ -85,10 +85,6 @@
         <el-button @click="visible = false">
           {{ t('actionClose') }}
         </el-button>
-        <el-button type="primary" @click="emit('schedule')">
-          <el-icon><Calendar /></el-icon>
-          {{ t('deploySchedule') }}
-        </el-button>
         <el-button type="success" @click="emit('deploy')">
           <el-icon><Upload /></el-icon>
           {{ t('deployStart') }}
@@ -100,7 +96,7 @@
 
 <script setup>
 import { computed } from 'vue'
-import { WarningFilled, Calendar, Upload } from '@element-plus/icons-vue'
+import { WarningFilled, Upload } from '@element-plus/icons-vue'
 import { useI18n } from '@/composables/useI18n'
 import { getRiskLevelType } from '@/utils/deploy.js'
 import DiffViewer from '@/components/DiffViewer.vue'
@@ -115,7 +111,7 @@ const props = defineProps({
 
 const selectedPreviewDevice = defineModel('selectedPreviewDevice', { type: Object, default: null })
 
-const emit = defineEmits(['update:modelValue', 'schedule', 'deploy'])
+const emit = defineEmits(['update:modelValue', 'deploy'])
 
 const visible = computed({
   get: () => props.modelValue,
