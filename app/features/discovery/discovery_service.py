@@ -129,7 +129,7 @@ class DiscoveryService:
                 sock.settimeout(self.timeout)
                 results[port] = sock.connect_ex((ip, port)) == 0
                 sock.close()
-            except:
+            except Exception:
                 results[port] = False
         return results
 

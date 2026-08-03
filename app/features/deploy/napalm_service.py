@@ -25,32 +25,6 @@ except ImportError:
 class NapalmDeployService:
     """NAPALM 配置部署服务"""
 
-    def __init__(self):
-        # 设备类型映射到 NAPALM driver
-        # NAPALM 支持的 driver: ios, nxos, nxos_ssh, junos, eos, iosxr, huawei, etc.
-        self.driver_map = {
-            'cisco_ios': 'ios',
-            'cisco_xe': 'ios',
-            'cisco_xr': 'iosxr',
-            'cisco_nxos': 'nxos_ssh',
-            'nxos': 'nxos_ssh',
-            'juniper_junos': 'junos',
-            'arista_eos': 'eos',
-            'huawei': 'huawei',
-            'h3c_comware': 'huawei',
-            # 自定义设备类型映射
-            'cisco': 'ios',
-            'switch': 'ios',
-            'office_switch': 'ios',
-            'core_switch': 'ios',
-            'uce': 'ios',
-            'uce_new': 'ios',
-            'router': 'ios',
-            'rtr': 'ios',
-            'layer2': 'ios',
-            'layer3': 'ios',
-        }
-
     def get_device_credentials(self, device: dict, credential_groups: List[dict]) -> dict:
         """根据设备的 credential_group 获取对应的凭证"""
         group_name = device.get('credential_group', 'default')
@@ -71,10 +45,6 @@ class NapalmDeployService:
                 }
 
         return {'username': '', 'password': ''}
-
-    def get_driver_name(self, device_type: str) -> str:
-        """获取 NAPALM driver 名称"""
-        return self.driver_map.get(device_type, 'ios')
 
     def connect_device(self, device: dict, credentials: dict) -> Optional[object]:
         """使用 NAPALM 连接设备"""
@@ -355,18 +325,6 @@ def get_napalm_service():
 
 class NapalmStreamService:
     """NAPALM 实时步骤状态推送服务"""
-
-    def __init__(self):
-        # 复用 NapalmDeployService 的设备类型映射
-        self.driver_map = {
-            'cisco_ios': 'ios',
-            'cisco_xe': 'ios',
-            'cisco_xr': 'ios',
-            'cisco_nxos': 'nxos',
-            'juniper_junos': 'junos',
-            'arista_eos': 'eos',
-            'huawei': 'huawei',
-        }
 
     async def push_message(self, websocket, message: dict):
         """推送消息到 WebSocket"""

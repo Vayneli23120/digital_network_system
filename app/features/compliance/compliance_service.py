@@ -282,8 +282,9 @@ class ComplianceService:
                         detail = f"配置符合要求，匹配行: {line_numbers}"
                     else:
                         detail = f"未发现匹配配置: {pattern}"
-                except:
+                except Exception as e:
                     # 正则无效，使用关键词匹配
+                    logger.warning(f"合规规则正则无效，回退关键词匹配: {e}")
                     pattern_lower = pattern.lower()
                     for i, line in enumerate(lines):
                         if pattern_lower in line.lower():

@@ -378,7 +378,8 @@ async def get_fault(
             if hasattr(m, 'spare_parts_used') and m.spare_parts_used:
                 try:
                     spare_parts_used = json.loads(m.spare_parts_used)
-                except:
+                except Exception as e:
+                    logger.warning(f"解析维修单备件更换记录 JSON 失败: {e}")
                     spare_parts_used = []
 
             maintenance = {

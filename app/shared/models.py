@@ -98,7 +98,7 @@ class Device(Base):
             try:
                 import json
                 return json.loads(self.modules)
-            except:
+            except Exception:
                 return []
         return []
 
@@ -208,7 +208,7 @@ class FaultRecord(Base):
             try:
                 import json
                 return json.loads(self.ai_analysis_result)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -973,7 +973,7 @@ class DeviceHealthScore(Base):
             try:
                 import json
                 return json.loads(self.score_factors)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -983,7 +983,7 @@ class DeviceHealthScore(Base):
             try:
                 import json
                 return json.loads(self.recommendations)
-            except:
+            except Exception:
                 return []
         return []
 
@@ -1122,7 +1122,7 @@ class WorkflowRule(Base):
             try:
                 import json
                 return json.loads(self.trigger_conditions)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -1132,7 +1132,7 @@ class WorkflowRule(Base):
             try:
                 import json
                 return json.loads(self.action_config)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -1219,7 +1219,7 @@ class DeployHistory(Base):
             try:
                 import json
                 return json.loads(self.target_devices)
-            except:
+            except Exception:
                 return []
         return []
 
@@ -1229,7 +1229,7 @@ class DeployHistory(Base):
             try:
                 import json
                 return json.loads(self.deploy_config)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -1424,7 +1424,7 @@ class AIAnalysisRecord(Base):
             try:
                 import json
                 return json.loads(self.input_data)
-            except:
+            except Exception:
                 return {}
         return {}
 
@@ -1434,7 +1434,7 @@ class AIAnalysisRecord(Base):
             try:
                 import json
                 return json.loads(self.output_result)
-            except:
+            except Exception:
                 return {}
         return {}
         return f"<AIAnalysisRecord(id={self.id}, type={self.analysis_type}, success={self.success})>"
