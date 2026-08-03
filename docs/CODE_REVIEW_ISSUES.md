@@ -944,7 +944,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P2** `api/request.js:107-113` — 401 用 `window.location.href` 整页刷新，多并发请求连弹错误，无 refresh token 流程。`[已复核]`
   → 修复（批次五请求层切片）：`handleAuthFailure` 加模块级 `isRedirectingToLogin` 守卫，并发多个 401 只弹一次 toast、只触发一次跳转（`api` 与 `authenticatedAxios` 共用该函数，一处守卫覆盖两条拦截链）。refresh token 流程超出本切片范围，仍缺。
 - [ ] **P2** 巨型视图：`Monitor3D.vue` 7119 行、`Deploy.vue` 3631、`Compliance.vue` 2948，渲染与请求耦合，无法单测。`[已复核]`
-  → 切片 1（Compliance，2026-08-03）：`utils/compliance.js` + UploadStandard/CreateStandard/Rules/StandardDetail 四对话框拆子组件，Compliance 3377→2753 行；Audit/AI 配置/规则详情/Config 高亮四对话框与 composable 收拢留待切片 2。
+  → 切片 1（Compliance，2026-08-03）：`utils/compliance.js` + UploadStandard/CreateStandard/Rules/StandardDetail 四对话框拆子组件，Compliance 3377→2753 行。＋切片 2（2026-08-03）：Audit/AI 配置/规则详情/Config 高亮四对话框拆子组件 + `useComplianceStandards` composable 收拢 standards 状态，Compliance 2753→934 行；Deploy/Monitor3D 待拆。
 - [x] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[已复核]`
   → 修复（批次五 :key-Logs 切片）：新增 `utils/uid.js`（`stampUid` 用 `Object.defineProperty` 定义**不可枚举** `_uid`，JSON 序列化不携带，避免泄漏进 payload / 被后端 `json.dumps` 落地 DB）。表单行改 `:key="xxx._uid"`：Devices:340/DeviceDetail:464 模块行、Deploy:285 变量行，stamp 覆盖初始/reset/add/probe/populate 全部分配点；展示列表改天然稳定键：Operations faultDeviceList→`device_id`、recentBackups→`device_name+backup_time`、alerts→`alert_key` 回退复合、activityFeed→`type+text`，Compliance configLineAnalysis→`lineNum`。探索按 `:key="idx"` 补出 4 处同病 Monitor3D 拐点行（`editingWaypoints`/Trunk/BranchLink/TopoEdge，均 v-model input-number + add/remove），一并 `_uid` 化。Logs 实时 interval 改 `loadLogs(true)`（原不 force 命中 30s 缓存，实际每 30s 才真刷新）；主表改 `el-table-v2` + `el-auto-resizer` 虚拟滚动（仅渲染可视行），列定义 `computed` 随语言响应式，message 列 ellipsis + 原生 title 替代 overflow tooltip。保留 `:key="index"`：Operations:18/24（字符串数组）、Operations:272（并行数组 index 承载）、Compliance:667/686（toc/content 的 active/scroll/ref 全靠 index 且静态）、Deploy:508（cliLogs append-only）、FaultDetail:129（字符串数组）。
 - [x] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
@@ -1042,6 +1042,20 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `pytest tests/test_batch1_regressions.py` 15 passed（改动仅 frontend/） |
 
 修复说明（946 切片 1，Compliance 拆分）：抽 `utils/compliance.js` 纯函数（escape-first markdown 渲染 + 章节解析 + category/severity 映射，无 vue 依赖可单测）；上传标准/Create 标准/规则列表/标准详情 4 个低耦合对话框拆子组件，props/emits 通信（详情对话框 `v-model:generating-rules` 用 `defineModel` 与父共享禁用态）；Compliance.vue 3377→2753 行。Audit/AI 配置/规则详情/Config 高亮 4 对话框与 composable 收拢留待切片 2。
+
+### 批次五 · 946 Compliance 拆分切片 2 · Linux 实测（2026-08-03）
+
+前端改动（仅 `frontend/`），验证靠构建 + HTTPS 冒烟 + 代码审查：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run validate:locales` | ✅ 0 违规（无 locales 改动，zh/en 各 3212 键）；新组件只用既有 `t()` 键，无硬编码文本 |
+| `npm run build` | ✅ 13.86s 构建成功（4 子组件 + `defineModel` + composable + props-emits 编译通过） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（复用既有 dev server，精确 PID 2283407） |
+| 代码审查 | ✅ 已迁走项（`auditForm`/`runAudit`/`ruleEditForm`/`aiConfigForm`/`configLineAnalysis`/`analyzeConfigLines`/`selectConfigLine`/`highlightIssueLines`/`testAIConfig`/`saveAIConfig` 等）在父组件零残留；`analyzeConfigLines`/`getLineClass`/`severityTagType`/`categoryTagType`/`capitalize` 定义仅在 `utils/compliance.js`；4 子组件无裸中文（仅注释/`t()`）；父 `.section-title`（两处）与 `.action-btn.small.primary`/`.table-action-btn.primary`/`.standard-name.clickable` 保留，页面 section 标题样式不变 |
+| 后端门禁 | ✅ `pytest tests/test_batch1_regressions.py` 15 passed（改动仅 frontend/） |
+
+修复说明（946 切片 2，Compliance 拆分）：Audit/AI 配置/规则详情/Config 高亮 4 个高耦合对话框拆子组件——`AuditDialog`（`defineModel('configText')` 与父共享手动审核配置文本，`@completed` 回调写父 `report`，打开重置对齐原 `showAuditDialog`）、`AIConfigDialog`（`watch(() => props.aiConfig, ..., { immediate: true })` 只填表单不含 api_key，保存 `@saved` → 父 `loadAIConfig()` 刷新 status bar）、`RuleDetailDialog`（父 `currentRule` 与 `rules` 表格行是同一对象引用，保存用 `Object.assign(props.currentRule, data.rule)` 原位更新父子同时生效、回滚传播一致）、`ConfigDetailDialog`（分析构建移入子 `watch(modelValue→true)`，`auditForm.config_text` → 父 `auditConfigText` ref）；`utils/compliance.js` 追加 5 个纯函数；新增 `useComplianceStandards` composable 收拢 standards 列表请求与状态（`loadStandards` 保留 debounce 300）；Compliance.vue 2753→934 行。`getDefaultUrl`（全文零引用死代码）与 `configDetailConfigText`（未使用 ref）一并丢弃。
 
 ---
 
