@@ -1209,9 +1209,12 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（批次六切片 B）：`main()` 顶部加环境守卫——`os.environ.get("NAS_SEED_CONFIRM") != "1"` 时打印拒绝说明并 `return 1`，发生在任何 DB 连接/初始化之前（误执行零副作用）。实测无环境变量即 exit=1 拒绝。README 三处用法同步为 `NAS_SEED_CONFIRM=1 python scripts/seed_data.py`。
 - [x] **P2** `scripts/migrate_features.py` 是代码搬迁 codemod（会覆盖 `app/shared/*.py`）而非 DB 迁移，放在 scripts 里有误执行风险。`[已复核]` `[已修复]`
   → 修复（批次六切片 B）：`git mv` 至 `scripts/devtools/migrate_features.py`，移出 scripts 命名空间、明确为一次性 codemod 工具（git 历史保留 move）。`app/services/` 仍有活跃模块故不删。
-- [ ] **P2** 异常体系混用：`shared/exceptions.py` 有完整 `AppException` 体系，devices/templates 用它，faults/maintenance/deploy 全用 `HTTPException`。`[已复核]`
-- [ ] **P2** 三处重复的 vendor→driver 映射：`deploy/napalm_service.py:33`、`deploy/deploy_stream_service.py:300`、`devices/drivers/registry.py`。`[已复核]`
-- [ ] **P2** 裸 `except:` 静默降级：`compliance/compliance_service.py:279`、`faults/router.py:335`、`discovery/discovery_service.py:130`、`shared/models.py:207`、`deploy/router.py:907`。`[已复核]`
+- [x] **P2** 异常体系混用：`shared/exceptions.py` 有完整 `AppException` 体系，devices/templates 用它，faults/maintenance/deploy 全用 `HTTPException`。`[已复核]` `[已记录]`
+  → 保留现状（批次六切片 C）：`AppException` 体系已注册全局 handler（`app/main.py:109` `register_exception_handlers`），与 `HTTPException` 两套共存由框架分别处理，行为安全；统一迁移风险 > 收益（会扰动批次七 53 失败基线），留待后续。
+- [x] **P2** 三处重复的 vendor→driver 映射：`deploy/napalm_service.py:33`、`deploy/deploy_stream_service.py:300`、`devices/drivers/registry.py`。`[已复核]` `[已修复]`
+  → 修复（批次六切片 C，安全子集）：`napalm_service.py` 的 `NapalmDeployService.driver_map`+`get_driver_name`（原 :31/:75）与 `NapalmStreamService.driver_map`（原 :361）是**死代码**（app 层零调用，grep 确认仅定义处）→ 删除；`connect_device`/`_connect_device` 早已用 `DriverRegistry.get(vendor).NAPALM_DRIVER`。`registry.py` 是 canonical 源不动。`deploy_stream_service.py:272` 内联 `vendor_driver_map`（`juniper→junos`/`arista→eos`/`h3c→huawei`）是**活代码**且与 registry 分歧（registry 缺 juniper/arista 驱动、`h3c_comware` NAPALM_DRIVER=None）——直换会改变这三类设备部署行为，属需真机验证的行为性统一，**保留**并记录。
+- [x] **P2** 裸 `except:` 静默降级：`compliance/compliance_service.py:279`、`faults/router.py:335`、`discovery/discovery_service.py:130`、`shared/models.py:207`、`deploy/router.py:907`。`[已复核]` `[已修复]`
+  → 修复（批次六切片 C）：docs 所列 5 处 + `models.py` 全部 10 处裸 `except:`（实际 101/211/976/986/1125/1135/1222/1232/1427/1437，全为 JSON/解析 fallback）→ `except Exception:`（裸 except 误捕 KeyboardInterrupt/SystemExit 是真正缺陷）。`compliance_service.py:285` 与 `faults/router.py:381` 加 `logger.warning`（`as e`）；`discovery_service.py:132` 端口探测失败回退 False 属常规路径不加日志。`deploy/router.py:907` 复核为批次三 3.2 已修（现文件零裸 except）。其余 ~15 处（snmp/websocket/deploy_service 等）超出 docs 范围保留。
 - [x] **P2** `maintenance/router.py:735,807` — `""` 与 `"/"` 双装饰器重复注册同一处理器。`[已复核]`
   → 修复（步骤 4E-B2）：仅保留 canonical collection 路由，回归测试确认 GET/POST 各注册一次。
 
@@ -1257,6 +1260,23 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - **1204**：`seed_data.py` `main()` 顶部环境守卫置于任何 DB 连接/初始化之前（比原计划「clear_existing_data 调用前」更早），误执行零副作用；实测拒绝路径 exit=1。README 三处用法同步。
 - **1205**：`git mv scripts/migrate_features.py scripts/devtools/migrate_features.py`，git 历史保留 move。
 
+### 批次六 · 切片 C · Linux 实测（2026-08-03）
+
+验证（HEAD `85540a6` → 切片 C 后）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `ruff check app tests` | ✅ All checks passed |
+| `pytest tests/test_batch1_regressions.py -q` | ✅ 15 passed |
+| 全量 `pytest -q -rf` | ✅ **53 failed / 642 passed / 4 skipped**，失败集合与基线**逐条一致**（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1 = 53），零新增 |
+| `frontend/npm run build` + `validate:locales` | ✅ 13.82s / 3212 zh + 3212 en |
+| `napalm_service` 导入 | ✅ 死代码删除后干净导入 |
+
+修复说明：
+- **1208 裸 `except:`**：5 处 + `models.py` 全部 10 处 → `except Exception:`（裸 except 会误捕 `KeyboardInterrupt`/`SystemExit`，这是真正缺陷，非纯风格）。compliance/faults 两处加 `logger.warning`；discovery 端口探测失败属常规路径只改 `except Exception:`。`deploy/router.py:907` 复核为零裸 except（批次三 3.2 已修）。
+- **1207 vendor→driver**：删除 `napalm_service.py` 三处死代码（`NapalmDeployService.driver_map`+`get_driver_name`、`NapalmStreamService.driver_map`，app 层零调用）；`registry.py` canonical 不动；`deploy_stream_service.py:272` 内联 map 是活代码且与 registry 分歧，**保留**——直换会改变 juniper/arista/h3c 三类设备行为，属需真机验证的行为性统一，延后。
+- **1206 异常体系**：仅记录——`AppException` 已注册全局 handler（`app/main.py:109`），与 `HTTPException` 两套共存由框架分别处理；统一迁移风险 > 收益，留待后续。
+
 ---
 
 ## 批次七 · 既存测试失败基线（批次一执行时测得，与本次改动无关）
@@ -1279,7 +1299,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
-7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03 完成；剩余：批次六切片 C（异常体系 / 三处 vendor→driver / 裸 except）+ 批次三 3.4/3.5
+7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官，剩余：批次三 3.4/3.5
 
 ## 附注
 
