@@ -22,7 +22,7 @@ class TestConsoleServiceListPorts:
             MagicMock(device="COM4", description="Standard Serial Port", hwid="ACPI\\PNP0501"),
         ]
 
-        with patch("app.services.console_service.list_ports.comports", return_value=mock_ports):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=mock_ports):
             ports = service.list_ports()
             assert len(ports) == 2
             assert ports[0]["device"] == "COM3"
@@ -32,7 +32,7 @@ class TestConsoleServiceListPorts:
         """Test that list_ports returns empty list when no ports found"""
         service = ConsoleService()
 
-        with patch("app.services.console_service.list_ports.comports", return_value=[]):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=[]):
             ports = service.list_ports()
             assert ports == []
 
@@ -50,8 +50,8 @@ class TestConsoleServiceConnect:
         mock_config.console.parity = "N"
         mock_config.console.stopbits = 1
 
-        with patch("app.services.console_service.get_config", return_value=mock_config):
-            with patch("app.services.console_service.serial.Serial", return_value=mock_serial) as mock_serial_cls:
+        with patch("app.features.console.console_service.get_config", return_value=mock_config):
+            with patch("app.features.console.console_service.serial.Serial", return_value=mock_serial) as mock_serial_cls:
                 result = service.connect("COM3", baudrate=9600)
 
                 assert result is True
@@ -69,8 +69,8 @@ class TestConsoleServiceConnect:
 
         from serial import SerialException
 
-        with patch("app.services.console_service.get_config", return_value=mock_config):
-            with patch("app.services.console_service.serial.Serial", side_effect=SerialException("Port not found")):
+        with patch("app.features.console.console_service.get_config", return_value=mock_config):
+            with patch("app.features.console.console_service.serial.Serial", side_effect=SerialException("Port not found")):
                 result = service.connect("COM99")
                 assert result is False
 
@@ -110,15 +110,14 @@ class TestConsoleServiceSendCommand:
 
         mock_serial = MagicMock()
         mock_serial.is_open = True
-        mock_serial.in_waiting = 0  # Will be checked in the while loop
+        # in_waiting 必须逐渐耗尽，否则 send_command 的 while 读循环永不退出
+        type(mock_serial).in_waiting = PropertyMock(side_effect=[20, 20, 0])
         mock_serial.read.return_value = b"hostname Test-Switch\r\n"
 
         service.serial_conn = mock_serial
         service.port = "COM3"
 
         with patch("time.sleep"):
-            # First call to in_waiting returns some data, then 0
-            mock_serial.in_waiting = 20
             response = service.send_command("show run | include hostname")
 
             mock_serial.write.assert_called_once()
@@ -223,7 +222,7 @@ class TestFindConsolePort:
             MagicMock(device="COM4", description="Standard Serial Port", hwid="ACPI\\PNP0501"),
         ]
 
-        with patch("app.services.console_service.list_ports.comports", return_value=mock_ports):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=mock_ports):
             port = find_console_port()
             assert port == "COM3"
 
@@ -233,7 +232,7 @@ class TestFindConsolePort:
             MagicMock(device="COM5", description="CP2102 USB to UART", hwid="USB VID:PID=10C4:EA60"),
         ]
 
-        with patch("app.services.console_service.list_ports.comports", return_value=mock_ports):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=mock_ports):
             port = find_console_port()
             assert port == "COM5"
 
@@ -243,12 +242,12 @@ class TestFindConsolePort:
             MagicMock(device="COM1", description="Standard Serial Port", hwid="ACPI\\PNP0501"),
         ]
 
-        with patch("app.services.console_service.list_ports.comports", return_value=mock_ports):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=mock_ports):
             port = find_console_port()
             assert port == "COM1"
 
     def test_find_console_port_no_ports(self):
         """Test returning None when no ports available"""
-        with patch("app.services.console_service.list_ports.comports", return_value=[]):
+        with patch("app.features.console.console_service.list_ports.comports", return_value=[]):
             port = find_console_port()
             assert port is None

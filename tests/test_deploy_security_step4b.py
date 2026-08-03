@@ -417,7 +417,10 @@ def test_stream_history_uses_authenticated_username_source():
     websocket_source = (
         root / "app/features/websocket/router.py"
     ).read_text(encoding="utf-8")
-    frontend_source = (root / "frontend/src/views/Deploy.vue").read_text(encoding="utf-8")
+    # 批次五 946 切片 5：deploy WS 报文构造随执行逻辑迁入 useDeployExecution composable
+    frontend_source = (
+        root / "frontend/src/composables/useDeployExecution.js"
+    ).read_text(encoding="utf-8")
 
     assert 'username="Web"' not in stream_source
     assert 'created_by="Web"' not in stream_source

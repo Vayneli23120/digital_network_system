@@ -46,7 +46,6 @@ def create_celery_app() -> Celery:
         task_routes={
             "app.tasks.backup_tasks.*": {"queue": "device_ops"},
             "app.tasks.deploy_tasks.*": {"queue": "device_ops"},
-            "app.tasks.discovery_tasks.*": {"queue": "device_ops"},
             "app.tasks.ai_tasks.*": {"queue": "ai_tasks"},
             "app.tasks.notification_tasks.*": {"queue": "notifications"},
             "app.tasks.scheduled_tasks.*": {"queue": "scheduled"},

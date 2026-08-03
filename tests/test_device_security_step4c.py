@@ -523,14 +523,15 @@ def test_photo_static_mount_is_removed_and_floor_plan_content_is_protected():
     monitor_source = (
         root / "app/features/monitor_screen/router.py"
     ).read_text(encoding="utf-8")
+    # 批次五 946 切片 9a：loadFloorPlanTexture 迁入 useThreeScene composable
     frontend_source = (
-        root / "frontend/src/views/Monitor3D.vue"
+        root / "frontend/src/composables/useThreeScene.js"
     ).read_text(encoding="utf-8")
 
     assert 'app.mount("/photos"' not in main_source
     assert "get_floor_plan_content" in monitor_source
     assert "Depends(require_floor_plan_read)" in monitor_source
-    assert "getFloorPlanContent(currentPlan.value.id)" in frontend_source
+    assert "getFloorPlanContent(deps.currentPlan.value.id)" in frontend_source
     assert "'/photos/floor_plans/'" not in frontend_source
 
 
