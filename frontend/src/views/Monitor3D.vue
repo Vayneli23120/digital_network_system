@@ -139,15 +139,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, onBeforeUnmount, shallowRef, computed, watch } from 'vue'
+import { ref, reactive, onMounted, onBeforeUnmount, computed, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as THREE from 'three'
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
-import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
+import { CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, ArrowRight } from '@element-plus/icons-vue'
 import { authenticatedAxios as axios } from '@/api/request.js'
-import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault, getFloorPlanContent } from '@/api'
+import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { stampUid } from '@/utils/uid.js'
 import { useI18n } from '@/composables/useI18n'
@@ -162,6 +161,7 @@ import SidePanel from '@/components/SidePanel.vue'
 import { useOverlayPanels } from '@/composables/useOverlayPanels'
 import { useCommandPanel } from '@/composables/useCommandPanel'
 import { useDeviceMappings } from '@/composables/useDeviceMappings'
+import { useThreeScene } from '@/composables/useThreeScene'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -182,7 +182,7 @@ const { snmpPos, heatPos, showSnmpHealth, showHeatLegend, startDrag, toggleSnmpH
 // 指挥面板状态（item 946 切片 8，父侧单实例：commandSummary 被场景 buildImpactGlow 共享；getPlanId 惰性取 currentPlanId）
 const { commandSummary, monitorEvents, eventWindow, loadCommandSummary, loadMonitorEvents, setEventWindow } = useCommandPanel(() => currentPlanId.value)
 // 设备类型/状态标签映射（item 946 切片 8，纯函数：父侧场景 HUD/标签与 SidePanel 模板各调用一次均安全）
-const { getDeviceTypeLabelI18n, getStatusLabelI18n, deviceStatus, isDeviceOnline, isDeviceOffline, faultSeverityTag } = useDeviceMappings()
+const { getDeviceTypeLabelI18n, getStatusLabelI18n, deviceStatus, isDeviceOnline, isDeviceOffline } = useDeviceMappings()
 
 // 上传底图相关
 const showUploadDialog = ref(false)
@@ -441,16 +441,6 @@ function toggleBranchPointExpand(bpId) {
   expandedBranchPoints[bpId] = !expandedBranchPoints[bpId]
 }
 
-// 获取指定主干下的分支点（旧模型）
-function getBranchPointsForTrunk(trunkId) {
-  return fiberBranchPoints.value.filter(bp => bp.trunk_link_id === trunkId)
-}
-
-// 获取指定分支点下的分支光缆（旧模型）
-function getBranchLinksForPoint(bpId) {
-  return fiberBranchLinks.value.filter(link => link.branch_point_id === bpId)
-}
-
 // 获取指定光缆关联的分支点（新 topo 模型）
 function getBranchPointsForCable(cableId) {
   // 找到该光缆的所有边（兼容没有 cable_id 的情况）
@@ -516,13 +506,6 @@ async function connectDeviceFromTopoBranch(deviceId, portId = null) {
     console.error('连接设备失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
-}
-
-// 开始从分支点连接设备
-function startConnectFromBranch(bp) {
-  connectFromBranchMode.value = true
-  selectedBranchPoint.value = bp
-  ElMessage.info(t('clickDeviceToConnect'))
 }
 
 // 创建主干光缆
@@ -605,18 +588,6 @@ async function loadFiberData() {
     buildDataLinkPaths()
   } catch (e) {
     console.error('加载光纤数据失败:', e)
-  }
-}
-
-// 删除主干光缆（旧 API）
-async function deleteTrunk(trunkId) {
-  try {
-    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-trunks/${trunkId}`)
-    ElMessage.success(t('msgSaveSuccess'))
-    await loadFiberData()
-  } catch (e) {
-    console.error('删除主干失败:', e)
-    ElMessage.error(t('msgUpdateFailed'))
   }
 }
 
@@ -747,18 +718,6 @@ function editCableWaypoints(cable) {
   }
 }
 
-// 删除分支点（旧 API）
-async function deleteBranchPoint(bpId) {
-  try {
-    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points/${bpId}`)
-    ElMessage.success(t('msgSaveSuccess'))
-    await loadFiberData()
-  } catch (e) {
-    console.error('删除分支点失败:', e)
-    ElMessage.error(t('msgUpdateFailed'))
-  }
-}
-
 // 删除拓扑边（新 topo API）
 async function deleteTopoEdge(edgeId) {
   try {
@@ -804,25 +763,6 @@ async function connectDeviceFromBranch(deviceId) {
   }
 }
 
-// 在主干上添加分支点（点击主干时）- 使用旧的 fiber API
-async function addBranchPointOnTrunk(trunk, clickPos) {
-  // 计算点击位置在主干上的百分比
-  const positionPercent = calculatePositionPercentOnTrunk(trunk, clickPos)
-
-  try {
-    await axios.post(`/api/floor-plans/${currentPlanId.value}/fiber-branch-points`, {
-      trunk_link_id: trunk.id,
-      position_percent: positionPercent,
-      name: `${fiberBranchPoints.value.length + 1}`,  // 只存储数字序号，显示时动态翻译
-    })
-    ElMessage.success(t('msgSaveSuccess'))
-    await loadFiberData()
-  } catch (e) {
-    console.error('添加分支点失败:', e)
-    ElMessage.error(t('msgUpdateFailed'))
-  }
-}
-
 // 在主干上添加分支点（点击 TopoEdge 时）- 使用新的 topo API
 async function addBranchPointOnTopoEdge(cableId, clickPos) {
   try {
@@ -838,79 +778,6 @@ async function addBranchPointOnTopoEdge(cableId, clickPos) {
     console.error('添加分支点失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
-}
-
-// 计算点击位置在主干上的百分比
-function calculatePositionPercentOnTrunk(trunk, clickPos) {
-  const points = [{ x: trunk.start_x_percent, y: trunk.start_y_percent }]
-  let waypoints = trunk.waypoints
-  if (typeof waypoints === 'string') {
-    try { waypoints = JSON.parse(waypoints) } catch (e) { waypoints = [] }
-  }
-  if (Array.isArray(waypoints)) points.push(...waypoints)
-  points.push({ x: trunk.end_x_percent, y: trunk.end_y_percent })
-
-  let totalLength = 0
-  const segmentLengths = []
-  for (let i = 1; i < points.length; i++) {
-    const dx = points[i].x - points[i-1].x
-    const dy = points[i].y - points[i-1].y
-    const len = Math.sqrt(dx*dx + dy*dy)
-    segmentLengths.push(len)
-    totalLength += len
-  }
-
-  // 用向量投影精确计算最近点，替代暴力循环
-  let minDist = Infinity
-  let bestPercent = 0
-  let accumulated = 0
-
-  for (let i = 0; i < segmentLengths.length; i++) {
-    const segLen = segmentLengths[i]
-    const ax = points[i].x, ay = points[i].y
-    const bx = points[i+1].x, by = points[i+1].y
-    const dx = bx - ax, dy = by - ay
-
-    if (segLen === 0) {
-      const dist = Math.sqrt((ax - clickPos.x)**2 + (ay - clickPos.y)**2)
-      if (dist < minDist) {
-        minDist = dist
-        bestPercent = accumulated / totalLength * 100
-      }
-      accumulated += segLen
-      continue
-    }
-
-    // 向量投影: t = dot(P-A, B-A) / |B-A|^2
-    const t = ((clickPos.x - ax) * dx + (clickPos.y - ay) * dy) / (segLen * segLen)
-    const clampedT = Math.max(0, Math.min(1, t))
-    const projX = ax + clampedT * dx
-    const projY = ay + clampedT * dy
-    const dist = Math.sqrt((projX - clickPos.x)**2 + (projY - clickPos.y)**2)
-
-    if (dist < minDist) {
-      minDist = dist
-      bestPercent = (accumulated + clampedT * segLen) / totalLength * 100
-    }
-    accumulated += segLen
-  }
-
-  return bestPercent
-}
-
-// 获取节点名称
-function getNodeName(node) {
-  const device = devices.value.find(d => d.id === node.device_id)
-  return device ? device.name : `Node ${node.id}`
-}
-
-// 获取链路标签
-function getLinkLabel(link) {
-  const fromNode = nodes.value.find(n => n.id === link.from_node_id)
-  const toNode = nodes.value.find(n => n.id === link.to_node_id)
-  const fromName = fromNode ? getNodeName(fromNode) : '?'
-  const toName = toNode ? getNodeName(toNode) : '?'
-  return `${fromName} → ${toName}`
 }
 
 // 新增链路
@@ -958,24 +825,6 @@ async function deleteLink(linkId) {
     console.error('删除链路失败:', e)
     ElMessage.error(t('msgUpdateFailed'))
   }
-}
-
-// 打开拐点编辑对话框
-function openWaypointDialog(link) {
-  editingLink.value = link
-  // waypoints 可能是字符串（旧数据）或已解析的数组（新接口）
-  try {
-    if (typeof link.waypoints === 'string') {
-      editingWaypoints.value = (JSON.parse(link.waypoints) || []).map(stampUid)
-    } else if (Array.isArray(link.waypoints)) {
-      editingWaypoints.value = link.waypoints.map(stampUid)
-    } else {
-      editingWaypoints.value = []
-    }
-  } catch (e) {
-    editingWaypoints.value = []
-  }
-  showWaypointDialog.value = true
 }
 
 // 保存拐点
@@ -1403,57 +1252,6 @@ function buildTopoEdges() {
   }
 }
 
-// 动态翻译主干名称
-function getTrunkDisplayName(trunk) {
-  if (!trunk.name) return `${t('fiberTrunk')} ${trunk.id}`
-  // 如果名称是纯数字，添加翻译前缀
-  if (/^\d+$/.test(trunk.name)) return `${t('fiberTrunk')} ${trunk.name}`
-  // 如果名称包含中文或英文前缀，解析数字并重新翻译
-  const match = trunk.name.match(/(?:光纤主干|Fiber\s*Trunk)\s*(\d+)/i)
-  if (match) return `${t('fiberTrunk')} ${match[1]}`
-  // 其他情况直接显示
-  return trunk.name
-}
-
-// 动态翻译分支点名称
-function getBranchPointDisplayName(bp) {
-  if (!bp.name) return `${t('fiberBranchPoint')} ${bp.id}`
-  // 如果名称是纯数字，添加翻译前缀
-  if (/^\d+$/.test(bp.name)) return `${t('fiberBranchPoint')} ${bp.name}`
-  // 如果名称包含中文或英文前缀，解析数字并重新翻译
-  const match = bp.name.match(/(?:分支点|Branch\s*Point)\s*(\d+)/i)
-  if (match) return `${t('fiberBranchPoint')} ${match[1]}`
-  // 其他情况直接显示
-  return bp.name
-}
-
-// 获取分支光缆名称（完整显示）
-function getBranchLinkName(link) {
-  const bp = fiberBranchPoints.value.find(bp => bp.id === link.branch_point_id)
-  const device = devices.value.find(d => d.id === link.to_device_id)
-  const bpName = bp ? getBranchPointDisplayName(bp) : `${t('fiberBranchPoint')} ${link.branch_point_id}`
-  const deviceName = device ? device.name : `Device ${link.to_device_id}`
-  return `${bpName} → ${deviceName}`
-}
-
-// 获取分支光缆设备名称（只显示设备名，用于树节点）
-function getBranchLinkDeviceName(link) {
-  const device = devices.value.find(d => d.id === link.to_device_id)
-  return device ? device.name : `Device ${link.to_device_id}`
-}
-
-// 删除分支光缆
-async function deleteBranchLink(linkId) {
-  try {
-    await axios.delete(`/api/floor-plans/${currentPlanId.value}/fiber-branch-links/${linkId}`)
-    ElMessage.success(t('msgSaveSuccess'))
-    await loadFiberData()
-  } catch (e) {
-    console.error('删除分支光缆失败:', e)
-    ElMessage.error(t('msgUpdateFailed'))
-  }
-}
-
 // 删除底图
 async function deletePlan(planId) {
   try {
@@ -1474,68 +1272,29 @@ async function deletePlan(planId) {
   }
 }
 
-// 用 shallowRef 持有 three 对象，避免 Vue 深度响应式代理
-const ctx = shallowRef({
-  scene: null,
-  camera: null,
-  renderer: null,
-  labelRenderer: null,
-  controls: null,
-  deviceGroup: null,
-  linkLines: null,
-  labels: null,
-  fiberTrunkGroup: null,
-  branchPointGroup: null,
-  branchLinkGroup: null,
-  dataLinkPaths: null,
-})
-
-// 厂区真实尺寸（米）
-const plan = {
-  real_width_m: 1000,
-  real_depth_m: 562.5,
-  wall_height_m: 3
+// 场景状态共享（item 946 切片 9a）：sceneState 由 useThreeScene 创建，供 useSceneBuilders/useCanvasInteraction 共享
+const deps = {
+  canvasHost, isFullscreen, floorTiltAngle, autoFocusOffline,
+  filteredDevices, nodes, selectedDevice, currentPlan,
+  deviceMappings: { isDeviceOffline },
 }
-
-let raf = 0
-const raycaster = new THREE.Raycaster()
-const pointer = new THREE.Vector2()
-
-// 颜色映射
-const COLORS = {
-  online: new THREE.Color(0x22d3ee),    // 青色
-  offline: new THREE.Color(0xff4d4f),   // 红色
-  maintenance: new THREE.Color(0xffa116), // 橙色
+const three = useThreeScene(deps)
+const { sceneState } = three
+// 别名：父侧剩余 builder/interaction 代码照旧引用（对象引用共享，非拷贝）
+const ctx = sceneState.ctx
+const plan = sceneState.plan
+const { percentToWorld, getDeviceBaseSize, raycaster, pointer, EMISSIVE_ON, EMISSIVE_OFF, STATUS_COLOR, STATUS_EMISSIVE } = sceneState
+// 渲染循环逐帧函数组合（必须在 initScene 前赋值：首帧同步执行；函数声明 hoisted 可引用）
+three.sceneState.frameUpdate = () => {
+  pulseOfflineDevices()
+  updateOfflineGlow()
+  updateImpactGlow()
+  pulseOfflineLinks()
+  refreshHoveredHud()
+  updateLabelVisibility()
 }
-
-// 设备尺寸比例系数 - 基于底图短边的百分比（调小以适应放大底图）
-const DEVICE_SIZE_RATIO = {
-  switch: 0.008,       // 交换机占底图短边 0.8%
-  core_switch: 0.010,  // 核心交换机 1%
-  ap: 0.005,           // AP 0.5%
-  server_switch: 0.008,
-  uce: 0.008,
-  router: 0.007,
-  firewall: 0.008,
-  wlc: 0.010,
-}
-
-// 计算设备基准尺寸（基于底图尺寸）
-function getDeviceBaseSize(deviceType) {
-  const ref = Math.min(plan.real_width_m, plan.real_depth_m)  // 用短边做基准
-  const ratio = DEVICE_SIZE_RATIO[deviceType] ?? 0.015
-  return ref * ratio
-}
-
-// 状态颜色映射
-const STATUS_COLOR = { online: 0x22d3ee, offline: 0xff4d4f, maintenance: 0xffa116 }
-
-// 设备发光颜色（让设备在暗背景下更醒目）
-const STATUS_EMISSIVE = { online: 0x0a4a5e, offline: 0x5a1a1a, maintenance: 0x5a3a0a }
-
-// 复用的 emissive 颜色常量（避免每次 new THREE.Color）
-const EMISSIVE_ON = new THREE.Color(0x333333)
-const EMISSIVE_OFF = new THREE.Color(0x000000)
+// 模板绑定：场景相机/聚焦方法（CanvasToolbar 与 SidePanel 引用）
+const { resetView, topView, toggleFullscreen, focusDevice } = three
 
 // 创建立体设备模型（基于底图比例）
 function createDeviceModel(deviceType, status = 'online') {
@@ -1743,13 +1502,6 @@ async function updateDeviceScale(newScale) {
   }
 }
 
-// 坐标转换：百分比 → 世界坐标（米）
-function percentToWorld(xPercent, yPercent, elevation = 0) {
-  const x = (Number(xPercent) / 100) * plan.real_width_m
-  const z = (Number(yPercent) / 100) * plan.real_depth_m
-  return { x, y: elevation, z }
-}
-
 // 自定义滚轮缩放处理函数（需要保存引用以便清理）
 function handleWheel(e) {
   e.preventDefault()
@@ -1793,254 +1545,6 @@ function handleWheel(e) {
 
     // 新的相机位置
     camera.position.copy(controls.target).add(direction.multiplyScalar(newDist))
-  }
-}
-
-// 初始化场景
-function initScene() {
-  const host = canvasHost.value
-  if (!host) return
-  // 清除可能残留的旧画布（HMR/重复挂载防护，避免画布堆叠导致设备等重影）
-  while (host.firstChild) host.removeChild(host.firstChild)
-  const W = host.clientWidth
-  const H = host.clientHeight
-
-  // 场景
-  const scene = new THREE.Scene()
-  scene.background = new THREE.Color(0x0a0e16)
-
-  // 相机
-  const camera = new THREE.PerspectiveCamera(50, W / H, 0.1, 8000)
-  camera.position.set(plan.real_width_m / 2, 700, plan.real_depth_m + 700)
-
-  // WebGL 渲染器
-  const renderer = new THREE.WebGLRenderer({ antialias: true })
-  renderer.setSize(W, H)
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-  host.appendChild(renderer.domElement)
-
-  // CSS2D 标签渲染器
-  const labelRenderer = new CSS2DRenderer()
-  labelRenderer.setSize(W, H)
-  labelRenderer.domElement.style.position = 'absolute'
-  labelRenderer.domElement.style.top = '0'
-  labelRenderer.domElement.style.pointerEvents = 'none'
-  host.appendChild(labelRenderer.domElement)
-
-  // 轨道控制
-  const controls = new OrbitControls(camera, renderer.domElement)
-  controls.enableDamping = true
-  controls.target.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
-  controls.maxPolarAngle = Math.PI / 2.05
-  controls.minDistance = 30
-  controls.maxDistance = 3000
-  controls.enablePan = true  // 允许平移
-  controls.panSpeed = 1.5    // 平移速度
-  controls.zoomSpeed = 1.2   // 缩放速度
-  controls.enableZoom = false // 禁用默认滚轮缩放，使用自定义的
-  controls.mouseButtons = {
-    LEFT: THREE.MOUSE.PAN,     // 左键平移
-    MIDDLE: THREE.MOUSE.DOLLY, // 中键缩放
-    RIGHT: THREE.MOUSE.ROTATE  // 右键旋转
-  }
-
-  // 灯光
-  scene.add(new THREE.AmbientLight(0xffffff, 0.7))
-  const dir = new THREE.DirectionalLight(0xffffff, 0.8)
-  dir.position.set(100, 200, 100)
-  scene.add(dir)
-
-  // 地面网格（已隐藏）
-  // const gridHelper = new THREE.GridHelper(plan.real_width_m, 50, 0x1a2230, 0x1a2230)
-  // gridHelper.position.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
-  // scene.add(gridHelper)
-
-  // 保存上下文
-  Object.assign(ctx.value, { scene, camera, renderer, labelRenderer, controls, host })
-
-  // 注册滚轮事件（使用提取的函数以便清理）
-  renderer.domElement.addEventListener('wheel', handleWheel, { passive: false })
-
-  // 动画循环
-  const animate = () => {
-    raf = requestAnimationFrame(animate)
-    controls.update()
-
-    // 离线设备呼吸动画
-    pulseOfflineDevices()
-
-    // 离线设备地面红色光晕呼吸
-    updateOfflineGlow()
-
-    // 受影响设备琥珀色范围光晕呼吸
-    updateImpactGlow()
-
-    // 离线/故障链路红色呼吸闪烁
-    pulseOfflineLinks()
-
-    // 悬浮 HUD 实时刷新（上行口状态/流量）
-    refreshHoveredHud()
-
-    // 根据相机距离更新标签可见性
-    updateLabelVisibility()
-
-    renderer.render(scene, camera)
-    labelRenderer.render(scene, camera)
-  }
-  animate()
-
-  // 点击事件（查看模式选中）
-  renderer.domElement.addEventListener('click', onCanvasClick)
-
-  // 悬浮 HUD 全息面板（查看模式）
-  renderer.domElement.addEventListener('mousemove', onCanvasMouseMove)
-
-  // 鼠标按下事件（编辑模式拖动起点）
-  renderer.domElement.addEventListener('mousedown', onCanvasMouseDown)
-
-  // 窗口大小变化
-  window.addEventListener('resize', onResize)
-}
-
-// 窗口大小变化处理
-function onResize() {
-  const { camera, renderer, labelRenderer, host } = ctx.value
-  if (!host) return
-  const W = host.clientWidth
-  const H = host.clientHeight
-  camera.aspect = W / H
-  camera.updateProjectionMatrix()
-  renderer.setSize(W, H)
-  labelRenderer.setSize(W, H)
-}
-
-// 视角复位
-function resetView() {
-  fitView()
-}
-
-// 俯视图
-function topView() {
-  const { camera, controls } = ctx.value
-  camera.position.set(plan.real_width_m / 2, 500, plan.real_depth_m / 2 + 0.1)
-  controls.target.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
-}
-
-// 自动框景 - 根据底图尺寸和画布宽高比计算合适的相机距离
-function fitView() {
-  const { camera, controls } = ctx.value
-  if (!camera) return
-
-  const fovV = THREE.MathUtils.degToRad(camera.fov)            // 垂直 FOV
-  const aspect = camera.aspect || 1
-
-  // 垂直方向需要的距离（按底图"深度"）
-  const distV = (plan.real_depth_m / 2) / Math.tan(fovV / 2)
-  // 水平方向需要的距离（按底图"宽度"，换算水平 FOV）
-  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
-  const distH = (plan.real_width_m / 2) / Math.tan(fovH / 2)
-
-  const dist = Math.max(distV, distH) * 1.05  // 取大者保证完整可见，1.05 微留边
-
-  // 略微俯视角度（0.6 越小越接近俯视）
-  camera.position.set(plan.real_width_m / 2, dist * 0.6, plan.real_depth_m / 2 + dist * 0.8)
-  controls.target.set(plan.real_width_m / 2, 0, plan.real_depth_m / 2)
-}
-
-// 全屏切换
-function toggleFullscreen() {
-  if (!isFullscreen.value) {
-    // 进入全屏
-    const elem = document.querySelector('.monitor3d')
-    if (elem.requestFullscreen) {
-      elem.requestFullscreen()
-    } else if (elem.webkitRequestFullscreen) {
-      elem.webkitRequestFullscreen()
-    } else if (elem.msRequestFullscreen) {
-      elem.msRequestFullscreen()
-    }
-    isFullscreen.value = true
-  } else {
-    // 退出全屏
-    if (document.exitFullscreen) {
-      document.exitFullscreen()
-    } else if (document.webkitExitFullscreen) {
-      document.webkitExitFullscreen()
-    } else if (document.msExitFullscreen) {
-      document.msExitFullscreen()
-    }
-    isFullscreen.value = false
-  }
-}
-
-// 监听全屏变化
-function onFullscreenChange() {
-  isFullscreen.value = document.fullscreenElement !== null
-}
-
-// 底图加载并发控制
-let floorPlanLoadId = 0
-
-// 加载底图纹理
-async function loadFloorPlanTexture() {
-  const { scene, renderer } = ctx.value
-  if (!currentPlan.value) return
-
-  // 生成新的加载ID，用于并发控制
-  const currentLoadId = ++floorPlanLoadId
-
-  // 清除旧底图
-  const oldGround = scene?.getObjectByName('ground')
-  if (oldGround) {
-    scene.remove(oldGround)
-    oldGround.geometry?.dispose()
-    oldGround.material?.dispose()
-  }
-
-  const loader = new THREE.TextureLoader()
-  let imageUrl = null
-
-  try {
-    const imageBlob = await getFloorPlanContent(currentPlan.value.id)
-    if (currentLoadId !== floorPlanLoadId) return
-    imageUrl = URL.createObjectURL(imageBlob)
-    const tex = await loader.loadAsync(imageUrl)
-
-    // 并发检查：如果这不是最新的加载请求，则放弃
-    if (currentLoadId !== floorPlanLoadId) {
-      tex.dispose()
-      return
-    }
-
-    tex.colorSpace = THREE.SRGBColorSpace
-    tex.anisotropy = renderer.capabilities.getMaxAnisotropy()
-
-    const geo = new THREE.PlaneGeometry(plan.real_width_m, plan.real_depth_m)
-    // 使用带亮度的材质，降低底图亮度
-    const mat = new THREE.MeshBasicMaterial({
-      map: tex,
-      opacity: 0.85,  // 略微降低亮度
-      transparent: true
-    })
-    const ground = new THREE.Mesh(geo, mat)
-
-    // 根据倾斜角度设置旋转和位置
-    // 0度 = 水平躺地 (-Math.PI/2)，90度 = 垂直站立 (0)
-    const tiltRad = (floorTiltAngle.value / 90) * (Math.PI / 2)
-    ground.rotation.x = -Math.PI / 2 + tiltRad
-
-    // 垂直时底图立在场景后方
-    const tiltFactor = floorTiltAngle.value / 90
-    const yPos = tiltFactor * plan.real_depth_m / 2  // 垂直时提升到底图高度的一半
-    const zPos = plan.real_depth_m / 2 - tiltFactor * plan.real_depth_m / 2  // 垂直时移到后方
-
-    ground.position.set(plan.real_width_m / 2, yPos, zPos)
-    ground.name = 'ground'
-    scene.add(ground)
-  } catch (e) {
-    console.error('加载底图失败:', e)
-  } finally {
-    if (imageUrl) URL.revokeObjectURL(imageUrl)
   }
 }
 
@@ -2758,8 +2262,6 @@ function pulseOfflineDevices() {
 // ===== 离线设备红色径向渐变光晕（以设备为中心向外渐变浅红，不覆盖整图）=====
 const OFFLINE_GLOW_RADIUS_FACTOR = 7   // 光晕半径 = 设备基准尺寸 × 系数
 const IMPACT_GLOW_RADIUS_FACTOR = 5.5
-let offlineGlowTexture = null
-let impactGlowTexture = null
 
 function createRadialGlowTexture() {
   const size = 256
@@ -2812,7 +2314,7 @@ function buildOfflineGlow() {
   const offline = filteredDevices.value.filter(isDeviceOffline)
   if (offline.length === 0) return
 
-  if (!offlineGlowTexture) offlineGlowTexture = createRadialGlowTexture()
+  if (!sceneState.offlineGlowTexture) sceneState.offlineGlowTexture = createRadialGlowTexture()
 
   const group = new THREE.Group()
   group.name = 'offline-glow'
@@ -2824,7 +2326,7 @@ function buildOfflineGlow() {
     const radius = getDeviceBaseSize(d.device_type) * OFFLINE_GLOW_RADIUS_FACTOR
     const geo = new THREE.PlaneGeometry(radius * 2, radius * 2)
     const mat = new THREE.MeshBasicMaterial({
-      map: offlineGlowTexture,
+      map: sceneState.offlineGlowTexture,
       transparent: true,
       opacity: 0.9,
       depthWrite: false,
@@ -2864,7 +2366,7 @@ function buildImpactGlow() {
   const impacted = getImpactDevices()
   if (impacted.length === 0) return
 
-  if (!impactGlowTexture) impactGlowTexture = createImpactGlowTexture()
+  if (!sceneState.impactGlowTexture) sceneState.impactGlowTexture = createImpactGlowTexture()
 
   const group = new THREE.Group()
   group.name = 'impact-glow'
@@ -2876,7 +2378,7 @@ function buildImpactGlow() {
     const radius = getDeviceBaseSize(d.device_type) * IMPACT_GLOW_RADIUS_FACTOR
     const geo = new THREE.PlaneGeometry(radius * 2, radius * 2)
     const mat = new THREE.MeshBasicMaterial({
-      map: impactGlowTexture,
+      map: sceneState.impactGlowTexture,
       transparent: true,
       opacity: 0.72,
       depthWrite: false,
@@ -3934,23 +3436,21 @@ let hudDeviceId = null     // 当前悬浮设备 id（避免重复刷新）
 let hudPinnedDeviceId = null
 let hudAutoHideTimer = null
 
-// SNMP 上行接口数据缓存：deviceId -> { ts, items }
-const snmpIfaceCache = new Map()
+// SNMP 上行接口数据缓存：deviceId -> { ts, items }（Map 实例在 sceneState 共享，HUD 与 WS handler 复用）
 const SNMP_IFACE_TTL = 8000   // 缓存有效期（ms），自带节流避免重复请求
-const snmpTrafficCache = new Map()
 const SNMP_TRAFFIC_TTL = 12000
 
 // 拉取设备被监控接口（含上行口 oper_status 与实时流量）
 async function fetchDeviceInterfaces(deviceId, force = false) {
   if (deviceId == null) return
-  const cached = snmpIfaceCache.get(deviceId)
+  const cached = sceneState.snmpIfaceCache.get(deviceId)
   if (!force && cached && (Date.now() - cached.ts) < SNMP_IFACE_TTL) return
   // 先占位（保留旧 items），避免并发重复请求
-  snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
+  sceneState.snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
   try {
     const res = await axios.get(`/api/devices/${deviceId}/interfaces`, { params: { monitored_only: true } })
     const items = res.data?.items || []
-    snmpIfaceCache.set(deviceId, { ts: Date.now(), items })
+    sceneState.snmpIfaceCache.set(deviceId, { ts: Date.now(), items })
     fetchUplinkTrafficSamples(deviceId, true)
     // 数据回来后若仍悬浮该设备，立即刷新 HUD
     if (hudDeviceId === deviceId) {
@@ -3959,14 +3459,14 @@ async function fetchDeviceInterfaces(deviceId, force = false) {
     }
   } catch (e) {
     // 静默失败（设备未配置 SNMP / 无接口等），保留旧缓存
-    snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
+    sceneState.snmpIfaceCache.set(deviceId, { ts: Date.now(), items: cached?.items || [] })
   }
 }
 
 // 取设备已标记为上行口的被监控接口
 function getUplinkInterfaces(device) {
   if (!device) return []
-  const cached = snmpIfaceCache.get(device.id)
+  const cached = sceneState.snmpIfaceCache.get(device.id)
   if (!cached) return []
   return (cached.items || []).filter(i => i.is_uplink)
 }
@@ -3999,20 +3499,20 @@ async function fetchUplinkTrafficSamples(deviceId, force = false) {
   if (!iface?.if_index) return
 
   const cacheKey = `${deviceId}:${iface.if_index}`
-  const cached = snmpTrafficCache.get(cacheKey)
+  const cached = sceneState.snmpTrafficCache.get(cacheKey)
   if (!force && cached && (Date.now() - cached.ts) < SNMP_TRAFFIC_TTL) return
 
-  snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
+  sceneState.snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
   try {
     const res = await axios.get(`/api/devices/${deviceId}/interfaces/${iface.if_index}/traffic`, { params: { limit: 24 } })
     const samples = res.data?.samples || []
-    snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples })
+    sceneState.snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples })
     if (hudDeviceId === deviceId) {
       const d = devices.value.find(x => x.id === deviceId)
       if (d) updateHudContent(d)
     }
   } catch (e) {
-    snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
+    sceneState.snmpTrafficCache.set(cacheKey, { ts: Date.now(), ifIndex: iface.if_index, samples: cached?.samples || [] })
   }
 }
 
@@ -4043,7 +3543,7 @@ function getUplinkTraffic(device) {
 function getUplinkTrafficSamples(device) {
   const iface = getPrimaryTrafficInterface(device)
   if (!device || !iface?.if_index) return []
-  const cached = snmpTrafficCache.get(`${device.id}:${iface.if_index}`)
+  const cached = sceneState.snmpTrafficCache.get(`${device.id}:${iface.if_index}`)
   return cached?.samples || []
 }
 
@@ -4548,184 +4048,6 @@ function onWiringMouseUp(e) {
   cancelWiring()
 }
 
-// 聚焦到设备（带平滑动画）- 使用基于底图尺寸的距离
-let focusAnimationId = null
-function focusDevice(device) {
-  const { camera, controls, deviceGroup } = ctx.value
-
-  const node = nodes.value.find(n => n.device_id === device.id)
-  if (!node) return
-
-  const w = percentToWorld(node.x_percent, node.y_percent, 0)
-
-  // 取消之前的动画
-  if (focusAnimationId) {
-    cancelAnimationFrame(focusAnimationId)
-  }
-
-  // 基于底图尺寸计算聚焦距离
-  const ref = Math.min(plan.real_width_m, plan.real_depth_m)
-  const focusDist = ref * 0.08
-  const focusHeight = ref * 0.05
-  const lookAtHeight = ref * 0.03
-
-  // 目标位置
-  const targetPos = { x: w.x + focusDist, y: focusHeight, z: w.z + focusDist }
-  const targetLookAt = { x: w.x, y: lookAtHeight, z: w.z }
-
-  // 当前位置
-  const startPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
-  const startLookAt = { x: controls.target.x, y: controls.target.y, z: controls.target.z }
-
-  // 动画参数
-  const duration = 60
-  let frame = 0
-
-  const animate = () => {
-    frame++
-    const progress = Math.min(frame / duration, 1)
-    const ease = 1 - Math.pow(1 - progress, 3)
-
-    camera.position.x = startPos.x + (targetPos.x - startPos.x) * ease
-    camera.position.y = startPos.y + (targetPos.y - startPos.y) * ease
-    camera.position.z = startPos.z + (targetPos.z - startPos.z) * ease
-
-    controls.target.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * ease
-    controls.target.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * ease
-    controls.target.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * ease
-
-    if (progress < 1) {
-      focusAnimationId = requestAnimationFrame(animate)
-    } else {
-      focusAnimationId = null
-    }
-  }
-  animate()
-
-  selectedDevice.value = device
-
-  // 高亮该设备（独立 Group）
-  if (deviceGroup) {
-    deviceGroup.children.forEach(model => {
-      const d = model.userData.device
-      if (d && d.id === device.id) {
-        model.traverse(child => {
-          if (child.material) {
-            child.material.emissive = EMISSIVE_ON
-          }
-        })
-      }
-    })
-  }
-}
-
-// 通用相机平滑动画（缓动到指定位置与注视点）
-function animateCameraTo(targetPos, targetLookAt, duration = 60) {
-  const { camera, controls } = ctx.value
-  if (!camera) return
-  if (focusAnimationId) cancelAnimationFrame(focusAnimationId)
-
-  const startPos = { x: camera.position.x, y: camera.position.y, z: camera.position.z }
-  const startLookAt = { x: controls.target.x, y: controls.target.y, z: controls.target.z }
-  let frame = 0
-
-  const animate = () => {
-    frame++
-    const progress = Math.min(frame / duration, 1)
-    const ease = 1 - Math.pow(1 - progress, 3)
-
-    camera.position.x = startPos.x + (targetPos.x - startPos.x) * ease
-    camera.position.y = startPos.y + (targetPos.y - startPos.y) * ease
-    camera.position.z = startPos.z + (targetPos.z - startPos.z) * ease
-
-    controls.target.x = startLookAt.x + (targetLookAt.x - startLookAt.x) * ease
-    controls.target.y = startLookAt.y + (targetLookAt.y - startLookAt.y) * ease
-    controls.target.z = startLookAt.z + (targetLookAt.z - startLookAt.z) * ease
-
-    if (progress < 1) {
-      focusAnimationId = requestAnimationFrame(animate)
-    } else {
-      focusAnimationId = null
-    }
-  }
-  animate()
-}
-
-// 框住多台离线设备所在区域（多设备同时掉线时俯视取景）
-function focusOfflineCluster(list) {
-  const { camera } = ctx.value
-  if (!camera) return
-
-  const pts = []
-  list.forEach(d => {
-    const node = nodes.value.find(n => n.device_id === d.id)
-    if (node) pts.push(percentToWorld(node.x_percent, node.y_percent, 0))
-  })
-  if (pts.length === 0) return
-
-  // 计算包围盒中心与跨度
-  let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
-  pts.forEach(p => {
-    minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x)
-    minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z)
-  })
-  const cx = (minX + maxX) / 2
-  const cz = (minZ + maxZ) / 2
-  const spanX = Math.max(maxX - minX, 1)
-  const spanZ = Math.max(maxZ - minZ, 1)
-  const ref = Math.min(plan.real_width_m, plan.real_depth_m)
-
-  // 取景距离：用 FOV 反算容纳整个簇，并留边距
-  const fovV = THREE.MathUtils.degToRad(camera.fov)
-  const aspect = camera.aspect || 1
-  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
-  const distV = (spanZ / 2) / Math.tan(fovV / 2)
-  const distH = (spanX / 2) / Math.tan(fovH / 2)
-  let dist = Math.max(distV, distH) * 1.6 + ref * 0.04
-  dist = Math.max(dist, ref * 0.1)   // 簇很小时也别贴太近
-
-  const targetPos = { x: cx, y: dist * 0.6, z: cz + dist * 0.8 }
-  const targetLookAt = { x: cx, y: 0, z: cz }
-  animateCameraTo(targetPos, targetLookAt)
-}
-
-// 平滑复位到全景（与 fitView 同一取景，但带缓动动画）
-function resetViewAnimated() {
-  const { camera } = ctx.value
-  if (!camera) return
-  const fovV = THREE.MathUtils.degToRad(camera.fov)
-  const aspect = camera.aspect || 1
-  const distV = (plan.real_depth_m / 2) / Math.tan(fovV / 2)
-  const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect)
-  const distH = (plan.real_width_m / 2) / Math.tan(fovH / 2)
-  const dist = Math.max(distV, distH) * 1.05
-  const targetPos = { x: plan.real_width_m / 2, y: dist * 0.6, z: plan.real_depth_m / 2 + dist * 0.8 }
-  const targetLookAt = { x: plan.real_width_m / 2, y: 0, z: plan.real_depth_m / 2 }
-  animateCameraTo(targetPos, targetLookAt)
-}
-
-// 自动锁定离线设备（去抖：批量掉线/逐台恢复时合并判定）
-// 0 台离线 → 视角复位；1 台 → 锁定该设备；多台 → 框住整片受影响区域
-let autoFocusDebounceTimer = null
-function scheduleAutoFocusOffline() {
-  if (!autoFocusOffline.value) return
-  if (autoFocusDebounceTimer) clearTimeout(autoFocusDebounceTimer)
-  autoFocusDebounceTimer = setTimeout(() => {
-    autoFocusDebounceTimer = null
-    if (!autoFocusOffline.value) return
-    const offline = filteredDevices.value.filter(d =>
-      isDeviceOffline(d) && nodes.value.some(n => n.device_id === d.id)
-    )
-    if (offline.length === 0) {
-      resetViewAnimated()           // 全部恢复，地图视角复位
-    } else if (offline.length === 1) {
-      focusDevice(offline[0])       // 仅剩一台，锁定该设备
-    } else {
-      focusOfflineCluster(offline)  // 多台仍离线，重新框住剩余区域
-    }
-  }, 600)
-}
-
 // 跳转设备详情
 function goToDeviceDetail(deviceId) {
   router.push(`/devices/${deviceId}`)
@@ -4829,7 +4151,7 @@ function focusIncidentEvent(event) {
   if (!event?.device_id) return
   const device = devices.value.find(d => d.id === event.device_id)
   if (!device) return
-  focusDevice(device)
+  three.focusDevice(device)
   selectedDevice.value = device
 }
 
@@ -4932,11 +4254,11 @@ async function switchPlan(planId) {
     await loadTrafficHeat()
 
     // 重建场景
-    loadFloorPlanTexture()
+    three.loadFloorPlanTexture()
     rebuildScene()
 
     // 重置视角
-    resetView()
+    three.resetView()
 
     ElMessage.success(`${t('monitorScreenPlanSwitched')}: ${plan.name}`)
   } catch (e) {
@@ -4991,7 +4313,7 @@ async function uploadFloorPlan() {
       currentPlanId.value = newPlan.id
 
       // 加载新底图纹理
-      loadFloorPlanTexture()
+      three.loadFloorPlanTexture()
     }
 
     // 关闭对话框
@@ -5163,9 +4485,9 @@ const REACHABILITY_POLL_INTERVAL = 20000  // 对账轮询间隔（毫秒）
 function handleInterfaceStatusChange(msg) {
   if (msg.device_id == null) return
   // 失效该设备的接口缓存，强制下次拉取最新
-  snmpIfaceCache.delete(msg.device_id)
-  for (const key of Array.from(snmpTrafficCache.keys())) {
-    if (String(key).startsWith(`${msg.device_id}:`)) snmpTrafficCache.delete(key)
+  sceneState.snmpIfaceCache.delete(msg.device_id)
+  for (const key of Array.from(sceneState.snmpTrafficCache.keys())) {
+    if (String(key).startsWith(`${msg.device_id}:`)) sceneState.snmpTrafficCache.delete(key)
   }
   // 立即重新拉取（若正悬浮该设备会自动刷新 HUD）
   fetchDeviceInterfaces(msg.device_id, true)
@@ -5176,7 +4498,7 @@ function handleInterfaceStatusChange(msg) {
   const ifName = msg.if_name || `if${msg.if_index}`
   const uplinkTag = msg.is_uplink ? t('monitor3dUplinkTag') : ''
   if (device && (msg.is_uplink || msg.source === 'trap')) {
-    focusDevice(device)
+    three.focusDevice(device)
     showHudForDevice(device, 6000)
   }
   if (msg.new_status === 'down') {
@@ -5206,11 +4528,11 @@ function handleDeviceStatusChange(msg) {
   if (msg.new_state === 'unreachable') {
     ElMessage.error({ message: t('monitor3dDeviceOffline', { label }), duration: 5000 })
     // 自动锁定镜头（去抖：多台同时掉线会合并为框住整片区域，避免镜头乱跳）
-    scheduleAutoFocusOffline()
+    three.scheduleAutoFocusOffline()
   } else if (msg.new_state === 'reachable' && msg.old_state === 'unreachable') {
     ElMessage.success({ message: t('monitor3dDeviceRecovered', { label }), duration: 4000 })
     // 逐台恢复时重新框定剩余离线区域；全部恢复则视角复位
-    scheduleAutoFocusOffline()
+    three.scheduleAutoFocusOffline()
   }
   loadActiveFaults()
   loadCommandPanelData()
@@ -5300,7 +4622,7 @@ async function reconcileDeviceReachability() {
       refreshDeviceVisuals()
       // 新离线或有设备恢复时重新取景（WS 未连通时的兜底）
       // 恢复会重新框定剩余离线区域，全部恢复则复位
-      if (newlyOffline || recovered) scheduleAutoFocusOffline()
+      if (newlyOffline || recovered) three.scheduleAutoFocusOffline()
     }
   } catch (e) {
     // 轮询失败静默处理，下个周期重试
@@ -5320,9 +4642,19 @@ function stopReachabilityPoll() {
 }
 
 onMounted(async () => {
-  initScene()
+  three.initScene()
+
+  // 场景交互监听（9a/9b 中间态由父侧接线；9c 移交 interaction.attachSceneListeners）
+  const domElement = three.sceneState.ctx.value.renderer?.domElement
+  if (domElement) {
+    domElement.addEventListener('wheel', handleWheel, { passive: false })
+    domElement.addEventListener('click', onCanvasClick)
+    domElement.addEventListener('mousemove', onCanvasMouseMove)
+    domElement.addEventListener('mousedown', onCanvasMouseDown)
+  }
+
   await loadData()
-  loadFloorPlanTexture()
+  three.loadFloorPlanTexture()
   buildDeviceModels()
   buildLinks()
   buildLabels()
@@ -5336,7 +4668,7 @@ onMounted(async () => {
   buildOfflineGlow()
 
   // 自动框景 - 延迟执行确保布局稳定
-  requestAnimationFrame(() => fitView())
+  requestAnimationFrame(() => three.fitView())
 
   // 订阅设备实时可达性状态变化
   connectDeviceStatusWs()
@@ -5348,13 +4680,13 @@ onMounted(async () => {
   startTrafficHeatPoll()
 
   // 全屏事件监听
-  document.addEventListener('fullscreenchange', onFullscreenChange)
-  document.addEventListener('webkitfullscreenchange', onFullscreenChange)
+  document.addEventListener('fullscreenchange', three.onFullscreenChange)
+  document.addEventListener('webkitfullscreenchange', three.onFullscreenChange)
 })
 
 onBeforeUnmount(() => {
-  cancelAnimationFrame(raf)
-  window.removeEventListener('resize', onResize)
+  // 场景资源释放（rAF/resize/autoFocusDebounceTimer/controls/renderer/scene traverse/glow 纹理/DOM 移交 three.dispose）
+  three.dispose()
   window.removeEventListener('theme-change', handleThemeChange)
   // 连线拖拽可能在卸载时进行中，直接移除其 window 监听（不只依赖 cancelWiring）
   window.removeEventListener('mousemove', onWiringMouseMove)
@@ -5374,66 +4706,28 @@ onBeforeUnmount(() => {
   // 断开设备状态 WebSocket
   disconnectDeviceStatusWs()
 
-  // 清除自动锁定去抖定时器
-  if (autoFocusDebounceTimer) {
-    clearTimeout(autoFocusDebounceTimer)
-    autoFocusDebounceTimer = null
-  }
-
   // 移除全屏事件监听
-  document.removeEventListener('fullscreenchange', onFullscreenChange)
-  document.removeEventListener('webkitfullscreenchange', onFullscreenChange)
+  document.removeEventListener('fullscreenchange', three.onFullscreenChange)
+  document.removeEventListener('webkitfullscreenchange', three.onFullscreenChange)
 
-  // 移除滚轮事件监听
-  if (ctx.value.renderer?.domElement) {
-    ctx.value.renderer.domElement.removeEventListener('wheel', handleWheel)
+  // 场景交互监听（9c 移交 interaction.dispose；置于 three.dispose 之后，ctx 仍持有已分离的 domElement 引用）
+  const domElement = three.sceneState.ctx.value.renderer?.domElement
+  if (domElement) {
+    domElement.removeEventListener('wheel', handleWheel)
+    domElement.removeEventListener('click', onCanvasClick)
+    domElement.removeEventListener('mousedown', onCanvasMouseDown)
+    domElement.removeEventListener('mousemove', onCanvasMouseMove)
+    domElement.removeEventListener('mousemove', onDragMove)
+    domElement.removeEventListener('mouseup', onDragEnd)
   }
 
-  const { renderer, controls, host, labelRenderer, scene } = ctx.value
-
-  // 清除事件
-  renderer?.domElement?.removeEventListener('click', onCanvasClick)
-  renderer?.domElement?.removeEventListener('mousedown', onCanvasMouseDown)
-  renderer?.domElement?.removeEventListener('mousemove', onCanvasMouseMove)
-  renderer?.domElement?.removeEventListener('mousemove', onDragMove)
-  renderer?.domElement?.removeEventListener('mouseup', onDragEnd)
-
-  // 释放 HUD
+  // 释放 HUD（9c 移交 interaction.dispose）
   if (hudObj) {
-    scene?.remove(hudObj)
+    three.sceneState.ctx.value.scene?.remove(hudObj)
     hudObj = null
     hudEl = null
     hudDeviceId = null
   }
-
-  // 释放资源
-  controls?.dispose()
-  renderer?.dispose()
-
-  // 清除场景：材质可能是数组（MeshBasicMaterial[]），需逐个 dispose；
-  // 同时释放材质上的纹理（如底图 map），避免 GPU 纹理残留
-  scene?.traverse(obj => {
-    obj.geometry?.dispose()
-    const materials = Array.isArray(obj.material) ? obj.material : [obj.material]
-    materials.forEach(mat => {
-      mat?.dispose()
-      if (mat?.map) mat.map.dispose()
-    })
-  })
-
-  // 释放模块级纹理并置空，重挂载时 buildOfflineGlow / impact 逻辑会重建，不复用已释放实例
-  if (offlineGlowTexture) {
-    offlineGlowTexture.dispose()
-    offlineGlowTexture = null
-  }
-  if (impactGlowTexture) {
-    impactGlowTexture.dispose()
-    impactGlowTexture = null
-  }
-
-  // 移除 DOM
-  if (renderer?.domElement) host?.removeChild(renderer.domElement)
-  if (labelRenderer?.domElement) host?.removeChild(labelRenderer.domElement)
 })
 </script>
 
