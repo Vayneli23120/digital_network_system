@@ -48,7 +48,7 @@
 > | 1 | 凭证接口停止回传明文 + 挂权限 + 管理员账号 CLI | ✅ 2026-07-29 |
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
-> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | 🟡 高风险主线 4A–4E-B5B 已完成（2026-08-02），长尾端点继续治理 |
+> | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | ✅ 高风险主线 4A–4E-B5B（2026-08-02）+ 长尾端点（2026-08-03 slice A）全部完成 |
 > | 5 | 会话级 SSH 凭证（用时输入一次）+ 高危操作二次确认 + 加密密钥独立 | ⬜ |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
@@ -75,8 +75,9 @@
   → 修复（步骤 3）：认证中间件改为始终注册；只有 `auth_enabled=false` **且** `app.debug=true` 才允许开发旁路。其余配置即使误关认证也拒绝受保护 API。`AUTH_ENABLED` / `APP_DEBUG` / `JWT_SECRET` / `CORS_ALLOWED_ORIGINS` 环境变量现已真正映射到配置，Docker 默认 `AUTH_ENABLED=true`、`APP_DEBUG=false`。
 - [x] **P0** `auth/router.py:370-395` — `auth_enabled=False` 时登录对任意用户名/密码返回 token（密码错误也落到占位 token 分支）。`[已复核]`
   → 修复（步骤 3）：占位登录仅限显式 debug 开发旁路；`auth_enabled=false + debug=false` 返回 503，不再签发占位 token。
-- [ ] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
+- [x] **P0** 后端接口级鉴权缺失 — 全仓仅 `deploy/router.py:1319`（删除部署历史）与 `ai/router.py` 几个端点挂了权限依赖，其余上百个写操作接口无任何校验。`[已复核]`
   → 高风险主线已分切片完成 alerts、deploy、devices、logs、backups、templates、faults、maintenance、planned maintenance、workflows、users、system settings/SLO/system ops；Spare/Movements C1 已完成代码收口、待服务器验证，Notifications、Jobs、Compliance 与 Scan Sessions 等长尾端点仍待逐域复核。
+  → 长尾收口（批次二 slice A，2026-08-03）：新增 `notification:*`、`job:*`、`compliance:read/write`、`discovery:*`、`scan:*` 10 个权限 code；notifications(5)、jobs(7)、compliance(20)、discovery(3)、scan(PC 侧 5) 全部挂上 `require_permission`（jobs/scan 原为全零 auth，一并补齐认证+授权）；`scan` 的 gun 侧端点（join/items/remove-item）因扫码枪无登录终端而按会话码凭据保持开放。同时修复两处 shadowed route：jobs `/stats`/`/types`/`/statuses` 与 scan `/sessions/active` 注册到通配路径之前（此前被 `/{job_id}`、`/sessions/{session_code}` 吞掉 → 404）。
 - [x] **P0** `permissions/router.py` — 权限定义、角色与用户角色分配的九个写接口没有功能权限依赖，任意已登录用户可创建含 `admin:all` 的角色或直接给自己绑定管理员角色。`[已复核]`
   → 修复（步骤 4E-B0）：权限/角色创建更新克隆使用 `role:write`，删除使用 `role:delete`，用户角色覆盖/添加/移除使用 `user:write`；普通用户自提权三条路径均为 403，角色管理与用户管理职责不能互相替代。
 - [x] **P0** `faults/router.py` — 23 条故障读写、删除、AI 与状态流转端点均无功能权限依赖，任意已登录用户可查看和修改全部故障。`[已复核]`
@@ -134,6 +135,35 @@
 - [ ] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]`
 
 **完成判定**：`auth_enabled=true` 下跑一遍主要写操作，未授权账号应全部 403；日志文件接口对 `../` 返回 400。
+
+### 批次二·安全 · 切片 A · Linux 实测（2026-08-03，HEAD 前 `51ce7cc`）
+
+> 对应 item 78（长尾 authz）。items 115/125/130/133 在切片 B/C，item 134 按约定延后。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_batch2_authz_longtail.py` | ✅ 14 passed（新增） |
+| `pytest tests/test_batch1_regressions.py` | ✅ 15 passed |
+| 全量 pytest | ✅ 53 failed / 674 passed / 4 skipped —— 失败集合与基线**逐条一致**（24 compliance_service + 11 tool_executor + 8 discovery_service + 3 spare + 2 deploy + 2 auth + 1 email + 1 device + 1 dashboard），无新增失败（passed 660→674 = 新增 14） |
+| `frontend validate:locales` + `npm run build` | ✅ 通过（零前端改动，验证性） |
+
+**根因**：批次二步骤 4 高风险主线完成后，Notifications/Jobs/Compliance/Discovery/Scan 五组端点仍是长尾：jobs 与 scan 8+7 端点**全零认证**，compliance 20 端点中 17 个零认证，discovery 仅 `get_current_active_user`（认证无授权），notifications 仅认证。
+
+**改动**：
+- `permissions/router.py`：EXTENDED_PERMISSIONS 新增 10 个 code（`notification:read/write`、`job:read/cancel`、`compliance:read/write`、`discovery:read/scan`、`scan:read/write`），startup 增量补齐；PRESET_ROLES operator 追加全部长尾 + `ai:config`（保住 AI 配置入口），viewer 追加只读侧。
+- 五组端点按 `require_permission` 挂依赖（`require_permission` 内部执行 `get_current_user_from_token`，**单个依赖同时完成 auth+authz**）：notifications 5（read/write）、jobs 7（read/cancel）、compliance 20（check/read/write/ai:config）、discovery 3（read/scan）、scan PC 侧 5（read/write）。
+- **shadowed route 修复**：jobs `/stats`、`/types`、`/statuses` 与 scan `/sessions/active` 移到通配路径 `/{job_id}`、`/sessions/{session_code}` **之前**——此前 GET `/api/jobs/stats`、`/api/scan/sessions/active` 被通配吞掉恒 404。
+
+**行为变化**：
+- `auth_enabled=true` 下 jobs/scan/compliance 等端点从"裸奔"变为按权限 401/403；`operator`/`viewer` 预置角色已获对应授权，存量部署 startup 时自动补齐。
+- `auth_enabled=false + debug=true` 开发旁路下所有端点行为不变（require_permission 返回 None 放行）。
+
+**保留项 / 说明**：
+- **scan gun 侧端点（`POST /sessions/join`、`POST /sessions/items`、`DELETE /sessions/{code}/items/{serial}`）保持开放**：/scanner 终端页是纯 HTML 无登录（兼容旧版 Chromium），扫码枪无法携带 token；这些端点只操作已存在会话，靠 6 位随机会话码 + 30 分钟有效期作凭据。电脑端创建/查询/完成/删除会话已上锁。
+- compliance `/standards/upload` 未做移动：无同层 `POST /standards/{x}` 竞争（仅 `/generate-rules`、`/update-rules` 为三层路径），不存在 shadow。
+- 既有失败基线中 compliance/discovery 相关失败均为**服务层**测试（test_compliance_service/test_discovery_service），与本次 router 改动无关，未新增。
+
 
 **步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
 `tests/test_credentials_no_plaintext.py`（10 项）与 `tests/test_sso_placeholder.py`（7 项）全过，
@@ -1332,7 +1362,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03；步骤 5 会话级 SSH 凭证 + 加密密钥独立、步骤 6 OIDC 真接仍 pending
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
