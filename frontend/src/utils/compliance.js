@@ -98,3 +98,109 @@ export const categoryType = (cat) => ({ security: 'danger', availability: 'warni
 
 // 规则严重级别 → element-plus tag type
 export const severityType = (sev) => ({ critical: 'danger', high: 'warning', medium: 'info', low: '' }[sev] || '')
+
+// 分析配置行与检查结果关联，返回行级分析结果（结果内为 configLineAnalysis 结构）
+export const analyzeConfigLines = (configText, results) => {
+  const lines = configText.split('\n')
+  const analysis = []
+
+  // 收集失败项的 pattern
+  const failedPatterns = results
+    .filter(r => !r.passed && r.pattern)
+    .map(r => ({
+      ...r,
+      patternLower: r.pattern.toLowerCase()
+    }))
+
+  // 收集通过项的 pattern
+  const passedPatterns = results
+    .filter(r => r.passed && r.pattern)
+    .map(r => r.pattern.toLowerCase())
+
+  for (let i = 0; i < lines.length; i++) {
+    const lineNum = i + 1
+    const content = lines[i]
+    const contentLower = content.toLowerCase()
+    const issues = []
+    let isPassed = false
+
+    // 检查失败项是否匹配该行
+    for (const failed of failedPatterns) {
+      // 简单的关键词匹配或尝试正则匹配
+      try {
+        if (contentLower.includes(failed.patternLower) ||
+            new RegExp(failed.pattern, 'i').test(content)) {
+          issues.push({
+            check_id: failed.check_id,
+            check_name: failed.check_name,
+            severity: failed.severity,
+            category: failed.category,
+            detail: failed.detail,
+            recommendation: failed.recommendation
+          })
+        }
+      } catch {
+        // 正则无效时使用关键词匹配
+        if (contentLower.includes(failed.patternLower)) {
+          issues.push({
+            check_id: failed.check_id,
+            check_name: failed.check_name,
+            severity: failed.severity,
+            category: failed.category,
+            detail: failed.detail,
+            recommendation: failed.recommendation
+          })
+        }
+      }
+    }
+
+    // 检查是否通过了某些检查
+    for (const passedPattern of passedPatterns) {
+      if (contentLower.includes(passedPattern)) {
+        isPassed = true
+        break
+      }
+    }
+
+    analysis.push({
+      lineNum,
+      content,
+      issues,
+      isPassed: isPassed && issues.length === 0
+    })
+  }
+
+  return analysis
+}
+
+// 获取配置行样式类
+export const getLineClass = (line) => {
+  if (!line.issues || line.issues.length === 0) {
+    return line.isPassed ? 'passed' : 'normal'
+  }
+
+  // 按最高严重程度确定样式
+  const severities = line.issues.map(i => i.severity)
+  if (severities.includes('critical')) return 'critical'
+  if (severities.includes('high')) return 'high'
+  if (severities.includes('medium')) return 'medium'
+  return 'low'
+}
+
+// 配置高亮面板的严重级别 → element-plus tag type（与 severityType 不同：low → success）
+export const severityTagType = (sev) => {
+  const types = { critical: 'danger', high: 'warning', medium: 'info', low: 'success' }
+  return types[sev] || ''
+}
+
+// 配置高亮面板的分类 → element-plus tag type
+export const categoryTagType = (cat) => {
+  const types = { security: 'danger', availability: 'warning', compliance: 'info' }
+  return types[cat] || ''
+}
+
+// 首字母大写
+export const capitalize = (str) => {
+  if (!str) return ''
+  return str.charAt(0).toUpperCase() + str.slice(1)
+}
