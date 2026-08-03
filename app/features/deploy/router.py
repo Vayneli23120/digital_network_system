@@ -1512,6 +1512,16 @@ def create_deploy_history(
         )
         db.add(device_result)
 
+    # 批次二·步骤5：成功部署/回滚后标记 config_changed_at，
+    # 使设备进入「需备份」列表（备份不再自动，改为提醒）
+    success_device_ids = [
+        device_dict['id'] for device_dict, result in zip(device_data_list, results)
+        if result.get('success')
+    ]
+    if success_device_ids:
+        for dev in db.query(Device).filter(Device.id.in_(success_device_ids)).all():
+            dev.config_changed_at = datetime.utcnow()
+
     db.flush()  # 获取 ID
     history_id = history.id
     # 注意：这里不 commit，由调用方（execute_deploy / rollback_deploy）统一提交，

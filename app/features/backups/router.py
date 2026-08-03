@@ -20,8 +20,9 @@ from app.shared.device_ops import run_device_op
 from app.shared.models import BackupRecord, Device, CredentialGroup, LogEntry
 from app.shared.time_utils import utc_iso
 from .backup_service import delete_backup as svc_delete_backup
-from .netmiko_service import backup_device_config
-from .schemas import BatchBackupRequest
+from .needs_backup import list_needs_backup, mark_devices_config_changed
+from .netmiko_service import NetmikoAuthenticationException, backup_device_config
+from .schemas import BackupRequest, BatchBackupRequest
 from .security import (
     UnsafeBackupRecordPathError,
     delete_backup_file,
@@ -38,14 +39,38 @@ require_backup_batch = require_permission("backup:batch")
 require_backup_delete = require_permission("backup:delete")
 
 
+def _operator_credentials(request) -> Optional[dict]:
+    """从请求提取操作者会话级 SSH 凭证；未提供返回 None。
+
+    部分填写视为错误（避免静默降级）；凭证仅存于请求/线程内存，不落库、不入日志。
+    """
+    if request is None:
+        return None
+    provided = any([request.username, request.password, request.secret])
+    username = (request.username or "").strip()
+    password = request.password or ""
+    if provided and (not username or not password):
+        raise HTTPException(status_code=400, detail="请完整填写操作者 SSH 凭证（用户名与密码必填）")
+    if not username or not password:
+        return None
+    return {"username": username, "password": password, "secret": request.secret or ""}
+
+
 @router.post("/backup/{device_id}")
 async def backup_device(
     device_id: int,
+    request: Optional[BackupRequest] = None,
     principal: Principal = Depends(get_current_principal),
     db: Session = Depends(get_db),
     _: None = Depends(require_backup_execute),
 ):
-    """备份单个设备配置"""
+    """备份单个设备配置（同步）。
+
+    默认（credential_session_required=True）必须携带操作者会话级 SSH 凭证，
+    密码仅存于请求内存、不落库不入日志；未提供返回 400。
+    仅当管理员显式关闭开关（credential_session_required=False）才降级回退
+    服务器存储的凭证组。
+    """
     operator = principal.username
     start_time = time.time()
     device = None
@@ -55,43 +80,45 @@ async def backup_device(
         if not device:
             raise HTTPException(status_code=404, detail="设备不存在")
 
-        # 从凭证组获取 SSH 凭证
-        cred_group_name = device.credential_group or "default"
-        cred_group = db.query(CredentialGroup).filter(
-            CredentialGroup.name == cred_group_name
-        ).first()
-
-        if not cred_group:
+        config = get_config()
+        credentials = _operator_credentials(request)
+        if credentials is not None:
+            # 操作者会话级凭证（仅内存，不落库不入日志）
+            cred_group_name = "操作者会话凭证"
+        elif config.security.credential_session_required:
+            raise HTTPException(
+                status_code=400,
+                detail="请使用操作者 SSH 凭证（密码不存储在服务器上）"
+            )
+        else:
+            # 显式降级：服务器存储的凭证组
+            cred_group_name = device.credential_group or "default"
             cred_group = db.query(CredentialGroup).filter(
-                CredentialGroup.name == "default"
+                CredentialGroup.name == cred_group_name
             ).first()
+            if not cred_group:
+                cred_group = db.query(CredentialGroup).filter(
+                    CredentialGroup.name == "default"
+                ).first()
+            if not cred_group:
+                raise HTTPException(
+                    status_code=500,
+                    detail="未配置 SSH 凭证，请改用操作者凭证或先添加凭证组"
+                )
+            credentials = {
+                "username": cred_group.username,
+                "password": decrypt_password(cred_group.password_encrypted),
+                "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
+            }
 
-        if not cred_group:
+        # 检查凭证是否完整（操作者凭证不完整已在 _operator_credentials 拦截）
+        if not credentials.get("username") or not credentials.get("password"):
             raise HTTPException(
-                status_code=500,
-                detail="未配置 SSH 凭证，请先在凭证管理页面添加凭证组"
-            )
-
-        credentials = {
-            "username": cred_group.username,
-            "password": decrypt_password(cred_group.password_encrypted),
-            "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
-        }
-
-        # 检查凭证是否完整
-        if not credentials["username"]:
-            raise HTTPException(
-                status_code=500,
-                detail=f"凭证组 '{cred_group_name}' 未设置用户名"
-            )
-        if not credentials["password"]:
-            raise HTTPException(
-                status_code=500,
-                detail=f"凭证组 '{cred_group_name}' 未设置密码"
+                status_code=400,
+                detail="请完整填写操作者 SSH 凭证（用户名与密码必填）"
             )
 
         # 执行备份（经统一设备操作执行器）
-        config = get_config()
         result = await run_device_op(
             backup_device_config,
             device,
@@ -182,6 +209,22 @@ async def backup_device(
         # HTTPException 直接重新抛出，不拦截
         raise
 
+    except NetmikoAuthenticationException:
+        # SSH 认证失败：记录日志并返回 401（消息不含任何口令）
+        db.rollback()
+        log_entry = LogEntry(
+            tool_type="netmiko",
+            operation="备份配置",
+            target=device.name if device else f"device_id:{device_id}",
+            status="failed",
+            log_content=f"[ERROR] SSH 认证失败: {device.name if device else device_id} ({device.ip if device else 'unknown'})\n[INFO] 耗时: {int((time.time() - start_time) * 1000)}ms",
+            duration_ms=int((time.time() - start_time) * 1000),
+            created_by=operator,
+        )
+        db.add(log_entry)
+        db.commit()
+        raise HTTPException(status_code=401, detail="SSH 认证失败，请检查操作者凭证")
+
     except Exception:
         # 记录失败日志
         db.rollback()
@@ -200,59 +243,22 @@ async def backup_device(
         raise HTTPException(status_code=500, detail="备份失败，请查看服务端日志")
 
 
-@router.post("/backup/{device_id}/async")
-async def backup_device_async(
-    device_id: int,
-    principal: Principal = Depends(get_current_principal),
+# 注：异步备份端点已下线（celery worker 无法携带操作者会话级凭证，
+# 与「密码不存储在服务器上」原则互斥）。备份统一走同步端点。
+
+
+@router.get("/needs-backup")
+async def list_needs_backup_endpoint(
     db: Session = Depends(get_db),
-    _: None = Depends(require_backup_execute),
+    _: None = Depends(require_backup_read),
 ):
+    """需备份设备统一列表（备份不再自动，改为提醒）。
+
+    - config_changed：配置已变更（部署成功/手动标记）且尚未备份
+    - backup_overdue：超过 backup_reminder_days 天未备份
+    由管理员批量备份。
     """
-    异步备份设备配置（推荐方式）
-
-    将备份任务提交到 Celery 队列，返回 job_id 供轮询状态。
-    适用场景：大批量备份、长时间操作、避免阻塞 HTTP 请求。
-    """
-    from app.shared.models_jobs import Job, JobType, JobStatus, create_job
-    from app.tasks.backup_tasks import backup_device as backup_task
-
-    # 检查设备是否存在
-    device = db.query(Device).filter(Device.id == device_id).first()
-    if not device:
-        raise HTTPException(status_code=404, detail="设备不存在")
-
-    # 创建 Job 记录
-    job = create_job(
-        db,
-        job_type=JobType.BACKUP,
-        device_id=device_id,
-        operator=principal.username,
-        parameters={"device_name": device.name, "ip": device.ip}
-    )
-
-    # 提交 Celery 任务
-    try:
-        backup_task.delay(
-            job_id=job.id,
-            device_id=device_id,
-            operator=principal.username,
-        )
-    except Exception as e:
-        # Celery 可能不可用，回退到同步模式
-        logger.warning(f"Celery unavailable, falling back to sync: {e}")
-        job.status = JobStatus.FAILED
-        job.error_message = f"Celery unavailable: {e}"
-        db.commit()
-        raise HTTPException(status_code=503, detail="任务队列不可用，请使用同步备份接口")
-
-    return {
-        "success": True,
-        "job_id": job.id,
-        "status": job.status,
-        "message": "备份任务已提交到队列",
-        "device_id": device_id,
-        "device_name": device.name,
-    }
+    return {"items": list_needs_backup(db)}
 
 
 @router.get("")
@@ -389,40 +395,63 @@ async def batch_backup(
     db: Session = Depends(get_db),
     _: None = Depends(require_backup_batch),
 ):
-    """批量备份设备配置"""
-    device_ids = request.root
+    """批量备份设备配置（同步，同批一次输入操作者凭证）。
+
+    默认（credential_session_required=True）必须携带操作者会话级 SSH 凭证；
+    逐台执行，认证失败的设备标记 auth_failed（不中断整批），便于单独重试。
+    仅当管理员显式关闭开关才降级回退服务器存储的凭证组。
+    """
+    device_ids = request.device_ids
     operator = principal.username
+    operator_creds = _operator_credentials(request)
+    config = get_config()
+    results = []
     try:
         devices = db.query(Device).filter(Device.id.in_(device_ids)).all()
 
-        # 一次性加载所有凭证组
+        if operator_creds is None and config.security.credential_session_required:
+            raise HTTPException(
+                status_code=400,
+                detail="请使用操作者 SSH 凭证（密码不存储在服务器上）"
+            )
+
+        # 显式降级时才一次性加载凭证组
         all_cred_groups = db.query(CredentialGroup).all()
         cred_group_map = {g.name: g for g in all_cred_groups}
-
-        results = []
 
         for device in devices:
             start_time = time.time()
 
-            cred_group_name = device.credential_group or "default"
-            cred_group = cred_group_map.get(cred_group_name) or cred_group_map.get("default")
-
-            if cred_group:
-                credentials = {
-                    "username": cred_group.username,
-                    "password": decrypt_password(cred_group.password_encrypted),
-                    "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
-                }
+            if operator_creds is not None:
+                credentials = operator_creds
             else:
-                credentials = {"username": "admin", "password": "", "secret": ""}
+                cred_group_name = device.credential_group or "default"
+                cred_group = cred_group_map.get(cred_group_name) or cred_group_map.get("default")
+                if cred_group:
+                    credentials = {
+                        "username": cred_group.username,
+                        "password": decrypt_password(cred_group.password_encrypted),
+                        "secret": decrypt_password(cred_group.enable_password_encrypted) if cred_group.enable_password_encrypted else ""
+                    }
+                else:
+                    credentials = {"username": "admin", "password": "", "secret": ""}
 
-            config = get_config()
-            result = await run_device_op(
-                backup_device_config,
-                device,
-                credentials,
-                config.storage.backup_dir,
-            )
+            try:
+                result = await run_device_op(
+                    backup_device_config,
+                    device,
+                    credentials,
+                    config.storage.backup_dir,
+                )
+            except NetmikoAuthenticationException:
+                results.append({
+                    "device_id": device.id,
+                    "device_name": device.name,
+                    "success": False,
+                    "auth_failed": True,
+                    "message": "SSH 认证失败，请检查操作者凭证",
+                })
+                continue
 
             duration_ms = int((time.time() - start_time) * 1000)
 
@@ -454,6 +483,7 @@ async def batch_backup(
                 device.last_backup_time = datetime.utcnow()
 
             results.append({
+                "device_id": device.id,
                 "device_name": device.name,
                 "success": result["success"],
                 "message": (
@@ -473,6 +503,18 @@ async def batch_backup(
     except Exception:
         db.rollback()
         raise
+
+
+@router.post("/mark-config-changed")
+async def mark_config_changed(
+    request: BatchBackupRequest,
+    principal: Principal = Depends(get_current_principal),
+    db: Session = Depends(get_db),
+    _: None = Depends(require_backup_execute),
+):
+    """手动标记设备配置已变更（离系统外改动），使其进入需备份列表。"""
+    count = mark_devices_config_changed(db, request.device_ids, source=principal.username)
+    return {"marked": count, "device_ids": request.device_ids}
 
 
 @router.delete("/{backup_id}")

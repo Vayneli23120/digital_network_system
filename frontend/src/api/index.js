@@ -142,14 +142,23 @@ export function diagnoseDeviceSnmp(deviceId) {
 }
 
 // 备份相关
-export function backupDevice(deviceId) {
-  return api.post(`/backups/backup/${deviceId}`, null, {
+// 凭证为操作者会话级（sessionStorage 短期持有，仅请求内存使用，不落服务器存储）
+export function backupDevice(deviceId, creds = {}) {
+  return api.post(`/backups/backup/${deviceId}`, creds, {
     timeout: 120000  // 备份操作可能需要较长时间（SSH连接设备）
   })
 }
 
-export function batchBackup(deviceIds) {
-  return api.post('/backups/batch', deviceIds)
+export function batchBackup(deviceIds, creds = {}) {
+  return api.post('/backups/batch', { device_ids: deviceIds, ...creds })
+}
+
+export function needsBackup() {
+  return api.get('/backups/needs-backup')
+}
+
+export function markConfigChanged(deviceIds) {
+  return api.post('/backups/mark-config-changed', { device_ids: deviceIds })
 }
 
 export function getBackups(params) {

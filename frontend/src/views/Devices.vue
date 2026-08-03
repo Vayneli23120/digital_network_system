@@ -487,6 +487,9 @@
         <el-button type="primary" @click="importDevices" :disabled="!selectedFile">{{ t('deviceConfirmImport') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 操作者会话级 SSH 凭证 -->
+    <SSHCredentialDialog ref="credDialog" />
   </div>
 </template>
 
@@ -498,13 +501,16 @@ import { Download, Plus, Upload, UploadFilled, Monitor, CircleCheck, CircleClose
 import { authenticatedAxios as axios } from '@/api/request.js'
 import { getDevices, createDevice, updateDevice as updateDeviceApi, deleteDevice as deleteDeviceApi, backupDevice as backupDeviceApi, batchBackup as batchBackupApi, getCredentials, exportDevices as exportDevicesApi, importDevices as importDevicesApi, getVendors, testDeviceReachability, testDeviceConnection, fetchDeviceInfo } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { getSessionCredentials, setSessionCredentials } from '@/composables/useSessionCredentials'
 import { debounce, throttle } from '@/utils/requestManager.js'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { stampUid } from '@/utils/uid.js'
+import SSHCredentialDialog from '@/components/SSHCredentialDialog.vue'
 
 const { t } = useI18n()
 const router = useRouter()
 
+const credDialog = ref(null)
 const loading = ref(false)
 const devices = ref([])
 const tableRef = ref(null)  // el-table ref
@@ -923,9 +929,19 @@ const viewDevice = (id) => {
   router.push(`/devices/${id}`)
 }
 
+const ensureCredentials = async () => {
+  const stored = getSessionCredentials()
+  if (stored) return stored
+  const creds = await credDialog.value.open()
+  if (creds) setSessionCredentials(creds)
+  return creds
+}
+
 const backupDevice = async (row) => {
+  const creds = await ensureCredentials()
+  if (!creds) return
   try {
-    await backupDeviceApi(row.id)
+    await backupDeviceApi(row.id, creds)
     ElMessage.success(t('msgBackupSuccess', { name: row.name }))
     loadDevices()
   } catch (error) {
@@ -936,12 +952,14 @@ const backupDevice = async (row) => {
 const batchBackupSelected = async () => {
   const ids = selectedDevices.value.map(d => d.id)
   if (ids.length === 0) return
+  const creds = await ensureCredentials()
+  if (!creds) return
   try {
-    await batchBackupApi(ids)
-    ElMessage.success(`已触发 ${ids.length} 台设备备份任务`)
+    await batchBackupApi(ids, creds)
+    ElMessage.success(t('msgBackupTriggered', { count: ids.length }))
     selectedDevices.value = []
   } catch {
-    ElMessage.error('批量备份触发失败')
+    ElMessage.error(t('msgBatchBackupTriggerFailed'))
   }
 }
 
@@ -955,7 +973,9 @@ const batchBackup = async () => {
       type: 'warning'
     })
 
-    await batchBackupApi(selectedDevices.value)
+    const creds = await ensureCredentials()
+    if (!creds) return
+    await batchBackupApi(selectedDevices.value, creds)
     ElMessage.success(t('msgBatchBackupSuccess'))
     loadDevices()
   } catch (error) {

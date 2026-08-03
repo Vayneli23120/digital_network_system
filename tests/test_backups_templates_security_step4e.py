@@ -183,11 +183,12 @@ def test_backup_http_permission_matrix_is_declared():
 
     expected = {
         "backup_device": "require_backup_execute",
-        "backup_device_async": "require_backup_execute",
         "list_backups": "require_backup_read",
         "get_backup_content": "require_backup_read",
         "download_backup": "require_backup_read",
         "get_backup_diff": "require_backup_read",
+        "list_needs_backup_endpoint": "require_backup_read",
+        "mark_config_changed": "require_backup_execute",
         "batch_backup": "require_backup_batch",
         "delete_backup": "require_backup_delete",
     }
@@ -413,9 +414,13 @@ def test_backup_uses_principal_as_operator(
         lambda: type("GitService", (), {"available": False})(),
     )
 
+    # 批次二·步骤5：备份必须携带操作者会话级凭证（密码不落服务器）
+    from app.features.backups.schemas import BackupRequest
+
     result = asyncio.run(
         backup_router.backup_device(
             device.id,
+            BackupRequest(username="netops", password="secret"),
             _principal(executor),
             db_session,
             None,
@@ -468,9 +473,11 @@ def test_backup_api_redacts_internal_failure_details(
         lambda: type("Notifier", (), {"notify_backup_failure": lambda *_args: None})(),
     )
 
+    # 批次二·步骤5：备份必须携带操作者会话级凭证（密码不落服务器）
+    creds = {"username": "netops", "password": "secret"}
     with _backup_client(admin, db_session) as client:
-        single = client.post(f"/api/backups/backup/{device.id}")
-        batch = client.post("/api/backups/batch", json=[device.id])
+        single = client.post(f"/api/backups/backup/{device.id}", json=creds)
+        batch = client.post("/api/backups/batch", json={"device_ids": [device.id], **creds})
 
     assert single.status_code == 500
     assert single.json()["detail"] == "备份失败，请查看服务端日志"
@@ -592,7 +599,11 @@ def test_backup_delete_removes_record_and_managed_file(
 def test_batch_backup_model_rejects_empty_negative_and_too_many_ids():
     from app.features.backups.schemas import BatchBackupRequest
 
-    for payload in ([], [0], list(range(1, 102))):
+    for payload in (
+        {"device_ids": []},
+        {"device_ids": [0]},
+        {"device_ids": list(range(1, 102))},
+    ):
         with pytest.raises(ValidationError):
             BatchBackupRequest.model_validate(payload)
 

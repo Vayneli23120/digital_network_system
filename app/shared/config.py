@@ -257,6 +257,11 @@ class SecurityConfig(BaseModel):
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
+    # 会话级 SSH 凭证开关：默认要求操作者手输自己的凭证（密码不落服务器）；
+    # False = 显式降级回退服务器存储的 CredentialGroup 凭证。
+    credential_session_required: bool = True
+    # 备份提醒阈值（天）：last_backup_time 超过该天数 → 需备份列表 backup_overdue 原因。
+    backup_reminder_days: int = 7
     # CORS 安全配置
     cors_allowed_origins: List[str] = Field(
         default=["http://localhost:3000", "http://localhost:5173"],
@@ -375,6 +380,16 @@ class Config(BaseModel):
             self.security.jwt_secret = os.environ["JWT_SECRET"]
         if "ENCRYPTION_KEY" in os.environ:
             self.security.encryption_key = os.environ["ENCRYPTION_KEY"]
+        if "CREDENTIAL_SESSION_REQUIRED" in os.environ:
+            self.security.credential_session_required = self._parse_bool_env(
+                "CREDENTIAL_SESSION_REQUIRED", os.environ["CREDENTIAL_SESSION_REQUIRED"]
+            )
+        if "BACKUP_REMINDER_DAYS" in os.environ:
+            raw = os.environ["BACKUP_REMINDER_DAYS"].strip()
+            try:
+                self.security.backup_reminder_days = int(raw)
+            except ValueError:
+                raise ValueError(f"BACKUP_REMINDER_DAYS 必须是整数，收到: {raw!r}")
         if "CORS_ALLOWED_ORIGINS" in os.environ:
             self.security.cors_allowed_origins = [
                 origin.strip()

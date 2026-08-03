@@ -624,7 +624,7 @@ class DeployStreamService:
         history_id = None
         try:
             from app.shared.database import get_db
-            from app.shared.models import DeployHistory, DeployDeviceResult, LogEntry
+            from app.shared.models import DeployHistory, DeployDeviceResult, Device, LogEntry
 
             db = next(get_db())
             try:
@@ -684,6 +684,15 @@ class DeployStreamService:
                         created_by=username
                     )
                     db.add(log_entry)
+
+                # 批次二·步骤5：成功部署后标记 config_changed_at，
+                # 使设备进入「需备份」列表（备份不再自动，改为提醒）
+                success_device_ids = [
+                    r.get('device_id') for r in results if r.get('success')
+                ]
+                if success_device_ids:
+                    for dev in db.query(Device).filter(Device.id.in_(success_device_ids)).all():
+                        dev.config_changed_at = datetime.utcnow()
 
                 db.commit()
                 logger.info(f"创建部署历史记录: id={history_id}")

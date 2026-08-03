@@ -54,6 +54,8 @@ class Device(Base):
     photo_dir = Column(String(500))
     credential_group = Column(String(50), default="default")
     last_backup_time = Column(DateTime)
+    # 配置最后变更时间（部署成功/手动标记），供「需备份」列表判定配置已变更原因
+    config_changed_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

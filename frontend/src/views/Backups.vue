@@ -82,6 +82,67 @@
       </div>
     </section>
 
+    <!-- 需备份提醒区（备份不再自动，改为提醒：配置已变更 / 超过阈值未备份） -->
+    <section class="needs-section" v-if="needsItems.length">
+      <div class="needs-header">
+        <div class="needs-title">
+          <el-icon><Warning /></el-icon>
+          <span>{{ t('backupNeedsTitle') }}</span>
+          <span class="needs-count">{{ needsItems.length }}</span>
+        </div>
+        <div class="needs-actions">
+          <button class="nav-action-btn secondary" @click="markSelectedChanged" :disabled="!needsSelectedIds.length">
+            <el-icon><Stamp /></el-icon>
+            <span>{{ t('backupMarkChanged') }}</span>
+          </button>
+          <button class="nav-action-btn" @click="backupNeedsSelected" :disabled="!needsSelectedIds.length">
+            <el-icon><Download /></el-icon>
+            <span>{{ t('backupBatchBackupSelected') }}</span>
+          </button>
+        </div>
+      </div>
+      <el-table
+        :data="needsItems"
+        class="enterprise-table needs-table"
+        @selection-change="onNeedsSelectionChange"
+      >
+        <el-table-column type="selection" width="45" />
+        <el-table-column prop="device_name" :label="t('backupColDevice')" min-width="140">
+          <template #default="{ row }">
+            <div class="device-cell">
+              <el-icon class="device-icon"><Connection /></el-icon>
+              <span class="device-name">{{ row.device_name }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column prop="ip" :label="t('backupColIp')" width="140" />
+        <el-table-column :label="t('backupColReason')" min-width="180">
+          <template #default="{ row }">
+            <div :class="['change-badge', row.reason === 'config_changed' ? 'changed' : 'overdue']">
+              <span class="change-dot"></span>
+              <span class="change-text">{{ reasonLabel(row.reason) }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('backupColLastBackup')" width="175">
+          <template #default="{ row }">
+            <div class="time-cell">
+              <el-icon class="time-icon"><Clock /></el-icon>
+              <span class="time-text">{{ row.last_backup_time ? formatDateTime(row.last_backup_time) : t('statusNone') }}</span>
+            </div>
+          </template>
+        </el-table-column>
+        <el-table-column :label="t('backupColConfigChanged')" width="175">
+          <template #default="{ row }">
+            <div class="time-cell">
+              <el-icon class="time-icon"><EditPen /></el-icon>
+              <span class="time-text">{{ row.config_changed_at ? formatDateTime(row.config_changed_at) : t('statusNone') }}</span>
+            </div>
+          </template>
+        </el-table-column>
+      </el-table>
+    </section>
+
     <!-- 高级筛选工具栏 -->
     <section class="filter-section">
       <div class="filter-toolbar">
@@ -282,17 +343,22 @@
         <el-button type="primary" @click="doBatchBackup">{{ t('actionConfirm') }}</el-button>
       </template>
     </el-dialog>
+
+    <!-- 操作者会话级 SSH 凭证 -->
+    <SSHCredentialDialog ref="credDialog" />
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
-import { getBackups, getBackupContent, getBackupDiff, downloadBackupFile, batchBackup, getDevices } from '@/api'
-import { Search, Download, Refresh, Document, WarningFilled, CircleCheck, Clock, View, DocumentCopy, Connection, Warning } from '@element-plus/icons-vue'
+import { getBackups, getBackupContent, getBackupDiff, downloadBackupFile, batchBackup, needsBackup, markConfigChanged, getDevices } from '@/api'
+import { Search, Download, Refresh, Document, WarningFilled, CircleCheck, Clock, View, DocumentCopy, Connection, Warning, Stamp, EditPen } from '@element-plus/icons-vue'
 import { formatDateTime, toLocalDayjs, dayjs } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
+import { getSessionCredentials, setSessionCredentials } from '@/composables/useSessionCredentials'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
+import SSHCredentialDialog from '@/components/SSHCredentialDialog.vue'
 
 const { t } = useI18n()
 
@@ -307,6 +373,11 @@ const showConfigDialog = ref(false)
 const showDiffDialog = ref(false)
 const showBatchBackupDialog = ref(false)
 const selectedDeviceIds = ref([])
+const credDialog = ref(null)
+
+// 需备份提醒列表（配置已变更 / 超过阈值未备份）
+const needsItems = ref([])
+const needsSelectedIds = ref([])
 
 const searchText = ref('')
 const dateRange = ref([])
@@ -494,21 +565,85 @@ const doBatchBackup = async () => {
     ElMessage.warning(t('backupSelectAtLeastOne'))
     return
   }
+  const creds = await ensureCredentials()
+  if (!creds) return
 
   try {
-    await batchBackup(selectedDeviceIds.value)
+    await batchBackup(selectedDeviceIds.value, creds)
     clearCache('backups')
     ElMessage.success(t('backupBatchComplete'))
     showBatchBackupDialog.value = false
     loadBackups(true)
+    loadNeedsBackup()
   } catch (error) {
     ElMessage.error(t('backupBatchFailed'))
+  }
+}
+
+// ===== 需备份提醒 =====
+const loadNeedsBackup = async () => {
+  try {
+    const data = await needsBackup()
+    needsItems.value = data.items || []
+  } catch (error) {
+    // 列表加载失败不阻断主备份页
+  }
+}
+
+const onNeedsSelectionChange = (rows) => {
+  needsSelectedIds.value = rows.map(r => r.device_id)
+}
+
+const reasonLabel = (reason) => {
+  return reason === 'config_changed'
+    ? t('backupReasonConfigChanged')
+    : t('backupReasonOverdue')
+}
+
+const ensureCredentials = async () => {
+  const stored = getSessionCredentials()
+  if (stored) return stored
+  const creds = await credDialog.value.open()
+  if (creds) setSessionCredentials(creds)
+  return creds
+}
+
+const backupNeedsSelected = async () => {
+  if (needsSelectedIds.value.length === 0) {
+    ElMessage.warning(t('backupSelectAtLeastOne'))
+    return
+  }
+  const creds = await ensureCredentials()
+  if (!creds) return
+  try {
+    await batchBackup(needsSelectedIds.value, creds)
+    clearCache('backups')
+    ElMessage.success(t('backupBatchComplete'))
+    loadBackups(true)
+    loadNeedsBackup()
+  } catch (error) {
+    ElMessage.error(t('backupBatchFailed'))
+  }
+}
+
+const markSelectedChanged = async () => {
+  if (needsSelectedIds.value.length === 0) {
+    ElMessage.warning(t('backupSelectAtLeastOne'))
+    return
+  }
+  try {
+    await markConfigChanged(needsSelectedIds.value)
+    ElMessage.success(t('backupMarkChangedDone'))
+    loadNeedsBackup()
+  } catch (error) {
+    ElMessage.error(t('backupMarkChangedFailed'))
   }
 }
 
 onMounted(() => {
   loadBackups()
   loadDevices()
+  loadNeedsBackup()
 })
 </script>
 
@@ -914,6 +1049,80 @@ onMounted(() => {
   border: 1px solid var(--border-default);
   box-shadow: none;
 }
+
+/* ===== 需备份提醒区 ===== */
+.needs-section {
+  padding: 16px;
+  background: rgba(255, 248, 235, 0.9);
+  backdrop-filter: blur(12px);
+  border-radius: var(--radius-lg);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow: 0 4px 24px rgba(245, 158, 11, 0.1);
+}
+
+.needs-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.needs-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.needs-count {
+  font-size: 12px;
+  font-family: 'JetBrains Mono', SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #b45309;
+  padding: 2px 8px;
+  background: rgba(245, 158, 11, 0.12);
+  border-radius: 10px;
+}
+
+.needs-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.nav-action-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.change-badge.overdue {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #b45309;
+}
+.change-badge.overdue .change-dot { background: #f59e0b; }
+
+.dark .needs-section {
+  background: rgba(22, 27, 34, 0.9);
+  border-color: rgba(210, 153, 34, 0.4);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+.dark .needs-header {
+  border-bottom-color: rgba(210, 153, 34, 0.2);
+}
+.dark .needs-title {
+  color: #d29922;
+}
+.dark .needs-count {
+  color: #d29922;
+  background: rgba(210, 153, 34, 0.15);
+}
+.dark .change-badge.overdue {
+  border-color: rgba(210, 153, 34, 0.4);
+  color: #d29922;
+}
+.dark .change-badge.overdue .change-dot { background: #d29922; }
 
 /* ===== 数据面板 ===== */
 .data-section {
