@@ -944,6 +944,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P2** `api/request.js:107-113` — 401 用 `window.location.href` 整页刷新，多并发请求连弹错误，无 refresh token 流程。`[已复核]`
   → 修复（批次五请求层切片）：`handleAuthFailure` 加模块级 `isRedirectingToLogin` 守卫，并发多个 401 只弹一次 toast、只触发一次跳转（`api` 与 `authenticatedAxios` 共用该函数，一处守卫覆盖两条拦截链）。refresh token 流程超出本切片范围，仍缺。
 - [ ] **P2** 巨型视图：`Monitor3D.vue` 7119 行、`Deploy.vue` 3631、`Compliance.vue` 2948，渲染与请求耦合，无法单测。`[已复核]`
+  → 切片 1（Compliance，2026-08-03）：`utils/compliance.js` + UploadStandard/CreateStandard/Rules/StandardDetail 四对话框拆子组件，Compliance 3377→2753 行；Audit/AI 配置/规则详情/Config 高亮四对话框与 composable 收拢留待切片 2。
 - [x] **P2** `:key="index"` 广泛存在（`Operations.vue:18,272,298,388,417,439`、`Compliance.vue:669,688,754`、`Devices.vue:340`）；`views/Logs.vue:286` 每 3 秒全量重载日志；全项目无虚拟滚动。`[已复核]`
   → 修复（批次五 :key-Logs 切片）：新增 `utils/uid.js`（`stampUid` 用 `Object.defineProperty` 定义**不可枚举** `_uid`，JSON 序列化不携带，避免泄漏进 payload / 被后端 `json.dumps` 落地 DB）。表单行改 `:key="xxx._uid"`：Devices:340/DeviceDetail:464 模块行、Deploy:285 变量行，stamp 覆盖初始/reset/add/probe/populate 全部分配点；展示列表改天然稳定键：Operations faultDeviceList→`device_id`、recentBackups→`device_name+backup_time`、alerts→`alert_key` 回退复合、activityFeed→`type+text`，Compliance configLineAnalysis→`lineNum`。探索按 `:key="idx"` 补出 4 处同病 Monitor3D 拐点行（`editingWaypoints`/Trunk/BranchLink/TopoEdge，均 v-model input-number + add/remove），一并 `_uid` 化。Logs 实时 interval 改 `loadLogs(true)`（原不 force 命中 30s 缓存，实际每 30s 才真刷新）；主表改 `el-table-v2` + `el-auto-resizer` 虚拟滚动（仅渲染可视行），列定义 `computed` 随语言响应式，message 列 ellipsis + 原生 title 替代 overflow tooltip。保留 `:key="index"`：Operations:18/24（字符串数组）、Operations:272（并行数组 index 承载）、Compliance:667/686（toc/content 的 active/scroll/ref 全靠 index 且静态）、Deploy:508（cliLogs append-only）、FaultDetail:129（字符串数组）。
 - [x] **P2** `Monitor3D.vue` 53 处、`Deploy.vue` 10 处 `console.log`（含 WS 报文）未在生产剥离。`[待验证]`
@@ -1027,6 +1028,20 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 后端门禁 | ✅ `pytest tests/test_batch1_regressions.py` 15 passed；全量 `pytest --ignore=tests/test_console_service.py` **53 failed / 625 passed / 4 skipped**，失败集合与基线逐项一致，无新增失败 |
 
 修复说明（947，:key 稳定化 + Logs 虚拟滚动）：新增 `utils/uid.js` `stampUid`（不可枚举 `_uid`），3 处表单行 + 探索补出的 4 处 Monitor3D 拐点行全部 `_uid` 键；5 处展示列表改天然稳定键；Logs 实时 interval `loadLogs(true)` 修复「读 30s 缓存不真刷新」bug + 主表改 `el-table-v2` 虚拟滚动（message 列 ellipsis + 原生 title 替代 overflow tooltip）。
+
+### 批次五 · 946 Compliance 拆分切片 1 · Linux 实测（2026-08-03）
+
+前端改动（仅 `frontend/`），验证靠构建 + HTTPS 冒烟 + 代码审查：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `npm run validate:locales` | ✅ 0 违规（无 locales 改动，zh/en 各 3212 键）；新组件只用既有 `t()` 键，无硬编码文本 |
+| `npm run build` | ✅ 13.86s 构建成功（`utils/compliance.js` + 4 子组件 import / `defineModel` / props-emits 编译通过） |
+| `npm run dev` HTTPS 冒烟 | ✅ `curl -k https://localhost:3000/login`、`/` 均 200（复用既有 dev server，精确 PID 2283407） |
+| 代码审查 | ✅ `escapeHtml`/`renderSectionContent`/`parseDocumentSections` 定义仅在 `utils/compliance.js`、调用仅在 `StandardDetailDialog.vue`；已迁走项（`standardUploadRef`/`uploadStandardDocument`/`standardForm`/`currentStandardDetail` 等）在父组件零残留；4 子组件无裸中文（仅注释/`t()`）；`renderSectionContent` 正则顺序与源文件逐字一致 |
+| 后端门禁 | ✅ `pytest tests/test_batch1_regressions.py` 15 passed（改动仅 frontend/） |
+
+修复说明（946 切片 1，Compliance 拆分）：抽 `utils/compliance.js` 纯函数（escape-first markdown 渲染 + 章节解析 + category/severity 映射，无 vue 依赖可单测）；上传标准/Create 标准/规则列表/标准详情 4 个低耦合对话框拆子组件，props/emits 通信（详情对话框 `v-model:generating-rules` 用 `defineModel` 与父共享禁用态）；Compliance.vue 3377→2753 行。Audit/AI 配置/规则详情/Config 高亮 4 对话框与 composable 收拢留待切片 2。
 
 ---
 
