@@ -5,92 +5,19 @@
          @dragover.prevent="onCanvasDragOver"
          @drop.prevent="onCanvasDrop"></div>
 
-    <!-- 流量热力图例（可拖拽） -->
-    <div class="heat-legend" :class="{ collapsed: !showHeatLegend, dark: isDark }"
-         :style="{ left: heatPos.x + 'px', bottom: heatPos.y + 'px' }">
-      <div class="heat-legend-head" @mousedown="e => startDrag(e, heatPos, HEAT_PANEL_W)">
-        <el-icon class="drag-handle"><Rank /></el-icon>
-        <span class="heat-legend-title">{{ t('heatLegendTitle') }}</span>
-        <el-icon class="heat-legend-toggle" @click.stop="toggleHeatLegend"><ArrowDown v-if="showHeatLegend" /><ArrowUp v-else /></el-icon>
-      </div>
-      <div v-show="showHeatLegend" class="heat-legend-body">
-        <div class="heat-legend-row" v-for="lv in heatLegendLevels" :key="lv.level">
-          <span class="heat-swatch" :style="{ background: lv.color }"></span>
-          <span class="heat-name">{{ lv.label }}</span>
-          <span class="heat-range">{{ lv.range }}</span>
-          <span class="heat-count">{{ trafficHeatSummary[lv.level] || 0 }}</span>
-        </div>
-        <div class="heat-legend-foot">{{ t('heatLegendHint') }}</div>
-      </div>
-    </div>
-
-    <!-- SNMP 采集健康（可拖拽） -->
-    <div class="snmp-health-panel" :class="{ collapsed: !showSnmpHealth, dark: isDark }"
-         :style="{ left: snmpPos.x + 'px', bottom: snmpPos.y + 'px' }">
-      <div class="snmp-health-head" @mousedown="e => startDrag(e, snmpPos, SNMP_PANEL_W)">
-        <el-icon class="drag-handle"><Rank /></el-icon>
-        <span class="snmp-health-title">{{ t('monitorSnmpHealth') }}</span>
-        <span class="snmp-health-summary">
-          {{ snmpHealthSummary.fresh || 0 }}/{{ snmpHealthSummary.total || 0 }} {{ t('snmpStatusFresh') }}
-        </span>
-        <el-icon class="snmp-health-toggle" @click.stop="toggleSnmpHealth"><ArrowDown v-if="showSnmpHealth" /><ArrowUp v-else /></el-icon>
-      </div>
-      <div v-show="showSnmpHealth" class="snmp-health-body">
-        <div class="snmp-health-kpis">
-          <span class="fresh">{{ t('snmpStatusFresh') }} {{ snmpHealthSummary.fresh || 0 }}</span>
-          <span class="lagging">{{ t('snmpStatusLagging') }} {{ snmpHealthSummary.lagging || 0 }}</span>
-          <span class="stale">{{ t('snmpStatusStale') }} {{ snmpHealthSummary.stale || 0 }}</span>
-          <span class="missing">{{ t('snmpStatusMissing') }} {{ snmpHealthSummary.missing || 0 }}</span>
-        </div>
-        <div v-if="snmpHealthItems.length" class="snmp-health-list">
-          <div
-            v-for="item in snmpHealthItems.slice(0, 6)"
-            :key="`${item.device_id}-${item.if_index}`"
-            class="snmp-health-row"
-            :class="item.status"
-          >
-            <div class="snmp-health-main">
-              <span class="snmp-health-device">{{ item.device_name }}</span>
-              <span class="snmp-health-if">{{ item.if_name || ('ifIndex ' + item.if_index) }}</span>
-            </div>
-            <div class="snmp-health-meta">
-              <span>{{ snmpHealthStatusLabel(item.status) }}</span>
-              <span>{{ t('monitorCheck') }} {{ formatSnmpAge(item.check_age_seconds ?? item.age_seconds) }}</span>
-              <span>{{ t('monitorTraffic') }} {{ formatSnmpAge(item.sample_age_seconds) }}</span>
-              <span>{{ t('monitorCollect') }} {{ collectorStatusLabel(item.collector_status) }}</span>
-              <span v-if="item.collector_duration_ms != null">{{ formatDurationMs(item.collector_duration_ms) }}</span>
-              <span v-if="item.collector_next_poll_in_seconds != null">{{ t('monitorNextPoll') }} {{ formatSnmpAge(item.collector_next_poll_in_seconds) }}</span>
-            </div>
-          </div>
-        </div>
-        <div v-else class="snmp-health-empty">{{ t('monitorSnmpEmpty') }}</div>
-        <div class="snmp-health-server-time">{{ t('monitorServerTime') }} {{ formatSnmpServerTime(snmpHealthNow) }}</div>
-        <button class="snmp-health-refresh" @click.stop="refreshTrafficHeatLayer">{{ t('monitorRefreshStatus') }}</button>
-      </div>
-    </div>
-
-    <!-- 画布右下角操作按钮 -->
-    <div class="canvas-tools">
-      <!-- 编辑模式状态提示 -->
-      <div v-if="isEditMode" class="edit-mode-indicator">
-        <el-tag type="warning" size="small">{{ t('monitorEditMode') }}</el-tag>
-      </div>
-      <!-- 编辑/查看模式切换 -->
-      <el-button size="small" :type="isEditMode ? 'warning' : 'primary'" @click="toggleEditMode">
-        {{ isEditMode ? t('monitorViewMode') : t('monitorEditMode') }}
-      </el-button>
-      <el-button size="small" @click="resetView">{{ t('viewReset') }}</el-button>
-      <el-button size="small" @click="topView">{{ t('viewTop') }}</el-button>
-      <el-button size="small" :loading="discoveringNeighbors" @click="discoverNeighbors">
-        {{ t('discoverNeighbors') }}
-      </el-button>
-      <el-button size="small" type="primary" @click="showUploadDialog = true">
-        {{ t('uploadFloorPlan') }}
-      </el-button>
-      <el-button size="small" :type="isFullscreen ? 'warning' : 'default'" @click="toggleFullscreen">
-        {{ isFullscreen ? t('exitFullscreen') : t('enterFullscreen') }}
-      </el-button>
-    </div>
+    <!-- 覆盖层：流量热力图例 / SNMP 采集健康 / 画布右下操作按钮（item 946 切片 7 拆组件） -->
+    <HeatLegendPanel :pos="heatPos" :collapsed="!showHeatLegend" :dark="isDark"
+      :summary="trafficHeatSummary"
+      @start-drag="e => startDrag(e, heatPos, HEAT_PANEL_W)" @toggle="toggleHeatLegend" />
+    <SnmpHealthPanel :pos="snmpPos" :collapsed="!showSnmpHealth" :dark="isDark"
+      :summary="snmpHealthSummary" :items="snmpHealthItems" :now="snmpHealthNow"
+      @start-drag="e => startDrag(e, snmpPos, SNMP_PANEL_W)" @toggle="toggleSnmpHealth"
+      @refresh="refreshTrafficHeatLayer" />
+    <CanvasToolbar :is-edit-mode="isEditMode" :is-fullscreen="isFullscreen"
+      :discovering-neighbors="discoveringNeighbors"
+      @toggle-edit-mode="toggleEditMode" @reset-view="resetView" @top-view="topView"
+      @discover-neighbors="discoverNeighbors" @upload="showUploadDialog = true"
+      @toggle-fullscreen="toggleFullscreen" />
 
     <!-- 右侧面板展开/收起按钮 -->
     <div class="panel-toggle" @click="hidePanel = !hidePanel">
@@ -572,7 +499,7 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { CSS2DRenderer, CSS2DObject } from 'three/examples/jsm/renderers/CSS2DRenderer.js'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, ArrowUp, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit, Rank } from '@element-plus/icons-vue'
+import { Pointer, Warning, Upload, FullScreen, Close, ArrowLeft, ArrowRight, ArrowDown, Plus, Delete, Switch, Picture, Box, Position, Connection, Lock, Cpu, Edit } from '@element-plus/icons-vue'
 import { authenticatedAxios as axios } from '@/api/request.js'
 import { reviewFault, transferFaultToMaintenance, aiPreDiagnoseFault, getFloorPlanContent } from '@/api'
 import { formatDateTime } from '@/utils/time'
@@ -582,6 +509,10 @@ import { useAuthStore } from '@/stores/auth'
 import UploadFloorPlanDialog from '@/components/UploadFloorPlanDialog.vue'
 import BindDeviceDialog from '@/components/BindDeviceDialog.vue'
 import WaypointEditorDialog from '@/components/WaypointEditorDialog.vue'
+import HeatLegendPanel from '@/components/HeatLegendPanel.vue'
+import SnmpHealthPanel from '@/components/SnmpHealthPanel.vue'
+import CanvasToolbar from '@/components/CanvasToolbar.vue'
+import { useOverlayPanels } from '@/composables/useOverlayPanels'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -597,6 +528,8 @@ const floorTiltAngle = ref(0)  // 底图倾斜角度，0=水平，90=垂直
 const isFullscreen = ref(false)  // 全屏模式
 const { t, currentLang } = useI18n()
 const hidePanel = ref(false)  // 隐藏侧边栏
+// 覆盖层拖拽/展开收起状态（item 946 切片 7，单实例：reset_panels=1 由首个实例清参）
+const { snmpPos, heatPos, showSnmpHealth, showHeatLegend, startDrag, toggleSnmpHealth, toggleHeatLegend, SNMP_PANEL_W, HEAT_PANEL_W } = useOverlayPanels()
 
 // 上传底图相关
 const showUploadDialog = ref(false)
@@ -648,122 +581,11 @@ const trafficHeatItems = ref([])
 const trafficHeatByDevice = ref(new Map())
 const trafficHeatSummary = ref({})
 let trafficHeatPollTimer = null
-const showHeatLegend = ref(true)
-const showSnmpHealth = ref(true)
 const snmpHealthItems = ref([])
 const snmpHealthSummary = ref({})
 const snmpHealthNow = ref(null)
-const heatLegendLevels = computed(() => [
-  { level: 'critical', color: '#f97316', label: t('heatLevelCritical'), range: '≥80%' },
-  { level: 'high', color: '#facc15', label: t('heatLevelHigh'), range: '60-80%' },
-  { level: 'normal', color: '#22d3ee', label: t('heatLevelNormal'), range: '20-60%' },
-  { level: 'low', color: '#22c55e', label: t('heatLevelLow'), range: '<20%' },
-  { level: 'down', color: '#ef4444', label: t('heatLevelDown'), range: 'link down' },
-  { level: 'stale', color: '#64748b', label: t('heatLevelStale'), range: '>10min' },
-])
 const faultActionLoading = ref(false)
 const aiDiagnosing = ref(false)
-
-// ===== 面板可拖拽位置 =====
-function loadPanelPos(key, defaultX, defaultY) {
-  try {
-    const saved = localStorage.getItem('monitor3d_panel_' + key)
-    if (saved) return JSON.parse(saved)
-  } catch {}
-  return { x: defaultX, y: defaultY }
-}
-function savePanelPos(key, pos) {
-  localStorage.setItem('monitor3d_panel_' + key, JSON.stringify({ x: pos.x, y: pos.y }))
-}
-const SNMP_PANEL_W = 260
-const HEAT_PANEL_W = 188
-const HEADER_H = 36  // 面板头部高度（含padding）
-const PANEL_MARGIN = 120  // 面板至少保留120px在视口内
-
-/** 将面板位置限制在视口范围内 */
-function clampPanelPos(pos, panelW) {
-  const ww = window.innerWidth
-  const wh = window.innerHeight
-  // X：至少保留 60px 可见
-  pos.x = Math.max(-(panelW - 60), Math.min(ww - 60, pos.x))
-  // Y（bottom）：不超出底部，且至少 PANEL_MARGIN 在视口内
-  pos.y = Math.max(0, Math.min(wh - PANEL_MARGIN, pos.y))
-}
-
-/** 若保存的位置已偏移到难以操作的范围，直接回退到默认值 */
-function resetPanelIfOob(pos, panelW, defaultX, defaultY) {
-  const ww = window.innerWidth
-  const wh = window.innerHeight
-  const maxY = wh - PANEL_MARGIN
-  const maxX = ww - 60
-  const minX = -(panelW - 60)
-  if (pos.y < 0 || pos.y > maxY || pos.x < minX || pos.x > maxX) {
-    pos.x = defaultX
-    pos.y = defaultY
-  }
-}
-
-const snmpPos = reactive(loadPanelPos('snmp', 16, 200))
-const heatPos = reactive(loadPanelPos('heat', 16, 16))
-// 支持 ?reset_panels=1 强制重置面板到底部
-if (window.location.search.includes('reset_panels=1')) {
-  localStorage.removeItem('monitor3d_panel_snmp')
-  localStorage.removeItem('monitor3d_panel_heat')
-  snmpPos.x = 16; snmpPos.y = 200
-  heatPos.x = 16; heatPos.y = 16
-  const url = new URL(window.location)
-  url.searchParams.delete('reset_panels')
-  window.history.replaceState({}, '', url)
-}
-// 加载后检查，如果位置超出可操作范围则重置
-resetPanelIfOob(snmpPos, SNMP_PANEL_W, 16, 200)
-resetPanelIfOob(heatPos, HEAT_PANEL_W, 16, 16)
-clampPanelPos(snmpPos, SNMP_PANEL_W)
-clampPanelPos(heatPos, HEAT_PANEL_W)
-
-let panelDragState = null
-
-function startDrag(e, pos, panelW) {
-  e.preventDefault()
-  panelDragState = {
-    pos,
-    panelW,
-    startX: e.clientX,
-    startY: e.clientY,
-    origX: pos.x,
-    origY: pos.y,
-  }
-  document.addEventListener('mousemove', onPanelDragMove)
-  document.addEventListener('mouseup', onPanelDragEnd)
-}
-
-function onPanelDragMove(e) {
-  if (!panelDragState) return
-  const { pos, panelW, startX, startY, origX, origY } = panelDragState
-  pos.x = origX + (e.clientX - startX)
-  pos.y = origY - (e.clientY - startY)
-  clampPanelPos(pos, panelW)
-}
-
-function onPanelDragEnd() {
-  document.removeEventListener('mousemove', onPanelDragMove)
-  document.removeEventListener('mouseup', onPanelDragEnd)
-  if (panelDragState) {
-    savePanelPos('snmp', snmpPos)
-    savePanelPos('heat', heatPos)
-    panelDragState = null
-  }
-}
-
-function toggleSnmpHealth() {
-  showSnmpHealth.value = !showSnmpHealth.value
-  clampPanelPos(snmpPos, SNMP_PANEL_W)
-}
-function toggleHeatLegend() {
-  showHeatLegend.value = !showHeatLegend.value
-  clampPanelPos(heatPos, HEAT_PANEL_W)
-}
-// =====
 
 const floorPlans = ref([])
 const currentPlan = ref(null)
@@ -5453,51 +5275,6 @@ function getTrafficHeatForPath(deviceId, pathData = {}) {
   return null
 }
 
-function snmpHealthStatusLabel(status) {
-  return {
-    fresh: t('snmpStatusFresh'),
-    lagging: t('snmpStatusLagging'),
-    stale: t('snmpStatusStale'),
-    missing: t('snmpStatusMissing'),
-    down: t('snmpStatusDown'),
-  }[status] || t('snmpStatusUnknown')
-}
-
-function collectorStatusLabel(status) {
-  return {
-    running: t('collectorRunning'),
-    ok: t('collectorOk'),
-    partial: t('collectorPartial'),
-    timeout: t('collectorTimeout'),
-    failed: t('collectorFailed'),
-    cancelled: t('collectorCancelled'),
-    stuck: t('collectorStuck'),
-    no_response: t('collectorNoResponse'),
-    no_interfaces: t('collectorNoInterfaces'),
-  }[status] || '-'
-}
-
-function formatSnmpAge(seconds) {
-  if (seconds == null) return '-'
-  if (seconds < 60) return `${seconds}s`
-  const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}min`
-  return `${Math.floor(minutes / 60)}h${minutes % 60}m`
-}
-
-function formatDurationMs(ms) {
-  if (ms == null) return '-'
-  if (ms < 1000) return `${ms}ms`
-  return `${(ms / 1000).toFixed(1)}s`
-}
-
-function formatSnmpServerTime(value) {
-  if (!value) return '-'
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString('zh-CN', { hour12: false })
-}
-
 function setEventWindow(windowValue) {
   eventWindow.value = windowValue
   loadMonitorEvents()
@@ -6293,236 +6070,8 @@ onBeforeUnmount(() => {
   color: #0078d4;
 }
 
-/* 画布右下角工具按钮（避开侧边栏） */
-.canvas-tools {
-  position: absolute;
-  right: 276px;
-  bottom: 16px;
-  display: flex;
-  gap: 8px;
-  z-index: 5;
-  transition: right 0.3s ease;
-}
-
 .monitor3d.panel-hidden .canvas-tools {
   right: 16px;
-}
-
-/* 流量热力图例 */
-.heat-legend {
-  position: absolute;
-  z-index: 6;
-  width: 188px;
-  background: rgba(15, 23, 42, 0.82);
-  border: 1px solid rgba(34, 211, 238, 0.25);
-  border-radius: 8px;
-  color: #e2e8f0;
-  font-size: 12px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-}
-.heat-legend.collapsed {
-  width: 188px;
-}
-.heat-legend-head {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 7px 10px;
-  cursor: grab;
-  user-select: none;
-}
-.heat-legend-head:active {
-  cursor: grabbing;
-}
-.heat-legend-title {
-  font-weight: 600;
-  color: #22d3ee;
-  letter-spacing: 0.5px;
-}
-.heat-legend-toggle {
-  font-size: 13px;
-  opacity: 0.8;
-}
-.heat-legend-body {
-  padding: 4px 10px 8px;
-}
-.heat-legend-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 2px 0;
-}
-.heat-swatch {
-  width: 14px;
-  height: 6px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-.heat-name {
-  width: 64px;
-  flex-shrink: 0;
-}
-.heat-range {
-  flex: 1;
-  color: #94a3b8;
-  font-size: 11px;
-}
-.heat-count {
-  min-width: 18px;
-  text-align: right;
-  font-variant-numeric: tabular-nums;
-  color: #e2e8f0;
-}
-.heat-legend-foot {
-  margin-top: 6px;
-  font-size: 10px;
-  line-height: 1.4;
-  color: #64748b;
-}
-
-.snmp-health-panel {
-  position: absolute;
-  z-index: 6;
-  width: 260px;
-  background: rgba(15, 23, 42, 0.86);
-  border: 1px solid rgba(148, 163, 184, 0.28);
-  border-radius: 8px;
-  color: #e2e8f0;
-  font-size: 12px;
-  backdrop-filter: blur(4px);
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-  overflow: hidden;
-}
-.snmp-health-panel.collapsed {
-  width: 260px;
-}
-.snmp-health-head {
-  display: grid;
-  grid-template-columns: auto 1fr auto auto;
-  align-items: center;
-  gap: 4px;
-  padding: 7px 10px;
-  cursor: grab;
-  user-select: none;
-}
-.snmp-health-head:active {
-  cursor: grabbing;
-}
-.snmp-health-title {
-  font-weight: 600;
-  color: #93c5fd;
-}
-.snmp-health-summary {
-  color: #cbd5e1;
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
-.snmp-health-toggle {
-  font-size: 13px;
-  opacity: 0.8;
-}
-
-/* 拖拽手柄图标 */
-.drag-handle {
-  font-size: 13px;
-  opacity: 0.4;
-  transition: opacity 0.2s;
-  flex-shrink: 0;
-  line-height: 1;
-}
-.drag-handle:hover {
-  opacity: 0.8;
-}
-.heat-legend-head:hover .drag-handle,
-.snmp-health-head:hover .drag-handle {
-  opacity: 0.7;
-}
-.snmp-health-body {
-  padding: 4px 10px 10px;
-}
-.snmp-health-kpis {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 4px;
-  margin-bottom: 8px;
-}
-.snmp-health-kpis span {
-  border-radius: 4px;
-  padding: 3px 4px;
-  text-align: center;
-  font-size: 10px;
-  background: rgba(30, 41, 59, 0.72);
-  white-space: nowrap;
-}
-.snmp-health-kpis .fresh { color: #86efac; }
-.snmp-health-kpis .lagging { color: #fde68a; }
-.snmp-health-kpis .stale { color: #fdba74; }
-.snmp-health-kpis .missing { color: #c4b5fd; }
-.snmp-health-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 176px;
-  overflow: auto;
-}
-.snmp-health-row {
-  border-left: 3px solid #64748b;
-  background: rgba(30, 41, 59, 0.62);
-  border-radius: 5px;
-  padding: 5px 6px;
-}
-.snmp-health-row.fresh { border-left-color: #22c55e; }
-.snmp-health-row.lagging { border-left-color: #facc15; }
-.snmp-health-row.stale { border-left-color: #f97316; }
-.snmp-health-row.missing { border-left-color: #8b5cf6; }
-.snmp-health-row.down { border-left-color: #ef4444; }
-.snmp-health-main,
-.snmp-health-meta {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-.snmp-health-device {
-  max-width: 132px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #e2e8f0;
-}
-.snmp-health-if,
-.snmp-health-meta {
-  color: #94a3b8;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
-.snmp-health-empty {
-  color: #94a3b8;
-  font-size: 11px;
-  padding: 8px 0;
-  text-align: center;
-}
-.snmp-health-server-time {
-  margin-top: 8px;
-  color: #94a3b8;
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-  text-align: center;
-}
-.snmp-health-refresh {
-  width: 100%;
-  margin-top: 8px;
-  border: 1px solid rgba(147, 197, 253, 0.28);
-  border-radius: 5px;
-  background: rgba(30, 41, 59, 0.76);
-  color: #bfdbfe;
-  font-size: 11px;
-  padding: 5px 8px;
-  cursor: pointer;
-}
-.snmp-health-refresh:hover {
-  background: rgba(37, 99, 235, 0.24);
 }
 
 .panel-header h3 {
@@ -7552,19 +7101,6 @@ onBeforeUnmount(() => {
 
 .monitor3d.edit-mode .canvas-host:active {
   cursor: grabbing;
-}
-
-.edit-mode-indicator {
-  position: fixed;
-  top: 16px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 100;
-  background: rgba(255, 161, 22, 0.9);
-  padding: 8px 16px;
-  border-radius: 4px;
-  color: #fff;
-  font-size: 14px;
 }
 
 /* 标签页样式 - 暗色玻璃质感风格 */
