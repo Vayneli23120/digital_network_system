@@ -98,148 +98,56 @@
     </div>
 
     <!-- 上传底图对话框 -->
-    <el-dialog v-model="showUploadDialog" :title="t('uploadFloorPlan')" width="400px">
-      <el-form>
-        <el-form-item :label="t('monitorScreenPlanName')">
-          <el-input v-model="uploadPlanName" :placeholder="t('monitorScreenPlanNamePlaceholder')" />
-        </el-form-item>
-        <el-form-item :label="t('monitorScreenPlanImage')">
-          <el-upload
-            :auto-upload="false"
-            :show-file-list="false"
-            accept="image/*"
-            :on-change="handleFileChange"
-          >
-            <el-button type="primary">{{ t('monitorScreenSelectImage') }}</el-button>
-            <template #tip>
-              <div class="upload-tip">{{ uploadFileName || t('monitorScreenSelectImage') }}</div>
-            </template>
-          </el-upload>
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showUploadDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="uploadFloorPlan" :loading="uploading">
-          {{ t('actionUpload') }}
-        </el-button>
-      </template>
-    </el-dialog>
+    <UploadFloorPlanDialog
+      v-model="showUploadDialog"
+      v-model:plan-name="uploadPlanName"
+      :file-name="uploadFileName"
+      :uploading="uploading"
+      @file-change="handleFileChange"
+      @confirm="uploadFloorPlan"
+    />
 
     <!-- 绑定设备对话框 -->
-    <el-dialog v-model="showBindDialog" :title="t('bindDeviceTitle')" width="400px">
-      <el-select v-model="bindDeviceId" :placeholder="t('monitorScreenSelectDevice')" filterable style="width:100%" popper-class="dark-select-popper">
-        <el-option v-for="d in bindCandidates" :key="d.id"
-                   :label="`${d.name} (${d.ip || ''})`" :value="d.id" />
-      </el-select>
-      <template #footer>
-        <el-button @click="cancelBind">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" :loading="bindSubmitting" @click="confirmBindDevice">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <BindDeviceDialog
+      v-model="showBindDialog"
+      v-model:device-id="bindDeviceId"
+      :candidates="bindCandidates"
+      :submitting="bindSubmitting"
+      @cancel="cancelBind"
+      @confirm="confirmBindDevice"
+    />
 
     <!-- 链路拐点编辑对话框 -->
-    <el-dialog v-model="showWaypointDialog" :title="t('editWaypoints')" width="500px">
-      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
-      <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingWaypoints" :key="wp._uid" class="waypoint-item">
-          <span class="waypoint-index">{{ idx + 1 }}</span>
-          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
-          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
-          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeWaypoint(idx)">
-            <el-icon><Delete /></el-icon>
-          </button>
-        </div>
-        <div v-if="editingWaypoints.length === 0" class="no-data">
-          {{ t('noWaypoints') }}
-        </div>
-      </div>
-      <el-button type="primary" size="small" @click="addWaypoint">
-        <el-icon><Plus /></el-icon>
-        {{ t('addWaypoint') }}
-      </el-button>
-      <template #footer>
-        <el-button @click="showWaypointDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="saveWaypoints">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <WaypointEditorDialog
+      v-model="showWaypointDialog"
+      :title="t('editWaypoints')"
+      v-model:waypoints="editingWaypoints"
+      @save="saveWaypoints"
+    />
 
     <!-- 主干光缆拐点编辑对话框 -->
-    <el-dialog v-model="showTrunkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberTrunk')" width="500px">
-      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
-      <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingTrunkWaypoints" :key="wp._uid" class="waypoint-item">
-          <span class="waypoint-index">{{ idx + 1 }}</span>
-          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
-          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
-          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeTrunkWaypoint(idx)">
-            <el-icon><Delete /></el-icon>
-          </button>
-        </div>
-        <div v-if="editingTrunkWaypoints.length === 0" class="no-data">
-          {{ t('noWaypoints') }}
-        </div>
-      </div>
-      <el-button type="primary" size="small" @click="addTrunkWaypoint">
-        <el-icon><Plus /></el-icon>
-        {{ t('addWaypoint') }}
-      </el-button>
-      <template #footer>
-        <el-button @click="showTrunkWaypointDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="saveTrunkWaypoints">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <WaypointEditorDialog
+      v-model="showTrunkWaypointDialog"
+      :title="t('editWaypoints') + ' - ' + t('fiberTrunk')"
+      v-model:waypoints="editingTrunkWaypoints"
+      @save="saveTrunkWaypoints"
+    />
 
     <!-- 分支光缆拐点编辑对话框 -->
-    <el-dialog v-model="showBranchLinkWaypointDialog" :title="t('editWaypoints') + ' - ' + t('fiberBranchLink')" width="500px">
-      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
-      <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingBranchLinkWaypoints" :key="wp._uid" class="waypoint-item">
-          <span class="waypoint-index">{{ idx + 1 }}</span>
-          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
-          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
-          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeBranchLinkWaypoint(idx)">
-            <el-icon><Delete /></el-icon>
-          </button>
-        </div>
-        <div v-if="editingBranchLinkWaypoints.length === 0" class="no-data">
-          {{ t('noWaypoints') }}
-        </div>
-      </div>
-      <el-button type="primary" size="small" @click="addBranchLinkWaypoint">
-        <el-icon><Plus /></el-icon>
-        {{ t('addWaypoint') }}
-      </el-button>
-      <template #footer>
-        <el-button @click="showBranchLinkWaypointDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="saveBranchLinkWaypoints">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <WaypointEditorDialog
+      v-model="showBranchLinkWaypointDialog"
+      :title="t('editWaypoints') + ' - ' + t('fiberBranchLink')"
+      v-model:waypoints="editingBranchLinkWaypoints"
+      @save="saveBranchLinkWaypoints"
+    />
 
     <!-- TopoEdge 拐点编辑对话框 -->
-    <el-dialog v-model="showTopoEdgeWaypointDialog" :title="t('editWaypoints') + ' - TopoEdge'" width="500px">
-      <p class="waypoint-hint">{{ t('waypointHint') }}</p>
-      <div class="waypoint-list">
-        <div v-for="(wp, idx) in editingTopoEdgeWaypoints" :key="wp._uid" class="waypoint-item">
-          <span class="waypoint-index">{{ idx + 1 }}</span>
-          <el-input-number v-model="wp.x" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointX')" />
-          <el-input-number v-model="wp.y" :min="0" :max="100" :step="1" size="small" :placeholder="t('waypointY')" />
-          <button class="icon-btn danger" :title="t('actionDelete')" @click="removeTopoEdgeWaypoint(idx)">
-            <el-icon><Delete /></el-icon>
-          </button>
-        </div>
-        <div v-if="editingTopoEdgeWaypoints.length === 0" class="no-data">
-          {{ t('noWaypoints') }}
-        </div>
-      </div>
-      <el-button type="primary" size="small" @click="addTopoEdgeWaypoint">
-        <el-icon><Plus /></el-icon>
-        {{ t('addWaypoint') }}
-      </el-button>
-      <template #footer>
-        <el-button @click="showTopoEdgeWaypointDialog = false">{{ t('actionCancel') }}</el-button>
-        <el-button type="primary" @click="saveTopoEdgeWaypoints">{{ t('actionConfirm') }}</el-button>
-      </template>
-    </el-dialog>
+    <WaypointEditorDialog
+      v-model="showTopoEdgeWaypointDialog"
+      :title="t('editWaypoints') + ' - TopoEdge'"
+      v-model:waypoints="editingTopoEdgeWaypoints"
+      @save="saveTopoEdgeWaypoints"
+    />
 
     <!-- 右：操作面板（玻璃质感） -->
     <aside class="side-panel" :class="{ dark: isDark }">
@@ -671,6 +579,9 @@ import { formatDateTime } from '@/utils/time'
 import { stampUid } from '@/utils/uid.js'
 import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
+import UploadFloorPlanDialog from '@/components/UploadFloorPlanDialog.vue'
+import BindDeviceDialog from '@/components/BindDeviceDialog.vue'
+import WaypointEditorDialog from '@/components/WaypointEditorDialog.vue'
 
 const router = useRouter()
 const authStore = useAuthStore()
@@ -1673,16 +1584,6 @@ function openWaypointDialog(link) {
   showWaypointDialog.value = true
 }
 
-// 添加拐点
-function addWaypoint() {
-  editingWaypoints.value.push(stampUid({ x: 50, y: 50 }))
-}
-
-// 移除拐点
-function removeWaypoint(idx) {
-  editingWaypoints.value.splice(idx, 1)
-}
-
 // 保存拐点
 async function saveWaypoints() {
   if (!editingLink.value) return
@@ -1740,19 +1641,6 @@ function openTrunkWaypointDialog(trunk) {
   showTrunkWaypointDialog.value = true
 }
 
-// 添加主干拐点
-function addTrunkWaypoint() {
-  editingTrunkWaypoints.value.push(stampUid({
-    x: 50,
-    y: 50
-  }))
-}
-
-// 删除主干拐点
-function removeTrunkWaypoint(idx) {
-  editingTrunkWaypoints.value.splice(idx, 1)
-}
-
 // 保存主干拐点
 async function saveTrunkWaypoints() {
   if (!editingTrunk.value) return
@@ -1796,19 +1684,6 @@ function openBranchLinkWaypointDialog(link) {
     editingBranchLinkWaypoints.value = []
   }
   showBranchLinkWaypointDialog.value = true
-}
-
-// 添加分支光缆拐点
-function addBranchLinkWaypoint() {
-  editingBranchLinkWaypoints.value.push(stampUid({
-    x: 50,
-    y: 50
-  }))
-}
-
-// 删除分支光缆拐点
-function removeBranchLinkWaypoint(idx) {
-  editingBranchLinkWaypoints.value.splice(idx, 1)
 }
 
 // 保存分支光缆拐点
@@ -1860,19 +1735,6 @@ function openTopoEdgeWaypointDialog(edge) {
     editingTopoEdgeWaypoints.value = []
   }
   showTopoEdgeWaypointDialog.value = true
-}
-
-// 添加 TopoEdge 拐点
-function addTopoEdgeWaypoint() {
-  editingTopoEdgeWaypoints.value.push(stampUid({
-    x: 50,
-    y: 50
-  }))
-}
-
-// 删除 TopoEdge 拐点
-function removeTopoEdgeWaypoint(idx) {
-  editingTopoEdgeWaypoints.value.splice(idx, 1)
 }
 
 // 保存 TopoEdge 拐点
@@ -6386,20 +6248,6 @@ onBeforeUnmount(() => {
   color: #6b7280;
 }
 
-/* 明亮模式：waypoint-hint 和 waypoint-item 适配 */
-.side-panel:not(.dark) .waypoint-hint {
-  color: #6b7280;
-}
-
-.side-panel:not(.dark) .waypoint-item {
-  background: rgba(0, 0, 0, 0.04);
-}
-
-.side-panel:not(.dark) .waypoint-index {
-  background: rgba(0, 120, 212, 0.1);
-  color: #0078d4;
-}
-
 .monitor3d.panel-hidden .side-panel {
   transform: translateX(100%);
 }
@@ -8150,36 +7998,4 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
-/* 拐点编辑样式 */
-.waypoint-hint {
-  font-size: 12px;
-  color: #6b7280;
-  margin-bottom: 12px;
-}
-
-.waypoint-list {
-  max-height: 200px;
-  overflow-y: auto;
-}
-
-.waypoint-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
-  background: rgba(26, 34, 48, 0.5);
-  border-radius: 4px;
-  margin-bottom: 4px;
-}
-
-.waypoint-index {
-  color: #22d3ee;
-  font-size: 12px;
-  font-weight: 500;
-  min-width: 20px;
-}
-
-.waypoint-item .el-input-number {
-  width: 80px;
-}
 </style>
