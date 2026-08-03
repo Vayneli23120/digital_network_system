@@ -389,143 +389,19 @@
     </el-dialog>
 
     <!-- 上传标准文档对话框 -->
-    <el-dialog
-      v-model="uploadStandardDialogVisible"
-      :title="t('complianceStandardUpload')"
-      width="500px"
-      append-to-body
-      draggable
-      align-center
-      class="compliance-dialog"
-    >
-      <el-upload
-        ref="standardUploadRef"
-        :auto-upload="false"
-        :limit="1"
-        :on-change="handleStandardFileChange"
-        accept=".txt,.pdf,.md,.doc,.docx"
-        drag
-        class="config-upload"
-      >
-        <el-icon class="el-icon--upload"><UploadFilled /></el-icon>
-        <div class="el-upload__text">
-          {{ t('complianceUploadConfigHint') }}
-        </div>
-      </el-upload>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <button class="nav-action-btn secondary" @click="uploadStandardDialogVisible = false">
-            {{ t('actionCancel') }}
-          </button>
-          <button class="nav-action-btn deploy-btn" @click="uploadStandardDocument" :disabled="uploadingStandard">
-            <el-icon v-if="uploadingStandard" class="is-loading"><Loading /></el-icon>
-            {{ t('complianceStandardUpload') }}
-          </button>
-        </div>
-      </template>
-    </el-dialog>
+    <UploadStandardDialog v-model="uploadStandardDialogVisible" @uploaded="loadStandards" />
 
     <!-- 创建标准文档对话框 -->
-    <el-dialog
-      v-model="createStandardDialogVisible"
-      :title="t('complianceStandardCreate')"
-      width="600px"
-      append-to-body
-      draggable
-      align-center
-      class="compliance-dialog"
-    >
-      <el-form :model="standardForm" label-width="100px" size="default" class="config-form">
-        <el-form-item :label="t('complianceStandardName')">
-          <el-input v-model="standardForm.name" />
-        </el-form-item>
-        <el-form-item :label="t('complianceStandardVersion')">
-          <el-input v-model="standardForm.version" />
-        </el-form-item>
-        <el-form-item :label="t('complianceStandardDesc')">
-          <el-input v-model="standardForm.description" />
-        </el-form-item>
-        <el-form-item :label="t('complianceStandardContent')">
-          <el-input
-            v-model="standardForm.content"
-            type="textarea"
-            :rows="10"
-            :placeholder="t('complianceStandardContent')"
-          />
-        </el-form-item>
-      </el-form>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <button class="nav-action-btn secondary" @click="createStandardDialogVisible = false">
-            {{ t('actionCancel') }}
-          </button>
-          <button class="nav-action-btn deploy-btn" @click="createStandard" :disabled="creatingStandard">
-            <el-icon v-if="creatingStandard" class="is-loading"><Loading /></el-icon>
-            {{ t('complianceStandardCreate') }}
-          </button>
-        </div>
-      </template>
-    </el-dialog>
+    <CreateStandardDialog v-model="createStandardDialogVisible" @created="loadStandards" />
 
     <!-- 规则列表对话框 -->
-    <el-dialog
+    <RulesDialog
       v-model="rulesDialogVisible"
-      :title="t('complianceRulesTitle')"
-      width="800px"
-      append-to-body
-      draggable
-      align-center
-      class="compliance-dialog"
-    >
-      <div class="rules-panel" v-loading="rulesLoading">
-        <el-empty v-if="rules.length === 0 && !rulesLoading" :description="t('complianceNoRules')" />
-
-        <el-table v-else :data="rules" style="width: 100%" size="small">
-          <el-table-column prop="rule_id" :label="t('complianceRuleId')" width="100">
-            <template #default="{ row }">
-              <span class="rule-id-link" @click="showRuleDetail(row)">{{ row.rule_id }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="name" :label="t('complianceRuleName')" min-width="150">
-            <template #default="{ row }">
-              <span class="rule-name-link" @click="showRuleDetail(row)">{{ row.name }}</span>
-            </template>
-          </el-table-column>
-          <el-table-column prop="category" :label="t('complianceCategory')" width="100">
-            <template #default="{ row }">
-              <el-tag :type="categoryType(row.category)" size="small">{{ row.category }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="severity" :label="t('complianceSeverity')" width="80">
-            <template #default="{ row }">
-              <el-tag :type="severityType(row.severity)" size="small">{{ row.severity }}</el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column prop="source_type" :label="t('complianceRuleSource')" width="100">
-            <template #default="{ row }">
-              <el-tag :type="row.source_type === 'auto' ? 'success' : 'info'" size="small">
-                {{ row.source_type === 'auto' ? t('complianceRuleSourceAuto') : t('complianceRuleSourceManual') }}
-              </el-tag>
-            </template>
-          </el-table-column>
-          <el-table-column :label="t('colActions')" width="120" align="center">
-            <template #default="{ row }">
-              <button class="table-action-btn primary" @click="showRuleDetail(row)">
-                <el-icon><View /></el-icon>
-                {{ t('complianceStandardViewBtn') }}
-              </button>
-              <el-switch
-                v-model="row.is_active"
-                size="small"
-                @change="toggleRuleStatus(row.id, row.is_active)"
-              />
-            </template>
-          </el-table-column>
-        </el-table>
-      </div>
-    </el-dialog>
+      :rules="rules"
+      :loading="rulesLoading"
+      @view-rule="showRuleDetail"
+      @toggle-status="toggleRuleStatus"
+    />
 
     <!-- 规则详情对话框 -->
     <el-dialog
@@ -634,84 +510,12 @@
     </el-dialog>
 
     <!-- 标准文档详情对话框 -->
-    <el-dialog
+    <StandardDetailDialog
       v-model="standardDetailVisible"
-      :title="t('complianceStandardDetail')"
-      width="900px"
-      append-to-body
-      draggable
-      align-center
-      class="compliance-dialog standard-detail-dialog"
-    >
-      <div class="standard-meta-bar" v-if="currentStandardDetail">
-        <span class="meta-item">
-          <span class="meta-label">{{ t('complianceStandardName') }}:</span>
-          <span class="meta-value">{{ currentStandardDetail.name }}</span>
-        </span>
-        <span class="meta-item">
-          <span class="meta-label">{{ t('complianceStandardVersion') }}:</span>
-          <span class="meta-value">v{{ currentStandardDetail.version }}</span>
-        </span>
-        <span class="meta-item">
-          <span class="meta-label">{{ t('complianceRuleCount') }}:</span>
-          <span class="meta-value">{{ currentStandardDetail.rules?.length || 0 }}</span>
-        </span>
-        <el-tag v-if="currentStandardDetail.is_active" type="success" size="small">{{ t('statusActive') }}</el-tag>
-      </div>
-
-      <div class="standard-detail-layout" v-loading="standardDetailLoading">
-        <!-- 左侧目录 -->
-        <div class="standard-toc">
-          <div class="toc-title">{{ t('complianceStandardToc') }}</div>
-          <div class="toc-list">
-            <div
-              v-for="(section, index) in documentSections"
-              :key="index"
-              class="toc-item"
-              :class="{ active: activeSectionIndex === index }"
-              @click="scrollToSection(index)"
-            >
-              <span class="toc-number">{{ section.number }}</span>
-              <span class="toc-text">{{ section.title }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 右侧内容 -->
-        <div class="standard-content" ref="standardContentRef">
-          <div v-if="!currentStandardDetail?.content" class="empty-content">
-            {{ t('complianceStandardNoContent') }}
-          </div>
-          <div v-else class="markdown-content">
-            <div
-              v-for="(section, index) in documentSections"
-              :key="index"
-              class="section-block"
-              :ref="el => sectionRefs[index] = el"
-            >
-              <h2 class="section-heading" :id="'section-' + index">
-                <span class="section-number">{{ section.number }}</span>
-                {{ section.title }}
-              </h2>
-              <div class="section-body" v-html="renderSectionContent(section.content)"></div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <button class="nav-action-btn deploy-btn" @click="generateRulesForStandardDetail" :disabled="generatingRules">
-            <el-icon v-if="generatingRules" class="is-loading"><Loading /></el-icon>
-            <el-icon v-else><MagicStick /></el-icon>
-            {{ t('complianceGenerateRules') }}
-          </button>
-          <button class="nav-action-btn secondary" @click="standardDetailVisible = false">
-            {{ t('actionCancel') }}
-          </button>
-        </div>
-      </template>
-    </el-dialog>
+      :standard="detailStandard"
+      v-model:generating-rules="generatingRules"
+      @rules-generated="loadStandards"
+    />
 
     <!-- 配置问题高亮对话框 -->
     <el-dialog
@@ -842,7 +646,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Connection, Document, VideoPlay, Loading, Setting, Upload, Plus, Delete,
@@ -850,14 +654,19 @@ import {
 } from '@element-plus/icons-vue'
 import {
   uploadConfigFile, runComplianceCheck,
-  getStandards, getStandard, createStandard as createStandardApi, updateStandard, deleteStandard as deleteStandardApi,
-  uploadStandardDocument as uploadStandardDocumentApi, generateRulesForStandard,
+  getStandards, updateStandard, deleteStandard as deleteStandardApi,
+  generateRulesForStandard,
   getRules, getRuleDetail, updateRuleStatus, updateRule,
   getAIConfig, createAIConfig as createAIConfigApi, updateAIConfig as updateAIConfigApi, testAIConfig as testAIConfigApi,
   checkPermission
 } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import { debounce } from '@/utils/requestManager.js'
+import UploadStandardDialog from '@/components/UploadStandardDialog.vue'
+import CreateStandardDialog from '@/components/CreateStandardDialog.vue'
+import RulesDialog from '@/components/RulesDialog.vue'
+import StandardDetailDialog from '@/components/StandardDetailDialog.vue'
+import { categoryType, severityType } from '@/utils/compliance.js'
 
 const { t } = useI18n()
 
@@ -871,16 +680,14 @@ const rulesDialogVisible = ref(false)
 const standardDetailVisible = ref(false)
 const configDetailVisible = ref(false)
 const ruleDetailVisible = ref(false)
+const detailStandard = ref(null)
 
 const auditing = ref(false)
 const testingAI = ref(false)
 const savingAIConfig = ref(false)
-const uploadingStandard = ref(false)
-const creatingStandard = ref(false)
 const generatingRules = ref(false)
 const standardsLoading = ref(false)
 const rulesLoading = ref(false)
-const standardDetailLoading = ref(false)
 
 // 规则详情
 const currentRule = ref(null)
@@ -896,13 +703,6 @@ const ruleEditForm = reactive({
 })
 const savingRule = ref(false)
 
-// 标准文档详情相关
-const currentStandardDetail = ref(null)
-const documentSections = ref([])
-const activeSectionIndex = ref(0)
-const standardContentRef = ref(null)
-const sectionRefs = ref([])
-
 // 配置问题高亮相关
 const configDetailConfigText = ref('')
 const configLineAnalysis = ref([])
@@ -911,7 +711,6 @@ const configLinesRef = ref(null)
 
 const auditTab = ref('upload')
 const uploadRef = ref(null)
-const standardUploadRef = ref(null)
 const currentFile = ref(null)
 const parseResult = ref(null)
 
@@ -935,13 +734,6 @@ const aiConfigForm = reactive({
   is_default: true
 })
 
-const standardForm = reactive({
-  name: '',
-  version: '1.0',
-  description: '',
-  content: ''
-})
-
 // 数据
 const standards = ref([])
 const rules = ref([])
@@ -956,9 +748,6 @@ const hasAIConfigPermission = ref(true)
 const aiConfigured = computed(() => aiConfig.value.configured === true)
 
 // 辅助函数
-const categoryType = (cat) => ({ security: 'danger', availability: 'warning', compliance: 'info' }[cat] || '')
-const severityType = (sev) => ({ critical: 'danger', high: 'warning', medium: 'info', low: '' }[sev] || '')
-
 const formatTime = (time) => {
   if (!time) return '-'
   return new Date(time).toLocaleString()
@@ -1102,10 +891,6 @@ const showUploadStandardDialog = () => {
 
 // 显示创建标准文档对话框
 const showCreateStandardDialog = () => {
-  standardForm.name = ''
-  standardForm.version = '1.0'
-  standardForm.description = ''
-  standardForm.content = ''
   createStandardDialogVisible.value = true
 }
 
@@ -1200,11 +985,6 @@ const handleFileChange = (file) => {
 
 const handleExceed = () => {
   ElMessage.warning(t('uploadLimitExceeded'))
-}
-
-// 标准文档文件处理
-const handleStandardFileChange = (file) => {
-  currentFile.value = file.raw
 }
 
 // 运行审核
@@ -1310,49 +1090,6 @@ const saveAIConfig = async () => {
   }
 }
 
-// 上传标准文档
-const uploadStandardDocument = async () => {
-  if (!currentFile.value) {
-    ElMessage.warning(t('selectFile'))
-    return
-  }
-
-  uploadingStandard.value = true
-  try {
-    const formData = new FormData()
-    formData.append('file', currentFile.value)
-
-    await uploadStandardDocumentApi(formData)
-    ElMessage.success(t('complianceStandardUpload') + ' ' + t('success'))
-    uploadStandardDialogVisible.value = false
-    loadStandards()
-  } catch (e) {
-    ElMessage.error(t('uploadFailed'))
-  } finally {
-    uploadingStandard.value = false
-  }
-}
-
-// 创建标准文档
-const createStandard = async () => {
-  if (!standardForm.name || !standardForm.content) {
-    ElMessage.warning(t('fieldRequired'))
-    return
-  }
-
-  creatingStandard.value = true
-  try {
-    await createStandardApi(standardForm)
-    ElMessage.success(t('complianceStandardCreate') + ' ' + t('success'))
-    createStandardDialogVisible.value = false
-    loadStandards()
-  } catch (e) {
-    ElMessage.error(t('saveFailed'))
-  } finally {
-    creatingStandard.value = false
-  }
-}
-
 // 生成规则
 const generateRules = async (standardId) => {
   generatingRules.value = true
@@ -1431,154 +1168,10 @@ const checkAIPermissions = async () => {
 
 // ==================== 标准文档详情查看 ====================
 
-// 查看标准文档详情
-const viewStandardDetail = async (standard) => {
-  standardDetailLoading.value = true
+// 查看标准文档详情（详情加载与解析在 StandardDetailDialog 子组件内完成）
+const viewStandardDetail = (standard) => {
+  detailStandard.value = standard
   standardDetailVisible.value = true
-
-  try {
-    const data = await getStandard(standard.id)
-    currentStandardDetail.value = data
-
-    // 解析文档章节
-    parseDocumentSections(data.content || '')
-  } catch (e) {
-    ElMessage.error(t('loadFailed'))
-    standardDetailVisible.value = false
-  } finally {
-    standardDetailLoading.value = false
-  }
-}
-
-// 解析文档章节
-const parseDocumentSections = (content) => {
-  const sections = []
-  const lines = content.split('\n')
-
-  let currentSection = null
-  let sectionContent = []
-
-  // 解析标题结构（支持 ## 格式的 Markdown 标题）
-  for (const line of lines) {
-    const headingMatch = line.match(/^#{1,3}\s+(\d+(\.\d+)*\.?)?\s*(.+)/)
-    if (headingMatch) {
-      // 保存上一个章节
-      if (currentSection) {
-        currentSection.content = sectionContent.join('\n')
-        sections.push(currentSection)
-      }
-
-      // 开始新章节
-      currentSection = {
-        number: headingMatch[2] || '',
-        title: headingMatch[3].trim(),
-        content: ''
-      }
-      sectionContent = []
-    } else if (currentSection) {
-      sectionContent.push(line)
-    }
-  }
-
-  // 保存最后一个章节
-  if (currentSection) {
-    currentSection.content = sectionContent.join('\n')
-    sections.push(currentSection)
-  }
-
-  // 如果没有解析到章节，创建一个默认章节
-  if (sections.length === 0) {
-    sections.push({
-      number: '',
-      title: t('complianceStandardContent'),
-      content: content
-    })
-  }
-
-  documentSections.value = sections
-  activeSectionIndex.value = 0
-  sectionRefs.value = []
-}
-
-// HTML 转义：v-html 渲染前先惰性化用户内容，防止存储型 XSS
-const escapeHtml = (str) => {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
-}
-
-// 渲染章节内容（简单的 Markdown 渲染）
-const renderSectionContent = (content) => {
-  if (!content) return ''
-
-  // 先整体转义，正则只作用于白名单标签的生成，捕获内容均为惰性化文本
-  let html = escapeHtml(content)
-
-  // 渲染代码块
-  html = html.replace(/```(\w+)?\n([\s\S]*?)```/g, '<pre class="code-block"><code>$2</code></pre>')
-
-  // 渲染行内代码
-  html = html.replace(/`([^`]+)`/g, '<code class="inline-code">$1</code>')
-
-  // 渲染粗体
-  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-
-  // 渲染斜体
-  html = html.replace(/\*([^*]+)\*/g, '<em>$1</em>')
-
-  // 渲染列表
-  html = html.replace(/^[-*]\s+(.+)/gm, '<li>$1</li>')
-
-  // 渲染段落
-  html = html.split('\n').map(line => {
-    if (line.trim() && !line.startsWith('<')) {
-      return `<p>${line}</p>`
-    }
-    return line
-  }).join('\n')
-
-  return html
-}
-
-// 滚动到指定章节
-const scrollToSection = async (index) => {
-  activeSectionIndex.value = index
-
-  await nextTick()
-
-  const el = sectionRefs.value[index]
-  if (el && standardContentRef.value) {
-    standardContentRef.value.scrollTo({
-      top: el.offsetTop - 20,
-      behavior: 'smooth'
-    })
-  }
-}
-
-// 为详情页标准文档生成规则
-const generateRulesForStandardDetail = async () => {
-  if (!currentStandardDetail.value) return
-
-  generatingRules.value = true
-  try {
-    const data = await generateRulesForStandard(currentStandardDetail.value.id)
-    if (data.success) {
-      ElMessage.success(`${t('complianceRulesGenerated')}: ${data.generated_count} rules`)
-      // 更新当前标准文档详情
-      const updatedData = await getStandard(currentStandardDetail.value.id)
-      currentStandardDetail.value = updatedData
-      loadStandards()
-    } else {
-      ElMessage.error(t('complianceRulesGenerateFailed') + ': ' + data.error)
-    }
-  } catch (e) {
-    ElMessage.error(t('complianceRulesGenerateFailed'))
-  } finally {
-    generatingRules.value = false
-  }
 }
 
 // ==================== 配置问题高亮展示 ====================
@@ -2583,180 +2176,6 @@ onMounted(() => {
 }
 
 /* ========================================
-   标准文档详情对话框
-   ======================================== */
-
-.standard-detail-dialog .standard-meta-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  margin-bottom: 16px;
-}
-
-.standard-meta-bar .meta-item {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-}
-
-.standard-meta-bar .meta-label {
-  color: var(--text-tertiary);
-}
-
-.standard-meta-bar .meta-value {
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.standard-detail-layout {
-  display: flex;
-  gap: 16px;
-  min-height: 500px;
-  max-height: 70vh;
-}
-
-/* 左侧目录 */
-.standard-toc {
-  width: 220px;
-  flex-shrink: 0;
-  background: var(--bg-tertiary);
-  border-radius: var(--radius-md);
-  padding: 12px;
-  overflow-y: auto;
-}
-
-.toc-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
-  margin-bottom: 8px;
-}
-
-.toc-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.toc-item {
-  padding: 8px 10px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-}
-
-.toc-item:hover {
-  background: var(--bg-hover);
-  color: var(--text-primary);
-}
-
-.toc-item.active {
-  background: rgba(9, 132, 227, 0.1);
-  color: var(--accent-secondary);
-}
-
-.toc-number {
-  color: var(--text-tertiary);
-  font-weight: 500;
-  flex-shrink: 0;
-}
-
-.toc-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* 右侧内容 */
-.standard-content {
-  flex: 1;
-  min-width: 0;
-  overflow-y: auto;
-  padding: 16px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-}
-
-.empty-content {
-  text-align: center;
-  padding: 40px;
-  color: var(--text-tertiary);
-}
-
-.markdown-content {
-  line-height: 1.6;
-}
-
-.section-block {
-  margin-bottom: 24px;
-}
-
-.section-heading {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border-subtle);
-}
-
-.section-number {
-  color: var(--accent-secondary);
-  margin-right: 8px;
-}
-
-.section-body {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.section-body p {
-  margin-bottom: 8px;
-}
-
-.section-body li {
-  margin-left: 16px;
-  margin-bottom: 4px;
-  list-style-type: disc;
-}
-
-.code-block {
-  background: var(--bg-tertiary);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-sm);
-  padding: 12px;
-  margin: 12px 0;
-  overflow-x: auto;
-}
-
-.code-block code {
-  font-family: 'Geist Mono', 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-primary);
-}
-
-.inline-code {
-  background: var(--bg-tertiary);
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-family: 'Geist Mono', monospace;
-  font-size: 12px;
-  color: var(--accent-secondary);
-}
-
-/* ========================================
    配置问题高亮对话框
    ======================================== */
 
@@ -3149,36 +2568,6 @@ onMounted(() => {
    暗色模式补充
    ======================================== */
 
-.dark .standard-meta-bar {
-  background: rgba(13, 17, 23, 0.8);
-}
-
-.dark .standard-toc {
-  background: rgba(13, 17, 23, 0.6);
-}
-
-.dark .toc-item.active {
-  background: rgba(0, 184, 148, 0.15);
-  color: var(--accent-primary);
-}
-
-.dark .standard-content {
-  background: rgba(13, 17, 23, 0.4);
-}
-
-.dark .section-heading {
-  color: #e6edf3;
-}
-
-.dark .code-block {
-  background: rgba(13, 17, 23, 0.8);
-}
-
-.dark .inline-code {
-  background: rgba(13, 17, 23, 0.6);
-  color: #58a6ff;
-}
-
 .dark .config-lines-panel,
 .dark .issue-detail-panel {
   background: rgba(13, 17, 23, 0.4);
@@ -3312,19 +2701,6 @@ onMounted(() => {
 .status-label {
   font-size: 13px;
   color: var(--text-secondary);
-}
-
-/* 规则表格中的链接样式 */
-.rule-id-link,
-.rule-name-link {
-  color: var(--accent-secondary);
-  cursor: pointer;
-  transition: color 0.15s ease;
-}
-
-.rule-id-link:hover,
-.rule-name-link:hover {
-  color: var(--accent-primary);
 }
 
 /* 暗色模式 */
