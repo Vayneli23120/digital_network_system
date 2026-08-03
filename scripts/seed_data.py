@@ -3,7 +3,8 @@
 用于生成示例数据，方便演示和测试系统功能
 
 使用方法:
-    python scripts/seed_data.py
+    NAS_SEED_CONFIRM=1 python scripts/seed_data.py
+    脚本会清空现有数据，必须设置 NAS_SEED_CONFIRM=1 显式确认才能执行。
 """
 
 import sys
@@ -632,6 +633,11 @@ def main():
     print("=" * 50)
     print("Network Automation System - 测试数据生成器")
     print("=" * 50)
+
+    # 环境守卫：种子脚本会清空数据库，必须显式确认，防止误在生产执行即清库
+    if os.environ.get("NAS_SEED_CONFIRM") != "1":
+        print("拒绝执行：种子脚本会清除现有数据。请设置 NAS_SEED_CONFIRM=1 以确认。")
+        return 1
 
     # 获取数据库管理器
     db_manager = get_db_manager()

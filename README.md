@@ -39,7 +39,7 @@ copy config.example.yaml config.yaml
 
 # 3. 初始化数据库并导入测试数据
 python init_db.py              # 初始化空数据库
-python scripts/seed_data.py    # 导入测试数据（可选，用于演示）
+NAS_SEED_CONFIRM=1 python scripts/seed_data.py   # 导入测试数据（可选，用于演示）
 
 # 4. 启动后端（终端 1）
 python -m uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -76,8 +76,8 @@ cd network-automation-system
 项目包含测试数据生成脚本，可快速生成演示数据：
 
 ```bash
-# 生成测试数据
-python scripts/seed_data.py
+# 生成测试数据（脚本会清空数据库，需显式确认）
+NAS_SEED_CONFIRM=1 python scripts/seed_data.py
 ```
 
 **测试数据包含**：
@@ -88,7 +88,7 @@ python scripts/seed_data.py
 - 3 个配置模板
 - 审计日志若干
 
-**注意**：`seed_data.py` 会清除现有数据后重新生成，生产环境请谨慎使用。
+**注意**：`seed_data.py` 会清除现有数据后重新生成；未设置 `NAS_SEED_CONFIRM=1` 时脚本会拒绝执行，防止误在生产环境清库。
 
 ---
 

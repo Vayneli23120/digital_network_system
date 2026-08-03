@@ -80,18 +80,6 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
-  frontend-react:
-    build:
-      context: ./frontend-react
-      dockerfile: Dockerfile
-    container_name: nas-frontend-react
-    ports:
-      - "3001:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
-
   worker:
     build:
       context: .
