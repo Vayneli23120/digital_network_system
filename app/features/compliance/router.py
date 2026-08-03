@@ -20,6 +20,7 @@ from app.features.compliance.config_parser_service import ConfigParserService
 from app.features.compliance.standard_service import StandardService
 from app.features.auth.identity import Principal, get_current_principal
 from app.shared.dependencies import require_permission
+from app.shared.crypto import encrypt_text
 
 router = APIRouter(prefix="/api/compliance", tags=["配置合规"])
 
@@ -596,7 +597,7 @@ async def create_ai_config(
         config = AIConfig(
             name=f"{request.provider}-{request.model_name}",
             provider=request.provider,
-            api_key_encrypted=request.api_key,  # 暂不加密，后续可添加加密逻辑
+            api_key_encrypted=encrypt_text(request.api_key) if request.api_key else None,
             base_url=request.base_url,
             model_name=request.model_name,
             temperature=request.temperature,
@@ -643,7 +644,9 @@ async def update_ai_config(
             raise HTTPException(status_code=404, detail="AI 配置不存在")
 
         config.provider = request.provider
-        config.api_key_encrypted = request.api_key
+        # None = 保留原值；传入新 key 才重新加密
+        if request.api_key is not None:
+            config.api_key_encrypted = encrypt_text(request.api_key)
         config.base_url = request.base_url
         config.model_name = request.model_name
         config.temperature = request.temperature
@@ -673,8 +676,6 @@ async def test_ai_config(
     _: None = Depends(require_ai_config),
 ):
     """测试 AI 配置是否有效 - 支持所有 LLM 提供商（litellm 直连）"""
-    import os
-
     try:
         import litellm
     except ImportError:
@@ -682,25 +683,6 @@ async def test_ai_config(
             "success": False,
             "error": "litellm 未安装，请先安装 requirements-ai.txt",
         }
-
-    # 通用环境变量映射
-    env_key_map = {
-        "openai": "OPENAI_API_KEY",
-        "anthropic": "ANTHROPIC_API_KEY",
-        "deepseek": "DEEPSEEK_API_KEY",
-        "groq": "GROQ_API_KEY",
-        "azure": "AZURE_API_KEY",
-        "together": "TOGETHER_API_KEY",
-        "replicate": "REPLICATE_API_KEY",
-        "cohere": "COHERE_API_KEY",
-        "ollama": "OLLAMA_API_KEY",
-        "llmstudio": "LMSTUDIO_API_KEY",
-        "lmstudio": "LMSTUDIO_API_KEY",
-        "local": "LOCAL_API_KEY",
-    }
-    env_key = env_key_map.get(request.provider.lower(), f"{request.provider.upper()}_API_KEY")
-    if request.api_key:
-        os.environ[env_key] = request.api_key
 
     # 根据提供商构建模型字符串
     provider_lower = request.provider.lower()
@@ -732,6 +714,7 @@ async def test_ai_config(
         response = litellm.completion(
             model=model_str,
             api_base=request.base_url or None,
+            api_key=request.api_key,
             messages=[{"role": "user", "content": "reply with exactly: OK"}],
             max_tokens=32,
             temperature=request.temperature or 0.2,

@@ -3,7 +3,6 @@
 从数据库加载 AIConfig，转换为 ADK LiteLlm 模型配置。
 """
 
-import os
 from typing import TYPE_CHECKING, Optional, Dict
 from loguru import logger
 
@@ -101,24 +100,11 @@ class ADKConfig:
         if config.base_url:
             result["api_base"] = config.base_url
 
-        # 设置 API Key（部分本地模型可能不需要）
+        # 解密 API Key 随配置返回（不再写进程级 os.environ，避免跨请求污染）。
+        # 历史明文 key 非 Fernet 密文 → 原样透传（decrypt_or_passthrough）。
         if config.api_key_encrypted:
-            # 环境变量名映射
-            env_key_map = {
-                'openai': 'OPENAI_API_KEY',
-                'anthropic': 'ANTHROPIC_API_KEY',
-                'deepseek': 'DEEPSEEK_API_KEY',
-                'groq': 'GROQ_API_KEY',
-                'azure': 'AZURE_API_KEY',
-                'together': 'TOGETHER_API_KEY',
-                'replicate': 'REPLICATE_API_KEY',
-                'cohere': 'COHERE_API_KEY',
-                'ollama': 'OLLAMA_API_KEY',      # 可选，Ollama 通常不需要
-                'lmstudio': 'LMSTUDIO_API_KEY',  # 可选
-                'local': 'LOCAL_API_KEY',        # 自定义
-            }
-            env_key = env_key_map.get(provider, f"{provider.upper()}_API_KEY")
-            os.environ[env_key] = config.api_key_encrypted
+            from app.shared.crypto import decrypt_or_passthrough
+            result["api_key"] = decrypt_or_passthrough(config.api_key_encrypted)
 
         logger.info(
             f"LLM 配置: provider={provider}, model={model_str}, "
@@ -138,6 +124,7 @@ class ADKConfig:
         return LiteLlm(
             model=config_dict["model"],
             api_base=config_dict.get("api_base"),
+            api_key=config_dict.get("api_key"),
             temperature=config_dict["temperature"],
             max_tokens=config_dict["max_tokens"],
             timeout=config_dict.get("timeout", 120),  # 添加超时参数

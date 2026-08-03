@@ -5,6 +5,7 @@ SSH 凭证管理服务
 from cryptography.fernet import Fernet
 from typing import Optional
 from app.shared.config import get_config
+from app.shared.crypto import decrypt_text, get_cipher
 
 
 class CredentialService:
@@ -16,23 +17,9 @@ class CredentialService:
 
     @property
     def cipher(self) -> Fernet:
-        """获取 Fernet 加密实例"""
+        """获取 Fernet 加密实例（encryption_key 优先，未配置回退 jwt_secret）"""
         if self._cipher is None:
-            key = self.config.security.jwt_secret
-            if not key:
-                raise ValueError("Encryption key not configured")
-            # 确保 key 是有效的 Fernet key (32 bytes url-safe base64)
-            from cryptography.hazmat.primitives import hashes
-            from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-            import base64
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=b"nas-salt",
-                iterations=100000,
-            )
-            key = base64.urlsafe_b64encode(kdf.derive(key.encode()))
-            self._cipher = Fernet(key)
+            self._cipher = get_cipher(self.config)
         return self._cipher
 
     def encrypt_password(self, password: str) -> str:
@@ -40,8 +27,8 @@ class CredentialService:
         return self.cipher.encrypt(password.encode()).decode()
 
     def decrypt_password(self, encrypted_password: str) -> str:
-        """解密密码"""
-        return self.cipher.decrypt(encrypted_password.encode()).decode()
+        """解密密码（新 key 失败时回退 legacy jwt_secret key，兼容旧密文）"""
+        return decrypt_text(encrypted_password, self.config)
 
 
 # 全局实例

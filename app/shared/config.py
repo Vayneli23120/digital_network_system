@@ -251,6 +251,9 @@ class SSOConfig(BaseModel):
 class SecurityConfig(BaseModel):
     auth_enabled: bool = False  # 认证功能开关，默认关闭
     jwt_secret: str = "your-secret-key-change-in-production"
+    # 独立加密密钥（PBKDF2 派生 Fernet）：与 jwt_secret 解耦，轮换 JWT 不影响已存凭证。
+    # 未配置时回退到 jwt_secret 派生（兼容既有密文）；仅解密侧回退旧 jwt_secret key。
+    encryption_key: Optional[str] = None
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7
@@ -370,6 +373,8 @@ class Config(BaseModel):
             self.app.debug = self._parse_bool_env("APP_DEBUG", os.environ["APP_DEBUG"])
         if "JWT_SECRET" in os.environ:
             self.security.jwt_secret = os.environ["JWT_SECRET"]
+        if "ENCRYPTION_KEY" in os.environ:
+            self.security.encryption_key = os.environ["ENCRYPTION_KEY"]
         if "CORS_ALLOWED_ORIGINS" in os.environ:
             self.security.cors_allowed_origins = [
                 origin.strip()

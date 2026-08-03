@@ -72,6 +72,7 @@ class ADKRunner:
             response = await acompletion(
                 model=model_config["model"],
                 api_base=model_config.get("api_base"),
+                api_key=model_config.get("api_key"),
                 messages=messages,
                 temperature=temperature,
                 max_tokens=max_tokens,
