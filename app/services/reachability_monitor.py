@@ -25,7 +25,12 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.shared.database import get_db_manager
 from app.shared.models import Device
-from app.shared.cache import cache
+from app.shared.cache import cache, HybridCache
+
+
+# 探测历史独立缓存实例：不与全局 cache（dashboard 等共用 max_size=256）竞争 LRU，
+# 避免设备多时连续失败计数被淘汰而漏告警；容量 1024 覆盖绝大多数规模，Redis 兜底支持多 worker 共享。
+_history_cache = HybridCache(max_size=1024, default_ttl=3600)
 
 
 class ReachabilityMonitor:
@@ -332,9 +337,9 @@ class ReachabilityMonitor:
             return None
 
     def _get_check_history(self, device_id: int) -> List[bool]:
-        """获取设备检测历史（从缓存）"""
+        """获取设备检测历史（从独立历史缓存）"""
         key = f"{self._history_cache_prefix}{device_id}"
-        cached = cache.get(key)
+        cached = _history_cache.get(key)
         if cached:
             try:
                 return cached if isinstance(cached, list) else []
@@ -343,10 +348,10 @@ class ReachabilityMonitor:
         return []
 
     def _update_check_history(self, device_id: int, history: List[bool]):
-        """更新设备检测历史（缓存）"""
+        """更新设备检测历史（独立历史缓存）"""
         key = f"{self._history_cache_prefix}{device_id}"
         # 缓存 1 小时
-        cache.set(key, history, ttl=3600)
+        _history_cache.set(key, history, ttl=3600)
 
     def _determine_state(self, history: List[bool], current_state: str, tier: str = "normal") -> str:
         """基于历史记录和分级阈值判定最终状态

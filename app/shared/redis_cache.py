@@ -20,9 +20,14 @@ class RedisCache:
     """Redis 缓存服务"""
 
     def __init__(self, host: str = "localhost", port: int = 6379, db: int = 0,
-                 password: str = "", default_ttl: int = 60):
+                 password: str = "", default_ttl: int = 60, enabled: bool = True):
         self.default_ttl = default_ttl
         self._client: Optional[redis.Redis] = None
+
+        if not enabled:
+            # config.cache.enabled=false 时不建连，HybridCache 自动降级纯内存
+            logger.info("Redis 数据缓存未启用（config.cache.enabled=false）")
+            return
 
         if not REDIS_AVAILABLE:
             logger.warning("Redis 未安装，缓存服务不可用")
@@ -82,6 +87,32 @@ class RedisCache:
             logger.warning(f"Redis DELETE 失败 {key}: {e}")
             return False
 
+    def get_ttl(self, key: str) -> Optional[int]:
+        """查询键剩余存活秒数（供内存层回填保持原始 TTL，已过期/不存在返回 None）"""
+        if not self.available:
+            return None
+        try:
+            ttl = self._client.ttl(key)
+            return ttl if ttl and ttl > 0 else None
+        except Exception as e:
+            logger.warning(f"Redis TTL 查询失败 {key}: {e}")
+            return None
+
+    def incr(self, key: str, ttl: Optional[int] = None) -> Optional[int]:
+        """原子自增，首次自增时设置 TTL（nx）。返回当前计数，失败返回 None。"""
+        if not self.available:
+            return None
+        try:
+            pipe = self._client.pipeline()
+            pipe.incr(key)
+            if ttl:
+                pipe.expire(key, ttl, nx=True)
+            results = pipe.execute()
+            return results[0]
+        except Exception as e:
+            logger.warning(f"Redis INCR 失败 {key}: {e}")
+            return None
+
     def invalidate_prefix(self, prefix: str) -> int:
         """清除匹配前缀的所有键"""
         if not self.available:
@@ -125,7 +156,7 @@ _redis_cache: Optional[RedisCache] = None
 
 
 def get_redis_cache() -> RedisCache:
-    """获取 Redis 缓存实例"""
+    """获取 Redis 缓存实例（尊重 config.cache.enabled：False 时不建连）"""
     global _redis_cache
     if _redis_cache is None:
         from app.shared.config import get_config
@@ -137,5 +168,6 @@ def get_redis_cache() -> RedisCache:
             db=cc.db,
             password=cc.password,
             default_ttl=cc.default_ttl,
+            enabled=cc.enabled,
         )
     return _redis_cache

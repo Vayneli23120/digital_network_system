@@ -6,6 +6,7 @@
 
 import time
 import hashlib
+import inspect
 import threading
 from typing import Any, Optional
 from collections import OrderedDict
@@ -102,14 +103,76 @@ class SimpleCache:
             return len(keys_to_delete)
 
 
-# 全局缓存实例
-cache = SimpleCache(max_size=256, default_ttl=60)
+class HybridCache(SimpleCache):
+    """内存 LRU + Redis 兜底的组合缓存。
+
+    内存层沿用 SimpleCache 的 LRU/TTL 语义；Redis 层作为可选的分布式兜底：
+    - ``get``：内存 miss 时回查 Redis，命中则回填内存（保持原始 TTL）。
+    - ``set``/``delete``/``clear``/``invalidate_prefix``：内存动作后级联 Redis。
+
+    Redis 不可用或 ``config.cache.enabled=false`` 时自动降级为纯内存，
+    行为与 SimpleCache 完全一致，调用方无感。
+    """
+
+    def __init__(self, max_size: int = 256, default_ttl: int = 60):
+        super().__init__(max_size=max_size, default_ttl=default_ttl)
+        self._redis: Optional[Any] = None
+
+    def _redis_backend(self):
+        """惰性获取 Redis 后端（单例）"""
+        if self._redis is None:
+            from app.shared.redis_cache import get_redis_cache
+            self._redis = get_redis_cache()
+        return self._redis
+
+    def get(self, key: str) -> Optional[Any]:
+        value = super().get(key)
+        if value is not None:
+            return value
+        redis = self._redis_backend()
+        if redis.available:
+            remote = redis.get(key)
+            if remote is not None:
+                super().set(key, remote, ttl=redis.get_ttl(key))
+                return remote
+        return None
+
+    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+        super().set(key, value, ttl=ttl)
+        redis = self._redis_backend()
+        if redis.available:
+            redis.set(key, value, ttl=ttl)
+
+    def delete(self, key: str) -> bool:
+        removed = super().delete(key)
+        redis = self._redis_backend()
+        if redis.available:
+            redis.delete(key)
+        return removed
+
+    def clear(self) -> int:
+        count = super().clear()
+        redis = self._redis_backend()
+        if redis.available:
+            redis.clear()
+        return count
+
+    def invalidate_prefix(self, prefix: str) -> int:
+        count = super().invalidate_prefix(prefix)
+        redis = self._redis_backend()
+        if redis.available:
+            redis.invalidate_prefix(prefix)
+        return count
+
+
+# 全局缓存实例（HybridCache：内存 + Redis 兜底）
+cache = HybridCache(max_size=256, default_ttl=60)
 
 
 def _cache_key(prefix: str, **kwargs) -> str:
-    """生成缓存键"""
+    """生成确定性缓存键（完整 md5，不受 PYTHONHASHSEED 影响）"""
     raw = str(sorted(kwargs.items()))
-    h = hashlib.md5(raw.encode()).hexdigest()[:8]
+    h = hashlib.md5(raw.encode()).hexdigest()
     return f"{prefix}:{h}"
 
 
@@ -120,11 +183,15 @@ def cached(key_prefix: str, ttl: Optional[int] = None):
         @cached("dashboard", ttl=30)
         def get_dashboard_data():
             return heavy_computation()
+
+    缓存键由签名绑定后的实参确定生成（确定性），不使用内置 hash()
+    （其值受 PYTHONHASHSEED 影响且对含 repr 地址的对象不稳定）。
     """
     def decorator(func):
         def wrapper(*args, **kwargs):
-            # 生成缓存键
-            cache_key = f"{key_prefix}:{hash(str(args) + str(sorted(kwargs.items())))}"
+            bound = inspect.signature(func).bind(*args, **kwargs)
+            bound.apply_defaults()
+            cache_key = _cache_key(key_prefix, **dict(bound.arguments))
             result = cache.get(cache_key)
             if result is not None:
                 return result

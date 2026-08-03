@@ -13,6 +13,20 @@ class TestRedisCacheUnavailable:
             cache = RedisCache()
             assert cache.available is False
 
+    def test_enabled_false_skips_connection(self):
+        """config.cache.enabled=false 时不建连（_client 保持 None，available=False）"""
+        cache = RedisCache(enabled=False)
+        assert cache._client is None
+        assert cache.available is False
+
+    def test_ttl_returns_none_when_unavailable(self):
+        cache = RedisCache(enabled=False)
+        assert cache.get_ttl("any_key") is None
+
+    def test_incr_returns_none_when_unavailable(self):
+        cache = RedisCache(enabled=False)
+        assert cache.incr("any_key") is None
+
     def test_get_returns_none_when_unavailable(self):
         cache = RedisCache()
         cache._client = None
@@ -103,5 +117,20 @@ class TestGetRedisCache:
             s1 = get_redis_cache()
             s2 = get_redis_cache()
             assert s1 is s2
+
+        rc_module._redis_cache = None
+
+    def test_respects_config_cache_enabled_false(self):
+        """get_redis_cache() 尊重 config.cache.enabled：False 时传入 enabled=False"""
+        import app.shared.redis_cache as rc_module
+        rc_module._redis_cache = None
+
+        with patch("app.shared.config.get_config") as mock_cfg, \
+             patch("app.shared.redis_cache.RedisCache") as MockRedis:
+            cfg = MagicMock()
+            cfg.cache.enabled = False
+            mock_cfg.return_value = cfg
+            get_redis_cache()
+            assert MockRedis.call_args.kwargs.get("enabled") is False
 
         rc_module._redis_cache = None

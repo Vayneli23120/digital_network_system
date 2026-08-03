@@ -236,8 +236,8 @@ async def rate_limit_status(
     request: Request,
     _: None = Depends(require_system_ops_read),
 ):
-    """查看当前请求的限流状态"""
-    from .shared.middleware.rate_limiter import get_rate_limiter
+    """查看当前请求的限流状态（v2，支持 Redis 共享额度）"""
+    from .shared.middleware.rate_limiter_v2 import get_rate_limiter
 
     limiter = get_rate_limiter()
     return limiter.get_status(request.client.host)
