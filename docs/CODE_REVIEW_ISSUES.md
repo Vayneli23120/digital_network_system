@@ -113,7 +113,8 @@
     未开通时 `/status` 返回 `enabled:false`，`/login` 返回 **501 + 缺失配置项清单**（不是 404/500），
     且 `/status` 绝不回传 client_id / client_secret。
     等应用注册批下来，只需在 config.yaml 填 tenant_id / client_id / client_secret / redirect_uri。
-- [ ] **P1** `services/adk/config.py:118`、`compliance/router.py:521,564,618` — AI API Key 明文入库（字段名却叫 `api_key_encrypted`），并写进进程级 `os.environ`，跨请求污染。`[已复核]`
+- [x] **P1** `services/adk/config.py:118`、`compliance/router.py:521,564,618` — AI API Key 明文入库（字段名却叫 `api_key_encrypted`），并写进进程级 `os.environ`，跨请求污染。`[已复核]`
+  → 修复（批次二切片 B）：入库改用 `encrypt_text`（Fernet 加密）——`create_ai_config` 加密存储、`update_ai_config` 显式传 key 才覆盖（None=保留原值）；`test_ai_config` 不再写 `os.environ` 改为直传 `api_key=`；adk `get_model_config` 解密返回 api_key 且不再写进程级 `os.environ`，`create_litellm_model` 与 runner `acompletion` 均 `api_key=` 直传。历史明文 key 经 `decrypt_or_passthrough` 原样透传。`get_ai_config` 仍不回传 api_key。
 - [x] **P1** `credentials/router.py:104` — 通过 API 明文返回 SSH 密码；`:41,115` 请求体是裸 `dict`。`[已复核]`
   → 修复（步骤 1）：详情/列表接口一律不返回密码，只给 `has_password` / `has_enable_password` 标志；
     前端本来就没用那个字段（`Credentials.vue` 写的是 `password: ''`），所以零功能损失。
@@ -123,7 +124,8 @@
     enable 密码；清空改为显式 `clear_enable_password`（编辑框下新增勾选项）。
   → 连带修复：`app/cli.py` 的 `backup run` 命令此前硬编码 `admin/admin/admin`，改为走
     `resolve_device_credentials()`。
-- [ ] **P1** `credentials/credential_service.py:24-38` — Fernet key 由 `jwt_secret` + 固定盐 `b"nas-salt"` 派生：轮换 JWT 密钥即全部设备凭证不可解密，且 `credentials/router.py:96` 已用 try/except 把解密失败兜成空密码。`[已复核]`
+- [x] **P1** `credentials/credential_service.py:24-38` — Fernet key 由 `jwt_secret` + 固定盐 `b"nas-salt"` 派生：轮换 JWT 密钥即全部设备凭证不可解密，且 `credentials/router.py:96` 已用 try/except 把解密失败兜成空密码。`[已复核]`
+  → 修复（批次二切片 B）：新增 `app/shared/crypto.py` 统一入口——密钥材料 `security.encryption_key`（`ENCRYPTION_KEY` 环境变量）优先，未配置时回退 `jwt_secret`（PBKDF2HMAC 派生参数不变，旧密文仍可解）；decrypt 失败且配置了 encryption_key 时回退 legacy `jwt_secret` cipher，密钥轮换不丢数据。`credential_service` 改经 `get_cipher()` / `decrypt_text()`。从此轮换 `JWT_SECRET` 不再影响已存凭证/AI Key 密文。
 - [x] **P1** `alerts/router.py:36-56` — `GET /settings` 无鉴权返回 `dingtalk_secret` / webhook / SMTP 用户名。`[已复核]`
   → 修复（步骤 4A）：`GET/POST /settings` 与 `POST /test` 统一挂 `alert:manage`；读取接口仅返回 `has_*` 标志，绝不返回 SMTP 用户名/密码、Webhook 或钉钉 Secret；请求体换成 Pydantic 模型，空敏感字段表示保留，只有显式 `clear_*` 才清除；配置采用临时文件 + `os.replace` 原子写入并重置配置/通知服务缓存。前端同步改为“已配置，留空保留”与显式清除，并用 `alert:manage` 控制菜单入口。
 - [x] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
@@ -138,7 +140,7 @@
 
 ### 批次二·安全 · 切片 A · Linux 实测（2026-08-03，HEAD 前 `51ce7cc`）
 
-> 对应 item 78（长尾 authz）。items 115/125/130/133 在切片 B/C，item 134 按约定延后。
+> 对应 item 78（长尾 authz）。items 115/125 在切片 B（下块），130/133 在切片 C，item 134 按约定延后。
 
 | 项 | 结果 |
 |---|---|
@@ -163,6 +165,42 @@
 - **scan gun 侧端点（`POST /sessions/join`、`POST /sessions/items`、`DELETE /sessions/{code}/items/{serial}`）保持开放**：/scanner 终端页是纯 HTML 无登录（兼容旧版 Chromium），扫码枪无法携带 token；这些端点只操作已存在会话，靠 6 位随机会话码 + 30 分钟有效期作凭据。电脑端创建/查询/完成/删除会话已上锁。
 - compliance `/standards/upload` 未做移动：无同层 `POST /standards/{x}` 竞争（仅 `/generate-rules`、`/update-rules` 为三层路径），不存在 shadow。
 - 既有失败基线中 compliance/discovery 相关失败均为**服务层**测试（test_compliance_service/test_discovery_service），与本次 router 改动无关，未新增。
+
+
+### 批次二·安全 · 切片 B · Linux 实测（2026-08-03，HEAD 前 `51ce7cc`）
+
+> 对应 item 125（凭证加密独立）+ item 115（AI key 加密）。items 130/133 在切片 C，item 134 按约定延后。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_crypto.py` | ✅ 4 passed（新增） |
+| `pytest tests/test_ai_config_security.py` | ✅ 8 passed（新增） |
+| `pytest tests/test_credential_service.py` | ✅ 12 passed（含回归 2 项：wrong_key 抛错、缺 key 抛 ValueError） |
+| `pytest tests/test_batch1_regressions.py` | ✅ 15 passed |
+| 全量 pytest | ✅ 53 failed / 686 passed / 4 skipped —— 失败集合与基线**逐条一致**（分布同切片 A 的 53，无新增失败；passed 674→686 = 新增 crypto/ai_config/credential 相关 12） |
+| `frontend validate:locales` + `npm run build` | ✅ 通过（零前端改动，验证性） |
+
+**根因**：
+- **125**：Fernet key 由 `jwt_secret` + 固定盐派生 → 轮换 JWT 密钥即全部设备凭证/AI Key 不可解密（加密依赖被认证密钥耦合）。
+- **115**：AI API Key 明文存 `api_key_encrypted` 字段，且 adk 侧写进程级 `os.environ` 供 LiteLLM 读取 → 明文落库 + 跨请求污染 + test 端点也污染环境。
+
+**改动**：
+- `shared/config.py`：`SecurityConfig` 新增 `encryption_key: Optional[str] = None`，`_apply_security_env_overrides` 读 `ENCRYPTION_KEY`（`.env.example:38` 声明的死变量正式生效）。
+- `shared/crypto.py`（新）：`_derive_fernet`（PBKDF2HMAC SHA256/32/salt=b"nas-salt"/100000，与历史一致）；`get_cipher`（encryption_key 优先否则 jwt_secret）、`get_legacy_cipher`（恒 jwt_secret，供解密旧密文回退）、`encrypt_text`/`decrypt_text`（新 cipher 失败且配置了 encryption_key 时回退 legacy）、`decrypt_or_passthrough`（非 Fernet 明文原样返回，兼容历史明文 AI Key）。
+- `credentials/credential_service.py`：cipher 改经 `get_cipher(self.config)`，`decrypt_password` 用 `decrypt_text(..., self.config)`——**保留 mock 能力**（crypto 函数支持显式传 config，既有测试的 `patch(get_config)` 依旧生效）。
+- `compliance/router.py`：create 用 `encrypt_text(request.api_key) if request.api_key else None`；update 用 `if request.api_key is not None:` 显式覆盖（None=保留原值）；test_ai_config 删 `os.environ` 块、`litellm.completion` 直传 `api_key=request.api_key`；get_ai_config 仍不回传 api_key。
+- `services/adk/config.py`：get_model_config 删 `os.environ` 写入，改 `result["api_key"] = decrypt_or_passthrough(config.api_key_encrypted)`；create_litellm_model 加 `api_key=config_dict.get("api_key")`。
+- `services/adk/runner.py`：`acompletion(...)` 加 `api_key=model_config.get("api_key")`。
+
+**行为变化**：
+- AI Key 与设备密码密文现由独立 `encryption_key` 保护；未配置时行为与历史完全一致（回退 jwt_secret），存量密文零迁移即可解。
+- `auth_enabled` 无关（纯数据层改动）；AI 调用链路不再依赖进程级 `os.environ`，避免并发请求 key 互相污染。
+
+**保留项 / 说明**：
+- `JWT_SECRET` 轮换流程不变；生产建议通过 `ENCRYPTION_KEY` 单独设置持久加密密钥后再轮换 JWT。
+- `decrypt_or_passthrough` 仅用于 AI key 消费侧（兼容历史明文）；凭证侧仍严格要求 Fernet 密文，解密失败按既有逻辑兜底。
+- 既有失败基线中 credential 相关 2 项（wrong_key / 缺 key）为**本次修复后回归通过**的项，不再属于基线。
 
 
 **步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
@@ -1362,7 +1400,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03；步骤 5 会话级 SSH 凭证 + 加密密钥独立、步骤 6 OIDC 真接仍 pending
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03；trap fail-closed + 前端守卫（slice C，items 130/133）、步骤 5 会话级 SSH 凭证、步骤 6 OIDC 真接仍 pending
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
