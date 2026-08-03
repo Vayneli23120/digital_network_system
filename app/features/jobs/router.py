@@ -6,12 +6,16 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from typing import Optional, List
+from typing import Optional
 
 from app.shared.database import get_db
 from app.shared.models_jobs import Job, JobType, JobStatus
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
+
+require_job_read = require_permission("job:read")
+require_job_cancel = require_permission("job:cancel")
 
 
 @router.get("")
@@ -22,6 +26,7 @@ def list_jobs(
     operator: Optional[str] = None,
     skip: int = 0,
     limit: int = Query(20, le=100),
+    _: None = Depends(require_job_read),
     db: Session = Depends(get_db)
 ):
     """
@@ -51,76 +56,15 @@ def list_jobs(
     }
 
 
-@router.get("/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)):
-    """
-    获取单个作业详情
-    """
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    return job.to_dict()
-
-
-@router.get("/{job_id}/log")
-def get_job_log(job_id: str, db: Session = Depends(get_db)):
-    """
-    获取作业执行日志
-    """
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-    return {
-        "job_id": job_id,
-        "log_output": job.log_output or "",
-        "status": job.status,
-    }
-
-
-@router.post("/{job_id}/cancel")
-def cancel_job(job_id: str, db: Session = Depends(get_db)):
-    """
-    取消正在运行或等待中的作业
-
-    - 调用 Celery control.revoke 撤销任务
-    - 更新 Job 状态为 cancelled
-    """
-    job = db.query(Job).filter(Job.id == job_id).first()
-    if not job:
-        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
-
-    if job.status not in (JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING):
-        raise HTTPException(
-            status_code=400,
-            detail=f"Job is {job.status}, cannot cancel"
-        )
-
-    # 撤销 Celery 任务
-    if job.celery_task_id:
-        try:
-            from app.core.celery_app import celery_app
-            celery_app.control.revoke(job.celery_task_id, terminate=True)
-        except Exception as e:
-            # Celery 可能不可用，仅更新数据库状态
-            pass
-
-    # 更新状态
-    job.status = JobStatus.CANCELLED
-    job.completed_at = __import__('datetime').datetime.utcnow()
-    db.commit()
-
-    return {
-        "success": True,
-        "job_id": job_id,
-        "status": JobStatus.CANCELLED,
-        "message": "Job cancelled"
-    }
+# 静态子路径（/stats、/types、/statuses）必须注册在 /{job_id} 之前，
+# 否则会被 {job_id} 通配吞掉（GET /api/jobs/stats → 按 job_id="stats" 查询 → 404）。
 
 
 @router.get("/stats")
 def job_stats(
     job_type: Optional[str] = None,
     days: int = Query(7, le=30),
+    _: None = Depends(require_job_read),
     db: Session = Depends(get_db)
 ):
     """
@@ -158,7 +102,7 @@ def job_stats(
 
 
 @router.get("/types")
-def list_job_types():
+def list_job_types(_: None = Depends(require_job_read)):
     """
     获取支持的作业类型列表
     """
@@ -175,7 +119,7 @@ def list_job_types():
 
 
 @router.get("/statuses")
-def list_job_statuses():
+def list_job_statuses(_: None = Depends(require_job_read)):
     """
     获取支持的作业状态列表
     """
@@ -190,4 +134,70 @@ def list_job_statuses():
             {"value": JobStatus.TIMEOUT, "label": "超时", "color": "red"},
             {"value": JobStatus.PARTIAL, "label": "部分成功", "color": "yellow"},
         ]
+    }
+
+
+@router.get("/{job_id}")
+def get_job(job_id: str, _: None = Depends(require_job_read), db: Session = Depends(get_db)):
+    """
+    获取单个作业详情
+    """
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return job.to_dict()
+
+
+@router.get("/{job_id}/log")
+def get_job_log(job_id: str, _: None = Depends(require_job_read), db: Session = Depends(get_db)):
+    """
+    获取作业执行日志
+    """
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+    return {
+        "job_id": job_id,
+        "log_output": job.log_output or "",
+        "status": job.status,
+    }
+
+
+@router.post("/{job_id}/cancel")
+def cancel_job(job_id: str, _: None = Depends(require_job_cancel), db: Session = Depends(get_db)):
+    """
+    取消正在运行或等待中的作业
+
+    - 调用 Celery control.revoke 撤销任务
+    - 更新 Job 状态为 cancelled
+    """
+    job = db.query(Job).filter(Job.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail=f"Job {job_id} not found")
+
+    if job.status not in (JobStatus.PENDING, JobStatus.QUEUED, JobStatus.RUNNING):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Job is {job.status}, cannot cancel"
+        )
+
+    # 撤销 Celery 任务
+    if job.celery_task_id:
+        try:
+            from app.core.celery_app import celery_app
+            celery_app.control.revoke(job.celery_task_id, terminate=True)
+        except Exception as e:
+            # Celery 可能不可用，仅更新数据库状态
+            pass
+
+    # 更新状态
+    job.status = JobStatus.CANCELLED
+    job.completed_at = __import__('datetime').datetime.utcnow()
+    db.commit()
+
+    return {
+        "success": True,
+        "job_id": job_id,
+        "status": JobStatus.CANCELLED,
+        "message": "Job cancelled"
     }

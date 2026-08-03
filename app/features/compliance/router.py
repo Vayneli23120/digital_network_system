@@ -19,8 +19,14 @@ from app.features.compliance.compliance_service import ComplianceService, Compli
 from app.features.compliance.config_parser_service import ConfigParserService
 from app.features.compliance.standard_service import StandardService
 from app.features.auth.identity import Principal, get_current_principal
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/compliance", tags=["配置合规"])
+
+require_compliance_check = require_permission("compliance:check")
+require_compliance_read = require_permission("compliance:read")
+require_compliance_write = require_permission("compliance:write")
+require_ai_config = require_permission("ai:config")
 
 config_parser_service = ConfigParserService()
 standard_service = StandardService()
@@ -124,6 +130,7 @@ class AIConfigRequest(BaseModel):
 async def run_compliance_check(
     request: ComplianceCheckRequest,
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_compliance_check),
 ):
     """
     运行配置合规检查
@@ -190,6 +197,7 @@ async def run_compliance_check(
 async def upload_config_file(
     file: UploadFile = File(...),
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_compliance_check),
 ):
     """
     上传配置文件进行审核
@@ -292,7 +300,10 @@ async def upload_config_file(
 
 
 @router.post("/quick-check")
-async def quick_compliance_check(request: ComplianceCheckRequest):
+async def quick_compliance_check(
+    request: ComplianceCheckRequest,
+    _: None = Depends(require_compliance_check),
+):
     """
     快速审核（仅 AI 审核，不依赖规则库）
     """
@@ -311,14 +322,20 @@ async def quick_compliance_check(request: ComplianceCheckRequest):
 # ==================== 标准文档管理 API ====================
 
 @router.get("/standards")
-async def list_standards(include_inactive: bool = False):
+async def list_standards(
+    include_inactive: bool = False,
+    _: None = Depends(require_compliance_read),
+):
     """获取标准文档列表"""
     standards = standard_service.list_standards(include_inactive)
     return {"standards": standards}
 
 
 @router.get("/standards/{standard_id}")
-async def get_standard(standard_id: int):
+async def get_standard(
+    standard_id: int,
+    _: None = Depends(require_compliance_read),
+):
     """获取标准文档详情"""
     standard = standard_service.get_standard(standard_id)
     if not standard:
@@ -327,7 +344,10 @@ async def get_standard(standard_id: int):
 
 
 @router.post("/standards")
-async def create_standard(request: StandardCreateRequest):
+async def create_standard(
+    request: StandardCreateRequest,
+    _: None = Depends(require_compliance_write),
+):
     """创建标准文档"""
     standard = standard_service.create_standard(
         name=request.name,
@@ -340,7 +360,11 @@ async def create_standard(request: StandardCreateRequest):
 
 
 @router.put("/standards/{standard_id}")
-async def update_standard(standard_id: int, request: StandardUpdateRequest):
+async def update_standard(
+    standard_id: int,
+    request: StandardUpdateRequest,
+    _: None = Depends(require_compliance_write),
+):
     """更新标准文档"""
     standard = standard_service.update_standard(
         standard_id=standard_id,
@@ -356,7 +380,10 @@ async def update_standard(standard_id: int, request: StandardUpdateRequest):
 
 
 @router.delete("/standards/{standard_id}")
-async def delete_standard(standard_id: int):
+async def delete_standard(
+    standard_id: int,
+    _: None = Depends(require_compliance_write),
+):
     """删除标准文档"""
     success = standard_service.delete_standard(standard_id)
     if not success:
@@ -365,7 +392,10 @@ async def delete_standard(standard_id: int):
 
 
 @router.post("/standards/{standard_id}/generate-rules")
-async def generate_rules_for_standard(standard_id: int):
+async def generate_rules_for_standard(
+    standard_id: int,
+    _: None = Depends(require_compliance_write),
+):
     """
     为标准文档生成检查规则（通过 AI）
 
@@ -380,7 +410,10 @@ async def generate_rules_for_standard(standard_id: int):
 
 
 @router.post("/standards/{standard_id}/update-rules")
-async def update_rules_for_standard(standard_id: int):
+async def update_rules_for_standard(
+    standard_id: int,
+    _: None = Depends(require_compliance_write),
+):
     """
     更新标准文档的规则
 
@@ -398,6 +431,7 @@ async def update_rules_for_standard(standard_id: int):
 async def upload_standard_document(
     file: UploadFile = File(...),
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_compliance_write),
 ):
     """
     上传标准文档（支持 txt, pdf 等）
@@ -442,7 +476,10 @@ async def upload_standard_document(
 # ==================== 规则管理 API ====================
 
 @router.get("/rules")
-async def list_rules(standard_id: Optional[int] = None):
+async def list_rules(
+    standard_id: Optional[int] = None,
+    _: None = Depends(require_compliance_read),
+):
     """
     获取检查规则列表
 
@@ -458,7 +495,11 @@ async def list_rules(standard_id: Optional[int] = None):
 
 
 @router.put("/rules/{rule_id}/status")
-async def update_rule_status(rule_id: int, is_active: bool = Query(...)):
+async def update_rule_status(
+    rule_id: int,
+    is_active: bool = Query(...),
+    _: None = Depends(require_compliance_write),
+):
     """更新规则状态（启用/禁用）"""
     success = standard_service.update_rule_status(rule_id, is_active)
     if not success:
@@ -478,7 +519,11 @@ class RuleUpdateRequest(BaseModel):
 
 
 @router.put("/rules/{rule_id}")
-async def update_rule(rule_id: int, request: RuleUpdateRequest):
+async def update_rule(
+    rule_id: int,
+    request: RuleUpdateRequest,
+    _: None = Depends(require_compliance_write),
+):
     """更新规则内容"""
     result = standard_service.update_rule(rule_id, request.dict(exclude_unset=True))
     if not result.get("success"):
@@ -487,7 +532,10 @@ async def update_rule(rule_id: int, request: RuleUpdateRequest):
 
 
 @router.get("/rules/{rule_id}")
-async def get_rule_detail(rule_id: int):
+async def get_rule_detail(
+    rule_id: int,
+    _: None = Depends(require_compliance_read),
+):
     """获取规则详情"""
     rule = standard_service.get_rule(rule_id)
     if not rule:
@@ -498,7 +546,7 @@ async def get_rule_detail(rule_id: int):
 # ==================== AI 配置管理 API ====================
 
 @router.get("/ai-config")
-async def get_ai_config():
+async def get_ai_config(_: None = Depends(require_ai_config)):
     """获取当前 AI 配置"""
     from app.shared.database import get_db
     from app.shared.models import AIConfig
@@ -531,7 +579,10 @@ async def get_ai_config():
 
 
 @router.post("/ai-config")
-async def create_ai_config(request: AIConfigRequest):
+async def create_ai_config(
+    request: AIConfigRequest,
+    _: None = Depends(require_ai_config),
+):
     """创建 AI 配置"""
     from app.shared.database import get_db
     from app.shared.models import AIConfig
@@ -576,7 +627,11 @@ async def create_ai_config(request: AIConfigRequest):
 
 
 @router.put("/ai-config/{config_id}")
-async def update_ai_config(config_id: int, request: AIConfigRequest):
+async def update_ai_config(
+    config_id: int,
+    request: AIConfigRequest,
+    _: None = Depends(require_ai_config),
+):
     """更新 AI 配置"""
     from app.shared.database import get_db
     from app.shared.models import AIConfig
@@ -613,7 +668,10 @@ async def update_ai_config(config_id: int, request: AIConfigRequest):
 
 
 @router.post("/ai-config/test")
-async def test_ai_config(request: AIConfigRequest):
+async def test_ai_config(
+    request: AIConfigRequest,
+    _: None = Depends(require_ai_config),
+):
     """测试 AI 配置是否有效 - 支持所有 LLM 提供商（litellm 直连）"""
     import os
 
@@ -701,7 +759,7 @@ async def test_ai_config(request: AIConfigRequest):
 # ==================== 旧版 API 兼容 ====================
 
 @router.get("/checks")
-async def list_checks():
+async def list_checks(_: None = Depends(require_compliance_read)):
     """获取所有可用合规检查项（旧版兼容）"""
     checks = [
         {"id": "SEC-001", "name": "Enable Secret 密码", "category": "security", "severity": "critical"},

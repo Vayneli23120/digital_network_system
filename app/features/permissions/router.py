@@ -128,6 +128,16 @@ EXTENDED_PERMISSIONS = [
     {"name": "system_ops:read", "resource": "system_ops", "action": "read", "description": "查看系统诊断"},
     {"name": "system_ops:write", "resource": "system_ops", "action": "write", "description": "执行系统运维操作"},
     {"name": "compliance:check", "resource": "compliance", "action": "check", "description": "合规检查"},
+    {"name": "compliance:read", "resource": "compliance", "action": "read", "description": "查看合规标准/规则"},
+    {"name": "compliance:write", "resource": "compliance", "action": "write", "description": "维护合规标准/规则"},
+    {"name": "job:read", "resource": "job", "action": "read", "description": "查看作业"},
+    {"name": "job:cancel", "resource": "job", "action": "cancel", "description": "取消作业"},
+    {"name": "notification:read", "resource": "notification", "action": "read", "description": "查看通知"},
+    {"name": "notification:write", "resource": "notification", "action": "write", "description": "标记通知已读/删除"},
+    {"name": "discovery:read", "resource": "discovery", "action": "read", "description": "查看发现能力"},
+    {"name": "discovery:scan", "resource": "discovery", "action": "scan", "description": "执行设备发现"},
+    {"name": "scan:read", "resource": "scan", "action": "read", "description": "查看扫码会话"},
+    {"name": "scan:write", "resource": "scan", "action": "write", "description": "创建/管理扫码会话"},
 
     # AI 功能权限
     {"name": "ai:use", "resource": "ai", "action": "use", "description": "使用AI功能"},
@@ -266,7 +276,13 @@ PRESET_ROLES = [
             "workflow:read", "workflow:trigger",
             "planned_task:read", "planned_task:execute",
             "log:read", "tool_log:read",
-            "ai:use", "ai:compliance",
+            "ai:use", "ai:config", "ai:compliance",
+            # 长尾资源权限（批次二·安全）：通知/作业/合规/发现/扫码
+            "notification:read", "notification:write",
+            "job:read", "job:cancel",
+            "compliance:check", "compliance:read", "compliance:write",
+            "discovery:read", "discovery:scan",
+            "scan:read", "scan:write",
             # 导航：除用户/角色管理外全部可见（operator 无 user:* / role:* 功能权限）
             *NAV_OVERVIEW, *NAV_DEVICES, *NAV_CONFIG, *NAV_SPARE,
             *NAV_SYSTEM_COMMON, *NAV_SYSTEM_SETTINGS,
@@ -281,6 +297,10 @@ PRESET_ROLES = [
             "fault:read", "maintenance:read", "spare_part:read", "spare_movement:read",
             "template:read", "workflow:read", "planned_task:read",
             "log:read", "tool_log:read", "floor_plan:read",
+            # 长尾资源权限（批次二·安全）：只读侧
+            "notification:read", "job:read",
+            "compliance:check", "compliance:read",
+            "discovery:read", "scan:read",
             # 导航：只保留与只读功能权限对应的菜单
             # （不含设备发现/Console/部署/凭证等写操作入口，也不含用户与角色管理）
             "nav_overview:dashboard", "nav_overview:operations", "nav_overview:monitor_3d",

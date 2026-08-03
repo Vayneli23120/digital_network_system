@@ -22,8 +22,12 @@ from .discovery_service import (
 )
 from app.features.auth.router import get_current_active_user
 from app.shared.models import User
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/discovery", tags=["discovery"])
+
+require_discovery_read = require_permission("discovery:read")
+require_discovery_scan = require_permission("discovery:scan")
 
 
 # =============================================================================
@@ -75,7 +79,8 @@ class DiscoveryResponse(BaseModel):
 @router.post("/ping-sweep", response_model=DiscoveryResponse)
 async def ping_sweep(
     request: PingSweepRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_discovery_scan),
 ):
     """
     Ping Sweep 网段扫描
@@ -124,7 +129,8 @@ async def ping_sweep(
 @router.post("/discover", response_model=DiscoveryResponse)
 async def discover_devices(
     request: DiscoveryRequest,
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_discovery_scan),
 ):
     """
     综合设备发现
@@ -188,7 +194,10 @@ async def discover_devices(
 
 
 @router.get("/capabilities")
-async def get_discovery_capabilities(current_user: User = Depends(get_current_active_user)):
+async def get_discovery_capabilities(
+    current_user: User = Depends(get_current_active_user),
+    _: None = Depends(require_discovery_read),
+):
     """
     获取发现服务能力信息
 

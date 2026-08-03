@@ -16,8 +16,14 @@ import json
 
 from app.shared.database import get_db
 from app.shared.models import SparePart, SparePartInstance, SparePartMovement
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/scan", tags=["scan-session"])
+
+# 电脑端操作需登录授权；扫码枪（无登录终端）侧端点保持开放，
+# 靠 6 位会话码 + 30 分钟有效期作为会话凭据。
+require_scan_read = require_permission("scan:read")
+require_scan_write = require_permission("scan:write")
 
 
 # ============ 内存存储（可改为 Redis） ============
@@ -76,6 +82,7 @@ class ScanComplete(BaseModel):
 @router.post("/sessions")
 async def create_scan_session(
     data: ScanSessionCreate,
+    _: None = Depends(require_scan_write),
     db: Session = Depends(get_db)
 ):
     """创建扫码会话（电脑端调用）
@@ -407,9 +414,30 @@ async def remove_scan_item(session_code: str, serial_number: str):
     raise HTTPException(status_code=404, detail="未找到该序列号")
 
 
+@router.get("/sessions/active")
+async def list_active_sessions(_: None = Depends(require_scan_read)):
+    """列出所有活跃会话（调试用）"""
+    now = datetime.utcnow()
+    active = []
+    for code, session in scan_sessions.items():
+        if session["expires_at"] > now and session["status"] not in ["completed", "expired"]:
+            active.append({
+                "session_code": code,
+                "type": session["session_type"],
+                "status": session["status"],
+                "items_count": len(session["items"])
+            })
+    return {"active_sessions": active, "total": len(active)}
+
+
+# 静态子路径 /sessions/active 必须注册在 /sessions/{session_code} 之前，
+# 否则会被 {session_code} 通配吞掉（GET /api/scan/sessions/active → 按 code="active" 查询 → 404）。
+
+
 @router.get("/sessions/{session_code}")
 async def get_scan_session(
     session_code: str,
+    _: None = Depends(require_scan_read),
     db: Session = Depends(get_db)
 ):
     """获取扫码会话状态（电脑端轮询获取扫描结果）"""
@@ -441,6 +469,7 @@ async def get_scan_session(
 async def complete_scan_session(
     session_code: str,
     data: Optional[ScanComplete] = None,
+    _: None = Depends(require_scan_write),
     db: Session = Depends(get_db)
 ):
     """完成扫码会话（电脑端确认提交后调用）
@@ -772,25 +801,12 @@ async def complete_scan_session(
 
 
 @router.delete("/sessions/{session_code}")
-async def delete_scan_session(session_code: str):
+async def delete_scan_session(
+    session_code: str,
+    _: None = Depends(require_scan_write),
+):
     """删除/取消扫码会话"""
     if session_code in scan_sessions:
         del scan_sessions[session_code]
         return {"message": "会话已删除"}
     raise HTTPException(status_code=404, detail="会话不存在")
-
-
-@router.get("/sessions/active")
-async def list_active_sessions():
-    """列出所有活跃会话（调试用）"""
-    now = datetime.utcnow()
-    active = []
-    for code, session in scan_sessions.items():
-        if session["expires_at"] > now and session["status"] not in ["completed", "expired"]:
-            active.append({
-                "session_code": code,
-                "type": session["session_type"],
-                "status": session["status"],
-                "items_count": len(session["items"])
-            })
-    return {"active_sessions": active, "total": len(active)}

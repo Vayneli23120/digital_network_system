@@ -9,13 +9,18 @@ from app.shared.models import Notification
 from app.shared.time_utils import utc_iso
 from app.features.auth.identity import Principal, get_current_principal
 from app.services.system_notification import SystemNotificationService
+from app.shared.dependencies import require_permission
 
 router = APIRouter(prefix="/api/notifications", tags=["notifications"])
+
+require_notification_read = require_permission("notification:read")
+require_notification_write = require_permission("notification:write")
 
 
 @router.get("")
 async def get_notifications(
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_notification_read),
     unread_only: bool = False,
     limit: int = 20,
     db: Session = Depends(get_db)
@@ -55,6 +60,7 @@ async def get_notifications(
 @router.get("/unread-count")
 async def get_unread_count(
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_notification_read),
     db: Session = Depends(get_db)
 ):
     """获取未读通知数量"""
@@ -68,6 +74,7 @@ async def get_unread_count(
 async def mark_as_read(
     notification_id: int,
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_notification_write),
     db: Session = Depends(get_db)
 ):
     """标记通知为已读"""
@@ -84,6 +91,7 @@ async def mark_as_read(
 @router.post("/read-all")
 async def mark_all_as_read(
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_notification_write),
     db: Session = Depends(get_db)
 ):
     """标记所有通知为已读"""
@@ -97,6 +105,7 @@ async def mark_all_as_read(
 async def delete_notification(
     notification_id: int,
     principal: Principal = Depends(get_current_principal),
+    _: None = Depends(require_notification_write),
     db: Session = Depends(get_db)
 ):
     """删除通知"""
