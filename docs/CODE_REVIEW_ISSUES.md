@@ -810,11 +810,31 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 ### 3.4 缓存
 
-- [ ] **P1** `services/reachability_monitor.py:339` — 探测历史存进 `max_size=256` 的全局 `SimpleCache`（与 dashboard 共用），被 LRU 淘汰即丢失连续失败计数 → **漏告警**。`[已复核]`
-- [ ] **P1** `services/ai_triage.py:377,398` — AI 后台结果只写进程内存缓存，多 worker 下前端轮询永不命中。`[已复核]`
-- [ ] **P1** `shared/cache.py:117` — `cached` 装饰器用 `hash(str(args))` 作键（含对象 repr 地址、受 PYTHONHASHSEED 影响），多进程键不一致；`_cache_key` 只取 md5 前 8 位。`[已复核]`
-- [ ] **P1** `shared/cache.py:96` / `shared/redis_cache.py:107` — 内存与 Redis 两套实现互不失效；前者全扫描 + 全局锁，后者用 `KEYS prefix*`。`[已复核]`
-- [ ] **P2** `shared/middleware/rate_limiter_v2.py:16` — `TieredRateLimiter` 定义后完全未使用；限流为进程内内存态，多 worker 下额度按进程翻倍。`[待验证]`
+- [x] **P1** `services/reachability_monitor.py:339` — 探测历史存进 `max_size=256` 的全局 `SimpleCache`（与 dashboard 共用），被 LRU 淘汰即丢失连续失败计数 → **漏告警**。`[已复核]` `[已修复]`：探测历史迁到独立 `_history_cache = HybridCache(max_size=1024, default_ttl=3600)`（不与 dashboard 256 竞争 LRU），Redis 兜底支持未来多 worker 共享历史。
+- [x] **P1** `services/ai_triage.py:377,398` — AI 后台结果只写进程内存缓存，多 worker 下前端轮询永不命中。`[已复核]` `[已修复]`：全局 `cache` 升级为 `HybridCache`（内存 LRU + Redis 兜底），set 双写、get 内存 miss 回查 Redis 保持原始 TTL 回填，ai_triage/dashboard 在 `config.cache.enabled=true` 时自动多 worker 共享。
+- [x] **P1** `shared/cache.py:117` — `cached` 装饰器用 `hash(str(args))` 作键（含对象 repr 地址、受 PYTHONHASHSEED 影响），多进程键不一致；`_cache_key` 只取 md5 前 8 位。`[已复核]` `[已修复]`：`_cache_key` 用完整 md5；`cached` 改 `inspect.signature(func).bind(*args, **kwargs)` + `apply_defaults()` 生成确定性键。
+- [x] **P1** `shared/cache.py:96` / `shared/redis_cache.py:107` — 内存与 Redis 两套实现互不失效；前者全扫描 + 全局锁，后者用 `KEYS prefix*`。`[已复核]` `[已修复]`：`HybridCache` 统一两层——`invalidate_prefix/clear/delete` 级联内存 + Redis，一处清空两套一致。
+- [x] **P2** `shared/middleware/rate_limiter_v2.py:16` — `TieredRateLimiter` 定义后完全未使用；限流为进程内内存态，多 worker 下额度按进程翻倍。`[待验证]` `[已修复]`：删除零引用的 `TieredRateLimiter`；`RateLimiter` 加 Redis 固定窗口后端（`rl:{prefix}:{identity}:{窗口}` INCR/EXPIRE），三套限流器独立 key_prefix；`/api/rate-limit/status` 改读 v2。固定窗口边界 2 倍突发为可接受近似。
+
+### 批次三 3.4 · 切片一 · Linux 实测（2026-08-03）
+
+验证（HEAD `c1ee7ae` → 切片一后）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `ruff check app tests` | ✅ All checks passed |
+| `pytest tests/test_batch1_regressions.py -q` | ✅ 15 passed |
+| 新增测试 `tests/test_cache.py` / `tests/test_redis_cache.py` | ✅ 56 passed（TestHybridCache 5 例 + Redis enabled=False/ttl/incr/get_config 用例） |
+| 全量 `pytest -q -rf` | ✅ **53 failed / 651 passed / 4 skipped**，失败集合与基线**逐条一致**（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1 = 53），零新增；passed +9 为新增用例 |
+| `frontend/npm run validate:locales` | ✅ 3212 zh / 3212 en，0 违规 |
+| `frontend/npm run build` | ✅ 构建成功（chunk 体积告警为既有，非错误） |
+
+修复说明：
+- **813 探测历史独立缓存**：`_history_cache = HybridCache(max_size=1024, default_ttl=3600)`，与全局 dashboard 缓存（max_size=256）隔离，消除 LRU 竞争漏告警；Redis 兜底支持未来多 worker 共享历史。
+- **814 AI 结果多 worker 共享**：全局 `cache` 由 `SimpleCache` 升级为 `HybridCache`；`config.cache.enabled=true`（config.yaml 配独立 db，默认 db=0 vs broker db=1 天然隔离）时 ai_triage/dashboard set 双写 Redis，内存 miss 回查 Redis 并保持原始 TTL 回填。
+- **815 key 确定性**：`_cache_key` 去 `[:8]` 用完整 md5；`cached` 装饰器 `inspect.signature().bind()` + `apply_defaults()`（零调用方，仅修陷阱）。
+- **816 两套缓存统一失效**：`HybridCache.invalidate_prefix/clear/delete` 级联内存 + Redis，一处清空两套一致。
+- **817 限流 Redis 化 + 删死码**：删零引用的 `TieredRateLimiter`；`RateLimiter` 加 Redis 固定窗口后端（pipeline INCR + EXPIRE nx），三套限流器独立 key_prefix（`rl:get`/`rl:write`/`rl:auth`），Redis 不可用/未启用自动降级纯内存滑动窗口；`/api/rate-limit/status` 改读 v2。固定窗口边界 2 倍突发为可接受近似（限流是保护非精确计量）。按用户限流属 3.5-3（切片二）范围，本切片保留按 IP。
 
 ### 3.5 启动与关闭
 
@@ -1299,7 +1319,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
-7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官，剩余：批次三 3.4/3.5
+7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项：HybridCache/Redis 兜底/独立历史缓存/确定性 key/限流 Redis 化）切片一 ✅ 2026-08-03（见上方 3.4 实测）；剩余：批次三 3.5 启动与关闭（切片二）
 
 ## 附注
 
