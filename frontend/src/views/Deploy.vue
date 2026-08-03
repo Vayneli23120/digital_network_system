@@ -713,166 +713,32 @@
     </section>
 
     <!-- 配置差异预览对话框 -->
-    <el-dialog
+    <DeployPreviewDialog
       v-model="showPreviewDialog"
-      :title="t('deployPreviewDialog')"
-      width="90%"
-      top="5vh"
-      destroy-on-close
-      align-center
-    >
-      <el-skeleton v-if="previewLoading" :rows="10" animated />
-
-      <div v-else class="preview-content">
-        <!-- 影响分析摘要 -->
-        <div class="impact-summary">
-          <div class="impact-header">
-            <el-icon><WarningFilled /></el-icon>
-            <span>{{ t('deployImpactAnalysis') }}</span>
-          </div>
-          <div class="impact-stats">
-            <div class="impact-item">
-              <span class="impact-label">{{ t('diffTotalChanges') }}</span>
-              <span class="impact-value">{{ impactAnalysis.totalChanges }}</span>
-            </div>
-            <div class="impact-item">
-              <span class="impact-label">{{ t('diffAffectedServices') }}</span>
-              <span class="impact-value">
-                {{ impactAnalysis.affectedServices.length > 0
-                  ? impactAnalysis.affectedServices.join(', ')
-                  : t('diffNoServices') }}
-              </span>
-            </div>
-            <div class="impact-item">
-              <span class="impact-label">{{ t('diffEstimatedDowntime') }}</span>
-              <span class="impact-value">{{ impactAnalysis.estimatedDowntime }}s</span>
-            </div>
-            <div class="impact-item">
-              <span class="impact-label">{{ t('diffRiskLevel') }}</span>
-              <el-tag :type="getRiskLevelType(impactAnalysis.riskLevel)" size="large">
-                {{ getRiskLevelText(impactAnalysis.riskLevel) }}
-              </el-tag>
-            </div>
-          </div>
-        </div>
-
-        <!-- 设备选择 -->
-        <div class="device-selector">
-          <span class="selector-label">{{ t('diffSelectDevice') }}:</span>
-          <el-select v-model="selectedPreviewDevice" style="width: 300px">
-            <el-option
-              v-for="result in previewResults"
-              :key="result.device_id"
-              :label="`${result.device_name} (${result.device_ip})`"
-              :value="result"
-            />
-          </el-select>
-        </div>
-
-        <!-- 设备差异 -->
-        <div v-if="selectedPreviewDevice" class="device-diff">
-          <div class="diff-device-header">
-            <div class="device-info">
-              <h4>{{ selectedPreviewDevice.device_name }}</h4>
-              <span class="device-ip">{{ selectedPreviewDevice.device_ip }}</span>
-            </div>
-            <el-tag
-              :type="getRiskLevelType(selectedPreviewDevice.impact?.risk_level)"
-              size="small"
-            >
-              {{ getRiskLevelText(selectedPreviewDevice.impact?.risk_level) }}
-            </el-tag>
-          </div>
-
-          <DiffViewer
-            v-if="selectedPreviewDevice.diff"
-            :old-config="selectedPreviewDevice.old_config || ''"
-            :new-config="selectedPreviewDevice.new_config || ''"
-            :diff-data="selectedPreviewDevice.diff"
-            :is-dark="isDark"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="showPreviewDialog = false">
-            {{ t('actionClose') }}
-          </el-button>
-          <el-button type="primary" @click="openScheduleDialog">
-            <el-icon><Calendar /></el-icon>
-            {{ t('deploySchedule') }}
-          </el-button>
-          <el-button type="success" @click="confirmDeployFromPreview">
-            <el-icon><Upload /></el-icon>
-            {{ t('deployStart') }}
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
+      :preview-loading="previewLoading"
+      :preview-results="previewResults"
+      v-model:selected-preview-device="selectedPreviewDevice"
+      :impact-analysis="impactAnalysis"
+      :is-dark="isDark"
+      @schedule="openScheduleDialog"
+      @deploy="confirmDeployFromPreview"
+    />
 
     <!-- 维护窗口预约对话框 -->
-    <el-dialog
+    <DeployScheduleDialog
       v-model="showScheduleDialog"
-      :title="t('deployScheduleDialog')"
-      width="600px"
-      align-center
-    >
-      <div class="schedule-content">
-        <p class="schedule-desc">{{ t('deployScheduleDesc') }}</p>
-
-        <el-form label-position="top">
-          <el-form-item :label="t('deploySelectWindow')">
-            <el-radio-group v-model="selectedWindow" class="window-options">
-              <el-radio-button
-                v-for="window in maintenanceWindows"
-                :key="window.id"
-                :label="window.id"
-                :disabled="!window.available"
-                class="window-option"
-              >
-                <div class="window-label">{{ getWindowLabel(window) }}</div>
-                <div class="window-time">{{ window.start_time }} - {{ window.end_time }}</div>
-              </el-radio-button>
-            </el-radio-group>
-          </el-form-item>
-        </el-form>
-
-        <div v-if="isScheduled" class="schedule-confirmation">
-          <el-alert
-            :title="t('deployScheduledConfirm', { time: scheduledTime })"
-            type="success"
-            :closable="false"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <div class="dialog-footer">
-          <el-button @click="showScheduleDialog = false">
-            {{ t('actionCancel') }}
-          </el-button>
-          <el-button type="primary" @click="scheduleDeployTask">
-            {{ t('deployConfirmSchedule') }}
-          </el-button>
-        </div>
-      </template>
-    </el-dialog>
+      :maintenance-windows="maintenanceWindows"
+      v-model:selected-window="selectedWindow"
+      :is-scheduled="isScheduled"
+      :scheduled-time="scheduledTime"
+      @schedule="scheduleDeployTask"
+    />
 
     <!-- 变量说明对话框 -->
-    <el-dialog
+    <DeployVariableHelpDialog
       v-model="showVariableHelp"
-      :title="t('deployVariableDialog')"
-      width="800px"
-      align-center
-      draggable
-    >
-      <el-table :data="allVariables" style="width: 100%" stripe>
-        <el-table-column prop="key" :label="t('deployVariableName')" width="200" />
-        <el-table-column prop="description" :label="t('deployDescription')" />
-        <el-table-column prop="example" :label="t('deployExampleValue')" width="200" />
-      </el-table>
-    </el-dialog>
+      :all-variables="allVariables"
+    />
   </div>
 </template>
 
@@ -892,14 +758,12 @@ import {
   Timer,
   Document,
   Files,
-  Calendar,
   Edit,
   Delete,
   User,
   Monitor,
   RefreshLeft,
   Refresh,
-  Promotion,
   ArrowRight,
   ArrowDown,
   Minus
@@ -917,9 +781,7 @@ import {
   scheduleDeploy,
   getDeployHistory,
   getDeployHistoryDetail,
-  deleteDeployHistory,
-  approveDeployment,
-  rejectDeployment
+  deleteDeployHistory
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -927,7 +789,17 @@ import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 import { stampUid } from '@/utils/uid.js'
-import DiffViewer from '@/components/DiffViewer.vue'
+import DeployPreviewDialog from '@/components/DeployPreviewDialog.vue'
+import DeployScheduleDialog from '@/components/DeployScheduleDialog.vue'
+import DeployVariableHelpDialog from '@/components/DeployVariableHelpDialog.vue'
+import {
+  getDeviceStatusType,
+  getDeviceProgressStatus,
+  formatDuration,
+  formatTime,
+  hasBeenRolledBack,
+  canRollback
+} from '@/utils/deploy.js'
 
 const { t } = useI18n()
 const authStore = useAuthStore()
@@ -993,15 +865,6 @@ const loadHistory = async () => {
     historyLoading.value = false
   }
 }
-
-// 审批相关状态
-const approvalStatus = ref('none') // none, pending, approved, rejected
-const approvalId = ref(null)
-const approvalLevel = ref(null)
-const approvalInfo = ref(null)
-const showApprovalDialog = ref(false)
-const approvalComment = ref('')
-const rejectionReason = ref('')
 
 // Phase 3: 配置差异预览
 const previewResults = ref([])
@@ -1207,12 +1070,7 @@ const removeVariable = (index) => {
   deployForm.value.variables.splice(index, 1)
 }
 
-// 设备状态
-const getDeviceStatusType = (status) => {
-  const types = { pending: 'info', running: 'primary', completed: 'success', failed: 'danger', skipped: 'warning' }
-  return types[status] || 'info'
-}
-
+// 设备状态文本
 const getDeviceStatusText = (status) => {
   const texts = {
     pending: t('deployDevicePending'),
@@ -1224,12 +1082,6 @@ const getDeviceStatusText = (status) => {
   return texts[status] || status
 }
 
-const getDeviceProgressStatus = (status) => {
-  if (status === 'failed') return 'exception'
-  if (status === 'completed') return 'success'
-  return ''
-}
-
 const selectDevice = (device) => {
   selectedDevice.value = device
 }
@@ -1238,19 +1090,6 @@ const clearCliOutput = () => {
   if (selectedDevice.value) {
     selectedDevice.value.cliLogs = []
   }
-}
-
-const formatDuration = (seconds) => {
-  const mins = Math.floor(seconds / 60)
-  const secs = seconds % 60
-  return `${mins}:${secs.toString().padStart(2, '0')}`
-}
-
-// 格式化时间
-const formatTime = (timestamp) => {
-  if (!timestamp) return ''
-  const date = new Date(timestamp)
-  return date.toLocaleTimeString()
 }
 
 // 自动滚动到底部
@@ -1291,23 +1130,6 @@ const loadHistoryRecord = async (record) => {
   if (deviceExecutions.value.length > 0) {
     selectedDevice.value = deviceExecutions.value[0]
   }
-}
-
-// 检查历史记录是否已被回滚
-const hasBeenRolledBack = (record) => {
-  if (record.mode === 'rollback') return false  // 回滚记录本身不算"已被回滚"
-  // 检查是否所有成功设备都已被回滚（rollback_available = false 且有 rollback_status）
-  const successDevices = record.deviceResults?.filter(d => d.status === 'completed') || []
-  if (successDevices.length === 0) return false
-  return successDevices.every(d => d.rollback_status === 'rolled_back')
-}
-
-// 检查历史记录是否可以回滚
-const canRollback = (record) => {
-  if (record.mode === 'rollback') return false  // 回滚记录不能再回滚
-  if (record.engine !== 'napalm') return false  // 只有 NAPALM 支持回滚
-  // 检查是否有 rollback_available = true 的设备
-  return record.deviceResults?.some(d => d.rollback_available) || false
 }
 
 // 任务链分组：将部署历史按父子关系分组
@@ -1596,60 +1418,6 @@ const scheduleDeployTask = async () => {
   }
 }
 
-// 获取风险等级标签
-const getRiskLevelType = (level) => {
-  const types = { low: 'success', medium: 'warning', high: 'danger' }
-  return types[level] || 'info'
-}
-
-const getRiskLevelText = (level) => {
-  const texts = {
-    low: t('diffRiskLow'),
-    medium: t('diffRiskMedium'),
-    high: t('diffRiskHigh')
-  }
-  return texts[level] || level
-}
-
-// 维护窗口标签生成
-const getWindowLabel = (window) => {
-  const dateStr = window.date ? window.date.slice(5) : ''  // 取 MM-DD
-  const periodLabels = {
-    morning: t('deployWindowMorning'),
-    afternoon: t('deployWindowAfternoon'),
-    evening: t('deployWindowEvening')
-  }
-  const periodText = periodLabels[window.period] || window.period
-  return `${dateStr} ${periodText} (${window.start_time}-${window.end_time})`
-}
-
-// 变量描述生成
-const getVariableDescription = (key) => {
-  const descriptions = {
-    HOSTNAME: t('varDescHostname'),
-    ENABLE_SECRET: t('varDescEnableSecret'),
-    ADMIN_USERNAME: t('varDescAdminUsername'),
-    ADMIN_PASSWORD: t('varDescAdminPassword'),
-    DOMAIN_NAME: t('varDescDomainName'),
-    MGMT_VLAN_ID: t('varDescMgmtVlanId'),
-    MGMT_IP: t('varDescMgmtIp'),
-    MGMT_NETMASK: t('varDescMgmtNetmask'),
-    DEFAULT_GATEWAY: t('varDescDefaultGateway'),
-    SNMP_COMMUNITY: t('varDescSnmpCommunity'),
-    LOCATION: t('varDescLocation'),
-    CONTACT: t('varDescContact'),
-    NTP_SERVER: t('varDescNtpServer'),
-    SYSLOG_SERVER: t('varDescSyslogServer'),
-    DEFAULT_ROUTE: t('varDescDefaultRoute'),
-    OSPF_ROUTER_ID: t('varDescOspfRouterId'),
-    ACCESS_PORT_RANGE: t('varDescAccessPortRange'),
-    UPLINK_PORT: t('varDescUplinkPort'),
-    BUSINESS_VLAN_LIST: t('varDescBusinessVlanList'),
-    TRUNK_VLANS: t('varDescTrunkVlans')
-  }
-  return descriptions[key] || key
-}
-
 // 执行部署
 const confirmDeploy = async () => {
   if (!canDeploy.value) {
@@ -1899,8 +1667,7 @@ const stopTimer = () => {
   }
 }
 
-// 启动运行计时器：先清掉旧计时器再启动，避免 executeDeploy / startApprovedDeployment
-// 两处共用同一 timer 变量时后者覆盖前者产生孤儿计时器
+// 启动运行计时器：先清掉旧计时器再启动，避免产生孤儿计时器
 const startElapsedTicker = () => {
   if (timer) clearInterval(timer)
   timer = setInterval(() => {
@@ -2029,50 +1796,6 @@ const abortExecution = async () => {
   } finally {
     aborting.value = false
   }
-}
-
-// 审批处理函数
-const handleApprovalSubmit = async () => {
-  if (!approvalComment.value.trim()) {
-    ElMessage.warning(t('deployApprovalCommentRequired'))
-    return
-  }
-
-  try {
-    await approveDeployment(approvalId.value, { comment: approvalComment.value })
-    approvalStatus.value = 'approved'
-    ElMessage.success(t('deployApproved'))
-    // 刷新并开始执行
-    await startApprovedDeployment()
-  } catch (error) {
-    ElMessage.error(t('deployApproveFailed'))
-  }
-}
-
-const handleRejectionSubmit = async () => {
-  if (!rejectionReason.value.trim()) {
-    ElMessage.warning(t('deployRejectionReasonRequired'))
-    return
-  }
-
-  try {
-    await rejectDeployment(approvalId.value, { reason: rejectionReason.value })
-    approvalStatus.value = 'rejected'
-    ElMessage.warning(t('deployRejected'))
-  } catch (error) {
-    ElMessage.error(t('deployRejectFailed'))
-  }
-}
-
-const startApprovedDeployment = async () => {
-  // 审批通过后开始执行
-  executionStatus.value = 'running'
-  startTime.value = Date.now()
-  startElapsedTicker()
-
-  // 重新调用部署API
-  // 注意：实际实现需要一个新的API端点或在原API中处理
-  // 这里简化处理，直接显示执行状态
 }
 
 // 打开预约对话框
@@ -2322,44 +2045,6 @@ onBeforeUnmount(() => {
 .nav-action-btn.preview-btn.disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* ========================================
-   警告区域
-   ======================================== */
-
-.warning-section {
-  margin-bottom: var(--gap-lg);
-}
-
-.warning-card {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-md);
-  padding: var(--gap-md) var(--gap-lg);
-  background: var(--warn-bg);
-  border: 1px solid rgba(225, 112, 85, 0.3);
-  border-radius: var(--radius-lg);
-}
-
-.warning-icon {
-  font-size: 24px;
-  color: var(--accent-warning);
-}
-
-.warning-content {
-  flex: 1;
-}
-
-.warning-title {
-  font-weight: 600;
-  color: var(--accent-warning);
-  margin-bottom: var(--gap-xs);
-}
-
-.warning-desc {
-  font-size: 13px;
-  color: var(--text-secondary);
 }
 
 /* ========================================
@@ -2633,37 +2318,6 @@ onBeforeUnmount(() => {
 .limit-tip {
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.execution-mode-hint {
-  margin-top: 8px;
-}
-
-.execution-mode-hint .el-tag,
-.execution-mode-hint .status-tag {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  justify-content: center !important;
-  gap: 6px !important;
-}
-
-.execution-mode-hint .el-tag :deep(.el-tag__content) {
-  display: inline-flex !important;
-  flex-direction: row !important;
-  align-items: center !important;
-  gap: 6px !important;
-}
-
-.execution-mode-hint .el-tag :deep(.el-icon) {
-  display: inline-flex !important;
-  align-items: center !important;
-  width: 14px !important;
-  height: 14px !important;
-  flex-shrink: 0 !important;
-  margin-right: 0 !important;
-  margin-bottom: 0 !important;
-  vertical-align: middle !important;
 }
 
 /* ========================================
@@ -3531,152 +3185,6 @@ onBeforeUnmount(() => {
 @keyframes rotating {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-
-/* ========================================
-   对话框样式
-   ======================================== */
-
-.preview-content {
-  max-height: 70vh;
-  overflow-y: auto;
-}
-
-.impact-summary {
-  background: var(--bg-hover);
-  border-radius: var(--radius-lg);
-  padding: var(--gap-lg);
-  margin-bottom: var(--gap-lg);
-  border: 1px solid var(--border-default);
-}
-
-.impact-header {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-sm);
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: var(--gap-lg);
-}
-
-.impact-stats {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: var(--gap-lg);
-}
-
-.impact-item {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-xs);
-}
-
-.impact-label {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-.impact-value {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.device-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--gap-md);
-  margin-bottom: var(--gap-lg);
-  padding: var(--gap-lg);
-  background: var(--bg-hover);
-  border-radius: var(--radius-md);
-}
-
-.selector-label {
-  font-size: 14px;
-  color: var(--text-secondary);
-}
-
-.device-diff {
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-
-.diff-device-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--gap-md);
-  background: var(--bg-hover);
-  border-bottom: 1px solid var(--border-default);
-}
-
-.diff-device-header .device-info h4 {
-  margin: 0;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.diff-device-header .device-ip {
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
-/* ========================================
-   预约对话框
-   ======================================== */
-
-.schedule-content {
-  padding: var(--gap-md) 0;
-}
-
-.schedule-desc {
-  margin-bottom: var(--gap-lg);
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-
-.window-options {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gap-md);
-  width: 100%;
-}
-
-.window-option {
-  width: 100%;
-}
-
-.window-option :deep(.el-radio-button__inner) {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  padding: var(--gap-md);
-}
-
-.window-label {
-  font-weight: 500;
-  font-size: 14px;
-  color: var(--text-primary);
-}
-
-.window-time {
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-top: var(--gap-xs);
-}
-
-.schedule-confirmation {
-  margin-top: var(--gap-lg);
-}
-
-.dialog-footer {
-  display: flex;
-  gap: var(--gap-md);
-  justify-content: flex-end;
 }
 
 /* ========================================
