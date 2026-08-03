@@ -840,12 +840,30 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 - [x] **P1** `main.py:217-221` — `return {...}, status_code` 被序列化成数组且状态码恒 200，`/ready` 永远"健康"。`[已复核]`
   → 修复（步骤 4E-B5B）：改为显式 JSONResponse，依赖失败真实返回 503；检查异常仅写服务端日志，响应不泄露细节。
-- [ ] **P1** `main.py:434-435` — 导入期注册 SIGTERM/SIGINT，会被 uvicorn 自身 handler 覆盖，且无 `@app.on_event("shutdown")` → Trap 接收器 / APScheduler / 连接池清理实际不执行。`[已复核]`
-- [ ] **P1** `services/prometheus_connector.py:505` — `start()` 内先阻塞跑一次完整 `poll_once()`；`:507` 的轮询任务未设 `max_instances/coalesce`（清理任务设了），60s 周期可重叠，`_last_counters` 多线程读写导致速率算错。`[已复核]`
+- [x] **P1** `main.py:434-435` — 导入期注册 SIGTERM/SIGINT，会被 uvicorn 自身 handler 覆盖，且无 `@app.on_event("shutdown")` → Trap 接收器 / APScheduler / 连接池清理实际不执行。`[已复核]` `[已修复]`：新增 `@app.on_event("shutdown") async def shutdown_event()`（迁入原 handle_shutdown 五段 try/except：停三服务 + engine.dispose + cache.clear），删除模块级 `signal.signal`（被 uvicorn handler 覆盖，属无效注册）与 `import signal`；uvicorn 收到 SIGTERM/SIGINT 均触发 lifespan shutdown，覆盖 `python app/main.py` 与 `python -m uvicorn` 两路径。
+- [x] **P1** `services/prometheus_connector.py:505` — `start()` 内先阻塞跑一次完整 `poll_once()`；`:507` 的轮询任务未设 `max_instances/coalesce`（清理任务设了），60s 周期可重叠，`_last_counters` 多线程读写导致速率算错。`[已复核]` `[已修复]`：删同步阻塞 `poll_once()`，轮询 job 加 `max_instances=1, coalesce=True, next_run_time=datetime.now()`（立即首跑不阻塞启动，与清理 job 一致）；`_last_counters` 读写加 `threading.Lock`。
 - [x] **P1** `main.py:262-283` — `async with AsyncClient` 内 `send(stream=True)`，返回 StreamingResponse 前 client 已关闭。`[已验证]`
   → 修复（步骤 4E-B5B）：client 生命周期延长到 StreamingResponse background close；同步关闭上游 response/client，并过滤凭据与 hop-by-hop 头。
-- [ ] **P1** `main.py:76-80` — 限流中间件注册在 auth 之后，实际先于认证执行，无法按用户限流。`[已复核]`
-- [ ] **P2** `services/trap_receiver.py:243` — `stop()` 只关 socket 不 join 线程；全局 `_db_lock` 串行处理所有 Trap，风暴时丢包。`[待验证]`
+- [x] **P1** `main.py:76-80` — 限流中间件注册在 auth 之后，实际先于认证执行，无法按用户限流。`[已复核]` `[已修复]`：`RateLimitMiddleware` 注册移到 auth_middleware 之前 → 入站 security→auth→RateLimit→CORS，认证先执行；`RateLimitMiddleware` 读 `scope["state"].get("user_id")`（auth 已写 `request.state.user_id`），有则按用户限流、无则回退 IP。行为变化：无效 token 请求先被 auth 拒绝（401，不再计入限流额度），恶意 token 洪泛打 DB 由 `/auth/`、`/login` 公开路径的 AUTH_LIMITER IP 限流缓解。
+- [x] **P2** `services/trap_receiver.py:243` — `stop()` 只关 socket 不 join 线程；全局 `_db_lock` 串行处理所有 Trap，风暴时丢包。`[待验证]` `[已修复]`（join 部分）：`stop()` 关 socket 后 `join(timeout=2.0)`（`_serve` 在 sock=None 时自然退出）。`_db_lock` 串行处理 Trap 属性能设计，非本项缺陷，保留。
+
+### 批次三 3.5 · 切片二 · Linux 实测（2026-08-03）
+
+验证（HEAD `c8e5ba9` → 切片二后）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `ruff check app tests` | ✅ All checks passed |
+| `pytest tests/test_lifecycle_batch3.py` + `test_batch1_regressions.py` | ✅ 24 passed（9 静态断言 + 15 回归） |
+| 全量 `pytest -q -rf` | ✅ **53 failed / 660 passed / 4 skipped**，失败集合与基线**逐条一致**（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1 = 53），零新增；passed +9 为新增生命周期用例 |
+| `frontend/npm run validate:locales` | ✅ 3212 zh / 3212 en，0 违规 |
+| `frontend/npm run build` | ✅ 构建成功（chunk 体积告警为既有，非错误） |
+
+修复说明：
+- **823 shutdown 事件**：`@app.on_event("shutdown")` 迁入原 handle_shutdown 五段 try/except；删模块级 `signal.signal` + `import signal`。静态断言：`signal.signal(` 与 `import signal` 均不在 main.py。
+- **824 prometheus 轮询**：删启动期同步阻塞 `poll_once()`；轮询 job `max_instances=1/coalesce=True/next_run_time=datetime.now()`；`_last_counters` 两处访问（:244 读 / :279 写）加 `threading.Lock`。静态断言覆盖 job 参数与锁。
+- **827 中间件顺序 + 按用户限流**：注册序改 CORS→RateLimit→auth→security（入站 security→auth→RateLimit→CORS）；`RateLimitMiddleware` 读 `scope["state"]["user_id"]` 优先按用户限流（public 路径无 user_id 回退 IP + AUTH_LIMITER）。
+- **828 trap join**：`stop()` 关 socket 后 `join(timeout=2.0)`（`self._thread` 初始化 None，安全）。
 
 ---
 
@@ -1319,7 +1337,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
-7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项：HybridCache/Redis 兜底/独立历史缓存/确定性 key/限流 Redis 化）切片一 ✅ 2026-08-03（见上方 3.4 实测）；剩余：批次三 3.5 启动与关闭（切片二）
+7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
 
 ## 附注
 
