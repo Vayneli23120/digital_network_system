@@ -130,17 +130,19 @@
   → 修复（步骤 4A）：`GET/POST /settings` 与 `POST /test` 统一挂 `alert:manage`；读取接口仅返回 `has_*` 标志，绝不返回 SMTP 用户名/密码、Webhook 或钉钉 Secret；请求体换成 Pydantic 模型，空敏感字段表示保留，只有显式 `clear_*` 才清除；配置采用临时文件 + `os.replace` 原子写入并重置配置/通知服务缓存。前端同步改为“已配置，留空保留”与显式清除，并用 `alert:manage` 控制菜单入口。
 - [x] **P1** `shared/middleware/auth_middleware.py:26` — `skip_paths` 含 `/api/devices`，前缀匹配放过整个设备域；`:57,62` 在中间件里 `raise HTTPException` 不会被 FastAPI 异常处理器接管，实际返回 500 而非 401。`[已复核]`
   → 修复（步骤 3）：删除设备域豁免，公共端点改精确匹配；中间件统一返回 JSON 401/403，并完整校验用户存在、启用状态与会话撤销状态。
-- [ ] **P1** `services/trap_receiver.py:196` — SNMP Trap 的 community 校验默认关闭，任意主机可伪造 linkDown 改设备状态并自动开工单。`[待验证]`
+- [x] **P1** `services/trap_receiver.py:196` — SNMP Trap 的 community 校验默认关闭，任意主机可伪造 linkDown 改设备状态并自动开工单。`[已复核]`
+  → 修复（批次二切片 C）：**fail-closed**——未配置 `SNMP_TRAP_COMMUNITY` 时 `_handle_packet` 直接 return 拒绝全部 Trap，启动时打 ERROR 告警（附交换机配置指引）；`_handle_packet` 改严格比对 `parsed.community == self.community`，配置错误/缺失一律拒绝。AP 监控不受影响：瘦 AP 不支持 SNMP，在线状态由所连交换机上联口 oper_status 派生（`ap_discovery.py`）。
 - [x] **P1** `notifications/router.py:37` — 解析不出用户时默认返回 `"Admin"`，匿名请求可读/已读/删除 Admin 的通知。`[已复核]`
   → 修复（步骤 3）：通知接口依赖统一 `Principal`，删除手工 JWT 解码和 `Admin` 回退；部署审计同步改用该身份。
-- [ ] **P1** `frontend/src/router/index.js:431` — 路由守卫只读 `localStorage.isLoggedIn === 'true'`，无权限判断，手改标志位即可进 `/users`、`/credentials`。`[已复核]`
+- [x] **P1** `frontend/src/router/index.js:431` — 路由守卫只读 `localStorage.isLoggedIn === 'true'`，无权限判断，手改标志位即可进 `/users`、`/credentials`。`[已复核]`
+  → 修复（批次二切片 C）：auth store 增 `permissions` / `permissionsLoaded` 状态与 `fetchMyPermissions()` action（拉 `/permissions/my-permissions`，失败置空不抛）；路由守卫改 async——`admin:all` 短路放行、未加载先拉取、仅当明确持非空权限且缺所需权限时才重定向回首页（空/未加载 = 放行，体验层兜底，后端 `require_permission` 才是真拦截）；9 个敏感路由挂 `meta.permission`（users/credentials/system-settings/permissions/logs/alert-settings/notifications/discovery/compliance）。
 - [ ] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]`
 
 **完成判定**：`auth_enabled=true` 下跑一遍主要写操作，未授权账号应全部 403；日志文件接口对 `../` 返回 400。
 
 ### 批次二·安全 · 切片 A · Linux 实测（2026-08-03，HEAD 前 `51ce7cc`）
 
-> 对应 item 78（长尾 authz）。items 115/125 在切片 B（下块），130/133 在切片 C，item 134 按约定延后。
+> 对应 item 78（长尾 authz）。items 115/125 在切片 B，130/133 在切片 C，item 134 按约定延后。
 
 | 项 | 结果 |
 |---|---|
@@ -169,7 +171,7 @@
 
 ### 批次二·安全 · 切片 B · Linux 实测（2026-08-03，HEAD 前 `51ce7cc`）
 
-> 对应 item 125（凭证加密独立）+ item 115（AI key 加密）。items 130/133 在切片 C，item 134 按约定延后。
+> 对应 item 125（凭证加密独立）+ item 115（AI key 加密）。items 130/133 在切片 C（下块），item 134 按约定延后。
 
 | 项 | 结果 |
 |---|---|
@@ -201,6 +203,40 @@
 - `JWT_SECRET` 轮换流程不变；生产建议通过 `ENCRYPTION_KEY` 单独设置持久加密密钥后再轮换 JWT。
 - `decrypt_or_passthrough` 仅用于 AI key 消费侧（兼容历史明文）；凭证侧仍严格要求 Fernet 密文，解密失败按既有逻辑兜底。
 - 既有失败基线中 credential 相关 2 项（wrong_key / 缺 key）为**本次修复后回归通过**的项，不再属于基线。
+
+
+### 批次二·安全 · 切片 C · Linux 实测（2026-08-03，HEAD `0d1b199`）
+
+> 对应 item 130（trap fail-closed）+ item 133（前端守卫缺权限）。item 134 按约定延后。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_lifecycle_batch3.py` | ✅ 全过（含新增 TestTrapCommunityFailClosed 2 项） |
+| `pytest tests/test_batch2_frontend_guard.py` | ✅ 8 passed（新增） |
+| `pytest tests/test_batch1_regressions.py` | ✅ 15 passed |
+| 全量 pytest | ✅ 53 failed / 696 passed / 4 skipped —— 失败集合与基线**逐条一致**（分布同切片 A/B 的 53，无新增失败；passed 686→696 = 新增前端守卫 8 + trap 2） |
+| `frontend validate:locales` + `npm run build` | ✅ 通过（本次有前端改动，真实构建） |
+
+**根因**：
+- **130**：Trap community 校验默认关闭（`if self.community and ...` 留空即放行），任意主机可伪造 linkDown/linkUp 改设备状态并自动开工单。
+- **133**：前端路由守卫只读 `localStorage.isLoggedIn === 'true'`，无权限判断，手改标志位即可直达 `/users`、`/credentials` 等敏感页。
+
+**改动**：
+- `trap_receiver.py`：模块 docstring 补 fail-closed 说明；`start()` 在 community 为空时打 **ERROR 告警**（含交换机配置指引）；`_handle_packet` 改为**先判 `if not self.community:` 直接 return（拒绝全部）**，再严格比对 `parsed.get("community") != self.community`，配置缺失/错误一律拒绝。
+- `stores/auth.js`：state 加 `permissions: []`、`permissionsLoaded: false`；action `async fetchMyPermissions()` 拉 `/permissions/my-permissions`（失败置空且仍置 loaded，不抛错）；`clearAuth()` 清 permissions。
+- `router/index.js`：`beforeEach` 改 async——`meta.permission` 存在时：未加载先 `await fetchMyPermissions()`；**`permissions.includes('admin:all')` 短路放行**（`get_user_all_permissions` 对超管只回 `["admin:all"]` 不展开，不短路会锁死超管）；仅当权限非空且缺所需权限才 `next('/')`；空/未加载 = 放行。
+- 9 个敏感路由挂 `meta.permission`：`/users→user:read`、`/credentials→credential:read`、`/system-settings→system_config:read`、`/permissions→role:read`、`/logs→log:read`、`/alert-settings→alert:manage`、`/notifications→notification:read`、`/discovery→discovery:read`、`/compliance→compliance:read`（codes 均已在批次二步骤 4 权限表内，startup 增量补齐）。
+
+**行为变化**：
+- 未配置 `SNMP_TRAP_COMMUNITY` 时 Trap 全部拒绝（fail-closed）并在启动日志打 ERROR；配置后仅接受匹配 community 的 Trap。
+- 前端手改 `isLoggedIn` 无法再直达敏感页；超管/空权限/权限拉取失败均不受影响（体验层兜底，后端 `require_permission` 才是真拦截）。
+
+**保留项 / 说明**：
+- **AP 监控不受影响**：瘦 AP 不支持 SNMP，在线状态由所连交换机上联口 oper_status 派生（`ap_discovery.py:116-151`），与 Trap 接收器无关。
+- 前端守卫是**体验层兜底**：`auth_enabled=false + debug=true` 开发旁路下守卫仍照常拉权限，但后端旁路放行；空/未加载放行约定与 `Layout.vue` nav 过滤一致（权限表未初始化/拉取失败不锁死 UI）。
+- `/scanner` 终端页无 `meta.permission`（扫码枪无登录），不参与守卫。
+- item 134（`detail=str(e)` 内部异常回显）按约定延后到后续批次。
 
 
 **步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
@@ -1400,7 +1436,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03；trap fail-closed + 前端守卫（slice C，items 130/133）、步骤 5 会话级 SSH 凭证、步骤 6 OIDC 真接仍 pending
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03；步骤 5 会话级 SSH 凭证、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
