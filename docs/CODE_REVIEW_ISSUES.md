@@ -49,7 +49,7 @@
 > | 2 | 登录页双入口 + 后端 SSO 端点预留 | ✅ 2026-07-29 |
 > | 3 | 统一身份解析、删 `X-User` 旁路、`auth_enabled` 收窄为开发旁路 | ✅ 2026-08-01 |
 > | 4 | 按危险度给写接口挂权限：alerts → deploy → devices → logs → 其余 | ✅ 高风险主线 4A–4E-B5B（2026-08-02）+ 长尾端点（2026-08-03 slice A）全部完成 |
-> | 5 | 会话级 SSH 凭证（用时输入一次）+ 备份提醒（不再自动）+ 高危操作二次确认 | 🕓 切片 A ✅ 2026-08-03（备份会话凭证 + 需备份列表）；切片 B 进行中 |
+> | 5 | 会话级 SSH 凭证（用时输入一次）+ 备份提醒（不再自动）+ 高危操作二次确认 | ✅ 2026-08-03（切片 A 备份会话凭证 + 需备份列表；切片 B 部署/回滚凭证 + 二次确认 + 下线异步） |
 > | 6 | OIDC 真接（填 tenant/client/secret + 服务器出站白名单） | ⬜ 等 IT |
 >
 > 步骤 5 必须排在步骤 3、4 之后：会话凭证的安全性完全依赖"会话属于谁可信"，
@@ -272,7 +272,35 @@
 **保留项 / 说明**：
 - `CredentialGroup`（服务器存储凭证）保留但作为**显式降级回退**：仅 `credential_session_required=False` 时使用；默认 True 拒绝无操作者凭证的请求。
 - sessionStorage 边界：刷新保留、关标签/登出清除——凭证会话边界即"浏览器会话"。
-- 切片 B（部署操作者凭证 + 二次确认 + 下线异步）继续推进，不在本切片范围内。
+
+
+### 批次二·步骤5 · 切片 B · Linux 实测（2026-08-03，HEAD 前 `bea483d`）
+
+> 步骤 5 切片 B：部署/回滚操作者会话级 SSH 凭证（单组 default 覆盖全部目标设备）+ 高危操作二次确认 + 下线 celery 异步备份/定时部署。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_typed_credentials_security.py` | ✅ 21 passed（切片 A 10 + 切片 B 新增 11：build_operator_credential_groups 单 default 组 / 拒绝部分填写 / 空返 None；resolve_operator_credentials 开关开→400、关→None 降级、带凭证透传；回滚端点无凭证→400；/schedule 端点与 schema 已移除；celery 不再注册 backup/deploy_tasks） |
+| `pytest tests/test_backups_templates_security_step4e.py` | ✅ 21 passed（异步 job 脱敏测试改写为同步 HTTP 路径等价覆盖：成功响应/LogEntry 不含绝对路径、失败归一封皮） |
+| `pytest tests/test_batch1_regressions.py` | ✅ 15 passed（async `backup_device.apply` 改写为同步 `run_device_op(backup_device_config)` 等价覆盖，调用时经模块属性解析取到 monkeypatch 实现） |
+| `pytest tests/test_deploy_security_step4b.py` | ✅ 通过（移除 ScheduleDeployRequest 测试与权限矩阵 `schedule_deploy` 项） |
+| 全量 pytest | ✅ 53 failed / 716 passed / 4 skipped —— 失败集合与基线**逐条一致**（分布同切片 A 的 53，零新增；passed 706→716 = 新增切片 B 11 项 − 移除 schedule schema 测试 1 项） |
+| `frontend validate:locales` + `npm run build` | ✅ 通过（3237 zh/en 键一致，真实构建，Deploy 路由产物正常） |
+
+**改动**：
+- **部署/回滚凭证**：`DeployRequest` / `RollbackRequest` / WS `start_deploy` 增加可选 `credentials{username?, password?, secret?}`；新 `app/features/deploy/operator_credentials.py` 的 `resolve_operator_credentials` 构建**单个 `name='default'` 操作者凭证组**覆盖全部目标设备（各 deploy 服务按 `device.credential_group` 名匹配并回退 `'default'`，单个 default 组即可覆盖全部设备）；`credential_session_required=True`（默认）未携带 → 400「请使用操作者 SSH 凭证（密码不存储在服务器上）」；`False` 才回退服务器存储 CredentialGroup 解密；部分填写（用户名/密码缺一）→ 400，不静默降级。凭证仅存于请求/WS 会话/线程内存，不落库、不入日志（部署日志仍只记用户名）。
+- **二次确认**：前端执行部署/回滚前 `ElMessageBox.confirm` 明示「高危操作：即将使用当前操作者 SSH 凭证…（密码仅本次会话，不存储在服务器上）」；Deploy.vue 缺凭证先弹 `SSHCredentialDialog`（sessionStorage 复用），取消则中止；`useDeployExecution.executeDeploy/handleRollback` 经 `hooks.ensureCredentials` 收集并在 WS/回滚请求携带凭证。
+- **下线异步/定时部署**：删除 `POST /api/deploy/schedule` 与 `ScheduleDeployRequest`（`POST /backup/{device_id}/async` 切片 A 已删）；`git rm app/tasks/backup_tasks.py` `app/tasks/deploy_tasks.py`；celery_app.py imports/task_routes 移除两条 `device_ops` 路由；tasks `__all__` 移除二者；前端移除 Deploy.vue 排程 UI（`DeployScheduleDialog.vue`、api `getMaintenanceWindows`/`scheduleDeploy`、DeployPreviewDialog Schedule 按钮）。
+
+**行为变化**：
+- 默认配置下部署/回滚/备份都必须携带操作者 SSH 凭证，未提供返回 400；凭证仅存于浏览器 sessionStorage / WS 会话 / 请求内存，关闭标签页或登出即消失。
+- 备份与部署全部走同步端点，不再有 celery 异步设备操作；定时部署功能下线（异步 worker 无法携带操作者会话凭证，与"密码不落服务器"互斥）。
+
+**保留项 / 说明**：
+- `CredentialGroup` 保留但仅 `credential_session_required=False` 时显式降级使用（默认 True 拒绝无操作者凭证请求）。
+- **残留风险（已 flag，不在本切片范围）**：`websocket/router.py:253` 的 legacy `action == 'deploy'` WS handler 无认证（不校验 access_token / 权限），直接使用服务器存储 CredentialGroup，且前端未调用（死代码）。建议后续独立下线或补鉴权。
+- WS `start_deploy` 凭证缺失时被外层 `except Exception` 归一封皮为通用错误消息「部署处理失败，请查看服务端日志」；前端总是先收集凭证再开 WS（`executeDeploy` 内 `ensureCredentials` 拦截），该路径为纵深防御，不影响正常流程。
 
 
 **步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
@@ -1472,7 +1500,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03；步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（切片 A ✅ 2026-08-03：备份会话凭证 + 需备份列表；切片 B 部署凭证/二次确认/下线异步进行中）、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03、步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（✅ 2026-08-03：切片 A 备份会话凭证 + 需备份列表，切片 B 部署/回滚凭证 + 二次确认 + 下线异步）、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
