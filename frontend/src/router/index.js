@@ -154,7 +154,7 @@ const routes = [
         path: '',
         name: 'Credentials',
         component: () => import('@/views/Credentials.vue'),
-        meta: { title: 'SSH 凭证' }
+        meta: { title: 'SSH 凭证', permission: 'credential:read' }
       }
     ]
   },
@@ -167,7 +167,7 @@ const routes = [
         path: '',
         name: 'Logs',
         component: () => import('@/views/Logs.vue'),
-        meta: { title: '系统日志' }
+        meta: { title: '系统日志', permission: 'log:read' }
       }
     ]
   },
@@ -220,7 +220,7 @@ const routes = [
         path: '',
         name: 'Compliance',
         component: () => import('@/views/Compliance.vue'),
-        meta: { title: '配置合规' }
+        meta: { title: '配置合规', permission: 'compliance:read' }
       }
     ]
   },
@@ -234,7 +234,7 @@ const routes = [
         path: '',
         name: 'Discovery',
         component: () => import('@/views/Discovery.vue'),
-        meta: { title: '设备发现' }
+        meta: { title: '设备发现', permission: 'discovery:read' }
       }
     ]
   },
@@ -260,7 +260,7 @@ const routes = [
         path: '',
         name: 'AlertSettings',
         component: () => import('@/views/AlertSettings.vue'),
-        meta: { title: '告警通知' }
+        meta: { title: '告警通知', permission: 'alert:manage' }
       }
     ]
   },
@@ -273,7 +273,7 @@ const routes = [
         path: '',
         name: 'SystemSettings',
         component: () => import('@/views/SystemSettings.vue'),
-        meta: { title: '系统设置' }
+        meta: { title: '系统设置', permission: 'system_config:read' }
       }
     ]
   },
@@ -306,7 +306,7 @@ const routes = [
         path: '',
         name: 'Users',
         component: () => import('@/views/Users.vue'),
-        meta: { title: '用户管理' }
+        meta: { title: '用户管理', permission: 'user:read' }
       }
     ]
   },
@@ -402,7 +402,7 @@ const routes = [
         path: '',
         name: 'Notifications',
         component: () => import('@/views/Notifications.vue'),
-        meta: { title: '系统通知' }
+        meta: { title: '系统通知', permission: 'notification:read' }
       }
     ]
   },
@@ -416,7 +416,7 @@ const routes = [
         path: '',
         name: 'Permissions',
         component: () => import('@/views/Permissions.vue'),
-        meta: { title: '角色权限' }
+        meta: { title: '角色权限', permission: 'role:read' }
       }
     ]
   }
@@ -427,14 +427,17 @@ const router = createRouter({
   routes
 })
 
-// Navigation guard - check authentication
-router.beforeEach((to, from, next) => {
-  const isLoggedIn = useAuthStore().isLoggedIn
+// Navigation guard - check authentication and route-level permission.
+// 前端守卫是体验层兜底，后端 require_permission 才是真正的拦截：
+// 权限为空/未加载时一律放行（与 Layout.vue 的 nav 过滤约定一致），
+// 只在明确持有非空权限列表且缺少所需权限时才重定向回首页。
+router.beforeEach(async (to, from, next) => {
+  const auth = useAuthStore()
 
   // If route doesn't require auth and user is not logged in, allow access
   if (to.meta.noAuth) {
     // If already logged in and trying to access login page, redirect to home
-    if (to.path === '/login' && isLoggedIn) {
+    if (to.path === '/login' && auth.isLoggedIn) {
       next('/')
     } else {
       next()
@@ -443,11 +446,30 @@ router.beforeEach((to, from, next) => {
   }
 
   // If route requires auth and user is not logged in, redirect to login
-  if (!isLoggedIn) {
+  if (!auth.isLoggedIn) {
     next('/login')
-  } else {
-    next()
+    return
   }
+
+  // Route-level permission check
+  const required = to.meta.permission
+  if (required) {
+    if (!auth.permissionsLoaded) {
+      await auth.fetchMyPermissions()
+    }
+    // 超管（admin:all，my-permissions 只回 admin:all 不展开）或空/未加载 = 放行；
+    // 只在明确持有非空权限且缺少所需权限时才重定向回首页
+    if (
+      auth.permissions.length > 0
+      && !auth.permissions.includes('admin:all')
+      && !auth.permissions.includes(required)
+    ) {
+      next('/')
+      return
+    }
+  }
+
+  next()
 })
 
 export default router

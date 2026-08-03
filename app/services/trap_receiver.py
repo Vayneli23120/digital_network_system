@@ -14,6 +14,11 @@ SNMP Trap 接收器（阶段 B）- 秒级 linkDown/linkUp
    snmp trap link-status
 并放行 UDP/162 到本服务器。绑定 162 端口需要 root（或 setcap），
 否则可用环境变量 SNMP_TRAP_PORT 指定高位端口测试。
+
+安全：**fail-closed**。未配置 `SNMP_TRAP_COMMUNITY` 时接收器拒绝全部 Trap
+（`_handle_packet` 直接 return），启动时打 ERROR 告警——避免默认放行导致
+任意主机伪造 linkDown 改设备状态并自动开工单。AP 监控不受影响：瘦 AP 不支持
+SNMP，其在线状态由所连交换机上联口 oper_status 派生。
 """
 
 import os
@@ -189,6 +194,11 @@ class TrapReceiver:
         if self._running:
             logger.warning("Trap receiver already running")
             return
+        if not self.community:
+            logger.error(
+                "SNMP_TRAP_COMMUNITY 未配置：Trap 接收器 fail-closed，拒绝所有 Trap；"
+                "请在交换机配置 SNMP community 并在环境变量设置"
+            )
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -250,10 +260,14 @@ class TrapReceiver:
                 logger.debug(f"Trap 处理失败 from {addr}: {e}")
 
     def _handle_packet(self, data: bytes, src_ip: str):
+        # fail-closed：未配置 community → 拒绝全部 Trap（见模块 docstring）
+        if not self.community:
+            logger.debug("SNMP_TRAP_COMMUNITY 未配置，fail-closed 拒绝 Trap")
+            return
         parsed = parse_snmp_trap(data)
         if not parsed:
             return
-        if self.community and parsed.get("community") != self.community:
+        if parsed.get("community") != self.community:
             logger.debug(f"Trap community 不匹配，忽略 from {src_ip}")
             return
         event, if_index = extract_link_event(parsed)

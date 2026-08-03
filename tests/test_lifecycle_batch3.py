@@ -88,3 +88,26 @@ class TestTrapReceiverStop:
         src = _read("services/trap_receiver.py")
         stop_block = src.split("def stop(self):", 1)[1].split("def diagnostics", 1)[0]
         assert "self._thread.join(timeout=2.0)" in stop_block
+
+
+class TestTrapCommunityFailClosed:
+    """批次二·安全 切片 C · Trap 接收器 fail-closed（item 130）
+
+    未配置 SNMP_TRAP_COMMUNITY 时拒绝全部 Trap，且启动时打 ERROR 告警。
+    """
+
+    def test_handle_packet_fails_closed_without_community(self):
+        """未配置 community 时 _handle_packet 直接 return（拒绝所有 Trap）"""
+        src = _read("services/trap_receiver.py")
+        handle_block = src.split("def _handle_packet", 1)[1].split("def _apply_link_event", 1)[0]
+        assert "if not self.community:" in handle_block
+        assert "return" in handle_block
+        # 未配置时不再"默认放行"：不再出现 `if self.community and ...` 的放行式判断
+        assert "if self.community and parsed.get" not in handle_block
+
+    def test_start_logs_error_when_community_missing(self):
+        """启动时 community 为空打 ERROR 告警文本"""
+        src = _read("services/trap_receiver.py")
+        start_block = src.split("def start(self):", 1)[1].split("def stop(self):", 1)[0]
+        assert "SNMP_TRAP_COMMUNITY 未配置：Trap 接收器 fail-closed，拒绝所有 Trap" in start_block
+        assert "logger.error(" in start_block
