@@ -476,7 +476,7 @@ import { ref, onMounted, nextTick, computed, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import * as echarts from 'echarts'
 import { ElMessage } from 'element-plus'
-import { getDashboardSummary, getAlerts, getAiBriefing } from '@/api'
+import { getDashboardSummary, getAlerts, getAiBriefing, getTopFaultDevices, getCostTrend, getFaultTrend } from '@/api'
 import dayjs from 'dayjs'
 import { useI18n } from '@/composables/useI18n'
 import { cachedRequest } from '@/utils/cache.js'
@@ -774,7 +774,7 @@ const faultDeviceList = ref([])
 const loadFaultDeviceList = async (force = false) => {
   try {
     const res = await cachedRequest(
-      () => fetch('/api/dashboard/top-fault-devices?days=30&limit=5').then(r => r.json()),
+      () => getTopFaultDevices({ days: 30, limit: 5 }),
       'dashboardTopFaultDevices',
       {},
       { forceRefresh: force }
@@ -818,7 +818,7 @@ const loadDashboardData = async (force = false) => {
     // Load cost trend
     try {
       const trendRes = await cachedRequest(
-        () => fetch('/api/dashboard/cost-trend?months=6').then(r => r.json()),
+        () => getCostTrend({ months: 6 }),
         'dashboardCostTrend',
         {},
         { forceRefresh: force }
@@ -907,12 +907,12 @@ const updateFaultChart = async () => {
   if (!faultChartInstance.value) return
   try {
     const range = faultTimeRange.value
-    let url = `/api/dashboard/fault-trend?time_range=${range}`
+    const params = { time_range: range }
     if (range === 'custom' && customStartDate.value && customEndDate.value) {
-      url = `/api/dashboard/fault-trend?time_range=custom&start_date=${customStartDate.value}&end_date=${customEndDate.value}`
+      params.start_date = customStartDate.value
+      params.end_date = customEndDate.value
     }
-    const response = await fetch(url)
-    const data = await response.json()
+    const data = await getFaultTrend(params)
     const severityData = { critical: [], major: [], minor: [], warning: [] }
     ;(data.labels || []).forEach((label) => {
       const counts = data.by_severity?.[label] || {}

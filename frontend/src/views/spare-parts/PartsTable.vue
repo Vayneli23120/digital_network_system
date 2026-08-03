@@ -325,11 +325,12 @@ const loadParts = debounce(async (force = false) => {
   loading.value = true
   try {
     const params = {
-      search: props.externalSearch || '',
-      category: props.externalCategory || '',
       low_stock: props.externalLowStock || false,
       limit: 200
     }
+    // 后端 search/category 带 min_length=1，空串会触发 400；为空时省略参数
+    if (props.externalSearch) params.search = props.externalSearch
+    if (props.externalCategory) params.category = props.externalCategory
     const result = await cachedRequest(
       () => getPartList(params),
       'spareParts',

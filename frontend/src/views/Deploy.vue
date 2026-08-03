@@ -917,7 +917,9 @@ import {
   scheduleDeploy,
   getDeployHistory,
   getDeployHistoryDetail,
-  deleteDeployHistory
+  deleteDeployHistory,
+  approveDeployment,
+  rejectDeployment
 } from '@/api'
 import { formatDateTime } from '@/utils/time'
 import { useI18n } from '@/composables/useI18n'
@@ -2037,20 +2039,11 @@ const handleApprovalSubmit = async () => {
   }
 
   try {
-    const response = await fetch(`/api/deploy-approval/${approvalId.value}/approve`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ comment: approvalComment.value })
-    })
-
-    if (response.ok) {
-      approvalStatus.value = 'approved'
-      ElMessage.success(t('deployApproved'))
-      // 刷新并开始执行
-      await startApprovedDeployment()
-    } else {
-      ElMessage.error(t('deployApproveFailed'))
-    }
+    await approveDeployment(approvalId.value, { comment: approvalComment.value })
+    approvalStatus.value = 'approved'
+    ElMessage.success(t('deployApproved'))
+    // 刷新并开始执行
+    await startApprovedDeployment()
   } catch (error) {
     ElMessage.error(t('deployApproveFailed'))
   }
@@ -2063,18 +2056,9 @@ const handleRejectionSubmit = async () => {
   }
 
   try {
-    const response = await fetch(`/api/deploy-approval/${approvalId.value}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reason: rejectionReason.value })
-    })
-
-    if (response.ok) {
-      approvalStatus.value = 'rejected'
-      ElMessage.warning(t('deployRejected'))
-    } else {
-      ElMessage.error(t('deployRejectFailed'))
-    }
+    await rejectDeployment(approvalId.value, { reason: rejectionReason.value })
+    approvalStatus.value = 'rejected'
+    ElMessage.warning(t('deployRejected'))
   } catch (error) {
     ElMessage.error(t('deployRejectFailed'))
   }

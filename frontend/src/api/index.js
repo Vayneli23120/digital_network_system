@@ -364,6 +364,12 @@ export function getMaintenanceWindows() {
 export function scheduleDeploy(data) {
   return api.post('/deploy/schedule', data)
 }
+export function approveDeployment(approvalId, data) {
+  return api.post(`/deploy-approval/${approvalId}/approve`, data)
+}
+export function rejectDeployment(approvalId, data) {
+  return api.post(`/deploy-approval/${approvalId}/reject`, data)
+}
 
 // 日志管理
 export function getLogs(params) {
@@ -389,6 +395,12 @@ export function clearOldLogs(days) {
 // 仪表盘趋势
 export function getFaultTrend(params) {
   return api.get('/dashboard/fault-trend', { params })
+}
+export function getTopFaultDevices(params) {
+  return api.get('/dashboard/top-fault-devices', { params })
+}
+export function getCostTrend(params) {
+  return api.get('/dashboard/cost-trend', { params })
 }
 
 // 设备发现
