@@ -1197,12 +1197,18 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
   → 修复（批次六切片 A）：`tasks/__init__.py` 导入期写占位文件的副作用已先期消除（当前为纯 docstring + `__all__`，占位模块是仓库真实文件）。本切片清掉残留悬挂 route `"app.tasks.discovery_tasks.*": {"queue": "device_ops"}`（`app/tasks/discovery_tasks.py` 不存在，路由永不命中属死配置）；`celery_app` 导入验证通过、routes 归一为 5 个真实模块。`notification_tasks`/`scheduled_tasks` 空占位与全局无 `beat_schedule` 保留——属「功能未实现」而非缺陷，见下方实测。
 - [x] **P1** `frontend/npm ci` 在当前网络下失败（`SELF_SIGNED_CERT_IN_CHAIN`，registry 指向 npmmirror）→ 前端无法构建验证。需决定：配置企业 CA 证书，或改用内网镜像。`[已复核]` `[已验证]`
   → 已随网络/镜像状态变化解决（批次六切片 A）：真实 `npm ci` 98 包 6s 成功（`--dry-run` 3s 先行确认 registry 可达），随后 `npm run build` 18.54s、`validate:locales` 3212/3212 全过，前端构建验证链恢复。无需再配置企业 CA 或改镜像。
-- [ ] **P2** `frontend-react/`（17 文件、5 个页面骨架、独立 vite/tsconfig）是停滞的并行重写，构成第二套事实标准，建议归档或删除。`[已复核]`
-- [ ] **P2** `backend/`（22 文件）已在 `README_ARCHIVED.md` 中标注"自 2026-06-05 废弃、不可运行"，但仍在仓库内，建议删除或移出。`[已复核]`
-- [ ] **P2** `frontend/src/locales/index.js.backup`（2277 行）留在 `src/` 内，会被 vite 扫描。`[已复核]`
-- [ ] **P2** `data/nas.db`（663 KB，2026-07-16）是迁 PG 前的遗留库，缺 `config.yaml` 时任何脚本都会默认打开它。建议改名为 `nas.db.legacy-20260716`。`[已复核]`
-- [ ] **P2** `scripts/seed_data.py:35-41` 用 `query().delete()` 批量清表并在 `:640` 调 `init_db()`，误在生产执行即清库，建议加环境确认。`[已复核]`
-- [ ] **P2** `scripts/migrate_features.py` 是代码搬迁 codemod（会覆盖 `app/shared/*.py`）而非 DB 迁移，放在 scripts 里有误执行风险。`[已复核]`
+- [x] **P2** `frontend-react/`（17 文件、5 个页面骨架、独立 vite/tsconfig）是停滞的并行重写，构成第二套事实标准，建议归档或删除。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`git rm -r frontend-react/` 删除 17 文件停滞重写（git 历史可恢复）；连带清掉 `docker-compose.yml` 的 `frontend-react:` 服务（build context 指向已删目录）与 `ruff.toml` 中对应 exclude 项。
+- [x] **P2** `backend/`（22 文件）已在 `README_ARCHIVED.md` 中标注"自 2026-06-05 废弃、不可运行"，但仍在仓库内，建议删除或移出。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`git rm -r backend/` 删除 22 文件废弃后端（README_ARCHIVED.md 2026-06-05 已标注不可运行）。
+- [x] **P2** `frontend/src/locales/index.js.backup`（2277 行）留在 `src/` 内，会被 vite 扫描。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`git rm frontend/src/locales/index.js.backup`，全仓库无引用。
+- [x] **P2** `data/nas.db`（663 KB，2026-07-16）是迁 PG 前的遗留库，缺 `config.yaml` 时任何脚本都会默认打开它。建议改名为 `nas.db.legacy-20260716`。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`mv data/nas.db data/nas.db.legacy-20260716`（`data/` 未纳入 git，纯文件系统操作）。`scripts/legacy_sqlite/*` 与 `_migrate_sqlite_to_pg.py` 的默认路径仍指向 `data/nas.db`，改名后这些一次性脚本会报「文件不存在」而非静默打开遗留库，符合改名初衷。
+- [x] **P2** `scripts/seed_data.py:35-41` 用 `query().delete()` 批量清表并在 `:640` 调 `init_db()`，误在生产执行即清库，建议加环境确认。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`main()` 顶部加环境守卫——`os.environ.get("NAS_SEED_CONFIRM") != "1"` 时打印拒绝说明并 `return 1`，发生在任何 DB 连接/初始化之前（误执行零副作用）。实测无环境变量即 exit=1 拒绝。README 三处用法同步为 `NAS_SEED_CONFIRM=1 python scripts/seed_data.py`。
+- [x] **P2** `scripts/migrate_features.py` 是代码搬迁 codemod（会覆盖 `app/shared/*.py`）而非 DB 迁移，放在 scripts 里有误执行风险。`[已复核]` `[已修复]`
+  → 修复（批次六切片 B）：`git mv` 至 `scripts/devtools/migrate_features.py`，移出 scripts 命名空间、明确为一次性 codemod 工具（git 历史保留 move）。`app/services/` 仍有活跃模块故不删。
 - [ ] **P2** 异常体系混用：`shared/exceptions.py` 有完整 `AppException` 体系，devices/templates 用它，faults/maintenance/deploy 全用 `HTTPException`。`[已复核]`
 - [ ] **P2** 三处重复的 vendor→driver 映射：`deploy/napalm_service.py:33`、`deploy/deploy_stream_service.py:300`、`devices/drivers/registry.py`。`[已复核]`
 - [ ] **P2** 裸 `except:` 静默降级：`compliance/compliance_service.py:279`、`faults/router.py:335`、`discovery/discovery_service.py:130`、`shared/models.py:207`、`deploy/router.py:907`。`[已复核]`
@@ -1231,6 +1237,26 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - **批次五遗留修复**：全量 pytest 暴出 2 个过期前端源码断言——`test_deploy_security_step4b.py::test_stream_history_uses_authenticated_username_source` 扫描 `Deploy.vue` 的 `access_token: authStore.accessToken`（946 切片 5 后迁入 `useDeployExecution.js`）；`test_device_security_step4c.py::test_photo_static_mount_...` 扫描 `Monitor3D.vue` 的 `getFloorPlanContent(currentPlan.value.id)`（946 切片 9a 后迁入 `useThreeScene.js`，变 `deps.currentPlan.value.id`）。按「源码断言随实现更新」先例（批次三 3.1）改扫描新位置，2 项通过。全量失败集合回到 53 基线（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1）。
 - docs「日常校验命令」全量测试命令已去掉 `--ignore=tests/test_console_service.py`。
 
+### 批次六 · 切片 B · Linux 实测（2026-08-03）
+
+验证（HEAD `a7edffc` → 切片 B 后）：
+
+| 检查点 | 结果 |
+| --- | --- |
+| `ruff check app tests scripts migrations` | ✅ All checks passed |
+| `pytest tests/test_batch1_regressions.py -q` | ✅ 15 passed |
+| 全量 `pytest -q` | ✅ **53 failed / 642 passed / 4 skipped**，失败集合与切片 A 基线逐条一致，无新增 |
+| `frontend/npm run validate:locales` | ✅ 3212 zh / 3212 en，0 违规 |
+| `frontend/npm run build` | ✅ 13.89s（chunk 体积告警为既有，非错误） |
+| `python scripts/seed_data.py`（无 NAS_SEED_CONFIRM） | ✅ 打印拒绝说明 exit=1，发生在任何 DB 连接之前 |
+| 仓库清理落点 | ✅ `frontend-react/`、`backend/`、`locales/index.js.backup` 已 git rm；`nas.db`→`nas.db.legacy-20260716`；`migrate_features.py`→`scripts/devtools/` |
+
+修复说明：
+- **1200/1201/1202**：`git rm -r frontend-react/`（17 文件）、`git rm -r backend/`（22 文件）、`git rm frontend/src/locales/index.js.backup`。连带清理两处引用：`docker-compose.yml` 的 `frontend-react:` 服务（build context 指向已删目录，不删则 `docker compose up` 会失败）、`ruff.toml` 的 `backend`/`frontend-react` 两条死 exclude。
+- **1203**：`data/nas.db` → `data/nas.db.legacy-20260716`。遗留一次性迁移脚本（`scripts/legacy_sqlite/*`、`_migrate_sqlite_to_pg.py`）默认路径仍指旧名，改名后报「文件不存在」而非静默打开遗留库，符合「防默认打开」初衷，故不改其路径。
+- **1204**：`seed_data.py` `main()` 顶部环境守卫置于任何 DB 连接/初始化之前（比原计划「clear_existing_data 调用前」更早），误执行零副作用；实测拒绝路径 exit=1。README 三处用法同步。
+- **1205**：`git mv scripts/migrate_features.py scripts/devtools/migrate_features.py`，git 历史保留 move。
+
 ---
 
 ## 批次七 · 既存测试失败基线（批次一执行时测得，与本次改动无关）
@@ -1253,7 +1279,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
-7. **批次三 3.4/3.5** 与 **批次六剩余项**
+7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03 完成；剩余：批次六切片 C（异常体系 / 三处 vendor→driver / 裸 except）+ 批次三 3.4/3.5
 
 ## 附注
 
