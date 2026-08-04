@@ -194,7 +194,7 @@ class TestDiscoveryServiceIdentifyCisco:
         """Test that identify_cisco_device returns None when netmiko is unavailable"""
         service = DiscoveryService()
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", False):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", False):
             result = service.identify_cisco_device("192.168.1.1", {})
             assert result is None
 
@@ -210,8 +210,8 @@ class TestDiscoveryServiceIdentifyCisco:
 
         credentials = {"username": "admin", "password": "secret", "secret": "enable"}
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", True):
-            with patch("app.services.discovery_service.netmiko.ConnectHandler", return_value=mock_conn):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", True):
+            with patch("app.features.discovery.discovery_service.netmiko.ConnectHandler", return_value=mock_conn):
                 result = service.identify_cisco_device("192.168.1.1", credentials)
 
                 assert result is not None
@@ -225,8 +225,8 @@ class TestDiscoveryServiceIdentifyCisco:
         """Test handling of connection failure"""
         service = DiscoveryService()
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", True):
-            with patch("app.services.discovery_service.netmiko.ConnectHandler", side_effect=Exception("Connection refused")):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", True):
+            with patch("app.features.discovery.discovery_service.netmiko.ConnectHandler", side_effect=Exception("Connection refused")):
                 result = service.identify_cisco_device("192.168.1.1", {})
                 assert result is None
 
@@ -238,7 +238,7 @@ class TestDiscoveryServiceCdpDiscover:
         """Test that cdp_discover returns empty list when netmiko unavailable"""
         service = DiscoveryService()
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", False):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", False):
             result = service.cdp_discover("192.168.1.1", {})
             assert result == []
 
@@ -258,8 +258,8 @@ Entry address(es):
 Platform: cisco WS-C2960X, Capabilities: Switch IGMP
 """
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", True):
-            with patch("app.services.discovery_service.netmiko.ConnectHandler", return_value=mock_conn):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", True):
+            with patch("app.features.discovery.discovery_service.netmiko.ConnectHandler", return_value=mock_conn):
                 neighbors = service.cdp_discover("192.168.1.1", {})
 
                 assert len(neighbors) == 2
@@ -270,8 +270,8 @@ Platform: cisco WS-C2960X, Capabilities: Switch IGMP
         """Test handling of connection failure during CDP discovery"""
         service = DiscoveryService()
 
-        with patch("app.services.discovery_service.NETMIKO_AVAILABLE", True):
-            with patch("app.services.discovery_service.netmiko.ConnectHandler", side_effect=Exception("Timeout")):
+        with patch("app.features.discovery.discovery_service.NETMIKO_AVAILABLE", True):
+            with patch("app.features.discovery.discovery_service.netmiko.ConnectHandler", side_effect=Exception("Timeout")):
                 result = service.cdp_discover("192.168.1.1", {})
                 assert result == []
 
@@ -308,7 +308,7 @@ class TestDiscoveryServiceSingleton:
 
     def test_get_discovery_service_returns_instance(self):
         """Test that get_discovery_service returns a DiscoveryService instance"""
-        import app.services.discovery_service as mod
+        import app.features.discovery.discovery_service as mod
         mod._discovery_service = None  # reset
 
         service = get_discovery_service()
@@ -316,7 +316,7 @@ class TestDiscoveryServiceSingleton:
 
     def test_get_discovery_service_returns_same_instance(self):
         """Test that get_discovery_service returns the same instance on repeated calls"""
-        import app.services.discovery_service as mod
+        import app.features.discovery.discovery_service as mod
         mod._discovery_service = None  # reset
 
         s1 = get_discovery_service()

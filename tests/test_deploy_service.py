@@ -230,7 +230,7 @@ class TestDeployServiceConnection:
         """Test successful device connection"""
         from app.features.deploy.deploy_service import DeployService
 
-        with patch("app.services.deploy_service.ConnectHandler", MockNetmikoConnection):
+        with patch("app.features.deploy.deploy_service.ConnectHandler", MockNetmikoConnection):
             service = DeployService()
 
             device = {
@@ -258,7 +258,7 @@ class TestDeployServiceConnection:
         device = {"device_type": "cisco_ios", "name": "Test", "ip": "192.168.1.1"}
         credentials = {"username": "admin", "password": "secret"}
 
-        with patch("app.services.deploy_service.NETMIKO_AVAILABLE", False):
+        with patch("app.features.deploy.deploy_service.NETMIKO_AVAILABLE", False):
             with pytest.raises(RuntimeError) as exc_info:
                 service.connect_device(device, credentials)
 
