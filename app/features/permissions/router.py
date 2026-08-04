@@ -572,7 +572,7 @@ async def init_permissions_system(
         }
     except Exception as e:
         logger.error(f"初始化权限系统失败: {e}")
-        raise HTTPException(status_code=500, detail=f"初始化失败: {str(e)}")
+        raise HTTPException(status_code=500, detail="权限系统初始化失败，请查看服务端日志")
 
 
 @router.get("/init-status")

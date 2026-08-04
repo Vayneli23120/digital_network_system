@@ -483,7 +483,7 @@ async def preview_deploy(
         logger.error(f"预览部署失败：{e}")
         import traceback
         logger.error(traceback.format_exc())
-        raise HTTPException(status_code=500, detail=f"预览失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="预览失败，请查看服务端日志")
     finally:
         db.close()
 
@@ -936,7 +936,7 @@ async def _run_deploy_impl(deploy_data: dict, current_username: str):
                 db.close()
         except Exception as rollback_error:
             logger.warning(f"清理部署会话异常: {rollback_error}")
-        raise HTTPException(status_code=500, detail=f"部署失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="部署失败，请查看服务端日志")
     # 注意：db.close() 在正常流程中已经在并行执行前关闭，
     # 这里不需要 finally 再次关闭
 
@@ -1090,7 +1090,7 @@ async def rollback_deploy(
     except Exception as e:
         db.rollback()
         logger.error(f"回滚配置失败：{e}")
-        raise HTTPException(status_code=500, detail=f"回滚失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="回滚失败，请查看服务端日志")
 
 
 @router.get("/compatible-variables")
@@ -1239,7 +1239,7 @@ async def get_deploy_history(
 
     except Exception as e:
         logger.error(f"获取部署历史失败：{e}")
-        raise HTTPException(status_code=500, detail=f"获取历史失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="获取部署历史失败，请查看服务端日志")
 
 
 @router.get("/history/{history_id}")
@@ -1292,7 +1292,7 @@ async def get_deploy_history_detail(
         raise
     except Exception as e:
         logger.error(f"获取部署历史详情失败：{e}")
-        raise HTTPException(status_code=500, detail=f"获取详情失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="获取部署详情失败，请查看服务端日志")
 
 
 @router.delete("/history/{history_id}")
@@ -1340,7 +1340,7 @@ async def delete_deploy_history(
     except Exception as e:
         db.rollback()
         logger.error(f"删除部署历史失败：{e}")
-        raise HTTPException(status_code=500, detail=f"删除失败：{str(e)}")
+        raise HTTPException(status_code=500, detail="删除部署历史失败，请查看服务端日志")
 
 
 def _build_logs_from_result(dr: DeployDeviceResult) -> list:

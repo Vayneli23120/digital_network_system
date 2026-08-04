@@ -327,7 +327,8 @@ async def import_devices(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=400, detail=f"导入失败：{str(e)}")
+        logger.error(f"设备导入失败: {e}")
+        raise HTTPException(status_code=400, detail="导入失败：文件解析失败，请检查 Excel 格式")
     finally:
         await file.close()
 

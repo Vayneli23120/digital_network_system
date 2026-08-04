@@ -8,6 +8,7 @@
 """
 
 from fastapi import APIRouter, HTTPException, Depends
+from loguru import logger
 from pydantic import BaseModel, Field
 from typing import List, Optional, Dict, Any
 from sqlalchemy.orm import Session
@@ -123,7 +124,8 @@ async def ping_sweep(
         # 非法 CIDR / 子网过大守卫（如 /8）→ 400
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Ping Sweep 失败: {str(e)}")
+        logger.error(f"Ping Sweep 失败: {e}")
+        raise HTTPException(status_code=500, detail="Ping Sweep 失败，请查看服务端日志")
 
 
 @router.post("/discover", response_model=DiscoveryResponse)
@@ -190,7 +192,8 @@ async def discover_devices(
         # discover_subnet 内部 ping_sweep 的子网过大守卫 → 400
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"发现失败: {str(e)}")
+        logger.error(f"设备发现失败: {e}")
+        raise HTTPException(status_code=500, detail="设备发现失败，请查看服务端日志")
 
 
 @router.get("/capabilities")

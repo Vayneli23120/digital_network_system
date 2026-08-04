@@ -622,7 +622,7 @@ async def create_ai_config(
     except Exception as e:
         db.rollback()
         logger.error(f"创建 AI 配置失败: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="创建 AI 配置失败，请查看服务端日志")
     finally:
         db.close()
 
@@ -665,7 +665,8 @@ async def update_ai_config(
         raise
     except Exception as e:
         db.rollback()
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"更新 AI 配置失败: {e}")
+        raise HTTPException(status_code=500, detail="更新 AI 配置失败，请查看服务端日志")
     finally:
         db.close()
 
