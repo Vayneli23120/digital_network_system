@@ -18,7 +18,7 @@ Network Automation System 是一个基于 **FastAPI + Vue 3** 的网络设备自
 | 服务层 | Feature-first 架构，19 个业务模块 |
 | 前端页面 | 19 个 Vue 组件 |
 | API 函数 | 80+ 前端 API 调用 |
-| 测试用例 | **225 个**，100% 通过 |
+| 测试用例 | **754 个**，0 failed（4 skipped） |
 | 数据库表 | 15 个模型 + Alembic 迁移 |
 | DB 索引 | 14 个高频查询列索引 |
 
@@ -61,7 +61,7 @@ cd frontend && npm run dev
 cd network-automation-system
 .venv/bin/python -m pytest tests/ -v
 
-# 当前状态：225 个测试用例，100% 通过
+# 当前状态：754 个测试用例，0 failed（4 skipped）
 # 覆盖率：核心服务层 100% 覆盖
 ```
 
@@ -202,7 +202,7 @@ network-automation-system/
 │       ├── router/
 │       └── api/
 │
-├── tests/                      # 225 个测试
+├── tests/                      # 754 个测试
 ├── migrations/                 # Alembic 数据库迁移
 ├── backups/ / logs/ / data/
 │
@@ -266,7 +266,7 @@ network-automation-system/
 | 功能 | 说明 |
 |------|------|
 | Feature-first 架构 | 19 个业务模块 + shared 基础设施 |
-| 测试覆盖 | 225 个测试，100% 通过 |
+| 测试覆盖 | 754 个测试，0 failed |
 | 前端 | 19 页面 + 暗色主题 + 响应式 + Auth 拦截器 |
 | 告警通知 | 企业微信/钉钉/邮件 |
 | 性能优化 | 14 DB 索引 + API 分页 + 内存缓存 |
@@ -305,4 +305,3 @@ network-automation-system/
 ---
 
 *版本：1.2.0 | 最后更新：2026-04-21*
-REDACTED==
