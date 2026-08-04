@@ -137,7 +137,7 @@
   → 修复（步骤 3）：通知接口依赖统一 `Principal`，删除手工 JWT 解码和 `Admin` 回退；部署审计同步改用该身份。
 - [x] **P1** `frontend/src/router/index.js:431` — 路由守卫只读 `localStorage.isLoggedIn === 'true'`，无权限判断，手改标志位即可进 `/users`、`/credentials`。`[已复核]`
   → 修复（批次二切片 C）：auth store 增 `permissions` / `permissionsLoaded` 状态与 `fetchMyPermissions()` action（拉 `/permissions/my-permissions`，失败置空不抛）；路由守卫改 async——`admin:all` 短路放行、未加载先拉取、仅当明确持非空权限且缺所需权限时才重定向回首页（空/未加载 = 放行，体验层兜底，后端 `require_permission` 才是真拦截）；9 个敏感路由挂 `meta.permission`（users/credentials/system-settings/permissions/logs/alert-settings/notifications/discovery/compliance）。
-- [ ] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]`
+- [x] **P2** 多处 `detail=str(e)` 直接回显内部异常（`deploy/router.py:1160`、`devices/router.py:219` 等）。`[已复核]` `[已修复]`（批次十一收尾）：5 个 router 共 12 处 catch-all 统一改「中文通用文案 + 服务端 `logger.error`」，`test_no_leak_detail.py` 7 项回归守卫。
 
 **完成判定**：`auth_enabled=true` 下跑一遍主要写操作，未授权账号应全部 403；日志文件接口对 `../` 返回 400。
 
@@ -237,7 +237,7 @@
 - **AP 监控不受影响**：瘦 AP 不支持 SNMP，在线状态由所连交换机上联口 oper_status 派生（`ap_discovery.py:116-151`），与 Trap 接收器无关。
 - 前端守卫是**体验层兜底**：`auth_enabled=false + debug=true` 开发旁路下守卫仍照常拉权限，但后端旁路放行；空/未加载放行约定与 `Layout.vue` nav 过滤一致（权限表未初始化/拉取失败不锁死 UI）。
 - `/scanner` 终端页无 `meta.permission`（扫码枪无登录），不参与守卫。
-- item 134（`detail=str(e)` 内部异常回显）按约定延后到后续批次。
+- item 134（`detail=str(e)` 内部异常回显）已于批次十一修复（2026-08-04）。
 
 
 ### 批次二·步骤5 · 切片 A · Linux 实测（2026-08-03，HEAD 前 `465bd35`）
@@ -1676,6 +1676,19 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 全量回归 | ✅ `pytest -q`：**796 passed / 4 skipped / 0 failed**（786 → +10：FK 4 项 + 保留配置 6 项） |
 | ruff | ✅ 修改文件零告警（门禁自动跑） |
 
+### 批次十一 · 异常泄漏修复（item 134）· Linux 实测（2026-08-04）
+
+收尾批次二安全遗留 item 134：catch-all 处理器不再向客户端回显内部异常文本。
+
+| 项 | 结果 |
+|---|---|
+| 范围 | ✅ 5 个 router 12 处 `except Exception as e: raise HTTPException(detail=str(e) / detail=f"...{e}")`：compliance（创建/更新 AI 配置）、discovery（Ping Sweep/综合发现）、deploy（预览/部署/回滚/历史列表/历史详情/删除历史 ×6）、permissions（权限系统初始化）、devices（Excel 导入） |
+| 处理方式 | ✅ 全部改「面向用户的中文通用文案（…请查看服务端日志 / 检查 Excel 格式）+ 服务端 `logger.error` 落原始异常」；deploy 保留既有 traceback 日志，devices 导入保留 400 状态码 |
+| 保留的安全回显 | ✅ 区分「领域异常 / ValueError 校验」仍回显设计好的用户文案（ConflictException、UnsafeBackupPathError、NetworkTemplateRenderError、FaultMaintenanceConflictError、DevicePhotoValidationError、UnsafeLogPathError、UnsafeBackupRecordPathError、compliance LLM 连接测试、devices 逐行导入错误、SNMP 诊断探针、jobs 吞异常）；全局 `generic_exception_handler`（`exceptions.py:119`）本就返回固定 `Internal server error` 不回显，绕过的正是这批本地 catch-all |
+| 回归测试 | ✅ 新增 `tests/test_no_leak_detail.py`（7 项）：对 5 个 router 各取一条最易触发的 catch-all 路径，monkeypatch 内部函数抛 `RuntimeError("LEAK-MARKER-...")`，断言响应 detail 为通用文案且不含 marker（防回显回归） |
+| 全量回归 | ✅ `pytest -q`：**803 passed / 4 skipped / 0 failed**（796 → +7：泄漏回归 7 项） |
+| ruff | ✅ 修改文件零告警（门禁自动跑） |
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1689,6 +1702,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 9. ~~**批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）~~ —— ✅ 2026-08-04 全部完成：切片 A router 层（26 项，`router_client_factory` mini-app 模式）、切片 B streaming 层（4 项，stream 直测 + WS 错误路径）、切片 C celery 层（4 项，无 broker 直调 + litellm stub）均 ✅ 2026-08-04（见上方批次八实测）；**全量 pytest 788 passed / 4 skipped / 0 failed**。三层零覆盖链路已全部建立第一批真实测试，模式可复用。
 10. ~~**批次九**（修复 `analyze_fault_task` P1，用户已排期 2026-08-04）~~ —— ✅ 2026-08-04 完成：按方案 A 改任务对齐 canonical 模型列（依据：活跃的 `app/services/adk/audit.py:35` 即用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 自增，模型列是权威）。修复 `ai_tasks.py:93` 写 `AIAnalysisRecord` 列名不匹配恒失败；同步翻转 `test_celery_ai_tasks.py` 测试为成功落库断言。**全量 pytest 788 passed / 4 skipped / 0 failed**（见上方批次九实测）。**遗留已清**（2026-08-04）：`analyze_fault_task` 核实为死代码且与活跃 ADK 链路冗余 → 按用户决定整体删除（任务 + `format_knowledge`）；`models.py` 不可达 `self.success` 残句已删。全量 pytest **786 passed / 4 skipped / 0 failed**（见上方「批次九 · 遗留清理」实测）
 11. ~~**批次十**（数据层 P2 遗留：批次三 3.3 两项 P2 收尾）~~ —— ✅ 2026-08-04 完成：**① 裸 Integer 伪外键 → 真 FK**（6 处，SET NULL ×4 / CASCADE ×2，幂等迁移 `f0a1b2c3d4e5` + 清孤儿 + 关系 `foreign_keys` 消歧 + `EXPECTED_ALEMBIC_HEAD` 修正）；**② 保留策略 config 化**（机制已存在，`Config.metrics` + config.yaml + env 下发，Connector 改读 config）。全量 pytest **796 passed / 4 skipped / 0 failed**（见上方「批次十」实测）；PG 分区列遗留记录在案
+12. **批次十一**（item 134：catch-all 异常泄漏修复）—— ✅ 2026-08-04 完成：5 个 router 12 处 `detail=str(e)` 统一改中文通用文案 + 服务端 `logger.error`，`test_no_leak_detail.py` 7 项回归守卫。全量 pytest **803 passed / 4 skipped / 0 failed**（见上方「批次十一」实测）
 
 ## 附注
 
