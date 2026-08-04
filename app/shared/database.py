@@ -142,7 +142,7 @@ class DatabaseManager:
 
 # 期望的 alembic head revision（与 migrations/versions 链保持同步；
 # 每次新增迁移后更新为最新 head）
-EXPECTED_ALEMBIC_HEAD = '5d16fa030a9a'
+EXPECTED_ALEMBIC_HEAD = 'f0a1b2c3d4e5'
 
 
 # 全局数据库实例

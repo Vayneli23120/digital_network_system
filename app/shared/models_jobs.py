@@ -7,7 +7,7 @@
 import uuid
 import json
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Text, DateTime
+from sqlalchemy import Column, ForeignKey, Integer, String, Text, DateTime
 from sqlalchemy.orm import Session
 from typing import Optional, Dict, Any, List
 
@@ -30,7 +30,7 @@ class Job(Base):
     # status 枚举: pending, queued, running, success, failed, cancelled, timeout, partial
 
     # 目标设备（单设备或多设备）
-    device_id = Column(Integer, nullable=True, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), nullable=True, index=True)
     device_ids_json = Column(Text, nullable=True)  # JSON 数组字符串，批量作业
 
     # 关联的变更单（可选）

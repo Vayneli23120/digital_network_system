@@ -30,8 +30,12 @@ class FakeRagEngine:
 class TestIndexDeviceConfigTask:
     def test_success_indexes_document(self, db_manager, db_session, monkeypatch):
         from app.shared import database
-        from app.shared.models import AIKnowledgeDocument
+        from app.shared.models import AIKnowledgeDocument, Device
         from app.tasks.ai_tasks import index_device_config_task
+
+        # 批次十：ai_knowledge_documents.device_id 已建 FK → 需先 seed Device
+        db_session.add(Device(id=1, name="SW-01", ip="10.0.0.1", vendor="cisco"))
+        db_session.commit()
 
         monkeypatch.setattr(database, "_db_manager", db_manager)
         monkeypatch.setattr("app.services.rag.rag_engine", FakeRagEngine(available=True, indexed=True))

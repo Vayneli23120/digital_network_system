@@ -83,7 +83,12 @@ class Device(Base):
 
     # 关系
     backups = relationship("BackupRecord", back_populates="device", cascade="all, delete-orphan")
-    faults = relationship("FaultRecord", back_populates="device", cascade="all, delete-orphan")
+    faults = relationship(
+        "FaultRecord",
+        back_populates="device",
+        cascade="all, delete-orphan",
+        foreign_keys="FaultRecord.device_id",  # 批次十：fault_records.peer_device_id 亦引用 devices，需消歧
+    )
     maintenances = relationship("MaintenanceRecord", back_populates="device", cascade="all, delete-orphan")
     photos = relationship("DevicePhoto", back_populates="device", cascade="all, delete-orphan")
     nodes = relationship("DeviceNode", back_populates="device", cascade="all, delete-orphan")
@@ -186,7 +191,7 @@ class FaultRecord(Base):
     source_event = Column(String(50), index=True)      # link_down / device_unreachable / neighbor_changed
     if_index = Column(Integer)                         # 关联接口 ifIndex
     if_name = Column(String(100))                      # 关联接口名
-    peer_device_id = Column(Integer)                   # 对端设备
+    peer_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"))  # 对端设备
     peer_if_name = Column(String(100))                 # 对端接口名
     event_count = Column(Integer, default=1)           # 同一故障累计事件次数
     last_event_at = Column(DateTime)                   # 最近一次事件时间
@@ -198,7 +203,7 @@ class FaultRecord(Base):
     false_positive = Column(Boolean, default=False, server_default='0')
 
     # 关系
-    device = relationship("Device", back_populates="faults")
+    device = relationship("Device", back_populates="faults", foreign_keys=[device_id])
     maintenance = relationship("MaintenanceRecord", foreign_keys=[maintenance_id])
 
     def __repr__(self):
@@ -1014,7 +1019,7 @@ class DeviceInterface(Base):
     is_uplink = Column(Boolean, default=False, server_default='0', index=True)  # 是否上行口
     monitored = Column(Boolean, default=False, server_default='0', index=True)  # 是否纳入轮询采集
     # 邻居发现（CDP/LLDP 自动推断的对端关联）
-    peer_device_id = Column(Integer, index=True)          # 对端设备（匹配上系统内设备时）
+    peer_device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), index=True)  # 对端设备（匹配上系统内设备时）
     peer_device_name = Column(String(200))                # 对端主机名（CDP/LLDP 上报）
     peer_ip = Column(String(64))                          # 对端管理 IP（CDP cdpCacheAddress）
     peer_if_name = Column(String(100))                    # 对端端口名
@@ -1035,7 +1040,7 @@ class DeviceInterface(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    device = relationship("Device")
+    device = relationship("Device", foreign_keys=[device_id])  # 批次十：peer_device_id 亦引用 devices，需消歧
 
     def __repr__(self):
         return f"<DeviceInterface(device={self.device_id}, if={self.if_name}, oper={self.oper_status})>"
@@ -1053,7 +1058,7 @@ class InterfaceTrafficSample(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     interface_id = Column(Integer, ForeignKey("device_interfaces.id", ondelete="CASCADE"), nullable=False, index=True)
-    device_id = Column(Integer, index=True)              # 冗余，便于按设备聚合
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), index=True)  # 冗余，便于按设备聚合
     ts = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     in_bps = Column(BigInteger)
     out_bps = Column(BigInteger)
@@ -1242,7 +1247,7 @@ class DeployDeviceResult(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     deploy_id = Column(Integer, ForeignKey("deploy_history.id", ondelete="CASCADE"), nullable=False, index=True)
-    device_id = Column(Integer, nullable=False, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="CASCADE"), nullable=False, index=True)
     device_name = Column(String(100), nullable=False)
     status = Column(String(20), nullable=False)  # completed/failed/skipped
     rollback_available = Column(Boolean, default=False)
@@ -1377,7 +1382,7 @@ class AIKnowledgeDocument(Base):
     content = Column(Text, nullable=False)
 
     # 关联的目标设备（可选）
-    device_id = Column(Integer, index=True)
+    device_id = Column(Integer, ForeignKey("devices.id", ondelete="SET NULL"), index=True)
 
     # 元数据（JSON），如：设备厂商、备份时间、故障编号等
     metadata_json = Column(Text)
