@@ -1422,7 +1422,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P0** venv 内无任何 linter（pyflakes / ruff / flake8 全部未安装）——批次一里 4 个 undefined-name 都能被 `ruff F821` 一次抓出。接入 ruff 是本清单投入产出比最高的一项。`[已复核]`
   → 已完成：新增 `ruff.toml`（门禁规则 F821/F822/F823/F811/F632/E9，刻意不启用 E712 因为 SQLAlchemy 的 `filter(Column == True)` 是必要写法），`requirements.txt` 钉 `ruff==0.16.0`，并用 `tests/test_batch1_regressions.py::test_ruff_static_analysis_is_clean` 把门禁接进测试
   → 未纳入门禁的技术债：F401 未使用导入约 200 处、F841 未使用局部变量约 20 处（其中少数指向真实死逻辑，如 `deploy/router.py:1140` 的 `deploy_data`）
-- [ ] **P1** 测试覆盖结构性偏斜：38 个测试文件 / 430 个用例，`pytest --collect-only` 干净通过，但全部集中在 service 层；router、streaming service、celery task 三条链路零覆盖，正是批次一全部故障的所在。`[已复核]`
+- [ ] **P1** 测试覆盖结构性偏斜：38 个测试文件 / 430 个用例，`pytest --collect-only` 干净通过，但全部集中在 service 层；router、streaming service、celery task 三条链路零覆盖，正是批次一全部故障的所在。`[已复核]`（批次八进行中：切片 A router 层 ✅ 2026-08-04 26 项、切片 B streaming 层进行中、切片 C celery 层进行中）
 - [x] **P0**（执行中新发现）`tests/test_console_service.py` 会**挂起**（collect 17 项后无进展，>45s 无输出），导致 `pytest` 全量跑不完 —— 该文件之后的用例长期从未执行过。原因指向 console 服务的同步串口 IO（批次三 3.1）。当前 CI 需先 `--ignore=tests/test_console_service.py` 才能拿到完整结果。`[已复核]` `[已修复]`
   → 修复（批次六切片 A）：真因不在 service 而在测试自身——① 9 处 `patch` 目标仍是旧路径 `app.services.console_service`（`app/services/console_service.py` 已删，代码在 `app/features/console/console_service.py`），4 个用例 fast-fail（AttributeError）；② `test_send_command_success` 把 `mock_serial.in_waiting = 20` 设为常量，`send_command` 的 `while in_waiting:` 读循环永不耗尽 → 死循环挂死（非 collect 挂起）。修复：9 处 patch 路径改 `app.features.console.console_service`；`in_waiting` 改 `type(mock_serial).in_waiting = PropertyMock(side_effect=[20, 20, 0])` 模拟耗尽。17/17 通过，全量 pytest 不再需要 `--ignore`。
 - [x] **P1** `core/celery_app.py:36-48` + `tasks/__init__.py:30` — 任务路由指向三个空占位模块，全局无 `beat_schedule`；`tasks/__init__.py` 在导入时写磁盘生成占位文件。`[已复核]` `[已修复]`
@@ -1596,6 +1596,21 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - 全量 pytest 每个提交约 37s，作为回归门禁可接受；文档改动同样触发，保证任何变更都不能绕过回归验证。
 - 恢复绿色基线（0 failed）是该门禁能落地的前提——在 53 失败基线接入只会让每次提交都失败。
 
+### 批次八 · 切片 A · router 层首测 · Linux 实测（2026-08-04）
+
+> 目标：给 router、streaming service、celery task 三条零覆盖链路补第一批真实测试，建立可复用模式。**只改测试 + conftest，不动应用代码**。
+
+| 项 | 结果 |
+|---|---|
+| conftest `router_client_factory` | ✅ 新增 fixture：mini FastAPI + TestClient，override `get_current_user_from_token` / `get_current_principal` / `get_db`，默认 transient superuser（`config.app.debug` 默认 False，非 superuser 会让 `require_permission` 拒绝） |
+| `tests/test_router_devices.py`（11 项） | ✅ CRUD + 列表过滤（status/role）+ 404/422 + 批次一 bug 现场回归：POST `/monitor/discover-neighbors-all`（patch `snmp_discovery.discover_neighbors` + `database._db_manager`，断言聚合 `total_aps_synced`） |
+| `tests/test_router_spare_parts.py`（10 项） | ✅ 零外部依赖，CRUD + stats + 手动出入库 + 分类中文归一化，最快证明 mini-app 模式 |
+| `tests/test_router_compliance.py`（5 项） | ✅ `/rules` 内置规则列表（`init_builtin_rules` 播种）、`/check` `use_ai=False` 基础审核（双 patch：`database._db_manager` + `_compliance_service=None` 强制重建单例播种）、空配置 400 |
+| 全量回归 | ✅ `pytest -q`：**780 passed / 4 skipped / 0 failed**（基线 754 → +26） |
+| ruff | ✅ 新/改文件零告警（门禁自动跑） |
+
+**关键模式**（后续 slices B/C 复用）：服务内部 `next(get_db())` 经 `database._db_manager` 全局 → `monkeypatch.setattr(database, "_db_manager", db_manager)` 路由到测试库；SQLite 用 StaticPool，所有 session 共享同一内存库，`db_session` 与 service 内建 session 可见同一数据。
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1606,6 +1621,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
 8. ~~**批次七**（恢复绿色基线 + 提交前门禁）~~ —— ✅ 2026-08-04 全部完成：53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）、切片 B（断言对齐 8 项）、切片 C（compliance 重写 24 项）均 ✅ 2026-08-04（见上方批次七实测）；**全量 pytest 恢复绿色（0 failed / 754 passed / 4 skipped）**；随后经用户确认选型，`.githooks/pre-commit` + `core.hooksPath` 把 ruff + 全量 pytest 接入提交前门禁 ✅（见上方实测）
+9. **批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）—— **进行中**：切片 A router 层 ✅ 2026-08-04（26 项，`router_client_factory` mini-app 模式，全量 780 passed / 4 skipped）；切片 B streaming 层、切片 C celery 层待做
 
 ## 附注
 
