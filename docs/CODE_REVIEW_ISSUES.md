@@ -1692,7 +1692,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03、步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（✅ 2026-08-03：切片 A 备份会话凭证 + 需备份列表，切片 B 部署/回滚凭证 + 二次确认 + 下线异步；✅ 2026-08-04 步骤 5 收尾：legacy `/ws/cli` 无认证部署路径整块下线）、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03、步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（✅ 2026-08-03：切片 A 备份会话凭证 + 需备份列表，切片 B 部署/回滚凭证 + 二次确认 + 下线异步；✅ 2026-08-04 步骤 5 收尾：legacy `/ws/cli` 无认证部署路径整块下线）、item 134（error leakage）✅ 2026-08-04 批次十一修复、**步骤 6 OIDC 真接仍 pending（⬜ 等 IT）**
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
@@ -1703,6 +1703,62 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 10. ~~**批次九**（修复 `analyze_fault_task` P1，用户已排期 2026-08-04）~~ —— ✅ 2026-08-04 完成：按方案 A 改任务对齐 canonical 模型列（依据：活跃的 `app/services/adk/audit.py:35` 即用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 自增，模型列是权威）。修复 `ai_tasks.py:93` 写 `AIAnalysisRecord` 列名不匹配恒失败；同步翻转 `test_celery_ai_tasks.py` 测试为成功落库断言。**全量 pytest 788 passed / 4 skipped / 0 failed**（见上方批次九实测）。**遗留已清**（2026-08-04）：`analyze_fault_task` 核实为死代码且与活跃 ADK 链路冗余 → 按用户决定整体删除（任务 + `format_knowledge`）；`models.py` 不可达 `self.success` 残句已删。全量 pytest **786 passed / 4 skipped / 0 failed**（见上方「批次九 · 遗留清理」实测）
 11. ~~**批次十**（数据层 P2 遗留：批次三 3.3 两项 P2 收尾）~~ —— ✅ 2026-08-04 完成：**① 裸 Integer 伪外键 → 真 FK**（6 处，SET NULL ×4 / CASCADE ×2，幂等迁移 `f0a1b2c3d4e5` + 清孤儿 + 关系 `foreign_keys` 消歧 + `EXPECTED_ALEMBIC_HEAD` 修正）；**② 保留策略 config 化**（机制已存在，`Config.metrics` + config.yaml + env 下发，Connector 改读 config）。全量 pytest **796 passed / 4 skipped / 0 failed**（见上方「批次十」实测）；PG 分区列遗留记录在案
 12. **批次十一**（item 134：catch-all 异常泄漏修复）—— ✅ 2026-08-04 完成：5 个 router 12 处 `detail=str(e)` 统一改中文通用文案 + 服务端 `logger.error`，`test_no_leak_detail.py` 7 项回归守卫。全量 pytest **803 passed / 4 skipped / 0 failed**（见上方「批次十一」实测）
+
+## 遗留与待办（截至 2026-08-04，批次十一后）
+
+批次一至十一已收尾全部**代码级**条目（item 1–134），全量 pytest **803 passed / 4 skipped**。
+以下剩余工作全部受**外部资源**阻塞，按阻塞源分类记录，方便日后接续处理。
+
+### 一、等 IT（OIDC 真接）
+
+- [ ] **OIDC 真接**（批次二 step 6）—— 需 IT 填 tenant/client/secret + 服务器出站白名单。`SSOConfig`（`app/shared/config.py`，默认关闭）与 SSO 端点已预留，`test_sso_placeholder.py` 7 项为占位断言。落地后：真实 Entra 跳转/回调 + 占位测试替换为真接断言。无前置代码项。
+
+### 二、需浏览器 + npm 构建环境（前端 QA 清单）
+
+> 本机 `npm ci && npm run build` 装不上依赖，以下均为静态阅读后待实机验证项。
+
+- [ ] 浏览器 Deploy 页 preview/历史/预约/回滚权限表现正确，WS 断线与 401/403 提示可理解
+- [ ] 浏览器照片上传/预览/删除、接口流量图、批量邻居发现和 3D 底图均携带 Bearer 且可用
+- [ ] 浏览器 Logs 页列表、搜索、文件查看、清理按钮权限与 401/403 提示正常
+- [ ] 浏览器 Backups 页列表/查看/diff/认证下载/批量执行可用，菜单与按钮权限表现正确
+- [ ] 浏览器 Faults/FaultDetail/Monitor3D 创建、复核、日志、转维修可用，故障角标携带 Bearer；执行 `npm ci && npm run build`
+- [ ] 浏览器 Maintenance/FaultDetail 创建、编辑、指派、日志、状态流转与验证可用；执行 `npm ci && npm run build`
+- [ ] 浏览器 legacy 与 AOP 新建/编辑/批量窗口/排程/任务完成可用；执行 `npm ci && npm run build`
+- [ ] 浏览器 Workflows 列表/创建/编辑/启停/删除/默认规则/四类测试触发可用；执行 `npm ci && npm run build`
+- [ ] 浏览器 Users 列表、创建、编辑、角色分配、密码重置、停用和删除可用；执行 `npm ci && npm run build`
+- [ ] 浏览器 SystemSettings 配置与 SLO CRUD 均携带 Bearer、一次保存无半写；执行 `npm ci && npm run build`
+- [ ] 浏览器验证 PartsTable、ScanInput、FaultDetail、MaintenanceDetail、PlannedMaintenance、TaskDetail、ScrapInventory 全流程并执行 `npm ci && npm run build`
+- [ ] 本地账号登录后刷新登录态保持；登出后回登录页且旧 token 不可用
+- [ ] Network 面板确认请求只有 `Authorization: Bearer ...`，不再发送 `X-User`；全局搜索能返回设备/模板/备份
+- [ ] 普通账号不能通过修改 `localStorage.isLoggedIn` 获得受保护 API 数据
+- [ ] 在企业 CA/内网 npm 镜像可用的环境执行 `npm ci && npm run build`，构建必须成功
+
+### 三、需 docker + HTTPS 反向代理环境（部署验证）
+
+- [ ] `docker compose config` 成功，backend 生效值 `AUTH_ENABLED=true`、`APP_DEBUG=false`
+- [ ] `docker compose up` 后 `/health` 与 `/ready` 正常；缺失/弱 `JWT_SECRET` 时 backend 必须拒绝启动
+- [ ] 合法 Origin 的 OPTIONS 预检成功；非法 Origin 不返回允许跨域头
+- [ ] HTTPS 反向代理下登录、Bearer 转发、401/403 响应和 `WWW-Authenticate` 头不被 Nginx 改写
+
+### 四、需真实账号 / 实验设备（集成验证）
+
+- [ ] 调用 `/api/auth/logout` 后复用旧 token：返回 401（验证撤销会话）—— 未测，服务端会话撤销逻辑待确认
+- [ ] 停用账号现有 token：返回 403；不能继续访问业务 API —— 未测，需要停用账号操作
+- [ ] 建立用户 A/B 各自通知，A 只能读取、标记、删除 A 的通知，不能操作 B 的通知
+- [ ] 使用实验设备执行一次 dry-run 部署，部署历史/审计 operator 必须等于 token 用户名
+- [ ] 多并发请求使用不同 token 时身份不得串线，日志中不得出现 token、密码或 JWT secret
+
+### 五、记录在案的观察 / 可选升级（无当前代码动作）
+
+- PG 分区列（batch 10 记为独立工作项：`interface_traffic_samples` / `device_metric_samples` 单表分区）
+- passlib 与新版 bcrypt 兼容警告（`bcrypt` 移除 `__about__`）升级，功能正常
+- `jobs.change_request_id` 无 `change_requests` 表（观察，无修复）
+- `fault_records.if_index` 为复合键引用（device_id+if_index → device_interfaces），判误报不建简单 FK
+- `tests/test_git_config.py` 11 项 Windows PermissionError（Linux 上不存在，无需处理）
+
+### 六、可选 ops（需真实 PostgreSQL）
+
+- batch 10 FK 迁移在真实 PG 落地验证：`alembic upgrade head` + `alembic check` 零漂移（同 batch 3.3 方式，不进门禁）
 
 ## 附注
 
