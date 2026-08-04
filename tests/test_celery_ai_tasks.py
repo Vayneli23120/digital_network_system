@@ -1,16 +1,17 @@
 """
-Celery 层测试（批次八切片 C）：app/tasks/ai_tasks.py 两个任务。
+Celery 层测试（批次八切片 C / 批次九修复）：app/tasks/ai_tasks.py 两个任务。
 
 无 broker，直调 @celery_app.task 装饰的函数。RAG 引擎在函数内
 `from app.services.rag import rag_engine` 导入，patch 目标是
 `app.services.rag.rag_engine` 模块属性；litellm 用 `sys.modules['litellm']`
 注入 stub；数据库经 `database._db_manager` monkeypatch 路由到测试库。
 
-注：analyze_fault_task 当前为死代码（app 内无 .delay/.apply_async 调用，
-活跃的 /faults/{id}/analyze 走 ADK agent），且 AIAnalysisRecord 写入
-用的列名（prompt/response/input_tokens/output_tokens/success）在模型中
-不存在 → 每次运行必 TypeError → 恒返回 success=False。测试按当前行为断言，
-见 docs/CODE_REVIEW_ISSUES.md 新增 P1 项。
+批次九修复后 analyze_fault_task 成功路径不再因 AIAnalysisRecord 列名
+不匹配（prompt/response/input_tokens/output_tokens/success）而恒失败，
+改为对齐模型列（input_data/output_result/tokens_used/status），本测试
+断言成功落库。任务仍为死代码（app 内无 .delay/.apply_async 调用，
+活跃的 /faults/{id}/analyze 走 ADK agent），见 docs/CODE_REVIEW_ISSUES.md
+批次九条目。
 """
 
 import sys
@@ -100,9 +101,10 @@ class TestAnalyzeFaultTask:
         db_session.add(dev)
         db_session.commit()
 
-    def test_record_write_fails_on_schema_mismatch(self, db_manager, db_session, monkeypatch):
-        """当前实现必败：AIAnalysisRecord 收到不存在的列名（prompt 等）→ TypeError。"""
+    def test_success_records_analysis(self, db_manager, db_session, monkeypatch):
+        """批次九修复后：AIAnalysisRecord 成功落库（列对齐 canonical 用法）。"""
         from app.shared import database
+        from app.shared.models import AIAnalysisRecord
         from app.tasks.ai_tasks import analyze_fault_task
 
         self._seed_device(db_session)
@@ -117,9 +119,19 @@ class TestAnalyzeFaultTask:
             context={},
         )
 
-        # 任务恒失败：写入 AIAnalysisRecord 时列名不匹配
-        assert result["success"] is False
-        assert "invalid keyword argument" in result["error"]
+        assert result["success"] is True
+        assert result["fault_id"] == 5
+        assert isinstance(result["record_id"], int)  # id 自增，非 uuid 字符串
+        assert result["analysis"] == "根因分析结果"
+
+        record = db_session.query(AIAnalysisRecord).filter_by(id=result["record_id"]).first()
+        assert record is not None
+        assert record.status == "completed"
+        assert record.target_type == "fault"
+        assert record.target_id == 5
+        assert record.output_result == "根因分析结果"
+        assert record.tokens_used == 30  # prompt 10 + completion 20
+        assert record.ai_provider == "litellm"
 
     def test_litellm_error_returns_failure(self, db_manager, db_session, monkeypatch):
         from app.shared import database

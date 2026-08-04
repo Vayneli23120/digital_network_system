@@ -6,6 +6,8 @@ AI 分析 Celery 任务
 - AI 分析任务
 """
 
+import json
+
 from loguru import logger
 
 from app.core.celery_app import celery_app
@@ -112,7 +114,6 @@ def analyze_fault_task(
     from app.services.ai_tools import AIToolRegistry
     from app.shared.database import get_db_manager
     from app.shared.models import AIAnalysisRecord, Device
-    import uuid
     from datetime import datetime
 
     # 获取设备信息
@@ -175,21 +176,24 @@ def analyze_fault_task(
 
         analysis_result = response.choices[0].message.content
 
-        # 记录分析结果
+        # 记录分析结果（列对齐 app/services/adk/audit.py 的 canonical 用法：
+        # id 自增不传、input_data/output_result/tokens_used/status）
         with db_manager.session_scope() as db:
             record = AIAnalysisRecord(
-                id=str(uuid.uuid4()),
                 analysis_type="fault_analysis",
                 target_type="fault",
                 target_id=fault_id,
-                prompt=prompt,
-                response=analysis_result,
-                model_name=model,
+                input_data=json.dumps({
+                    "prompt": prompt,
+                    "device_name": device_name,
+                    "device_vendor": device_vendor,
+                }, ensure_ascii=False),
                 ai_provider="litellm",
-                input_tokens=response.usage.prompt_tokens,
-                output_tokens=response.usage.completion_tokens,
+                model_name=model,
+                output_result=analysis_result[:5000] if analysis_result else "",
+                tokens_used=int(response.usage.prompt_tokens or 0) + int(response.usage.completion_tokens or 0),
                 processing_time_ms=int(response._response_ms or 0),
-                success=True,
+                status="completed",
                 created_at=datetime.utcnow(),
             )
             db.add(record)
