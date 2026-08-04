@@ -1422,7 +1422,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P0** venv 内无任何 linter（pyflakes / ruff / flake8 全部未安装）——批次一里 4 个 undefined-name 都能被 `ruff F821` 一次抓出。接入 ruff 是本清单投入产出比最高的一项。`[已复核]`
   → 已完成：新增 `ruff.toml`（门禁规则 F821/F822/F823/F811/F632/E9，刻意不启用 E712 因为 SQLAlchemy 的 `filter(Column == True)` 是必要写法），`requirements.txt` 钉 `ruff==0.16.0`，并用 `tests/test_batch1_regressions.py::test_ruff_static_analysis_is_clean` 把门禁接进测试
   → 未纳入门禁的技术债：F401 未使用导入约 200 处、F841 未使用局部变量约 20 处（其中少数指向真实死逻辑，如 `deploy/router.py:1140` 的 `deploy_data`）
-- [ ] **P1** 测试覆盖结构性偏斜：38 个测试文件 / 430 个用例，`pytest --collect-only` 干净通过，但全部集中在 service 层；router、streaming service、celery task 三条链路零覆盖，正是批次一全部故障的所在。`[已复核]`（批次八进行中：切片 A router 层 ✅ 2026-08-04 26 项、切片 B streaming 层 ✅ 2026-08-04 4 项、切片 C celery 层进行中）
+- [x] **P1** 测试覆盖结构性偏斜：38 个测试文件 / 430 个用例，`pytest --collect-only` 干净通过，但全部集中在 service 层；router、streaming service、celery task 三条链路零覆盖，正是批次一全部故障的所在。`[已复核]`（批次八全部完成 ✅ 2026-08-04：切片 A router 层 26 项、切片 B streaming 层 4 项、切片 C celery 层 4 项，共 +34 → 788 passed / 4 skipped；**切片 C 顺带暴露 analyze_fault_task 真实缺陷，见下方新 P1 项**）
 - [x] **P0**（执行中新发现）`tests/test_console_service.py` 会**挂起**（collect 17 项后无进展，>45s 无输出），导致 `pytest` 全量跑不完 —— 该文件之后的用例长期从未执行过。原因指向 console 服务的同步串口 IO（批次三 3.1）。当前 CI 需先 `--ignore=tests/test_console_service.py` 才能拿到完整结果。`[已复核]` `[已修复]`
   → 修复（批次六切片 A）：真因不在 service 而在测试自身——① 9 处 `patch` 目标仍是旧路径 `app.services.console_service`（`app/services/console_service.py` 已删，代码在 `app/features/console/console_service.py`），4 个用例 fast-fail（AttributeError）；② `test_send_command_success` 把 `mock_serial.in_waiting = 20` 设为常量，`send_command` 的 `while in_waiting:` 读循环永不耗尽 → 死循环挂死（非 collect 挂起）。修复：9 处 patch 路径改 `app.features.console.console_service`；`in_waiting` 改 `type(mock_serial).in_waiting = PropertyMock(side_effect=[20, 20, 0])` 模拟耗尽。17/17 通过，全量 pytest 不再需要 `--ignore`。
 - [x] **P1** `core/celery_app.py:36-48` + `tasks/__init__.py:30` — 任务路由指向三个空占位模块，全局无 `beat_schedule`；`tasks/__init__.py` 在导入时写磁盘生成占位文件。`[已复核]` `[已修复]`
@@ -1621,6 +1621,18 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 全量回归 | ✅ `pytest -q`：**784 passed / 4 skipped / 0 failed**（780 → +4） |
 | ruff | ✅ 新文件零告警（门禁自动跑） |
 
+### 批次八 · 切片 C · celery 层首测 · Linux 实测（2026-08-04）
+
+| 项 | 结果 |
+|---|---|
+| `tests/test_celery_ai_tasks.py`（4 项） | ✅ 无 broker 直调 `@celery_app.task` 装饰函数：patch `app.services.rag.rag_engine` 模块属性 + `sys.modules['litellm']` stub + `database._db_manager`。`index_device_config_task` 成功/不可用两路径；`analyze_fault_task` 按当前行为断言（见下） |
+| `index_device_config_task` | ✅ 成功路径 AIKnowledgeDocument 落库 + 返回 dict；RAG 不可用 → `{"success": False, "error": "RAG not available"}` |
+| `analyze_fault_task` | ⚠️ 按当前行为断言：**每次运行必失败**（见下方新 P1 项）；litellm 异常 → 返回 `success False` |
+| 全量回归 | ✅ `pytest -q`：**788 passed / 4 skipped / 0 failed**（784 → +4） |
+| ruff | ✅ 新文件零告警（门禁自动跑） |
+
+**新发现 P1（批次八切片 C 实测暴露）**：`app/tasks/ai_tasks.py:93 analyze_fault_task` 写 `AIAnalysisRecord` 时传入 `prompt` / `response` / `input_tokens` / `output_tokens` / `success`，但 `models.py:1400 AIAnalysisRecord` 实际列是 `input_data` / `output_result` / `tokens_used` / `status` —— 五个参数全部不匹配，构造时即 `TypeError: 'prompt' is an invalid keyword argument`，被函数内 `except Exception` 吞掉 → **恒返回 `success=False`，AI 故障分析结果永不落库**。且该任务为死代码：app 内无 `.delay()`/`.apply_async()` 调用（活跃的 `POST /faults/{id}/analyze` 走 ADK agent，`faults/router.py:605`）。修复需先定 schema 口径（改任务对齐模型列，或改模型对齐任务），且属「功能未实现」任务接入点问题，超出本批次「只改测试」范围，**留待后续批次决策**。
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1631,7 +1643,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
 8. ~~**批次七**（恢复绿色基线 + 提交前门禁）~~ —— ✅ 2026-08-04 全部完成：53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）、切片 B（断言对齐 8 项）、切片 C（compliance 重写 24 项）均 ✅ 2026-08-04（见上方批次七实测）；**全量 pytest 恢复绿色（0 failed / 754 passed / 4 skipped）**；随后经用户确认选型，`.githooks/pre-commit` + `core.hooksPath` 把 ruff + 全量 pytest 接入提交前门禁 ✅（见上方实测）
-9. **批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）—— **进行中**：切片 A router 层 ✅ 2026-08-04（26 项，`router_client_factory` mini-app 模式，全量 780 passed / 4 skipped）；切片 B streaming 层 ✅ 2026-08-04（4 项，stream 直测 + WS 错误路径，全量 784 passed / 4 skipped）；切片 C celery 层待做
+9. ~~**批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）~~ —— ✅ 2026-08-04 全部完成：切片 A router 层（26 项，`router_client_factory` mini-app 模式）、切片 B streaming 层（4 项，stream 直测 + WS 错误路径）、切片 C celery 层（4 项，无 broker 直调 + litellm stub）均 ✅ 2026-08-04（见上方批次八实测）；**全量 pytest 788 passed / 4 skipped / 0 failed**。三层零覆盖链路已全部建立第一批真实测试，模式可复用。**遗留待决策**：切片 C 暴露 `analyze_fault_task` 列名不匹配恒失败（死代码，见新 P1 项），修复需定 schema 口径，留待后续批次
 
 ## 附注
 
