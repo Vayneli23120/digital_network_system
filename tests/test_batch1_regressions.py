@@ -116,7 +116,9 @@ def test_deploy_to_device_passes_device_down(deploy_svc, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# P0-4 / P0-5：缺失导入（tool_executor / asyncio）
+# P0-4：缺失导入（tool_executor）。
+# P0-5（napalm_service 缺 import asyncio）：legacy /ws/cli 部署路径整块下线、
+# NapalmStreamService 已删除后，asyncio 在该模块不再被使用，回归点自然消解。
 # ---------------------------------------------------------------------------
 
 def test_websocket_router_has_tool_executor():
@@ -125,13 +127,6 @@ def test_websocket_router_has_tool_executor():
 
     assert hasattr(ws_router, "tool_executor")
     assert callable(ws_router.tool_executor.register_callback)
-
-
-def test_napalm_service_module_has_asyncio():
-    """NapalmStreamService 全程依赖 asyncio，模块必须导入它"""
-    from app.features.deploy import napalm_service
-
-    assert getattr(napalm_service, "asyncio", None) is not None
 
 
 # ---------------------------------------------------------------------------
