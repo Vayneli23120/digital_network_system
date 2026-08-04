@@ -69,6 +69,20 @@ cd network-automation-system
 [远程测试机 PostgreSQL 并发测试手册](docs/REMOTE_POSTGRESQL_CONCURRENCY_TEST.md)
 执行。测试必须使用独立数据库 `nas_concurrency_test`，禁止连接业务库。
 
+### 提交前门禁（pytest + ruff）
+
+仓库内置提交前门禁：`.githooks/pre-commit` 用 `.venv/bin/python` 跑
+`ruff check` + 全量 `pytest`，任一项失败即中止提交。
+
+**新克隆仓库需手动启用一次**（`core.hooksPath` 是仓库本地配置，不随克隆传播）：
+
+```bash
+git config core.hooksPath .githooks
+```
+
+- 门禁强制 `.venv` 虚拟环境解释器（系统 `python3` 未装 ruff/pytest 依赖，会产生环境类假失败）。
+- 显式绕过：`git commit --no-verify`（一次性逃逸，与 git 内置语义一致）。
+
 ---
 
 ## 测试数据
