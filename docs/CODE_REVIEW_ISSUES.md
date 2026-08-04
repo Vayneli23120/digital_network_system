@@ -1519,9 +1519,9 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] ~~**P1** `tests/test_tool_executor.py` 11 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（陈旧 `app.services.*` patch 全部失效；改用 `database._db_manager` 单例替换 + 保留 netmiko/napalm/jira 补丁）
 - [ ] **P1** `tests/test_git_config.py` 11 项失败/错误 —— PermissionError，疑似 Windows 上临时 Git 仓库清理失败，需确认是否仅本地环境问题（Linux 上不存在）
 - [x] ~~**P1** `tests/test_discovery_service.py` 8 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（patch/别名模块名 retarget 到 `app.features.discovery.*`）
-- [ ] **P1** `tests/test_compliance_service.py` 24 项失败 —— 与批次四"`/quick-check` 字段名对不上"、"`max([severity])` 字典序"两条同源；切片 C 按新 ADK 架构重写（`audit_config(use_ai=False)` + `_parse_ai_result` + `_generate_config_analysis`）
+- [x] ~~**P1** `tests/test_compliance_service.py` 24 项失败~~ —— ✅ 2026-08-04 批次七切片 C 已修复（按新 ADK 架构重写：`audit_config(use_ai=False)` 基础审核 + `_parse_ai_result` + `_generate_config_analysis`，不调用真实 AI/ADK）
 - [x] ~~**P1** `tests/test_spare_part_service.py` 3 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项~~ —— ✅ 2026-08-04 批次七切片 B 已修复（断言对齐语义变更：分类中文归一化、库存实例 total_value、dashboard deployment_status/reachability 口径、MIME base64 解码；`check_permission`→`check_user_permission` 改 import）
-- [ ] **P1** 恢复"绿色基线"后再把 `pytest` 接入提交前门禁；在此之前只能靠"失败集合不变"来判断是否引入回归
+- [ ] **P1** 把 `pytest` 接入提交前门禁 —— ✅ 2026-08-04 绿色基线已恢复（切片 A/B/C 完成，全量 0 failed），下一步将 pytest 接入提交前门禁（.venv 解释器）
 
 ### 批次七 · 恢复绿色基线 · 切片 A · Linux 实测（2026-08-04，HEAD 前 `32391c5`）
 
@@ -1559,6 +1559,25 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 **遗留**：切片 C 24 项（compliance 测试重写）待后续切片。
 
+### 批次七 · 恢复绿色基线 · 切片 C · Linux 实测（2026-08-04，HEAD 前 `eda08fc`）
+
+> 切片 C 只处理 **compliance 测试重写**一类（24 项），全部为测试侧问题，未改任何应用代码。全量 pytest 由此恢复绿色。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_compliance_service.py` | ✅ 15 passed |
+| 全量 pytest | ✅ **0 failed / 754 passed / 4 skipped** —— 失败集合从 24 收敛到 0，绿色基线恢复（无新增失败、无新增跳过） |
+
+**改动**：批次四把 `ComplianceService` 重写为「规则库 + ADK AI」架构，删除 `run_all_checks` / `_check_*` / `service.checks`，旧测试全部调用已删除 API。按新架构的确定性部分重写（不调用真实 AI/ADK）：
+- **基础审核（`use_ai=False`）**：沿用 `database._db_manager` 单例替换模式，构造 `ComplianceService()`（`__init__` 经 `init_builtin_rules()` 种子 10 条内置规则），`await audit_config(GOOD_CONFIG / BAD_CONFIG, use_ai=False)`。GOOD_CONFIG → `total_checks==10`、`passed==9`、`score==90.0`（SEC-004 `access-class` 缺失）；BAD_CONFIG → `failed==8`、`score==20.0`。**已知基础审核误判**（写注释说明）：BAD_CONFIG 的 `no ip ssh version 2` 含子串 `ip ssh version 2`、`snmp-server community public` 含 `snmp-server community` → SEC-002 / SEC-010 误判为通过；真实 AI 路径不受影响。
+- **单规则断言**：从 `report.results` 按 `check_id` 逐条断言 GOOD/BAD 各 10 条规则的 `passed`/`severity`（替代原 18 个 `_check_*` 粒度用例）。
+- **AI 结果解析**：直接调 `_parse_ai_result(report, 假 AI 字典, rules)` 断言 results/passed/failed/score/line_numbers 填充正确。
+- **配置行分析**：调 `_generate_config_analysis` 断言 `config_analysis` 含行号与 issues。
+- **edge cases**：空配置 → `passed==0`；无 shutdown 配置的 SEC-005 失败（新架构无法区分「无接口」与「接口未 shutdown」，注释说明）；`get_all_rules_for_audit()` 需先构造 service 触发种子。
+
+**遗留**：绿色基线已恢复；下一步把 `pytest` 接入提交前门禁。
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1568,7 +1587,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
-8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04、切片 B（断言对齐 8 项）✅ 2026-08-04（均见上方批次七实测）；切片 C（compliance 重写 24 项）进行中；恢复绿色后把 `pytest` 接入提交前门禁
+8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04、切片 B（断言对齐 8 项）✅ 2026-08-04、切片 C（compliance 重写 24 项）✅ 2026-08-04（均见上方批次七实测）；**全量 pytest 已恢复绿色（0 failed / 754 passed / 4 skipped）**；下一步把 `pytest` 接入提交前门禁
 
 ## 附注
 
