@@ -1631,7 +1631,20 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 全量回归 | ✅ `pytest -q`：**788 passed / 4 skipped / 0 failed**（784 → +4） |
 | ruff | ✅ 新文件零告警（门禁自动跑） |
 
-**新发现 P1（批次八切片 C 实测暴露）**：`app/tasks/ai_tasks.py:93 analyze_fault_task` 写 `AIAnalysisRecord` 时传入 `prompt` / `response` / `input_tokens` / `output_tokens` / `success`，但 `models.py:1400 AIAnalysisRecord` 实际列是 `input_data` / `output_result` / `tokens_used` / `status` —— 五个参数全部不匹配，构造时即 `TypeError: 'prompt' is an invalid keyword argument`，被函数内 `except Exception` 吞掉 → **恒返回 `success=False`，AI 故障分析结果永不落库**。且该任务为死代码：app 内无 `.delay()`/`.apply_async()` 调用（活跃的 `POST /faults/{id}/analyze` 走 ADK agent，`faults/router.py:605`）。修复需先定 schema 口径（改任务对齐模型列，或改模型对齐任务），且属「功能未实现」任务接入点问题，超出本批次「只改测试」范围，**已排入批次九**（2026-08-04）。
+**新发现 P1（批次八切片 C 实测暴露）**：`app/tasks/ai_tasks.py:93 analyze_fault_task` 写 `AIAnalysisRecord` 时传入 `prompt` / `response` / `input_tokens` / `output_tokens` / `success`，但 `models.py:1400 AIAnalysisRecord` 实际列是 `input_data` / `output_result` / `tokens_used` / `status` —— 五个参数全部不匹配，构造时即 `TypeError: 'prompt' is an invalid keyword argument`，被函数内 `except Exception` 吞掉 → **恒返回 `success=False`，AI 故障分析结果永不落库**。且该任务为死代码：app 内无 `.delay()`/`.apply_async()` 调用（活跃的 `POST /faults/{id}/analyze` 走 ADK agent，`faults/router.py:605`）。修复需先定 schema 口径（改任务对齐模型列，或改模型对齐任务），且属「功能未实现」任务接入点问题，超出本批次「只改测试」范围，**已排入批次九**（2026-08-04）。`[已修复]`（批次九 ✅ 2026-08-04）：按方案 A 改任务对齐 canonical 模型列（依据：活跃的 `app/services/adk/audit.py:35` 正是用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 自增）——去掉 `id=str(uuid)`、`prompt`→`input_data`(JSON)、`response`→`output_result`、`input/output_tokens`→`tokens_used`(求和)、`success`→`status="completed"`。批次八切片 C 的 `test_record_write_fails_on_schema_mismatch` 已翻转为 `test_success_records_analysis`（成功落库断言）。任务仍为死代码，是否接回 `POST /faults/{id}/analyze` 异步链路待评估。
+
+### 批次九 · 修复 analyze_fault_task P1 · Linux 实测（2026-08-04）
+
+> schema 口径决策：改任务对齐模型（方案 A），不动 schema、无 alembic 迁移。依据：`AIAnalysisRecord` 的唯一活跃写入方 `app/services/adk/audit.py:35` 即用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 走自增——模型列是 canonical，死任务假设是孤例。
+
+| 项 | 结果 |
+|---|---|
+| `app/tasks/ai_tasks.py:93 analyze_fault_task` | ✅ 去掉 `id=str(uuid)`（改自增，顺带清未用 `import uuid`）、`prompt`→`input_data`(JSON)、`response`→`output_result`(截 5000)、`input/output_tokens`→`tokens_used`(求和)、`success`→`status="completed"`；模块级补 `import json` |
+| `tests/test_celery_ai_tasks.py` | ✅ `test_record_write_fails_on_schema_mismatch` 翻转为 `test_success_records_analysis`：`record_id` 为 int、落库 `status=completed` / `output_result` / `tokens_used=30` / `target_id`；litellm 异常路径测试保留不变 |
+| 全量回归 | ✅ `pytest -q`：**788 passed / 4 skipped / 0 failed**（测试数不变，翻转断言） |
+| ruff | ✅ 修改文件零告警（门禁自动跑） |
+
+**遗留待评估（非本批次范围）**：① 任务仍为死代码，是否接回 `POST /faults/{id}/analyze` 异步链路；② `models.py:1442` 有一行不可达的 `self.success` 残句（`__repr__` 碎片，位于 `get_output_dict` 的 `return {}` 之后，永不执行，不影响运行）。
 
 ## 建议执行顺序
 
@@ -1644,7 +1657,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
 8. ~~**批次七**（恢复绿色基线 + 提交前门禁）~~ —— ✅ 2026-08-04 全部完成：53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）、切片 B（断言对齐 8 项）、切片 C（compliance 重写 24 项）均 ✅ 2026-08-04（见上方批次七实测）；**全量 pytest 恢复绿色（0 failed / 754 passed / 4 skipped）**；随后经用户确认选型，`.githooks/pre-commit` + `core.hooksPath` 把 ruff + 全量 pytest 接入提交前门禁 ✅（见上方实测）
 9. ~~**批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）~~ —— ✅ 2026-08-04 全部完成：切片 A router 层（26 项，`router_client_factory` mini-app 模式）、切片 B streaming 层（4 项，stream 直测 + WS 错误路径）、切片 C celery 层（4 项，无 broker 直调 + litellm stub）均 ✅ 2026-08-04（见上方批次八实测）；**全量 pytest 788 passed / 4 skipped / 0 failed**。三层零覆盖链路已全部建立第一批真实测试，模式可复用。
-10. **批次九**（修复 `analyze_fault_task` P1，用户已排期 2026-08-04）—— 修复 `ai_tasks.py:93` 写 `AIAnalysisRecord` 列名不匹配恒失败。**先定 schema 口径再动手**：方案 A 改任务对齐模型（`prompt`/`response` → `input_data`/`output_result`，`input_tokens`/`output_tokens` → `tokens_used`，`success` → `status`）；方案 B 改模型对齐任务（加列，需 alembic 迁移）。任务当前为死代码，修复后可顺带评估是否接回 `POST /faults/{id}/analyze` 异步链路。批次八切片 C 的 4 项测试已按当前行为断言，修复后需同步翻转 `test_record_write_fails_on_schema_mismatch`
+10. ~~**批次九**（修复 `analyze_fault_task` P1，用户已排期 2026-08-04）~~ —— ✅ 2026-08-04 完成：按方案 A 改任务对齐 canonical 模型列（依据：活跃的 `app/services/adk/audit.py:35` 即用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 自增，模型列是权威）。修复 `ai_tasks.py:93` 写 `AIAnalysisRecord` 列名不匹配恒失败；同步翻转 `test_celery_ai_tasks.py` 测试为成功落库断言。**全量 pytest 788 passed / 4 skipped / 0 failed**（见上方批次九实测）。**遗留待评估**：任务仍为死代码，是否接回 `POST /faults/{id}/analyze` 异步链路，以及 models.py:1442 一处不可达的 `self.success` 残句（`__repr__` 碎片，死代码，不影响运行）
 
 ## 附注
 
