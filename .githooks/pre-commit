@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+#
+# 提交前门禁：ruff 静态检查 + 全量 pytest
+#
+# 启用：git config core.hooksPath .githooks   （仓库本地，写入 .git/config，不随克隆传播）
+# 绕过：git commit --no-verify                （明确的一次性逃逸，与 git 内置语义一致）
+#
+# 为什么强制 .venv 解释器：系统 python3 未装 ruff/pytest 依赖，退回它只会产生
+# 与环境相关的假失败（见 docs/CODE_REVIEW_ISSUES.md 批次七）。门禁直接失败并
+# 提示，而不是静默降级。
+#
+set -u
+
+PY="$PWD/.venv/bin/python"
+if [ ! -x "$PY" ]; then
+    echo "[pre-commit] 未找到 $PY" >&2
+    echo "[pre-commit] 本仓库门禁要求使用 .venv 虚拟环境（系统 python3 无 ruff/pytest 依赖）。" >&2
+    echo "[pre-commit] 请先创建虚拟环境并安装依赖，或对本次提交使用 git commit --no-verify。" >&2
+    exit 1
+fi
+
+fail=0
+
+echo "[pre-commit] ruff check ..."
+"$PY" -m ruff check app scripts migrations tests
+if [ $? -ne 0 ]; then
+    echo "[pre-commit] ruff 未通过，已中止提交" >&2
+    fail=1
+fi
+
+if [ "$fail" -eq 0 ]; then
+    echo "[pre-commit] pytest ..."
+    "$PY" -m pytest -q
+    if [ $? -ne 0 ]; then
+        echo "[pre-commit] pytest 未通过，已中止提交" >&2
+        fail=1
+    fi
+fi
+
+if [ "$fail" -eq 0 ]; then
+    echo "[pre-commit] 门禁通过（ruff 零告警 + 全量 pytest 绿色）"
+fi
+exit "$fail"
