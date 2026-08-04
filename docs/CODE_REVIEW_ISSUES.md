@@ -1521,7 +1521,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] ~~**P1** `tests/test_discovery_service.py` 8 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（patch/别名模块名 retarget 到 `app.features.discovery.*`）
 - [x] ~~**P1** `tests/test_compliance_service.py` 24 项失败~~ —— ✅ 2026-08-04 批次七切片 C 已修复（按新 ADK 架构重写：`audit_config(use_ai=False)` 基础审核 + `_parse_ai_result` + `_generate_config_analysis`，不调用真实 AI/ADK）
 - [x] ~~**P1** `tests/test_spare_part_service.py` 3 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项~~ —— ✅ 2026-08-04 批次七切片 B 已修复（断言对齐语义变更：分类中文归一化、库存实例 total_value、dashboard deployment_status/reachability 口径、MIME base64 解码；`check_permission`→`check_user_permission` 改 import）
-- [ ] **P1** 把 `pytest` 接入提交前门禁 —— ✅ 2026-08-04 绿色基线已恢复（切片 A/B/C 完成，全量 0 failed），下一步将 pytest 接入提交前门禁（.venv 解释器）
+- [x] ~~**P1** 把 `pytest` 接入提交前门禁~~ —— ✅ 2026-08-04 已完成（`.githooks/pre-commit` 仓库内脚本 + `git config core.hooksPath .githooks`；.venv 解释器跑 ruff + 全量 pytest，失败即中止提交，见下方实测）
 
 ### 批次七 · 恢复绿色基线 · 切片 A · Linux 实测（2026-08-04，HEAD 前 `32391c5`）
 
@@ -1578,6 +1578,24 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 
 **遗留**：绿色基线已恢复；下一步把 `pytest` 接入提交前门禁。
 
+### 批次七 · 把 pytest 接入提交前门禁 · Linux 实测（2026-08-04）
+
+> 门禁选型经用户确认：**仓库内 git hook 脚本**（自包含、无外部框架依赖、.venv 解释器）。
+
+| 项 | 结果 |
+|---|---|
+| 新增 `.githooks/pre-commit` | ✅ 仓库内跟踪，`chmod +x`，`git config core.hooksPath .githooks`（仓库本地，不随克隆传播） |
+| 通过路径 | ✅ ruff + 全量 pytest 通过，`exit=0`，打印「门禁通过（ruff 零告警 + 全量 pytest 绿色）」 |
+| ruff 失败路径 | ✅ 临时 probe 文件触发 F821 → `exit=1`「ruff 未通过，已中止提交」 |
+| 缺 .venv 路径 | ✅ 从无 `.venv` 目录运行 → `exit=1` 提示需先建虚拟环境（拒绝静默降级到系统 python3，避免环境类假失败） |
+| 绕过 | git 内置 `--no-verify`（一次性显式逃逸） |
+
+**设计要点**：
+- 强制 `.venv/bin/python`：系统 python3 无 ruff/pytest 依赖，退回只会产生环境类假失败（批次一已踩过 4 个 F821 全被吞的坑），门禁直接失败并提示而非降级。
+- ruff 覆盖 `app scripts migrations tests`（与 `ruff.toml` 用法注释一致）。
+- 全量 pytest 每个提交约 37s，作为回归门禁可接受；文档改动同样触发，保证任何变更都不能绕过回归验证。
+- 恢复绿色基线（0 failed）是该门禁能落地的前提——在 53 失败基线接入只会让每次提交都失败。
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1587,7 +1605,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
-8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04、切片 B（断言对齐 8 项）✅ 2026-08-04、切片 C（compliance 重写 24 项）✅ 2026-08-04（均见上方批次七实测）；**全量 pytest 已恢复绿色（0 failed / 754 passed / 4 skipped）**；下一步把 `pytest` 接入提交前门禁
+8. ~~**批次七**（恢复绿色基线 + 提交前门禁）~~ —— ✅ 2026-08-04 全部完成：53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）、切片 B（断言对齐 8 项）、切片 C（compliance 重写 24 项）均 ✅ 2026-08-04（见上方批次七实测）；**全量 pytest 恢复绿色（0 failed / 754 passed / 4 skipped）**；随后经用户确认选型，`.githooks/pre-commit` + `core.hooksPath` 把 ruff + 全量 pytest 接入提交前门禁 ✅（见上方实测）
 
 ## 附注
 
