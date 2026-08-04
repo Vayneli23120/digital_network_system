@@ -989,10 +989,10 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [x] **P1** `models.py:154,237,771,1153` — `fault_records.maintenance_id` 等 4 处 FK 无 `ondelete`，且 fault↔maintenance 构成环形 FK，删设备时会被 FK 违例挡住。`[已复核]` `[已修复]`：4 处 FK 均改 `ondelete="SET NULL"`；真实 PG 已落地（含历史孤儿数据清理：2 条 `maintenance_tasks` 引用不存在父行 → 置 NULL 后重建约束）。
 - [x] **P1** `models.py:23` — `devices.serial_number` 既无唯一约束也无索引；`models.py:332` — `audit_logs` 除主键外零索引。`[已复核]` `[已修复]`：`serial_number` 改 `index=True`（不 unique，避免既有重复数据迁移失败）；`audit_logs` 加 `ix_audit_logs_created_at`/`ix_audit_logs_operator`；真实 PG `pg_indexes` 实测 3 索引均在。
 - [x] **P2** `models.py` 全文 0 处 `server_default`，默认值只在 Python 侧；raw SQL 路径写 NULL 而 `filter(x == False)` 在 PG 下不匹配 NULL。`[已复核]` `[已修复]`（有界子集）：`review_required→true`、`snmp_enabled/is_uplink/monitored/false_positive/auto_created/ai_recommended/verify_passed/notifications.read→false` 补 `server_default` + 迁移回填既有 NULL；其余 True 默认列（`is_active`/`is_auto_created`/`auto_generate` 等）留待 797 后续批次。
-- [ ] **P2** `models.py:187,1011,1050,1239,1374`、`models_jobs.py:34` — 裸 Integer 伪外键，会产生孤儿数据。`[已复核]`
+- [x] **P2** `models.py:187,1011,1050,1239,1374`、`models_jobs.py:34` — 裸 Integer 伪外键，会产生孤儿数据。`[已复核]` `[已修复]`（批次十收尾）：6 处转真 FK（`fault_records.peer_device_id`/`device_interfaces.peer_device_id`/`ai_knowledge_documents.device_id`/`jobs.device_id` → `SET NULL`，`interface_traffic_samples.device_id`/`deploy_device_results.device_id` → `CASCADE`），幂等迁移 `f0a1b2c3d4e5`（建约束前清孤儿）+ `test_fk_integrity.py` 覆盖三类 ondelete；`fault_records.if_index` 为复合键引用（device_id+if_index → device_interfaces）判为误报不建简单 FK，`jobs.change_request_id` 无 `change_requests` 表记观察；既有 `Device.faults`/`DeviceInterface.device` 关系因新增第二个 devices FK 加 `foreign_keys` 消歧（仅 ORM）。
 - [x] **P2** `shared/config.py:137` — `pool_timeout` 配置项从未传入 `create_engine`（`database.py:73-78`），无效配置。`[已复核]` `[已修复]`：`DatabaseManager.__init__` 增加 `pool_timeout` 参数并传入 PG `create_engine`，`get_db_manager()` 从 `config.database.pool_timeout` 取值。
 - [x] **P2** `models.py:1207` — `deploy_history.children` 的 `remote_side=[id]` + `backref="parent"` 自引用方向反了。`[待验证]` `[已核实为误报]`：这是 SQLAlchemy 标准 adjacency-list 写法（children 以 id 为 remote_side），无需修改。
-- [ ] **P2** `interface_traffic_samples` / `device_metric_samples` 无分区、无保留策略，单表无限增长。`[已复核]`
+- [x] **P2** `interface_traffic_samples` / `device_metric_samples` 无分区、无保留策略，单表无限增长。`[已复核]` `[已修复]`（批次十收尾）：经核实**保留机制已存在**（`metric_retention.py` + `prometheus_connector.cleanup_old_metric_samples` + APScheduler 每日任务，默认 90 天，`test_metric_retention.py` 全绿），批次十补齐可运维性——保留参数经 `Config.metrics`（`retention_days`/`cleanup_interval_seconds`/`cleanup_batch_size`）+ config.yaml `metrics:` 块 + env（`DEVICE_METRIC_*`）下发；**PG 分区列遗留不动**（单表分区为独立工作项）。
 - [x] **P2** 目标动作：以当前 PG 实际结构 autogenerate 一个基线迁移并 `alembic stamp`，然后移除启动期 `create_all`。`[已修复]`：基线 `ed628a533673`（autogenerate）+ 修复迁移 `5d16fa030a9a`；真实 nas 库 `stamp ed628a533673` → `upgrade head`（仅跑 5d16fa030a9a）；PG `init_db()` 移除 create_all 改 head 校验 fail-fast；重启后冒烟全过（见下方实测）。
 
 **批次三 3.3 Linux 实测（2026-08-02，HEAD 后，真实服务器 systemd nas-backend / PG / auth_enabled=true）**：
@@ -1658,6 +1658,24 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 | 全量回归 | ✅ `pytest -q`：**786 passed / 4 skipped / 0 failed**（788 → -2，随删除的 2 个 analyze 用例） |
 | ruff | ✅ 修改文件零告警（门禁自动跑） |
 
+### 批次十 · 数据层 P2 遗留 · Linux 实测（2026-08-04）
+
+收尾批次三 3.3 两项 P2（伪外键 + 保留策略），只动数据层，不动页面逻辑。
+
+| 项 | 结果 |
+|---|---|
+| 伪外键 6 处 | ✅ `fault_records.peer_device_id`、`device_interfaces.peer_device_id`、`ai_knowledge_documents.device_id`、`jobs.device_id` → `ForeignKey("devices.id", ondelete="SET NULL")`（可空/审计引用，删设备保留父行）；`interface_traffic_samples.device_id`、`deploy_device_results.device_id` → `ondelete="CASCADE"`（冗余副本 / NOT NULL 子行） |
+| 关系消歧 | ✅ `fault_records`、`device_interfaces` 因新增第二个 devices FK，既有 `Device.faults` / `DeviceInterface.device` 关系报 `AmbiguousForeignKeysError` → 加 `foreign_keys=[device_id]`（仅 ORM，无 schema 影响）；其余 4 表无 Device 关系不需处理 |
+| 迁移 | ✅ 新增幂等迁移 `f0a1b2c3d4e5_add_device_fks.py`（down=`5e6a7b8c9d0e`）：`_existing_fk` 探测约束，ondelete 一致跳过、不符则 drop 重建；建约束前清孤儿（SET NULL → 置 NULL 保留行，CASCADE → 删行）；约束名 `{table}_{col}_fkey` 匹配 PG autogen 命名，`alembic check` 零漂移 |
+| `EXPECTED_ALEMBIC_HEAD` | ✅ `database.py:145` 由过期 `'5d16fa030a9a'` 修正为 `'f0a1b2c3d4e5'`（真实链头原为 `5e6a7b8c9d0e`，既存不一致顺带修复） |
+| FK 测试 | ✅ 新增 `tests/test_fk_integrity.py`（SQLite `foreign_keys=ON` 真实生效）：孤儿 `interface_traffic_samples.device_id` 写入拒绝（`IntegrityError`）；SET NULL 两例（删对端设备 fault 保留置 NULL、删设备 RAG 文档保留置 NULL）；CASCADE 一例（删设备 deploy 结果行消失）。`test_celery_ai_tasks.py::test_success_indexes_document` 补 seed Device 以符合新 FK |
+| 保留策略 | ✅ 机制已存在（`metric_retention.py` + `cleanup_old_metric_samples` + APScheduler 每日任务，默认 90 天，`test_metric_retention.py` 全绿）；批次十 config 化：新增 `MetricsConfig`（`retention_days`/`cleanup_interval_seconds`/`cleanup_batch_size`）挂 `Config.metrics`，config.yaml `metrics:` 块 + env（`DEVICE_METRIC_RETENTION_DAYS`/`DEVICE_METRIC_CLEANUP_INTERVAL`/`DEVICE_METRIC_CLEANUP_BATCH_SIZE`，保留既有变量名）经 `_apply_security_env_overrides` 覆盖 |
+| Connector 取参 | ✅ `prometheus_connector.__init__` 三保留参数默认 `None` → 落 `get_config().metrics`（try/except 兜底 90/86400/5000）；新增 `metric_cleanup_interval` 实例属性，`start()` 改用 `self._metric_cleanup_interval`；删除随之无用的模块常量 `METRIC_RETENTION_DAYS`/`METRIC_CLEANUP_INTERVAL`/`METRIC_CLEANUP_BATCH_SIZE`（`PROMETHEUS_URL`/`POLL_INTERVAL`/`METRIC_SAMPLE_INTERVAL` 保留） |
+| 保留配置测试 | ✅ 新增 `tests/test_retention_config.py`（6 项）：默认值 / YAML 块生效 / env 覆盖优先 / 非法 env 报错 / Connector 未传参读 config / 显式传参优先 |
+| 遗留记录 | ⏸ PG 分区列遗留不动（单表分区为独立工作项）；`fault_records.if_index` 复合键引用判误报不建简单 FK；`jobs.change_request_id` 无 `change_requests` 表记观察 |
+| 全量回归 | ✅ `pytest -q`：**796 passed / 4 skipped / 0 failed**（786 → +10：FK 4 项 + 保留配置 6 项） |
+| ruff | ✅ 修改文件零告警（门禁自动跑） |
+
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
@@ -1670,6 +1688,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 8. ~~**批次七**（恢复绿色基线 + 提交前门禁）~~ —— ✅ 2026-08-04 全部完成：53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）、切片 B（断言对齐 8 项）、切片 C（compliance 重写 24 项）均 ✅ 2026-08-04（见上方批次七实测）；**全量 pytest 恢复绿色（0 failed / 754 passed / 4 skipped）**；随后经用户确认选型，`.githooks/pre-commit` + `core.hooksPath` 把 ruff + 全量 pytest 接入提交前门禁 ✅（见上方实测）
 9. ~~**批次八**（补测试覆盖偏斜：router / streaming / celery 三层首测）~~ —— ✅ 2026-08-04 全部完成：切片 A router 层（26 项，`router_client_factory` mini-app 模式）、切片 B streaming 层（4 项，stream 直测 + WS 错误路径）、切片 C celery 层（4 项，无 broker 直调 + litellm stub）均 ✅ 2026-08-04（见上方批次八实测）；**全量 pytest 788 passed / 4 skipped / 0 failed**。三层零覆盖链路已全部建立第一批真实测试，模式可复用。
 10. ~~**批次九**（修复 `analyze_fault_task` P1，用户已排期 2026-08-04）~~ —— ✅ 2026-08-04 完成：按方案 A 改任务对齐 canonical 模型列（依据：活跃的 `app/services/adk/audit.py:35` 即用 `input_data`/`output_result`/`tokens_used`/`status` 且不传 id 自增，模型列是权威）。修复 `ai_tasks.py:93` 写 `AIAnalysisRecord` 列名不匹配恒失败；同步翻转 `test_celery_ai_tasks.py` 测试为成功落库断言。**全量 pytest 788 passed / 4 skipped / 0 failed**（见上方批次九实测）。**遗留已清**（2026-08-04）：`analyze_fault_task` 核实为死代码且与活跃 ADK 链路冗余 → 按用户决定整体删除（任务 + `format_knowledge`）；`models.py` 不可达 `self.success` 残句已删。全量 pytest **786 passed / 4 skipped / 0 failed**（见上方「批次九 · 遗留清理」实测）
+11. ~~**批次十**（数据层 P2 遗留：批次三 3.3 两项 P2 收尾）~~ —— ✅ 2026-08-04 完成：**① 裸 Integer 伪外键 → 真 FK**（6 处，SET NULL ×4 / CASCADE ×2，幂等迁移 `f0a1b2c3d4e5` + 清孤儿 + 关系 `foreign_keys` 消歧 + `EXPECTED_ALEMBIC_HEAD` 修正）；**② 保留策略 config 化**（机制已存在，`Config.metrics` + config.yaml + env 下发，Connector 改读 config）。全量 pytest **796 passed / 4 skipped / 0 failed**（见上方「批次十」实测）；PG 分区列遗留记录在案
 
 ## 附注
 
