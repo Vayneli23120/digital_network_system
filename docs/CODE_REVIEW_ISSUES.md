@@ -19,6 +19,7 @@
 - [x] **P0** `devices/router.py:1123` — `total_aps` 未初始化就 `+=`（`:1119` 初始化了其它四个累加器），`POST /monitor/discover-neighbors-all` 只要有一台设备发现成功就 500。`[已复核]`
 - [x] **P0** `websocket/router.py:92,103,120,128` — 使用 `tool_executor` 但文件内无该导入，`/ws/logs` accept 后立即 NameError。`[已复核]`
 - [x] **P0** `deploy/napalm_service.py:456` — `NapalmStreamService` 全程用 `asyncio.*`，但该文件没有 `import asyncio`（同目录 `cli_stream_service.py:10`、`deploy_stream_service.py:5`、`router.py:3` 都导了）。`[已复核]`
+  → 后续（批次二·步骤5 收尾）：legacy `/ws/cli/{session_id}` 无认证部署路径整块下线，`cli_stream_service.py` 与 `NapalmStreamService`/`get_napalm_stream_service` 一并删除，`napalm_service.py` 不再使用 `asyncio`/`datetime`（导入随之下移），本 P0 回归点由「删除代码」消解，`test_batch1_regressions.py` 对应用例移除。
 - [x] **P0** `ai/router.py:247,260` — 读 `fault.title`，但 `FaultRecord`（`shared/models.py:139-215`）没有 `title` 字段，只有 `fault_no` / `description`。`GET /api/ai/faults/{id}/analysis` 必然 AttributeError。`[已复核]`
   → 修复：改用 `description[:50] or fault_no`，与 `workflow/triggers/triggers.py:79` 的既有取法保持一致
 - [x] **P0** `tasks/backup_tasks.py:67` — 调 `NetmikoService.backup_device()`，该类（`backups/netmiko_service.py:19`）没有此方法，备份实现是模块级函数 `backup_device_config`（`:122`）。Celery 备份任务每次 AttributeError + 重试 2 次。`[已复核]`
@@ -299,8 +300,33 @@
 
 **保留项 / 说明**：
 - `CredentialGroup` 保留但仅 `credential_session_required=False` 时显式降级使用（默认 True 拒绝无操作者凭证请求）。
-- **残留风险（已 flag，不在本切片范围）**：`websocket/router.py:253` 的 legacy `action == 'deploy'` WS handler 无认证（不校验 access_token / 权限），直接使用服务器存储 CredentialGroup，且前端未调用（死代码）。建议后续独立下线或补鉴权。
+- **残留风险（已解决）**：切片 B 曾 flag `websocket/router.py:253` 的 legacy `action == 'deploy'` WS handler 无认证（不校验 access_token / 权限），直接使用服务器存储 CredentialGroup，且前端未调用（死代码）。已于步骤 5 收尾切片整块下线（见下方实测）。
 - WS `start_deploy` 凭证缺失时被外层 `except Exception` 归一封皮为通用错误消息「部署处理失败，请查看服务端日志」；前端总是先收集凭证再开 WS（`executeDeploy` 内 `ensureCredentials` 拦截），该路径为纵深防御，不影响正常流程。
+
+
+### 批次二·步骤5 · legacy `/ws/cli` 下线 · Linux 实测（2026-08-04，HEAD 前 `54bbbb0`）
+
+> 步骤 5 收尾：整块下线 legacy `/ws/cli/{session_id}` 无认证部署路径（方法 1，即切片 B 曾 flag 的残留风险）。前端从未接入该端点（自引入即死代码，部署进度走 `/ws/deploy/` 的 `start_deploy`），无前端改动。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_batch1_regressions.py` | ✅ 14 passed（移除 `test_napalm_service_module_has_asyncio`——其守护对象 `NapalmStreamService` 已随本切片删除，P0-5 回归点由删码消解；15 → 14 为预期） |
+| `pytest tests/test_typed_credentials_security.py` | ✅ 21 passed（不受影响） |
+| `pytest tests/test_deploy_security_step4b.py` + `test_backups_templates_security_step4e.py` | ✅ 30 + 21 passed（WS 部署测试走 `/ws/deploy/`，与 `/ws/cli/` 零耦合） |
+| 全量 pytest | ✅ **53 failed / 715 passed / 4 skipped** —— 失败集合与基线**逐条一致**（compliance 24 / tool_executor 11 / discovery 8 / spare 3 / deploy 2 / auth 2 / email 1 / device 1 / dashboard 1 = 53，零新增；passed 716→715 = 移除 batch1 asyncio 用例 1 项） |
+| `frontend validate:locales` + `npm run build` | ✅ 通过（3237 zh/en 键一致，真实构建 13.86s） |
+| 模块导入 | ✅ `websocket.router` / `napalm_service` 干净导入；WS 路由仅剩 `/ws/deploy/{session_id}`、`/ws/device-status`、`/ws/logs`、`/ws/logs/{operation}` |
+
+**改动**：
+- **删除端点**：`websocket/router.py` 移除 `@router.websocket("/ws/cli/{session_id}")` 的 `websocket_cli_stream` 整个函数（含无认证的 `action == 'deploy'` 分支与 `action == 'ping'`）及仅该分支使用的 `parse_config_to_commands`；`datetime` 导入保留（`start_deploy` 仍用）。
+- **删除服务**：`git rm app/features/deploy/cli_stream_service.py`（`stream_netmiko_deploy` / `get_cli_stream_service` 仅被该端点引用）；`napalm_service.py` 删除 `NapalmStreamService` 类与 `get_napalm_stream_service`（`stream_napalm_deploy` 仅被该端点引用），随之失用的 `import asyncio` / `from datetime import datetime` 一并移除（`time` / `Dict` 原本即未用，同块清理；`List` / `Optional` 仍被 `NapalmDeployService` 使用保留）。
+
+**行为变化**：
+- WebSocket 部署仅剩 `/ws/deploy/{session_id}` 一条路径，全部走鉴权（`authorize_deploy_token` 校验 access_token + `config:deploy` 权限）+ 操作者会话级 SSH 凭证；仓库内不再存在任何无认证、直接解密服务器 CredentialGroup 的部署入口。
+
+**遗留说明**：
+- `NapalmStreamService.driver_map` 早在批次六切片 C 已删，本次删除的是该类的剩余主体；`docs/CODE_REVIEW_ISSUES.md:21` 的 P0 项（napalm_service 缺 `import asyncio`）已追加"由删码消解"的跟进说明。
 
 
 **步骤 1 / 2 的验证结果（2026-07-29）**：✅ `ruff` 零告警；✅ 新增
@@ -1500,7 +1526,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 ## 建议执行顺序
 
 1. ~~**批次一**（硬故障）+ **批次六第 1 项**（接 ruff）~~ —— ✅ 2026-07-29 完成
-2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03、步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（✅ 2026-08-03：切片 A 备份会话凭证 + 需备份列表，切片 B 部署/回滚凭证 + 二次确认 + 下线异步）、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
+2. **批次二**（安全）—— 需先确认 `auth_enabled` 的目标状态，再决定是收紧默认值还是重新定位 RBAC。**进行中**：步骤 3（统一身份）✅、步骤 4（写接口权限，含长尾 slice A）✅ 2026-08-03、加密密钥独立 + AI key 加密（slice B，items 125/115）✅ 2026-08-03、trap fail-closed + 前端守卫（slice C，items 130/133）✅ 2026-08-03、步骤 5 会话级 SSH 凭证 + 备份提醒 + 二次确认（✅ 2026-08-03：切片 A 备份会话凭证 + 需备份列表，切片 B 部署/回滚凭证 + 二次确认 + 下线异步；✅ 2026-08-04 步骤 5 收尾：legacy `/ws/cli` 无认证部署路径整块下线）、步骤 6 OIDC 真接仍 pending（item 134 error leakage 按约定延后）
 3. ~~**批次三 3.2**（DB 会话统一）+ **3.1**（设备操作执行器）~~ —— ✅ 2026-08-02 完成（统一执行器 `app/shared/device_ops.py`，详见批次三 3.1/3.2 打勾项与下方实测）
 4. ~~**批次三 3.3**（schema 基线）~~ —— ✅ 2026-08-02 完成（alembic 成为唯一 schema 权威源：基线 `ed628a533673` + 修复迁移 `5d16fa030a9a`，PG 启动 create_all 移除改 head 校验 fail-fast，详见 3.3 打勾项与下方实测）
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
