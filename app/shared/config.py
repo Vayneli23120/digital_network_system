@@ -112,6 +112,17 @@ class StorageConfig(BaseModel):
         return v
 
 
+class MetricsConfig(BaseModel):
+    """设备指标样本保留配置（interface_traffic_samples / device_metric_samples）。
+
+    清理机制本身在 app/services/metric_retention.py + prometheus_connector 每日任务，
+    这里把保留天数 / 清理间隔 / 单批行数暴露到 config.yaml 与 env，便于运维调参。
+    """
+    retention_days: int = Field(default=90, ge=1, description="指标样本保留天数")
+    cleanup_interval_seconds: int = Field(default=86400, ge=3600, description="清理任务运行间隔秒数")
+    cleanup_batch_size: int = Field(default=5000, ge=1, description="单批清理行数上限（防长事务）")
+
+
 class ConsoleConfig(BaseModel):
     baudrate: int = 9600
     bytesize: int = 8
@@ -317,6 +328,7 @@ class Config(BaseModel):
     security: SecurityConfig = Field(default_factory=SecurityConfig)
     sso: SSOConfig = Field(default_factory=SSOConfig)
     storage: StorageConfig = Field(default_factory=StorageConfig)
+    metrics: MetricsConfig = Field(default_factory=MetricsConfig)
     console: ConsoleConfig = Field(default_factory=ConsoleConfig)
     alerts: AlertsConfig = Field(default_factory=AlertsConfig)
     cache: RedisCacheConfig = Field(default_factory=RedisCacheConfig)
@@ -396,6 +408,28 @@ class Config(BaseModel):
                 for origin in os.environ["CORS_ALLOWED_ORIGINS"].split(",")
                 if origin.strip()
             ]
+        # 指标保留配置：沿用既有 env 变量名（prometheus_connector 旧模块常量曾直读），
+        # 现在统一经 Config.metrics 下发，保证容器/进程环境里仍可调参。
+        if "DEVICE_METRIC_RETENTION_DAYS" in os.environ:
+            self.metrics.retention_days = self._parse_int_env(
+                "DEVICE_METRIC_RETENTION_DAYS", os.environ["DEVICE_METRIC_RETENTION_DAYS"]
+            )
+        if "DEVICE_METRIC_CLEANUP_INTERVAL" in os.environ:
+            self.metrics.cleanup_interval_seconds = self._parse_int_env(
+                "DEVICE_METRIC_CLEANUP_INTERVAL", os.environ["DEVICE_METRIC_CLEANUP_INTERVAL"]
+            )
+        if "DEVICE_METRIC_CLEANUP_BATCH_SIZE" in os.environ:
+            self.metrics.cleanup_batch_size = self._parse_int_env(
+                "DEVICE_METRIC_CLEANUP_BATCH_SIZE", os.environ["DEVICE_METRIC_CLEANUP_BATCH_SIZE"]
+            )
+
+    @staticmethod
+    def _parse_int_env(name: str, value: str) -> int:
+        raw = value.strip()
+        try:
+            return int(raw)
+        except ValueError:
+            raise ValueError(f"{name} 必须是整数，收到: {raw!r}")
 
     @staticmethod
     def _parse_bool_env(name: str, value: str) -> bool:

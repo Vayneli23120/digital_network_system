@@ -50,3 +50,11 @@ storage:
   log_dir: "./logs"
   max_backups_per_device: 30
   backup_retention_days: 365
+
+# 设备指标样本保留（interface_traffic_samples / device_metric_samples）。
+# 亦可用环境变量覆盖：DEVICE_METRIC_RETENTION_DAYS / DEVICE_METRIC_CLEANUP_INTERVAL /
+# DEVICE_METRIC_CLEANUP_BATCH_SIZE。
+metrics:
+  retention_days: 90
+  cleanup_interval_seconds: 86400
+  cleanup_batch_size: 5000

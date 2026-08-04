@@ -24,6 +24,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from app.services.device_metric_facts import record_device_metric_sample
 from app.services.metric_retention import delete_expired_metric_samples_batch
+from app.shared.config import get_config
 from app.shared.database import get_db_manager
 from app.shared.models import Device, DeviceInterface, InterfaceTrafficSample
 
@@ -31,24 +32,29 @@ logger = logging.getLogger(__name__)
 
 COUNTER64_MAX = 2**64
 
+
+def _metric_retention_defaults() -> dict:
+    """读取 Config.metrics（config.yaml / env）作为保留参数默认值。
+
+    get_config() 首次调用会加载 config.yaml；读取失败时兜底内置默认值，
+    避免配置异常导致连接器启动失败。
+    """
+    try:
+        metrics = get_config().metrics
+        return {
+            "retention_days": metrics.retention_days,
+            "cleanup_interval_seconds": metrics.cleanup_interval_seconds,
+            "cleanup_batch_size": metrics.cleanup_batch_size,
+        }
+    except Exception:
+        return {"retention_days": 90, "cleanup_interval_seconds": 86400, "cleanup_batch_size": 5000}
+
 # Prometheus 直连地址（Python 应用与 Prometheus 同机部署；Prometheus 在 Docker，端口发布到宓主机）
 PROMETHEUS_URL = os.environ.get("PROMETHEUS_URL", "http://localhost:9090")
 POLL_INTERVAL = int(os.environ.get("PROMETHEUS_POLL_INTERVAL", "60"))  # 秒，与 Prometheus scrape_interval 对齐
 METRIC_SAMPLE_INTERVAL = max(
     60,
     int(os.environ.get("DEVICE_METRIC_SAMPLE_INTERVAL", "300")),
-)
-METRIC_RETENTION_DAYS = max(
-    1,
-    int(os.environ.get("DEVICE_METRIC_RETENTION_DAYS", "90")),
-)
-METRIC_CLEANUP_INTERVAL = max(
-    3600,
-    int(os.environ.get("DEVICE_METRIC_CLEANUP_INTERVAL", "86400")),
-)
-METRIC_CLEANUP_BATCH_SIZE = max(
-    1,
-    int(os.environ.get("DEVICE_METRIC_CLEANUP_BATCH_SIZE", "5000")),
 )
 
 # Prometheus file_sd 目标文件：由本连接器根据数据库自动生成。
@@ -67,8 +73,9 @@ class PrometheusConnector:
         prometheus_url: str = PROMETHEUS_URL,
         *,
         metric_sample_interval: int = METRIC_SAMPLE_INTERVAL,
-        metric_retention_days: int = METRIC_RETENTION_DAYS,
-        metric_cleanup_batch_size: int = METRIC_CLEANUP_BATCH_SIZE,
+        metric_retention_days: Optional[int] = None,
+        metric_cleanup_batch_size: Optional[int] = None,
+        metric_cleanup_interval: Optional[int] = None,
     ):
         self._http = httpx.Client(timeout=30)
         self._prometheus_url = prometheus_url.rstrip("/")
@@ -78,8 +85,20 @@ class PrometheusConnector:
         self._counters_lock = threading.Lock()
         self._last_metric_sample_at: Dict[int, datetime] = {}
         self._metric_sample_interval = max(1, metric_sample_interval)
-        self._metric_retention_days = max(1, metric_retention_days)
-        self._metric_cleanup_batch_size = max(1, metric_cleanup_batch_size)
+        # 保留配置默认走 Config.metrics（config.yaml / env），显式传参仍优先
+        retention = _metric_retention_defaults()
+        self._metric_retention_days = max(
+            1, retention["retention_days"] if metric_retention_days is None else metric_retention_days
+        )
+        self._metric_cleanup_batch_size = max(
+            1,
+            retention["cleanup_batch_size"] if metric_cleanup_batch_size is None else metric_cleanup_batch_size,
+        )
+        self._metric_cleanup_interval = max(
+            3600,
+            retention["cleanup_interval_seconds"]
+            if metric_cleanup_interval is None else metric_cleanup_interval,
+        )
         # {device_ip: {ifIndex: {"in": octets, "out": octets, "ts": timestamp}}}
 
     # ── Prometheus 查询 ──
@@ -518,7 +537,7 @@ class PrometheusConnector:
         )
         self._scheduler.add_job(
             self.cleanup_old_metric_samples,
-            trigger=IntervalTrigger(seconds=METRIC_CLEANUP_INTERVAL),
+            trigger=IntervalTrigger(seconds=self._metric_cleanup_interval),
             id="prometheus_metric_retention",
             name="Metric sample retention cleanup",
             replace_existing=True,
