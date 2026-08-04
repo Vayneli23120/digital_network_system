@@ -1516,12 +1516,29 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 `pytest -q --ignore=tests/test_console_service.py` 的结果是 **54 failed / 370 passed / 4 skipped / 10 errors**。
 下面 64 条失败在修复前后**逐条完全一致**，属于早于本轮审查就存在的债务，需要单独一批处理：
 
-- [ ] **P1** `tests/test_compliance_service.py` 24 项失败 —— 与批次四"`/quick-check` 字段名对不上"、"`max([severity])` 字典序"两条同源，建议连带修
-- [ ] **P1** `tests/test_tool_executor.py` 11 项失败 —— 与批次三 3.1（协程内同步 SSH）、`next(get_db())` 未关闭同源
-- [ ] **P1** `tests/test_git_config.py` 11 项失败/错误 —— PermissionError，疑似 Windows 上临时 Git 仓库清理失败，需确认是否仅本地环境问题
-- [ ] **P1** `tests/test_discovery_service.py` 8 项失败 —— 与批次四"单例缓存首次 timeout/workers"同源
-- [ ] **P1** `tests/test_spare_part_service.py` 3 项、`tests/test_deploy_service.py` 2 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项
+- [x] ~~**P1** `tests/test_tool_executor.py` 11 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（陈旧 `app.services.*` patch 全部失效；改用 `database._db_manager` 单例替换 + 保留 netmiko/napalm/jira 补丁）
+- [ ] **P1** `tests/test_git_config.py` 11 项失败/错误 —— PermissionError，疑似 Windows 上临时 Git 仓库清理失败，需确认是否仅本地环境问题（Linux 上不存在）
+- [x] ~~**P1** `tests/test_discovery_service.py` 8 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（patch/别名模块名 retarget 到 `app.features.discovery.*`）
+- [ ] **P1** `tests/test_compliance_service.py` 24 项失败 —— 与批次四"`/quick-check` 字段名对不上"、"`max([severity])` 字典序"两条同源；切片 C 按新 ADK 架构重写（`audit_config(use_ai=False)` + `_parse_ai_result` + `_generate_config_analysis`）
+- [ ] **P1** `tests/test_spare_part_service.py` 3 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项（切片 B：断言对齐语义变更；`check_permission`→`check_user_permission` 已随部署更名为 shared.dependencies，测试需改 import）
 - [ ] **P1** 恢复"绿色基线"后再把 `pytest` 接入提交前门禁；在此之前只能靠"失败集合不变"来判断是否引入回归
+
+### 批次七 · 恢复绿色基线 · 切片 A · Linux 实测（2026-08-04，HEAD 前 `32391c5`）
+
+> 切片 A 只处理**陈旧 patch 路径**一类（21 项），全部为测试侧问题，未改任何应用代码。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest tests/test_discovery_service.py` + `test_deploy_service.py` + `test_tool_executor.py` | ✅ 22 + 14 + 14 passed |
+| 全量 pytest | ✅ **32 failed / 736 passed / 4 skipped** —— 失败集合从 53 收敛到 32，剩余恰为切片 B（auth 2 / spare 3 / device 1 / email 1 / dashboard 1 = 8）+ 切片 C（compliance 24），零新增 |
+
+**改动**：
+- `test_discovery_service.py`：8 处 `patch("app.services.discovery_service.NETMIKO_AVAILABLE" / "netmiko.ConnectHandler")` 与 2 处 `import app.services.discovery_service as mod` retarget 到 `app.features.discovery.discovery_service`（顶部 import 已是新路径）。
+- `test_deploy_service.py`：`app.services.deploy_service.ConnectHandler` / `.NETMIKO_AVAILABLE` 同理 retarget。
+- `test_tool_executor.py`（重写）：批次三后新实现无模块级 `get_db`/`LogEntry`（改用 `get_db_manager().session_scope()`），旧的两层 patch 必然 `AttributeError`。改为沿用 `test_batch1_regressions` 模式：`monkeypatch.setattr("app.shared.database._db_manager", db_manager)` 让 `get_db_manager()` 命中测试库、`LogEntry` 真实落库；`netmiko.ConnectHandler` / `napalm.get_network_driver` / `jira.JIRA` / `app.config.settings` 补丁目标在新实现内仍有效，原样保留。`napalm`/`jira` not_installed 两个空壳用例补为真实覆盖（`patch("builtins.__import__")` 抛 ImportError）。napalm mock 链修正：执行器是 `get_network_driver("ios")` → driver 类 → `driver(**device)` → 实例，需 `mock_driver_cls.return_value = instance`；method-not-found 需真实 stub（MagicMock 的 `getattr` 会为任意属性自动生成子 mock，导致 `getattr(instance, method, None)` 永不为 None）。
+
+**遗留**：切片 B 8 项（断言对齐语义变更）与切片 C 24 项（compliance 重写）待后续切片。
 
 ## 建议执行顺序
 
@@ -1532,6 +1549,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
+8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04（见上方批次七实测）；切片 B（断言对齐 8 项）与切片 C（compliance 重写 24 项）进行中；恢复绿色后把 `pytest` 接入提交前门禁
 
 ## 附注
 
