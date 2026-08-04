@@ -127,9 +127,14 @@ class TestEmailAlertServiceSendEmail:
 
                 assert result is True
                 mock_server.sendmail.assert_called_once()
-                # Check that the HTML content was passed
-                call_args = mock_server.sendmail.call_args
-                assert "<h1>HTML</h1>" in call_args[0][2]
+                # HTML 内容经 MIME base64 编码在 multipart 里，需解码后断言
+                import email
+                msg = email.message_from_string(mock_server.sendmail.call_args[0][2])
+                html_part = msg.get_payload()[0]
+                body = html_part.get_payload(decode=True).decode(
+                    html_part.get_content_charset() or "utf-8"
+                )
+                assert "<h1>HTML</h1>" in body
 
     def test_send_email_smtp_failure(self):
         """Test handling SMTP connection failure"""

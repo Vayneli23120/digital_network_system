@@ -20,20 +20,21 @@ class TestGetDashboardSummary:
 
     def test_summary_device_counts(self, db_session):
         devices = [
-            Device(name="core-01", ip="10.0.0.1", role="core", status="online"),
-            Device(name="dist-01", ip="10.0.0.2", role="distribution", status="online"),
-            Device(name="access-01", ip="10.0.0.3", role="access", status="offline"),
-            Device(name="maint-01", ip="10.0.0.4", role="access", status="maintenance"),
+            Device(name="core-01", ip="10.0.0.1", role="core", deployment_status="in-use", reachability="reachable"),
+            Device(name="dist-01", ip="10.0.0.2", role="distribution", deployment_status="in-use", reachability="reachable"),
+            Device(name="access-01", ip="10.0.0.3", role="access", deployment_status="in-use", reachability="unreachable"),
+            Device(name="maint-01", ip="10.0.0.4", role="access", deployment_status="maintenance", reachability="unknown"),
         ]
         for d in devices:
             db_session.add(d)
         db_session.commit()
 
         result = get_dashboard_summary(db_session)
-        assert result["devices"]["total"] == 4
+        # 统计口径为 deployment_status/reachability（total 只统计已部署 in-use 设备）
+        assert result["devices"]["total"] == 3
         assert result["devices"]["online"] == 2
         assert result["devices"]["offline"] == 1
-        assert result["devices"]["maintenance"] == 1
+        assert result["devices"]["deployment"]["maintenance"] == 1
 
     def test_summary_recent_backups(self, db_session):
         device = Device(name="sw-01", ip="10.0.0.1", status="online")

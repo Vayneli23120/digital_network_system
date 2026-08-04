@@ -5,7 +5,7 @@ Tests for spare_part_service.py
 import pytest
 from sqlalchemy.orm import Session
 
-from app.shared.models import SparePart, SparePartMovement
+from app.shared.models import SparePart, SparePartInstance, SparePartMovement
 from app.features.spare_parts.spare_part_service import (
     list_parts, get_part, create_part, update_part, delete_part,
     get_stats, create_movement, list_movements, get_movement,
@@ -69,7 +69,8 @@ class TestGetPart:
         create_part(db_session, {"name": "SFP-1G", "part_number": "SFP-001", "category": "module"})
         result = get_part(db_session, 1)
         assert result["name"] == "SFP-1G"
-        assert result["category"] == "module"
+        # 分类经 normalize_category 归一化为中文（module -> 模块）
+        assert result["category"] == "模块"
 
     def test_get_part_not_found(self, db_session):
         with pytest.raises(ResourceNotFoundException):
@@ -128,13 +129,20 @@ class TestGetStats:
         assert result["total_quantity"] == 0
 
     def test_stats_basic(self, db_session):
-        create_part(db_session, {"name": "A", "part_number": "A-001", "quantity_in_stock": 10, "unit_price": 100.0})
-        create_part(db_session, {"name": "B", "part_number": "B-001", "quantity_in_stock": 5, "unit_price": 200.0})
+        part_a = create_part(db_session, {"name": "A", "part_number": "A-001", "quantity_in_stock": 10, "unit_price": 100.0})
+        part_b = create_part(db_session, {"name": "B", "part_number": "B-001", "quantity_in_stock": 5, "unit_price": 200.0})
+
+        # total_value 现按库存实例（入库实际单价）求和，而非 SparePart.unit_price
+        db_session.add_all([
+            SparePartInstance(part_id=part_a["id"], serial_number="SN-A-001", unit_price=100.0, status="in_stock"),
+            SparePartInstance(part_id=part_b["id"], serial_number="SN-B-001", unit_price=200.0, status="in_stock"),
+        ])
+        db_session.commit()
 
         result = get_stats(db_session)
         assert result["total_parts"] == 2
         assert result["total_quantity"] == 15
-        assert result["total_value"] == 2000.0  # 10*100 + 5*200
+        assert result["total_value"] == 300.0  # 100 + 200（库存实例单价求和）
 
     def test_stats_low_stock_count(self, db_session):
         create_part(db_session, {"name": "Enough", "part_number": "P-001", "quantity_in_stock": 10, "min_quantity": 5})
@@ -150,8 +158,9 @@ class TestGetStats:
         create_part(db_session, {"name": "Another-SFP", "part_number": "SFP-002", "category": "module", "quantity_in_stock": 3})
 
         result = get_stats(db_session)
-        assert result["by_category"]["module"] == 8
-        assert result["by_category"]["cable"] == 20
+        # 分类已归一化为中文
+        assert result["by_category"]["模块"] == 8
+        assert result["by_category"]["线缆"] == 20
 
 
 class TestCreateMovement:

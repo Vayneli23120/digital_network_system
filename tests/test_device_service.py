@@ -77,8 +77,10 @@ class TestCreateDevice:
         }
         result = create_device(db_session, data)
         assert result["model"] == "C9300"
-        assert result["serial_number"] == "SN123"
         assert result["location"] == "Room 101"
+        # create_device/get_device 返回摘要不含 serial_number，直接查库断言已落库
+        saved = db_session.query(Device).filter(Device.id == result["id"]).first()
+        assert saved.serial_number == "SN123"
 
 
 class TestGetDevice:
