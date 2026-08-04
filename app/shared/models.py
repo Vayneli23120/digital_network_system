@@ -1439,7 +1439,6 @@ class AIAnalysisRecord(Base):
             except Exception:
                 return {}
         return {}
-        return f"<AIAnalysisRecord(id={self.id}, type={self.analysis_type}, success={self.success})>"
 
 
 class SystemConfig(Base):
