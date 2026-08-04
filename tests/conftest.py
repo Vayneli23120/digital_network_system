@@ -166,6 +166,49 @@ def mock_netmiko(monkeypatch):
     monkeypatch.setattr("app.features.backups.netmiko_service.ConnectHandler", mock_connect)
 
 
+@pytest.fixture
+def router_client_factory(db_session):
+    """构建包含单个路由的 mini FastAPI TestClient（沿用既有 security 测试的 mini-app 模式）。
+
+    默认注入一个 transient superuser（is_superuser=True 让 require_permission 短路，
+    见 app/shared/dependencies.py），并 override 全部三个常用依赖：
+    get_current_user_from_token / get_current_principal / get_db。
+
+    用法：
+        client = router_client_factory(devices_router)
+        r = client.post("/api/devices", json={...})
+    或传自定义 user / extra_overrides。
+    """
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from app.features.auth.router import get_current_user_from_token
+    from app.features.auth.identity import get_current_principal, Principal
+    from app.shared.database import get_db
+    from app.shared.models import User
+
+    def _factory(router, *, user=None, extra_overrides=None):
+        if user is None:
+            user = User(
+                id=999999, username="test-admin", password_hash="x",
+                is_active=True, is_superuser=True,
+            )
+            db_session.add(user)
+            db_session.flush()
+        app = FastAPI()
+        app.include_router(router)
+        app.dependency_overrides[get_current_user_from_token] = lambda: user
+        app.dependency_overrides[get_current_principal] = lambda: Principal(
+            username=user.username, user_id=user.id, user=user, auth_source="test",
+        )
+        app.dependency_overrides[get_db] = lambda: db_session
+        if extra_overrides:
+            app.dependency_overrides.update(extra_overrides)
+        return TestClient(app)
+
+    return _factory
+
+
 # PostgreSQL 专用测试标记
 def pytest_configure(config):
     """注册自定义标记"""
