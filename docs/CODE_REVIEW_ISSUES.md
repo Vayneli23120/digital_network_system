@@ -1520,7 +1520,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - [ ] **P1** `tests/test_git_config.py` 11 项失败/错误 —— PermissionError，疑似 Windows 上临时 Git 仓库清理失败，需确认是否仅本地环境问题（Linux 上不存在）
 - [x] ~~**P1** `tests/test_discovery_service.py` 8 项失败~~ —— ✅ 2026-08-04 批次七切片 A 已修复（patch/别名模块名 retarget 到 `app.features.discovery.*`）
 - [ ] **P1** `tests/test_compliance_service.py` 24 项失败 —— 与批次四"`/quick-check` 字段名对不上"、"`max([severity])` 字典序"两条同源；切片 C 按新 ADK 架构重写（`audit_config(use_ai=False)` + `_parse_ai_result` + `_generate_config_analysis`）
-- [ ] **P1** `tests/test_spare_part_service.py` 3 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项（切片 B：断言对齐语义变更；`check_permission`→`check_user_permission` 已随部署更名为 shared.dependencies，测试需改 import）
+- [x] ~~**P1** `tests/test_spare_part_service.py` 3 项、`tests/test_auth.py` 2 项、`test_device_service.py` / `test_dashboard_service.py` / `test_email_service.py` 各 1 项~~ —— ✅ 2026-08-04 批次七切片 B 已修复（断言对齐语义变更：分类中文归一化、库存实例 total_value、dashboard deployment_status/reachability 口径、MIME base64 解码；`check_permission`→`check_user_permission` 改 import）
 - [ ] **P1** 恢复"绿色基线"后再把 `pytest` 接入提交前门禁；在此之前只能靠"失败集合不变"来判断是否引入回归
 
 ### 批次七 · 恢复绿色基线 · 切片 A · Linux 实测（2026-08-04，HEAD 前 `32391c5`）
@@ -1538,7 +1538,26 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 - `test_deploy_service.py`：`app.services.deploy_service.ConnectHandler` / `.NETMIKO_AVAILABLE` 同理 retarget。
 - `test_tool_executor.py`（重写）：批次三后新实现无模块级 `get_db`/`LogEntry`（改用 `get_db_manager().session_scope()`），旧的两层 patch 必然 `AttributeError`。改为沿用 `test_batch1_regressions` 模式：`monkeypatch.setattr("app.shared.database._db_manager", db_manager)` 让 `get_db_manager()` 命中测试库、`LogEntry` 真实落库；`netmiko.ConnectHandler` / `napalm.get_network_driver` / `jira.JIRA` / `app.config.settings` 补丁目标在新实现内仍有效，原样保留。`napalm`/`jira` not_installed 两个空壳用例补为真实覆盖（`patch("builtins.__import__")` 抛 ImportError）。napalm mock 链修正：执行器是 `get_network_driver("ios")` → driver 类 → `driver(**device)` → 实例，需 `mock_driver_cls.return_value = instance`；method-not-found 需真实 stub（MagicMock 的 `getattr` 会为任意属性自动生成子 mock，导致 `getattr(instance, method, None)` 永不为 None）。
 
-**遗留**：切片 B 8 项（断言对齐语义变更）与切片 C 24 项（compliance 重写）待后续切片。
+**遗留**：切片 C 24 项（compliance 重写）待后续切片。
+
+### 批次七 · 恢复绿色基线 · 切片 B · Linux 实测（2026-08-04，HEAD 前 `e9158ab`）
+
+> 切片 B 只处理**断言对齐语义变更**一类（8 项），全部为测试侧问题，未改任何应用代码。
+
+| 项 | 结果 |
+|---|---|
+| `ruff check app tests` | ✅ 零告警 |
+| `pytest test_auth` + `test_spare_part_service` + `test_device_service` + `test_email_service` + `test_dashboard_service` | ✅ 97 passed |
+| 全量 pytest | ✅ **24 failed / 744 passed / 4 skipped** —— 失败集合从 32 收敛到 24，剩余恰为切片 C（compliance），零新增 |
+
+**改动**：
+- `test_auth.py`：`check_permission` → `app.shared.dependencies.check_user_permission`（签名 `(user_id, permission_name, db)` 一致，仅 import/调用更名）。
+- `test_spare_part_service.py`：分类经 `normalize_category` 归一化为中文（`module`→`模块`、`cable`→`线缆`），断言改中文键；`total_value` 语义为「库存实例 in_stock 单价求和」（`spare_part_service.py:266-270`），改为构造 `SparePartInstance` 后断言 100+200=300，保留覆盖意图。
+- `test_device_service.py`：`create_device`/`get_device` 返回摘要均不含 `serial_number`（仅 `update_device`/`list_devices` 含），改为直接查库断言已落库。
+- `test_email_service.py`：HTML 正文经 MIME base64 编码在 multipart 中，`email.message_from_string` 解码后断言 `<h1>HTML</h1>` 在内。
+- `test_dashboard_service.py`：设备统计口径改为 `deployment_status`/`reachability`（`dashboard_service.py:31-46`，total 只统计 in-use），构造改用 `deployment_status`+`reachability`，断言 `total==3`、`online==2`、`offline==1`、`devices.deployment.maintenance==1`（无顶层 `maintenance` 键）。
+
+**遗留**：切片 C 24 项（compliance 测试重写）待后续切片。
 
 ## 建议执行顺序
 
@@ -1549,7 +1568,7 @@ HTTP 状态码/关键响应头、浏览器截图或 HAR、是否属于既存基�
 5. **批次四**（数据正确性）—— 页面数字可信之后再谈优化
 6. **批次五**（前端）—— 先收请求层默认行为，再补卸载清理，最后拆巨型组件与重建 i18n 表
 7. **批次三 3.4/3.5** 与 **批次六剩余项** —— 批次六切片 A（console 挂起 / celery route / npm ci）✅ 2026-08-03、切片 B（仓库清理 6 项）✅ 2026-08-03、切片 C（异常体系记录 / vendor→driver 死码删 / 裸 except）✅ 2026-08-03 全部完成；批次六收官。批次三 3.4（缓存 5 项）切片一 ✅ 2026-08-03（见上方 3.4 实测）、3.5（启动与关闭 4 项：shutdown 事件 / prometheus 轮询 / 中间件顺序+按用户限流 / trap join）切片二 ✅ 2026-08-03（见上方 3.5 实测），批次三 3.4/3.5 全部完成
-8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04（见上方批次七实测）；切片 B（断言对齐 8 项）与切片 C（compliance 重写 24 项）进行中；恢复绿色后把 `pytest` 接入提交前门禁
+8. **批次七**（恢复绿色基线）—— 53 项既存失败全部为测试侧问题（陈旧 patch 路径 / 未跟上批次二~四语义变更），未改应用代码。切片 A（陈旧路径 retarget 21 项）✅ 2026-08-04、切片 B（断言对齐 8 项）✅ 2026-08-04（均见上方批次七实测）；切片 C（compliance 重写 24 项）进行中；恢复绿色后把 `pytest` 接入提交前门禁
 
 ## 附注
 
