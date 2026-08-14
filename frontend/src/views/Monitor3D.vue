@@ -1709,9 +1709,13 @@ function connectDeviceStatusWs() {
     // WebSocket 连接地址：
     // 开发环境：通过 vite 代理（wss://），代理会转发到后端 ws://
     // 生产环境：使用当前 host（前端与后端同域部署）
-    // VITE_WS_URL 为可选覆盖（远程访问或后端不同域时设置），缺省按 location.host 拼
+    // VITE_WS_URL 为可选覆盖（远程访问或后端不同域时设置），缺省按 location.host 拼；
+    // 但 https 页面配明文 ws:// 覆盖会被浏览器按混合内容拦截，此时放弃覆盖、改走同源代理
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const base = import.meta.env.VITE_WS_URL || `${proto}://${location.host}`
+    let base = import.meta.env.VITE_WS_URL || ''
+    if (!base || (proto === 'wss' && base.startsWith('ws://'))) {
+      base = `${proto}://${location.host}`
+    }
     const wsUrl = `${base}/ws/device-status`
     deviceStatusWs = new WebSocket(wsUrl)
     deviceStatusWs.onopen = () => {

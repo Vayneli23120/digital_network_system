@@ -161,6 +161,12 @@ function onPortAnchorMouseDown(anchorData) {
   // 进入连线态
   const worldPos = percentToWorld(anchorData.anchorX, anchorData.anchorY, Math.min(plan.real_width_m, plan.real_depth_m) * 0.003)
 
+  // 底图数据异常导致坐标非有限值时，连线会污染线几何体（NaN 顶点 → 每帧 computeBoundingSphere 报错），直接放弃
+  if (!Number.isFinite(worldPos.x + worldPos.y + worldPos.z)) {
+    console.warn('[useCanvasInteraction] 端口锚点坐标非法，放弃连线：', anchorData)
+    return
+  }
+
   wiringState.value = {
     fromNodeId: topoNode.id,
     fromDeviceId: anchorData.deviceId,
@@ -181,6 +187,8 @@ function onPortAnchorMouseDown(anchorData) {
     ])
     const line = new THREE.Line(lineGeo, lineMat)
     line.name = 'rubber-band'
+    // 两点短线无需视锥剔除；关闭后即使顶点异常也不会每帧触发 computeBoundingSphere 报错
+    line.frustumCulled = false
     scene.add(line)
     wiringState.value.rubberBandLine = line
   }
@@ -1840,11 +1848,12 @@ function onWiringMouseMove(e) {
   raycaster.setFromCamera(pointer, camera)
 
   // 计算鼠标在世界坐标中的位置（投射到平面）
+  // 射线与平面不相交（视角平行/平面退化）时 intersectPlane 返回 null，跳过更新避免写入异常顶点
   const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -Math.min(plan.real_width_m, plan.real_depth_m) * 0.003)
   const mouseWorld = new THREE.Vector3()
-  raycaster.ray.intersectPlane(plane, mouseWorld)
-
-  updateRubberBandLine(mouseWorld)
+  if (raycaster.ray.intersectPlane(plane, mouseWorld)) {
+    updateRubberBandLine(mouseWorld)
+  }
 }
 
 function onWiringMouseUp(e) {

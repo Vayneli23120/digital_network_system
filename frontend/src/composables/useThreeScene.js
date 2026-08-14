@@ -61,9 +61,15 @@ export function useThreeScene(deps) {
   }
 
   // 坐标转换：百分比 → 世界坐标（米）
+  // 缺失/非法百分比（后端数据缺字段 → Number(undefined)=NaN）会污染线几何体顶点，
+  // 触发 three.js 每帧 computeBoundingSphere NaN 报错刷屏：统一回退为 0 原点
   function percentToWorld(xPercent, yPercent, elevation = 0) {
-    const x = (Number(xPercent) / 100) * plan.real_width_m
-    const z = (Number(yPercent) / 100) * plan.real_depth_m
+    const px = Number(xPercent)
+    const py = Number(yPercent)
+    const w = Number.isFinite(plan.real_width_m) ? plan.real_width_m : 0
+    const d = Number.isFinite(plan.real_depth_m) ? plan.real_depth_m : 0
+    const x = ((Number.isFinite(px) ? px : 0) / 100) * w
+    const z = ((Number.isFinite(py) ? py : 0) / 100) * d
     return { x, y: elevation, z }
   }
 
