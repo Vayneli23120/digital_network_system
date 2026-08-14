@@ -125,20 +125,26 @@ api.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // 处理认证错误
-    if (error.response?.status === 401) {
+    // 登录接口的错误由登录页内联展示：其 401 表示「用户名或密码错误」，
+    // 不应触发「会话过期」的全局跳转，也不应重复弹出全局提示。
+    const isLoginRequest = (error.config?.url || '').includes('/auth/login')
+
+    // 处理认证错误（登录接口除外）
+    if (error.response?.status === 401 && !isLoginRequest) {
       return handleAuthFailure(error)
     }
 
-    // 对于有具体错误信息的请求，显示具体信息而不是笼统提示
-    const detail = error.response?.data?.detail || error.response?.data?.error
-    if (detail) {
-      // 翻译 SSH 相关错误
-      const translatedDetail = translateSSHError(detail)
-      ElMessage.error(translatedDetail)
-    } else {
-      // 显示通用网络错误
-      showNetworkError(error)
+    // 对于有具体错误信息的请求，显示具体信息而不是笼统提示（登录接口除外）
+    if (!isLoginRequest) {
+      const detail = error.response?.data?.detail || error.response?.data?.error
+      if (detail) {
+        // 翻译 SSH 相关错误
+        const translatedDetail = translateSSHError(detail)
+        ElMessage.error(translatedDetail)
+      } else {
+        // 显示通用网络错误
+        showNetworkError(error)
+      }
     }
 
     return Promise.reject(error)

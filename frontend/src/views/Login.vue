@@ -4,45 +4,52 @@
       <!-- Logo -->
       <div class="login-logo">
         <div class="logo-icon">
-          <!-- 固特异飞艇 -->
-          <svg class="logo-blimp" viewBox="0 0 64 64" aria-hidden="true">
-            <!-- 系留缆绳 -->
-            <path d="M23 40 L25 33 M28 40 L29 33 M33 40 L33 33 M38 40 L37 33"
-                  stroke="#FFD100" stroke-width="1.6" stroke-linecap="round" />
-            <!-- 艇体 -->
-            <ellipse cx="29" cy="22" rx="23" ry="11.5" fill="#FFD100" />
-            <!-- 艇体高光 -->
-            <ellipse cx="24" cy="18.5" rx="13" ry="5.5" fill="#FFE9A8" opacity="0.55" />
-            <!-- 尾鳍 -->
-            <path d="M50 15 L61 6 L53.5 23 Z" fill="#FFD100" />
-            <path d="M50 29 L61 38 L53.5 21 Z" fill="#FFD100" />
-            <!-- 吊舱 -->
-            <rect x="22.5" y="38" width="14" height="8" rx="3" fill="#FFE9A8" />
-            <!-- 吊舱舷窗 -->
-            <circle cx="26" cy="42" r="1.6" fill="#0A2342" />
-            <circle cx="31" cy="42" r="1.6" fill="#0A2342" />
+          <!-- 固特异轮胎 -->
+          <svg class="logo-tire" viewBox="0 0 64 64" aria-hidden="true" xmlns:xlink="http://www.w3.org/1999/xlink">
+            <defs>
+              <path id="tire-text-arc" d="M 17 32 A 15 15 0 0 1 47 32" />
+            </defs>
+            <!-- 轮胎主体 -->
+            <circle cx="32" cy="32" r="28" fill="#FFD100" />
+            <!-- 胎面花纹 -->
+            <circle cx="32" cy="32" r="25" fill="none" stroke="#0A2342" stroke-width="5" stroke-dasharray="4.5 4" />
+            <!-- 侧壁高光 -->
+            <circle cx="32" cy="32" r="19" fill="#FFE9A8" opacity="0.55" />
+            <!-- 轮毂 -->
+            <circle cx="32" cy="32" r="9" fill="#0A2342" />
+            <circle cx="32" cy="32" r="9" fill="none" stroke="#FFD100" stroke-width="1.6" />
+            <circle cx="32" cy="32" r="3.2" fill="#FFD100" />
+            <!-- GOODYEAR 字样（沿侧壁弧形排布） -->
+            <text font-family="Arial, 'Helvetica Neue', sans-serif" font-size="6.6" font-weight="700" letter-spacing="0.4" fill="#0A2342">
+              <textPath xlink:href="#tire-text-arc" startOffset="50%" text-anchor="middle">GOODYEAR</textPath>
+            </text>
           </svg>
         </div>
         <h1 class="logo-text" :class="{ 'logo-text-en': currentLang === 'en' }">{{ t('loginLogoText') }}</h1>
       </div>
 
-      <!-- 第一步：选择登录方式 -->
+      <!-- 第一步：选择登录方式（可用的本地登录置顶，未开通的 SSO 下移弱化） -->
       <div v-if="stage === 'choose'" class="login-methods">
-        <button type="button" class="method-card" @click="handleSsoLogin">
-          <div class="method-body">
-            <h2 class="method-title">{{ t('loginSsoTitle') }}</h2>
-            <p class="method-desc">{{ t('loginSsoDesc') }}</p>
-            <p v-if="!ssoEnabled" class="method-badge">{{ t('loginSsoNotReady') }}</p>
-          </div>
-          <el-icon class="method-arrow"><Right /></el-icon>
-        </button>
-
-        <button type="button" class="method-card" @click="stage = 'local'">
+        <button type="button" class="method-card method-card--primary" @click="stage = 'local'">
           <div class="method-body">
             <h2 class="method-title">{{ t('loginLocalTitle') }}</h2>
             <p class="method-desc">{{ t('loginLocalDesc') }}</p>
           </div>
           <el-icon class="method-arrow"><Right /></el-icon>
+        </button>
+
+        <button
+          type="button"
+          class="method-card"
+          :class="{ 'method-card--disabled': !ssoEnabled }"
+          @click="handleSsoLogin"
+        >
+          <div class="method-body">
+            <h2 class="method-title">{{ t('loginSsoTitle') }}</h2>
+            <p class="method-desc">{{ ssoEnabled ? t('loginSsoDesc') : t('loginSsoDescSoon') }}</p>
+            <p v-if="!ssoEnabled" class="method-badge">{{ t('loginSsoComingSoon') }}</p>
+          </div>
+          <el-icon v-if="ssoEnabled" class="method-arrow"><Right /></el-icon>
         </button>
 
         <div class="login-error" v-if="errorMsg">
@@ -80,17 +87,32 @@
           />
         </el-form-item>
 
+        <div class="login-options">
+          <el-checkbox v-model="rememberMe" class="remember-checkbox">
+            {{ t('loginRememberMe') }}
+          </el-checkbox>
+          <button type="button" class="forgot-link" @click="handleForgotPassword">
+            {{ t('loginForgotPassword') }}
+          </button>
+        </div>
+
         <el-form-item>
           <el-button
             type="primary"
             size="large"
             :loading="loading"
+            :disabled="locked"
             class="login-btn"
             @click="handleLogin"
           >
             {{ t('loginSubmit') }}
           </el-button>
         </el-form-item>
+
+        <p class="login-security-hint" :class="{ 'login-security-hint--warn': locked || failedAttempts > 0 }">
+          <el-icon><Lock /></el-icon>
+          <span>{{ securityHint }}</span>
+        </p>
 
         <div class="login-error" v-if="errorMsg">
           <el-icon><WarningFilled /></el-icon>
@@ -120,8 +142,20 @@
 
       <!-- Footer -->
       <div class="login-footer">
-        <span>{{ t('brandName') }} v1.5</span>
+        <span>{{ t('brandName') }}</span>
+        <span class="login-footer-sep">·</span>
+        <button type="button" class="about-link" @click="aboutVisible = true">
+          {{ t('loginAbout') }}
+        </button>
       </div>
+
+      <!-- 关于（版本信息从登录页移入此处，避免在登录页直接暴露版本号） -->
+      <el-dialog v-model="aboutVisible" :title="t('loginAboutTitle')" width="360px" append-to-body>
+        <div class="login-about">
+          <p class="login-about-name">{{ t('brandName') }}</p>
+          <p class="login-about-meta">{{ t('loginVersionLabel') }}：{{ t('appVersion') }}</p>
+        </div>
+      </el-dialog>
     </div>
 
     <!-- 固特异品牌背景四层：深海暗流（WebGL 流体）+ 点阵网格 + 飞足字标粒子 + 漂浮飞艇粒子 -->
@@ -136,7 +170,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { WarningFilled, Right } from '@element-plus/icons-vue'
+import { WarningFilled, Right, Lock } from '@element-plus/icons-vue'
 import { login, getSsoStatus } from '@/api'
 import { useI18n } from '@/composables/useI18n'
 import { useAuthStore } from '@/stores/auth'
@@ -152,6 +186,17 @@ const authStore = useAuthStore()
 const loginFormRef = ref(null)
 const loading = ref(false)
 const errorMsg = ref('')
+const rememberMe = ref(localStorage.getItem('login_remember_username') === '1')
+const aboutVisible = ref(false)
+
+// —— 登录失败保护（客户端软锁，叠加后端 15 次/分钟认证限流） ——
+const MAX_FAILED_ATTEMPTS = 5
+const LOCKOUT_SECONDS = 60
+const failedAttempts = ref(0)
+const lockedUntil = ref(0)
+const lockCountdown = ref(0)
+let lockTimer = null
+const locked = computed(() => Date.now() < lockedUntil.value)
 
 // 'choose' = 选择登录方式，'local' = 本地账号表单
 const stage = ref('choose')
@@ -166,6 +211,11 @@ onMounted(async () => {
   } catch (e) {
     // 后端不可用时保持 SSO 入口为"未开通"状态，本地登录仍可用
     ssoStatus.value = { enabled: false, display_name: '', login_url: '/api/auth/sso/login' }
+  }
+
+  // 「记住我」：预填上次记住的用户名
+  if (rememberMe.value) {
+    loginForm.username = localStorage.getItem('login_username') || ''
   }
 })
 
@@ -195,6 +245,73 @@ const loginRules = {
   password: [
     { required: true, message: t('loginPasswordRequired'), trigger: 'blur' }
   ]
+}
+
+// —— 记住用户名（仅记忆用户名，不存储密码） ——
+const persistRememberedUsername = () => {
+  if (rememberMe.value) {
+    localStorage.setItem('login_remember_username', '1')
+    localStorage.setItem('login_username', loginForm.username)
+  } else {
+    localStorage.removeItem('login_remember_username')
+    localStorage.removeItem('login_username')
+  }
+}
+
+// —— 忘记密码（占位：后续接入自助重置流程） ——
+const handleForgotPassword = () => {
+  ElMessage.info(t('loginForgotPasswordHint'))
+}
+
+// —— 登录失败保护的体验呈现：软锁倒计时 + 剩余次数提示 ——
+const securityHint = computed(() => {
+  if (locked.value) {
+    return t('loginLockedHint').replace('{seconds}', String(lockCountdown.value))
+  }
+  if (failedAttempts.value > 0) {
+    return t('loginRemainingAttempts')
+      .replace('{n}', String(failedAttempts.value))
+      .replace('{m}', String(MAX_FAILED_ATTEMPTS - failedAttempts.value))
+  }
+  return t('loginSecurityHint')
+})
+
+const handleLockTick = () => {
+  const remaining = Math.ceil((lockedUntil.value - Date.now()) / 1000)
+  lockCountdown.value = Math.max(0, remaining)
+  if (remaining <= 0) {
+    clearInterval(lockTimer)
+    lockTimer = null
+    failedAttempts.value = 0
+  }
+}
+
+const startLockCountdown = () => {
+  if (lockTimer) clearInterval(lockTimer)
+  lockCountdown.value = LOCKOUT_SECONDS
+  lockTimer = setInterval(handleLockTick, 1000)
+}
+
+// 记录一次失败；返回 true 表示本次失败触发了临时锁定
+const recordFailedAttempt = () => {
+  failedAttempts.value += 1
+  if (failedAttempts.value >= MAX_FAILED_ATTEMPTS) {
+    lockedUntil.value = Date.now() + LOCKOUT_SECONDS * 1000
+    failedAttempts.value = 0
+    startLockCountdown()
+    return true
+  }
+  return false
+}
+
+const resetFailedAttempts = () => {
+  failedAttempts.value = 0
+  lockedUntil.value = 0
+  lockCountdown.value = 0
+  if (lockTimer) {
+    clearInterval(lockTimer)
+    lockTimer = null
+  }
 }
 
 /**
@@ -237,6 +354,8 @@ const secureStoreToken = (token, username) => {
 }
 
 const handleLogin = async () => {
+  if (locked.value) return
+
   try {
     await loginFormRef.value.validate()
     loading.value = true
@@ -253,14 +372,34 @@ const handleLogin = async () => {
       return
     }
 
+    persistRememberedUsername()
+    resetFailedAttempts()
+
     ElMessage.success(t('loginSuccess'))
 
     // Redirect to dashboard
     router.push('/')
   } catch (error) {
-    if (error.response?.data?.detail) {
+    // 表单校验未通过（Element Plus validate 以 false reject）
+    if (error === false) {
+      return
+    }
+
+    // 后端认证限流（429）：独立呈现，不计入失败次数，避免双重惩罚
+    if (error.response?.status === 429) {
+      const retryAfter = error.response?.data?.retry_after
+      errorMsg.value = retryAfter
+        ? `${t('loginRateLimited')}（${retryAfter} 秒）`
+        : t('loginRateLimited')
+      return
+    }
+
+    const justLocked = recordFailedAttempt()
+    if (justLocked) {
+      errorMsg.value = t('loginLockedHint').replace('{seconds}', String(LOCKOUT_SECONDS))
+    } else if (error.response?.data?.detail) {
       errorMsg.value = error.response.data.detail
-    } else if (error !== false) {
+    } else {
       errorMsg.value = t('loginFailed')
     }
   } finally {
@@ -342,6 +481,27 @@ const handleLogin = async () => {
   font-size: 12px;
   font-weight: 600;
   color: #ffd100;
+}
+
+/* 可用入口（本地登录）置顶并给予轻微强调 */
+.method-card--primary {
+  border-color: rgba(255, 209, 0, 0.38);
+  background: rgba(255, 255, 255, 0.11);
+}
+
+/* 未开通入口（SSO）弱化：降透明度、去 hover 高亮、默认光标 */
+.method-card--disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.method-card--disabled:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.method-card--disabled:hover .method-arrow {
+  color: rgba(255, 255, 255, 0.55);
 }
 
 .method-arrow {
@@ -443,7 +603,7 @@ const handleLogin = async () => {
   margin-bottom: 16px;
 }
 
-.logo-blimp {
+.logo-tire {
   width: 42px;
   height: 42px;
   display: block;
@@ -502,6 +662,58 @@ const handleLogin = async () => {
   color: rgba(255, 255, 255, 0.5);
 }
 
+/* 记住我 / 忘记密码 一行 */
+.login-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: -6px 0 16px;
+}
+
+.login-form :deep(.remember-checkbox .el-checkbox__label) {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+}
+
+.login-form :deep(.remember-checkbox .el-checkbox__inner) {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.35);
+}
+
+.forgot-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: #ffd100;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.forgot-link:hover {
+  color: #ffe066;
+  text-decoration: underline;
+}
+
+/* 登录安全提示（限流 / 失败锁定） */
+.login-security-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: -8px 0 12px;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.login-security-hint .el-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.login-security-hint--warn {
+  color: #ffd100;
+}
+
 .login-btn {
   width: 100%;
   height: 44px;
@@ -531,10 +743,45 @@ const handleLogin = async () => {
 }
 
 .login-footer {
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   margin-top: 30px;
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
+}
+
+.login-footer-sep {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.about-link {
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.about-link:hover {
+  color: #fff;
+  text-decoration: underline;
+}
+
+/* 关于弹窗内容（append-to-body 后仍可命中自身类名） */
+.login-about-name {
+  margin: 0 0 8px;
+  font-size: 16px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.login-about-meta {
+  margin: 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .login-lang {
