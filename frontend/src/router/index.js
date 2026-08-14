@@ -10,6 +10,13 @@ const routes = [
     component: Login,
     meta: { title: '登录', noAuth: true }
   },
+  // 临时演示路由（B1 深海暗流背景独立测试用），集成完成后可随时删除
+  {
+    path: '/demo/ocean-background',
+    name: 'OceanBackgroundDemo',
+    component: () => import('@/components/OceanBackgroundDemo.vue'),
+    meta: { title: '背景演示', noAuth: true }
+  },
   {
     path: '/',
     name: 'Layout',
