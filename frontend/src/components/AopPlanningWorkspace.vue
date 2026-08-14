@@ -497,7 +497,11 @@ const loadPrograms = async () => {
 
 const loadProgram = async () => {
   if (!currentProgramId.value) return
-  programDetail.value = await getAopProgram(currentProgramId.value)
+  const programId = currentProgramId.value
+  const detail = await getAopProgram(programId)
+  // 请求期间程序已切换：丢弃过期响应，防止旧程序详情覆盖新程序
+  if (programId !== currentProgramId.value) return
+  programDetail.value = detail
 }
 
 const calendarBounds = () => ({
@@ -507,17 +511,37 @@ const calendarBounds = () => ({
 
 const loadCalendar = async () => {
   if (!currentProgramId.value) return
-  calendarData.value = await getAopCalendar({ program_id: currentProgramId.value, ...calendarBounds() })
+  const programId = currentProgramId.value
+  const data = await getAopCalendar({ program_id: programId, ...calendarBounds() })
+  // 请求期间程序已切换：丢弃过期响应，防止旧程序日历覆盖新程序
+  if (programId !== currentProgramId.value) return
+  calendarData.value = data
   loadedMonth.value = dayjs(calendarDate.value).format('YYYY-MM')
+}
+
+// 详情+日历加载去重：refreshWorkspace 与 currentProgramId watcher 可能在同一轮触发，
+// 共用同一 in-flight promise，避免重复 GET 被请求拦截器自动取消（CanceledError）
+let detailLoad = { id: null, promise: null }
+const loadDetailAndCalendar = () => {
+  const id = currentProgramId.value
+  if (!id) return Promise.resolve()
+  if (detailLoad.id === id && detailLoad.promise) return detailLoad.promise
+  const promise = Promise.all([loadProgram(), loadCalendar()]).finally(() => {
+    if (detailLoad.promise === promise) detailLoad = { id: null, promise: null }
+  })
+  detailLoad = { id, promise }
+  return promise
 }
 
 const refreshWorkspace = async () => {
   loading.value = true
   try {
     await loadPrograms()
-    if (currentProgramId.value) await Promise.all([loadProgram(), loadCalendar()])
+    if (currentProgramId.value) await loadDetailAndCalendar()
   } catch (error) {
-    ElMessage.error(error.response?.data?.detail || t('aopLoadFailed'))
+    if (error?.name !== 'CanceledError') {
+      ElMessage.error(error.response?.data?.detail || t('aopLoadFailed'))
+    }
   } finally {
     loading.value = false
   }
@@ -525,7 +549,8 @@ const refreshWorkspace = async () => {
 
 const loadDevices = async () => {
   try {
-    const data = await getDevices({ limit: 500 })
+    // 后端分页上限 le=200（devices 路由契约），超过会 400
+    const data = await getDevices({ limit: 200 })
     devices.value = data.items || []
   } catch (error) {
     console.error(error)
@@ -765,12 +790,29 @@ watch(selectedYear, async year => {
 watch(currentProgramId, async (value, oldValue) => {
   if (!value || value === oldValue) return
   loading.value = true
-  try { await Promise.all([loadProgram(), loadCalendar()]) } finally { loading.value = false }
+  try {
+    await loadDetailAndCalendar()
+  } catch (error) {
+    // 重复请求被自动取消属正常流程（请求拦截器取消前一个相同 GET），静默跳过
+    if (error?.name !== 'CanceledError') {
+      ElMessage.error(error.response?.data?.detail || t('aopLoadFailed'))
+    }
+  } finally {
+    loading.value = false
+  }
 })
 watch(calendarDate, async value => {
   selectedDay.value = dayjs(value).format('YYYY-MM-DD')
   const month = dayjs(value).format('YYYY-MM')
-  if (month !== loadedMonth.value) await loadCalendar()
+  if (month !== loadedMonth.value) {
+    try {
+      await loadCalendar()
+    } catch (error) {
+      if (error?.name !== 'CanceledError') {
+        ElMessage.error(error.response?.data?.detail || t('aopLoadFailed'))
+      }
+    }
+  }
 })
 watch(projects, refreshCostChart)
 watch(currentLang, refreshCostChart)

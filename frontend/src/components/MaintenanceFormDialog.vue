@@ -248,7 +248,8 @@ watch(() => props.modelValue, (val) => {
 
 const loadDevices = async () => {
   try {
-    const result = await getDevices({ limit: 500 })
+    // 后端分页上限 le=200（devices 路由契约），超过会 400
+    const result = await getDevices({ limit: 200 })
     devices.value = result.items || []
   } catch (error) {
     // Silent fail
