@@ -27,25 +27,28 @@ class DingTalkAlertService:
         self.webhook_url = self.config.alerts.dingtalk.webhook_url
         self.secret = self.config.alerts.dingtalk.secret
 
-    def _get_signed_url(self) -> str:
-        """获取带签名的 Webhook URL"""
-        if not self.secret:
-            return self.webhook_url
+    def _get_signed_url_for(self, url: str, secret: Optional[str]) -> str:
+        """获取带签名的 Webhook URL（可指定 url/secret，DB 渠道覆盖用）"""
+        if not secret:
+            return url
 
         timestamp = str(int(__import__("time").time() * 1000))
-        string_to_sign = f"{timestamp}\n{self.secret}"
+        string_to_sign = f"{timestamp}\n{secret}"
         hmac_code = hmac.new(
-            self.secret.encode("utf-8"),
+            secret.encode("utf-8"),
             string_to_sign.encode("utf-8"),
             digestmod=hashlib.sha256,
         ).digest()
         sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
-        return f"{self.webhook_url}&timestamp={timestamp}&sign={sign}"
+        return f"{url}&timestamp={timestamp}&sign={sign}"
 
     def send_text(self, content: str, at_mobiles: Optional[list] = None,
-                  is_at_all: bool = False) -> bool:
-        """发送文本消息"""
-        if not self.config.alerts.enabled or not self.webhook_url:
+                  is_at_all: bool = False,
+                  webhook_url: Optional[str] = None,
+                  secret: Optional[str] = None) -> bool:
+        """发送文本消息（webhook_url 可选覆盖，DB 渠道配置优先）"""
+        url = webhook_url or self.webhook_url
+        if not self.config.alerts.enabled or not url:
             logger.warning("钉钉 Webhook 告警未启用")
             return False
 
@@ -57,7 +60,7 @@ class DingTalkAlertService:
                 "isAtAll": is_at_all,
             }
         }
-        return self._send(data)
+        return self._send(data, url=url, secret=secret)
 
     def send_markdown(self, title: str, text: str,
                       at_mobiles: Optional[list] = None) -> bool:
@@ -79,10 +82,11 @@ class DingTalkAlertService:
         }
         return self._send(data)
 
-    def _send(self, data: dict) -> bool:
+    def _send(self, data: dict, url: Optional[str] = None, secret: Optional[str] = None) -> bool:
         """发送 HTTP POST 请求到 Webhook"""
         try:
-            url = self._get_signed_url()
+            url = self._get_signed_url_for(url or self.webhook_url,
+                                           secret if secret is not None else self.secret)
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             req = urllib_request.Request(
                 url,

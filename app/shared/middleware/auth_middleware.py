@@ -40,6 +40,10 @@ def is_public_path(path: str) -> bool:
         return True
     if path.startswith(("/health/", "/ready/", "/openapi.json/", "/redoc/")):
         return False
+    # 告警 Webhook：由 ALERT_WEBHOOK_TOKEN 自行鉴权（fail-closed），
+    # 不受 JWT 中间件管辖（Alertmanager 无法携带 JWT）。
+    if path.startswith("/api/alerts/webhook/"):
+        return True
     # Vue 前端路由本身不含敏感数据；API、照片、代理和扫描终端仍受保护。
     return not path.startswith(("/api/", "/photos/", "/grafana/", "/static/", "/scanner"))
 

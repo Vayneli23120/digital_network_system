@@ -23,15 +23,18 @@ class WeChatWorkAlertService:
         self.webhook_url = self.config.alerts.wechat_work.webhook_url
 
     def send_text(self, content: str, mentioned_list: Optional[List[str]] = None,
-                  mentioned_mobile_list: Optional[List[str]] = None) -> bool:
+                  mentioned_mobile_list: Optional[List[str]] = None,
+                  webhook_url: Optional[str] = None) -> bool:
         """发送文本消息
 
         Args:
             content: 文本内容（最长 4096 字节）
             mentioned_list: 需要 @ 的用户 ID 列表
             mentioned_mobile_list: 需要 @ 的手机号列表
+            webhook_url: 可选覆盖 Webhook 地址（DB 渠道配置优先于 config.yaml）
         """
-        if not self.config.alerts.enabled or not self.webhook_url:
+        url = webhook_url or self.webhook_url
+        if not self.config.alerts.enabled or not url:
             logger.warning("企业微信 Webhook 告警未启用")
             return False
 
@@ -46,7 +49,7 @@ class WeChatWorkAlertService:
         if mentioned_mobile_list:
             data["text"]["mentioned_mobile_list"] = mentioned_mobile_list
 
-        return self._send(data)
+        return self._send(data, url=url)
 
     def send_markdown(self, content: str) -> bool:
         """发送 Markdown 消息"""
@@ -62,12 +65,12 @@ class WeChatWorkAlertService:
         }
         return self._send(data)
 
-    def _send(self, data: dict) -> bool:
+    def _send(self, data: dict, url: Optional[str] = None) -> bool:
         """发送 HTTP POST 请求到 Webhook"""
         try:
             payload = json.dumps(data, ensure_ascii=False).encode("utf-8")
             req = urllib_request.Request(
-                self.webhook_url,
+                url or self.webhook_url,
                 data=payload,
                 headers={"Content-Type": "application/json"},
                 method="POST",

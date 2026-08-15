@@ -11,7 +11,10 @@ from app.features.auth.identity import Principal, get_current_principal
 from app.shared.database import get_db
 from app.shared.dependencies import require_permission
 from app.shared.models import MaintenanceRecord, MaintenanceEvent, FaultRecord
-from app.features.faults.router import send_maintenance_completed_notification
+from app.features.faults.router import (
+    send_maintenance_assigned_notification,
+    send_maintenance_completed_notification,
+)
 from app.features.spare_movements.router import require_movement_write_for_side_effect
 from app.features.spare_parts.spare_part_service import (
     create_movements as svc_create_movements,
@@ -472,6 +475,7 @@ async def transition_maintenance_status(
 async def assign_maintenance(
     maint_id: int,
     data: MaintenanceAssignRequest,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     _: None = Depends(require_maintenance_write),
     principal: Principal = Depends(get_current_principal),
@@ -497,6 +501,9 @@ async def assign_maintenance(
         db.add(event)
 
         db.commit()
+
+        # v1.1：维修单指派必须通知被指派人（此前为零通知）
+        background_tasks.add_task(send_maintenance_assigned_notification, maint_id, owner)
 
         return {"id": maint_id, "owner": owner, "message": f"已分配给 {owner}"}
     except HTTPException:

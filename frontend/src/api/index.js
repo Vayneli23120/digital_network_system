@@ -930,6 +930,132 @@ export function deleteNotification(id) {
   return api.delete(`/notifications/${id}`)
 }
 
+// ============ 通知分组/排班/分发规则/升级策略 API（通知模块一期） ============
+export function getGroups() {
+  return api.get('/groups')
+}
+
+export function createGroup(data) {
+  return api.post('/groups', data)
+}
+
+export function updateGroup(id, data) {
+  return api.put(`/groups/${id}`, data)
+}
+
+export function deleteGroup(id) {
+  return api.delete(`/groups/${id}`)
+}
+
+export function addGroupMember(groupId, data) {
+  return api.post(`/groups/${groupId}/members`, data)
+}
+
+export function removeGroupMember(groupId, userId) {
+  return api.delete(`/groups/${groupId}/members/${userId}`)
+}
+
+export function getGroupSchedules(groupId) {
+  return api.get(`/groups/${groupId}/schedules`)
+}
+
+export function createGroupSchedule(groupId, data) {
+  return api.post(`/groups/${groupId}/schedules`, data)
+}
+
+export function deleteGroupSchedule(groupId, scheduleId) {
+  return api.delete(`/groups/${groupId}/schedules/${scheduleId}`)
+}
+
+export function getDispatchRules() {
+  return api.get('/groups/dispatch-rules')
+}
+
+export function createDispatchRule(data) {
+  return api.post('/groups/dispatch-rules', data)
+}
+
+export function updateDispatchRule(id, data) {
+  return api.put(`/groups/dispatch-rules/${id}`, data)
+}
+
+export function deleteDispatchRule(id) {
+  return api.delete(`/groups/dispatch-rules/${id}`)
+}
+
+export function getEscalationPolicy() {
+  return api.get('/groups/escalation-policy')
+}
+
+export function updateEscalationPolicy(data) {
+  return api.put('/groups/escalation-policy', data)
+}
+
+// ============ 通知设置 API（二期：渠道/模板/策略/日志） ============
+export function getNotificationChannels() {
+  return api.get('/notification-settings/channels')
+}
+
+export function createNotificationChannel(data) {
+  return api.post('/notification-settings/channels', data)
+}
+
+export function updateNotificationChannel(id, data) {
+  return api.put(`/notification-settings/channels/${id}`, data)
+}
+
+export function deleteNotificationChannel(id) {
+  return api.delete(`/notification-settings/channels/${id}`)
+}
+
+export function testNotificationChannel(id) {
+  return api.post(`/notification-settings/channels/${id}/test`)
+}
+
+export function getNotificationTemplates() {
+  return api.get('/notification-settings/templates')
+}
+
+export function createNotificationTemplate(data) {
+  return api.post('/notification-settings/templates', data)
+}
+
+export function updateNotificationTemplate(id, data) {
+  return api.put(`/notification-settings/templates/${id}`, data)
+}
+
+export function deleteNotificationTemplate(id) {
+  return api.delete(`/notification-settings/templates/${id}`)
+}
+
+export function getNotificationPolicies() {
+  return api.get('/notification-settings/policies')
+}
+
+export function createNotificationPolicy(data) {
+  return api.post('/notification-settings/policies', data)
+}
+
+export function updateNotificationPolicy(id, data) {
+  return api.put(`/notification-settings/policies/${id}`, data)
+}
+
+export function deleteNotificationPolicy(id) {
+  return api.delete(`/notification-settings/policies/${id}`)
+}
+
+export function getNotificationTargets() {
+  return api.get('/notification-settings/targets')
+}
+
+export function getNotificationLogs(params) {
+  return api.get('/notification-settings/logs', { params })
+}
+
+export function getNotificationStats() {
+  return api.get('/notification-settings/stats')
+}
+
 // ============ 故障状态流转 API ============
 export function assignFault(faultId, assignedTo) {
   return api.post(`/faults/${faultId}/assign`, { assigned_to: assignedTo })

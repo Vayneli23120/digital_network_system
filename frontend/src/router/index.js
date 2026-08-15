@@ -413,6 +413,20 @@ const routes = [
       }
     ]
   },
+  // 通知设置（分组/排班/分发规则/升级策略）
+  {
+    path: '/notification-settings',
+    name: 'NotificationSettingsLayout',
+    component: Layout,
+    children: [
+      {
+        path: '',
+        name: 'NotificationSettings',
+        component: () => import('@/views/NotificationSettings.vue'),
+        meta: { title: '通知设置', permission: 'notification:manage' }
+      }
+    ]
+  },
   // 角色权限
   {
     path: '/permissions',

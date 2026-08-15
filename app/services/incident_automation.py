@@ -14,12 +14,12 @@ import os
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from loguru import logger
 from sqlalchemy.orm import Session
 
-from app.shared.models import Device, DeviceInterface, FaultRecord
+from app.shared.models import Device, DeviceInterface, FaultRecord, User
 
 
 OPEN_STATUSES = ["open", "assigned", "diagnosing", "resolving", "transferred"]
@@ -46,6 +46,7 @@ class MonitorEvent:
     peer_device_name: Optional[str] = None
     peer_if_name: Optional[str] = None
     severity_hint: Optional[str] = None
+    is_recovery: bool = False  # 恢复类事件（与 event_type 配合，source_key 保持与触发时一致）
     raw: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -72,40 +73,6 @@ def _severity_max(a: str, b: str) -> str:
 
 def _device_tier(device: Device) -> str:
     return (getattr(device, "device_type", None) or "switch").lower()
-
-
-def _default_owner() -> Tuple[str, Optional[str]]:
-    return (
-        os.getenv("INCIDENT_DEFAULT_OWNER", "Network Admin"),
-        os.getenv("INCIDENT_DEFAULT_EMAIL") or None,
-    )
-
-
-def _owner_for(device: Device, fault_type: str, incident_type: str, severity: str) -> Tuple[str, Optional[str]]:
-    """MVP 版指派规则：先用环境变量 + 内置默认，后续可迁移为规则表。"""
-    device_type = _device_tier(device)
-
-    if device_type in ("core_switch", "router") and severity in ("critical", "major"):
-        return (
-            os.getenv("INCIDENT_CORE_OWNER", "Core Network Admin"),
-            os.getenv("INCIDENT_CORE_EMAIL") or os.getenv("INCIDENT_DEFAULT_EMAIL") or None,
-        )
-    if device_type in ("firewall", "pa", "ftd"):
-        return (
-            os.getenv("INCIDENT_SECURITY_OWNER", "Security Admin"),
-            os.getenv("INCIDENT_SECURITY_EMAIL") or os.getenv("INCIDENT_DEFAULT_EMAIL") or None,
-        )
-    if fault_type in ("topology", "hardware"):
-        return (
-            os.getenv("INCIDENT_FIELD_OWNER", "Field Engineer"),
-            os.getenv("INCIDENT_FIELD_EMAIL") or os.getenv("INCIDENT_DEFAULT_EMAIL") or None,
-        )
-    if incident_type == "high_utilization":
-        return (
-            os.getenv("INCIDENT_CAPACITY_OWNER", "Capacity Planner"),
-            os.getenv("INCIDENT_CAPACITY_EMAIL") or os.getenv("INCIDENT_DEFAULT_EMAIL") or None,
-        )
-    return _default_owner()
 
 
 def _format_device(device: Device) -> str:
@@ -168,7 +135,7 @@ def classify_event(db: Session, event: MonitorEvent) -> IncidentDecision:
             f"来源：{event.source_type}\n时间：{event.occurred_at.isoformat()}"
         )
         impact = "上行口中断，可能影响下游设备或业务链路。" if is_uplink else "接入口中断，影响范围可能局限于单端口。"
-        owner, owner_email = _owner_for(device, "network", "uplink_down" if is_uplink else "access_port_down", severity)
+        owner, owner_email = None, None  # v1.1：派发目标由 dispatch_rule/运维组解析，不再用伪账号
         return IncidentDecision(
             fault_type="network",
             incident_type="uplink_down" if is_uplink else "access_port_down",
@@ -198,7 +165,7 @@ def classify_event(db: Session, event: MonitorEvent) -> IncidentDecision:
             f"来源：{event.source_type}\n时间：{event.occurred_at.isoformat()}"
         )
         impact = "设备不可达，可能影响其下联业务或管理能力。"
-        owner, owner_email = _owner_for(device, "network", "device_down", severity)
+        owner, owner_email = None, None  # v1.1：派发目标由 dispatch_rule/运维组解析，不再用伪账号
         return IncidentDecision(
             fault_type="network",
             incident_type="device_down",
@@ -213,7 +180,7 @@ def classify_event(db: Session, event: MonitorEvent) -> IncidentDecision:
         )
 
     source_key = f"device:{device.id}:{event.event_type}"
-    owner, owner_email = _default_owner()
+    owner, owner_email = None, None  # v1.1：派发目标由 dispatch_rule/运维组解析，不再用伪账号
     return IncidentDecision(
         fault_type="other",
         incident_type=event.event_type,
@@ -286,7 +253,7 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
     """监控事件创建/更新 FaultRecord。恢复事件会把对应未关闭故障标记 resolved。"""
     decision = classify_event(db, event)
 
-    if event.event_type in ("link_up", "device_recovered"):
+    if event.event_type in ("link_up", "device_recovered") or event.is_recovery:
         fault = _resolve_existing_fault(db, decision, event)
         if fault:
             if _is_flap_recovery(fault, event):
@@ -304,6 +271,9 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
         fault.event_count = (fault.event_count or 1) + 1
         fault.last_event_at = event.occurred_at
         fault.severity = _severity_max(fault.severity or "minor", decision.severity)
+        # 三期：窗口结束自动解除静默（重新检查，无窗口则释放）
+        from app.services.alert_governance import check_silence
+        fault.silenced = check_silence(db, fault.device_id, event.occurred_at) is not None
         fault.description = decision.description
         fault.impact = decision.impact
         fault.recommendation = decision.recommendation
@@ -319,21 +289,48 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
     if not device:
         return None
 
+    # v1.1：派发目标解析（dispatch_rule → 运维组 → 值班人/组名），通知 admin + 运维组
+    from app.features.groups.service import resolve_fault_targets
+    assigned_to, notify_usernames, notify_emails, group = resolve_fault_targets(
+        db,
+        source_type=event.source_type,
+        device_type=_device_tier(device),
+        severity=decision.severity,
+    )
+    is_real_user = bool(group and assigned_to and assigned_to != group.name)
+
+    # 三期治理：静默窗口 / 根因抑制 / 频控
+    from app.services.alert_governance import check_silence, find_suppressor, freq_limited
+    silence_task = check_silence(db, device.id, event.occurred_at)
+    suppressor = find_suppressor(db, device, event.event_type, if_index=event.if_index)
+    rate_limited = False
+    if not silence_task and not suppressor:
+        # 频控键 = 设备 × 事件类型（同一设备同类告警风暴抑制；单故障重复由去重分支兜底）
+        rate_limited = freq_limited(
+            f"device:{device.id}:{decision.incident_type or event.event_type}",
+            decision.severity)
+    governance = {
+        "silenced": silence_task is not None,
+        "silenced_by_task": silence_task.task_no if silence_task else None,
+        "suppressed_by": suppressor.fault_no if suppressor else None,
+        "rate_limited": rate_limited,
+    }
+
     fault_no = f"INC-{datetime.utcnow().strftime('%Y%m%d')}-{uuid.uuid4().hex[:4].upper()}"
     fault = FaultRecord(
         fault_no=fault_no,
         device_id=device.id,
         device_name=device.name,
         severity=decision.severity,
-        status="assigned" if decision.owner else "open",
+        status="assigned" if is_real_user else "open",
         description=decision.description,
         impact=decision.impact,
         reporter="Monitor Automation",
         fault_time=event.occurred_at,
         fault_type=decision.fault_type,
         incident_type=decision.incident_type,
-        assigned_to=decision.owner,
-        assigned_at=datetime.utcnow() if decision.owner else None,
+        assigned_to=assigned_to,
+        assigned_at=datetime.utcnow() if is_real_user else None,
         source_type=event.source_type,
         source_key=decision.source_key,
         source_event=event.event_type,
@@ -344,7 +341,10 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
         event_count=1,
         last_event_at=event.occurred_at,
         recommendation=decision.recommendation,
-        assigned_email=decision.owner_email,
+        assigned_email=notify_emails[0] if notify_emails else None,
+        group_id=group.id if group else None,
+        silenced=governance["silenced"],
+        suppressed_by=governance["suppressed_by"],
         review_required=True,
         false_positive=False,
     )
@@ -352,72 +352,70 @@ def upsert_fault_from_monitor_event(db: Session, event: MonitorEvent) -> Optiona
     db.commit()
     db.refresh(fault)
 
-    notify_incident(db, fault, decision, recovered=False)
+    if governance["silenced"] or governance["suppressed_by"] or governance["rate_limited"]:
+        from app.services.notification_service import record_notification_log
+        reason = ("静默(维护窗口)" if governance["silenced"]
+                  else f"抑制(根因 {governance['suppressed_by']})" if governance["suppressed_by"]
+                  else "频控")
+        record_notification_log(
+            db, event_type="fault_auto_created", channel="all",
+            recipient="governance", title=fault.fault_no, status="suppressed",
+            fault_id=fault.id, error=reason)
+        try:
+            db.commit()
+        except Exception:
+            logger.exception("治理日志提交失败")
+        logger.info("告警治理：fault=%s %s", fault.fault_no, reason)
+    else:
+        notify_incident(db, fault, decision, recovered=False,
+                        notify_usernames=notify_usernames, notify_emails=notify_emails)
     return fault
 
 
-def build_incident_email_body(fault: FaultRecord, decision: IncidentDecision, recovered: bool = False) -> str:
-    status_line = "已恢复，待人工确认关闭" if recovered else "待复核"
-    return f"""网络自动化系统故障通知
-
-故障单：{fault.fault_no}
-状态：{status_line}
-严重级别：{fault.severity}
-负责人：{fault.assigned_to or '-'}
-设备：{fault.device_name or '-'}
-接口：{fault.if_name or '-'}
-来源：{fault.source_type or '-'} / {fault.source_event or '-'}
-发生时间：{fault.fault_time.isoformat() if fault.fault_time else '-'}
-最近事件：{fault.last_event_at.isoformat() if fault.last_event_at else '-'}
-累计次数：{fault.event_count or 1}
-
-系统判断：
-故障类型：{fault.fault_type or '-'} / {fault.incident_type or '-'}
-影响范围：{fault.impact or '-'}
-
-处理建议：
-{fault.recommendation or decision.recommendation}
-
-复核动作：
-1. 登录系统查看故障单。
-2. 确认接单或调整负责人。
-3. 开始诊断并记录处理过程。
-4. 必要时转维修单。
-5. 恢复后标记解决并关闭。
-
----
-Network Automation System
-"""
-
-
-def notify_incident(db: Session, fault: FaultRecord, decision: IncidentDecision, recovered: bool = False) -> None:
-    """发送系统通知 + 邮件。邮件通道未启用时静默失败并记录日志。"""
+def notify_incident(
+    db: Session,
+    fault: FaultRecord,
+    decision: IncidentDecision,
+    recovered: bool = False,
+    notify_usernames: Optional[List[str]] = None,
+    notify_emails: Optional[List[str]] = None,
+) -> None:
+    """v1.1：统一经 dispatch() 通知 admin + 运维组（真实账号），全量落 notification_log。"""
     try:
-        from app.services.system_notification import SystemNotificationService
-        service = SystemNotificationService(db)
-        title_prefix = "[恢复]" if recovered else f"[{fault.severity.upper()}]"
-        service.send_notification(
-            user=fault.assigned_to or "Admin",
-            type="incident",
-            title=f"{title_prefix} {fault.device_name or ''} {decision.title}",
-            content=(fault.recommendation or decision.recommendation or "")[:500],
+        # 三期治理防御：静默/被抑制的故障不发任何通知
+        if fault.silenced or fault.suppressed_by:
+            return
+        if notify_usernames is None or notify_emails is None:
+            from app.features.groups.service import group_members
+            usernames = ["admin"]
+            if fault.group_id:
+                usernames += [m.username for m in group_members(db, fault.group_id)]
+            usernames = list(dict.fromkeys(usernames))
+            emails: List[str] = []
+            for user in db.query(User).filter(User.username.in_(usernames)).all():
+                if user.email:
+                    emails.append(user.email)
+            if notify_usernames is None:
+                notify_usernames = usernames
+            if notify_emails is None:
+                notify_emails = emails
+
+        from app.services.notification_service import get_notification_service
+        prefix = "[恢复]" if recovered else f"[{fault.severity.upper()}]"
+        external = recovered or fault.severity in ("critical", "major")
+        get_notification_service().dispatch(
+            db,
+            event_type="fault_recovered" if recovered else "fault_auto_created",
+            title=f"{prefix} {fault.device_name or ''} - {fault.fault_no}",
+            content=(fault.recommendation or decision.recommendation
+                     or (fault.description or "")[:800]),
+            recipients=notify_usernames,
+            emails=notify_emails,
             reference_type="fault",
             reference_id=fault.id,
+            fault_id=fault.id,
+            use_email=external,
+            use_im=external,
         )
     except Exception as e:
-        logger.warning(f"系统通知发送失败 fault={fault.id}: {e}")
-
-    if not decision.should_notify:
-        return
-    if fault.severity not in ("critical", "major") and not recovered:
-        return
-
-    try:
-        from app.services.notification_service import get_notification_service
-        subject_prefix = "[NAS 恢复]" if recovered else f"[NAS {fault.severity.upper()}]"
-        subject = f"{subject_prefix} {fault.device_name or ''} - {fault.fault_no}"
-        body = build_incident_email_body(fault, decision, recovered=recovered)
-        recipients = [fault.assigned_email] if fault.assigned_email else None
-        get_notification_service()._send_email(subject=subject, body=body, to_addresses=recipients)
-    except Exception as e:
-        logger.warning(f"故障邮件发送失败 fault={fault.id}: {e}")
+        logger.warning(f"故障通知发送失败 fault={fault.id}: {e}")

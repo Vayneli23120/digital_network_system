@@ -247,14 +247,24 @@ class SendAlertAction(BaseAction):
         for key, value in context.items():
             message = message.replace(f'{{{key}}}', str(value))
 
-        # 记录告警日志（暂不创建数据库记录，后续可集成通知服务）
         alert_id = f"alert-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{context.get('device_id', 0)}"
 
-        logger.warning(
-            f"Workflow Alert [{alert_level}]: {config.get('title', '自动化告警')} - {message}"
-        )
-
-        # TODO: 集成邮件/钉钉/企业微信通知服务
+        # v1.1：接入统一通知出口（通知 admin + 运维组，落 notification_log）
+        try:
+            from app.services.notification_service import get_notification_service
+            from app.features.groups.service import resolve_fault_targets
+            _assigned, usernames, emails, _group = resolve_fault_targets(db)
+            get_notification_service().dispatch(
+                db,
+                event_type="workflow_alert",
+                title=f"[{alert_level}] {config.get('title', '自动化告警')}",
+                content=message,
+                recipients=usernames,
+                emails=emails,
+                fault_id=context.get('fault_id'),
+            )
+        except Exception:
+            logger.exception("Workflow Alert 通知发送失败")
 
         return {
             'success': True,

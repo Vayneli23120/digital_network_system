@@ -56,6 +56,9 @@ from .features.workflows.router import router as workflow_router
 from .features.notifications.router import router as notifications_router
 from .features.jobs.router import router as jobs_router
 from .features.system_settings.router import router as system_settings_router
+from .features.groups.router import router as groups_router
+from .features.notifications.settings_router import router as notification_settings_router
+from .features.alerts.webhook import router as alerts_webhook_router
 from .features.auth.sso_router import router as sso_router
 from .shared.middleware.auth_middleware import auth_middleware
 from .shared.middleware.rate_limiter_v2 import RateLimitMiddleware
@@ -170,6 +173,9 @@ app.include_router(workflow_router)    # 自动化工作流路由
 app.include_router(notifications_router)  # 系统通知路由
 app.include_router(jobs_router)        # 作业监控路由
 app.include_router(system_settings_router)  # 系统设置路由
+app.include_router(groups_router)      # 通知分组/排班/升级策略
+app.include_router(notification_settings_router)  # 通知渠道/模板/策略/发送日志
+app.include_router(alerts_webhook_router)  # 告警 Webhook（Alertmanager 等）
 
 
 # ============ 健康检查 ============
@@ -429,6 +435,32 @@ async def startup_event():
     logger.info(f"备份目录：{config.storage.backup_dir}")
     init_default_templates()
     init_default_roles()
+
+    # 初始化通知分组默认数据（运维组 + admin 组长 + 默认分发规则 + 默认升级策略）
+    try:
+        from .features.groups.service import ensure_default_notification_setup
+        with db_manager.session_scope() as _seed_db:
+            ensure_default_notification_setup(_seed_db)
+        logger.info("通知分组默认数据初始化完成")
+    except Exception as e:
+        logger.warning(f"通知分组默认数据初始化失败: {e}")
+
+    # 渠道 seed：config.yaml 现有渠道配置迁入 DB（幂等，仅首次）
+    try:
+        from .services.notification_channels import seed_channels_from_config
+        with db_manager.session_scope() as _seed_db:
+            seed_channels_from_config(_seed_db, config.alerts)
+        logger.info("通知渠道 DB seed 完成")
+    except Exception as e:
+        logger.warning(f"通知渠道 DB seed 失败: {e}")
+
+    # 启动告警升级扫描（15min 运维组全员 → 30min 部门经理；维修单 SLA 同套）
+    try:
+        from .services.escalation_service import start_escalation_scanner
+        start_escalation_scanner()
+        logger.info("告警升级扫描服务已启动")
+    except Exception as e:
+        logger.warning(f"启动告警升级扫描服务失败: {e}")
 
     # 注册主事件循环，供 APScheduler 后台线程推送 WebSocket 状态变化
     from .features.websocket.router import set_main_loop

@@ -114,7 +114,7 @@ const loadUnreadNotifCount = debounce(async (force = false) => {
     const res = await cachedRequest(
       () => getUnreadCount(),
       'layout_unread_count',
-      {},
+      { user: authStore.currentUser || '' },
       { forceRefresh: force, ttl: 30000 }
     )
     unreadNotifCount.value = res.unread_count || 0
@@ -204,6 +204,7 @@ const sidebarData = computed(() => {
         label: t('groupSystem'),
         items: [
           { path: '/notifications', text: t('menuNotifications'), icon: Bell, permission: 'nav_system:notifications' },
+          { path: '/notification-settings', text: t('menuNotificationSettings') || '通知设置', icon: Setting, permission: 'notification:manage' },
           { path: '/logs', text: t('menuLogs'), icon: Document, permission: 'log:read' },
           { path: '/alert-settings', text: t('menuAlertSettings'), icon: Bell, permission: 'alert:manage' },
           { path: '/system-settings', text: t('menuSystemSettings'), icon: Setting, permission: 'system_config:read' },
@@ -250,7 +251,7 @@ watch(route, (newRoute) => {
     activeTopTab.value = 'config'
   } else if (path.startsWith('/spare') || path.startsWith('/scrap') || path.startsWith('/movements')) {
     activeTopTab.value = 'spare'
-  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/system-settings') || path.startsWith('/system-help') || path.startsWith('/users') || path.startsWith('/permissions') || path.startsWith('/notifications')) {
+  } else if (path.startsWith('/logs') || path.startsWith('/alert-settings') || path.startsWith('/system-settings') || path.startsWith('/system-help') || path.startsWith('/users') || path.startsWith('/permissions') || path.startsWith('/notifications') || path.startsWith('/notification-settings')) {
     activeTopTab.value = 'system'
   }
 }, { immediate: true })

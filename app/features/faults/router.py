@@ -796,6 +796,32 @@ async def auto_create_maintenance(
     except FaultMaintenanceConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
+    # v1.1：自动建单补指派（dispatch_rule → 运维组值班人/组名）+ 通知 admin + 运维组
+    if created:
+        from app.features.groups.service import resolve_fault_targets
+        device = db.query(Device).filter(Device.id == fault.device_id).first()
+        assigned_to, usernames, emails, group = resolve_fault_targets(
+            db,
+            source_type=fault.source_type,
+            device_type=(device.device_type if device else None),
+            severity=fault.severity,
+        )
+        maintenance.current_owner = assigned_to
+        maintenance.group_id = group.id if group else None
+        db.commit()
+        from app.services.notification_service import get_notification_service
+        get_notification_service().dispatch(
+            db,
+            event_type="maintenance_auto_created",
+            title=f"新维修单: {maintenance.maint_no}",
+            content=f"设备 {maintenance.device_name} 已自动创建维修单（来源故障 {fault.fault_no}），请安排处理。",
+            recipients=usernames,
+            emails=emails,
+            reference_type="maintenance",
+            reference_id=maintenance.id,
+            maintenance_id=maintenance.id,
+        )
+
     return {
         "success": True,
         "maintenance_id": maintenance.id,
@@ -1170,25 +1196,26 @@ async def trigger_fault_ai_prediagnosis(fault_id: int):
 
 
 async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
-    """后台发送故障指派通知"""
+    """后台发送故障指派通知（站内 + 邮件 + IM，经 dispatch 统一出口，落通知日志）"""
     from app.shared.database import get_db_manager
-    from app.services.system_notification import SystemNotificationService
+    from app.services.notification_service import get_notification_service
 
     db_manager = get_db_manager()
     db = db_manager.get_session()
 
     try:
         fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
-        if fault:
-            notification_service = SystemNotificationService(db)
-            # 只发给被指派的人
-            notification_service.send_notification(
-                user=assigned_to,
-                type="fault_assigned",
+        if fault and assigned_to:
+            # 只发给被指派的人（真实账号）
+            get_notification_service().dispatch(
+                db,
+                event_type="fault_assigned",
                 title=f"新故障指派: {fault.fault_no}",
                 content=f"设备 {fault.device_name} 的故障已指派给您，请尽快处理。",
+                recipients=[assigned_to],
                 reference_type="fault",
-                reference_id=fault_id
+                reference_id=fault_id,
+                fault_id=fault_id,
             )
     except Exception:
         logger.exception("Assignment notification failed for fault {}", fault_id)
@@ -1197,25 +1224,26 @@ async def send_fault_assigned_notification(fault_id: int, assigned_to: str):
 
 
 async def send_maintenance_assigned_notification(maintenance_id: int, assigned_to: str):
-    """后台发送维修单指派通知"""
+    """后台发送维修单指派通知（站内 + 邮件 + IM，经 dispatch 统一出口，落通知日志）"""
     from app.shared.database import get_db_manager
-    from app.services.system_notification import SystemNotificationService
+    from app.services.notification_service import get_notification_service
 
     db_manager = get_db_manager()
     db = db_manager.get_session()
 
     try:
         maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maintenance_id).first()
-        if maintenance:
-            notification_service = SystemNotificationService(db)
-            # 只发给被指派的人
-            notification_service.send_notification(
-                user=assigned_to,
-                type="maintenance_assigned",
+        if maintenance and assigned_to:
+            # 只发给被指派的人（真实账号）
+            get_notification_service().dispatch(
+                db,
+                event_type="maintenance_assigned",
                 title=f"新维修单指派: {maintenance.maint_no}",
                 content=f"设备 {maintenance.device_name} 的维修任务已指派给您，故障来源: {maintenance.fault_id}。",
+                recipients=[assigned_to],
                 reference_type="maintenance",
-                reference_id=maintenance_id
+                reference_id=maintenance_id,
+                maintenance_id=maintenance_id,
             )
     except Exception:
         logger.exception(
@@ -1227,9 +1255,9 @@ async def send_maintenance_assigned_notification(maintenance_id: int, assigned_t
 
 
 async def send_maintenance_completed_notification(fault_id: int, maintenance_id: int):
-    """后台发送维修完成通知（通知故障负责人确认解决）"""
+    """后台发送维修完成通知（通知故障负责人确认解决，经 dispatch 统一出口）"""
     from app.shared.database import get_db_manager
-    from app.services.system_notification import SystemNotificationService
+    from app.services.notification_service import get_notification_service
 
     db_manager = get_db_manager()
     db = db_manager.get_session()
@@ -1238,17 +1266,18 @@ async def send_maintenance_completed_notification(fault_id: int, maintenance_id:
         fault = db.query(FaultRecord).filter(FaultRecord.id == fault_id).first()
         maintenance = db.query(MaintenanceRecord).filter(MaintenanceRecord.id == maintenance_id).first()
         if fault and maintenance:
-            # 通知故障负责人
-            notification_service = SystemNotificationService(db)
-            if fault.assigned_to:
-                notification_service.send_notification(
-                    user=fault.assigned_to,
-                    type="maintenance_completed",
-                    title=f"维修完成待确认: {maintenance.maint_no}",
-                    content=f"设备 {maintenance.device_name} 的维修已完成，请确认故障是否解决。",
-                    reference_type="fault",
-                    reference_id=fault_id
-                )
+            recipients = [fault.assigned_to] if fault.assigned_to else ["admin"]
+            get_notification_service().dispatch(
+                db,
+                event_type="maintenance_completed",
+                title=f"维修完成待确认: {maintenance.maint_no}",
+                content=f"设备 {maintenance.device_name} 的维修已完成，请确认故障是否解决。",
+                recipients=recipients,
+                reference_type="fault",
+                reference_id=fault_id,
+                fault_id=fault_id,
+                maintenance_id=maintenance_id,
+            )
     except Exception:
         logger.exception(
             "Completion notification failed for maintenance {}",

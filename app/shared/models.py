@@ -202,6 +202,13 @@ class FaultRecord(Base):
     reviewed_by = Column(String(100))
     false_positive = Column(Boolean, default=False, server_default='0')
 
+    # ===== 通知/分发/升级字段 =====
+    group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="SET NULL"), nullable=True)  # 派发目标运维组
+    escalation_level = Column(Integer, default=0)  # 当前升级层级（0=未升级）
+    escalated_at = Column(DateTime)  # 最近一次升级时间
+    silenced = Column(Boolean, default=False, server_default='0')  # 维护窗口静默（只落库不通知）
+    suppressed_by = Column(String(50))  # 被哪张根因故障单抑制（拓扑/同设备根因）
+
     # 关系
     device = relationship("Device", back_populates="faults", foreign_keys=[device_id])
     maintenance = relationship("MaintenanceRecord", foreign_keys=[maintenance_id])
@@ -263,6 +270,11 @@ class MaintenanceRecord(Base):
     current_owner = Column(String(100))  # 当前负责人
     priority = Column(String(10), default="P3", index=True)  # P1/P2/P3/P4 优先级
     sla_deadline = Column(DateTime)  # SLA截止时间
+
+    # ===== 通知/分发/升级字段 =====
+    group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="SET NULL"), nullable=True)  # 派发目标组
+    escalation_level = Column(Integer, default=0)  # 当前升级层级
+    escalated_at = Column(DateTime)  # 最近一次升级时间
 
     # ===== 半自动状态机字段 =====
     # 诊断信息
@@ -1192,6 +1204,185 @@ class Notification(Base):
 
     def __repr__(self):
         return f"<Notification(user='{self.user}', type='{self.type}')>"
+
+
+class UserGroup(Base):
+    """用户组表（运维组/值班组）——通知与分发的地基"""
+    __tablename__ = "user_groups"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    description = Column(String(500))
+    is_oncall = Column(Boolean, default=True, server_default='1')  # 是否值班组（参与告警派发）
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    members = relationship("UserGroupMember", back_populates="group", cascade="all, delete-orphan")
+
+    def __repr__(self):
+        return f"<UserGroup(name='{self.name}')>"
+
+
+class UserGroupMember(Base):
+    """组成员表（多对多，含组长标记——组长即部门经理升级目标）"""
+    __tablename__ = "user_group_members"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    username = Column(String(100), nullable=False)  # 冗余用户名，通知/派发查询免 join
+    is_leader = Column(Boolean, default=False, server_default='0')  # 组长（部门经理）
+
+    group = relationship("UserGroup", back_populates="members")
+
+    def __repr__(self):
+        return f"<UserGroupMember(group_id={self.group_id}, user='{self.username}', leader={self.is_leader})>"
+
+
+class OncallSchedule(Base):
+    """排班表（组 × 时间段 × 值班人）"""
+    __tablename__ = "oncall_schedules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    username = Column(String(100), nullable=False)  # 冗余用户名
+    start_at = Column(DateTime, nullable=False)
+    end_at = Column(DateTime)
+    repeat_rule = Column(String(20), default="none")  # none/daily/weekly
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<OncallSchedule(group_id={self.group_id}, user='{self.username}')>"
+
+
+class DispatchRule(Base):
+    """分发规则表（条件 → 目标运维组）"""
+    __tablename__ = "dispatch_rules"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, server_default='1')
+    priority = Column(Integer, default=100)  # 数值越小越优先
+    source_types = Column(Text)  # JSON list，空=全部：["trap","reachability",...]
+    device_types = Column(Text)  # JSON list，空=全部：["core_switch","router",...]
+    severities = Column(Text)    # JSON list，空=全部：["critical","major",...]
+    target_group_id = Column(Integer, ForeignKey("user_groups.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<DispatchRule(name='{self.name}', enabled={self.enabled})>"
+
+
+class EscalationPolicy(Base):
+    """升级策略表（超时逐级升级，默认 15min 组全员 → 30min 部门经理）"""
+    __tablename__ = "escalation_policies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, server_default='1')
+    # JSON: [{"level":2,"timeout_minutes":15,"targets":["group"],"create_review":false},
+    #        {"level":3,"timeout_minutes":30,"targets":["leader"],"create_review":true}]
+    # targets 取值：oncall=值班人 / group=组全员 / leader=组长(部门经理) / admin=管理员
+    levels_json = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<EscalationPolicy(name='{self.name}', enabled={self.enabled})>"
+
+
+class NotificationLog(Base):
+    """通知发送日志表（全渠道审计：谁、何时、渠道、结果、重试）"""
+    __tablename__ = "notification_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_type = Column(String(50), index=True)  # fault_auto_created / fault_assigned / escalation ...
+    fault_id = Column(Integer, index=True)
+    maintenance_id = Column(Integer, index=True)
+    channel = Column(String(20))  # inapp / email / wechat_work / dingtalk
+    recipient = Column(String(200))  # 接收方（用户名/邮箱/webhook 标识）
+    title = Column(String(300))
+    status = Column(String(20), default="sent")  # sent/failed/degraded/suppressed
+    retry_count = Column(Integer, default=0)
+    error = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<NotificationLog(event='{self.event_type}', channel='{self.channel}', status='{self.status}')>"
+
+
+class NotificationChannel(Base):
+    """通知渠道表（配置加密入库，密钥由 ENCRYPTION_KEY/JWT_SECRET 派生）"""
+    __tablename__ = "notification_channels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    type = Column(String(20), nullable=False, index=True)  # email/wechat_work/dingtalk/webhook
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, server_default='1')
+    config_encrypted = Column(Text)  # Fernet 密文 JSON：{"smtp_host":..., "webhook_url":..., "secret":...}
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<NotificationChannel(type='{self.type}', name='{self.name}', enabled={self.enabled})>"
+
+
+class NotificationTemplate(Base):
+    """通知模板表（Jinja2 沙箱渲染）"""
+    __tablename__ = "notification_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    channel_type = Column(String(20), default="email")  # email/wechat_work/dingtalk/inapp
+    subject_tpl = Column(Text)  # 标题模板（支持 {{ title }} 等变量）
+    body_tpl = Column(Text)     # 正文模板
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<NotificationTemplate(name='{self.name}')>"
+
+
+class NotificationPolicy(Base):
+    """通知策略表（级别 × 事件 × 目标 × 渠道 × 模板 × 频控）"""
+    __tablename__ = "notification_policies"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False)
+    enabled = Column(Boolean, default=True, server_default='1')
+    priority = Column(Integer, default=100)  # 数值越小越优先
+    severities = Column(Text)    # JSON list，空=全部级别
+    event_types = Column(Text)   # JSON list，空=全部事件
+    target_type = Column(String(20), default="all")  # all/group/role/user
+    target_id = Column(Integer)  # group_id / role_id / user_id（target_type 非 all 时）
+    channels = Column(Text)      # JSON list：inapp/email/wechat_work/dingtalk
+    template_id = Column(Integer, ForeignKey("notification_templates.id", ondelete="SET NULL"), nullable=True)
+    rate_limit_window_s = Column(Integer, default=0)  # 0=不限
+    rate_limit_max = Column(Integer, default=0)       # 0=不限
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f"<NotificationPolicy(name='{self.name}', enabled={self.enabled})>"
+
+
+class AlertEvent(Base):
+    """标准化告警事件表（外部源进来必落；fingerprint 唯一保证 webhook 幂等）"""
+    __tablename__ = "alert_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_type = Column(String(30), index=True)  # prometheus/zabbix/generic/trap/reachability
+    event_type = Column(String(50), index=True)
+    fingerprint = Column(String(200), nullable=False)
+    dedup_key = Column(String(200), unique=True, index=True)
+    severity = Column(String(20), index=True)
+    labels_json = Column(Text)
+    annotations_json = Column(Text)
+    silenced = Column(Boolean, default=False, server_default='0')
+    suppressed_by = Column(String(200))
+    fault_id = Column(Integer, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    def __repr__(self):
+        return f"<AlertEvent(source='{self.source_type}', event='{self.event_type}')>"
 
 
 class DeployHistory(Base):
