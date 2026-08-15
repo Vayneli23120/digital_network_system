@@ -24,6 +24,13 @@ RUN pip install --no-cache-dir -r requirements.txt \
     -i https://mirrors.aliyun.com/pypi/simple/ \
     --trusted-host mirrors.aliyun.com
 
+# Install LLM 依赖（litellm，供「通用 LLM 服务配置」直连各提供商 / LM Studio / Ollama 等）
+# 说明：requirements-ai.txt 里 google-adk 与 langchain 对 tenacity 的版本要求互斥
+# （>=9 与 <9），整文件无法一起安装；此处只安装 LLM 配置所必需的 litellm。
+RUN pip install --no-cache-dir litellm==1.60.0 \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com
+
 # Copy application source
 COPY . .
 
