@@ -74,7 +74,7 @@ class TestDingTalkService:
         service = DingTalkAlertService()
         service.webhook_url = "https://test.webhook"
         service.secret = ""
-        url = service._get_signed_url()
+        url = service._get_signed_url_for("https://test.webhook", "")
         assert url == "https://test.webhook"
 
 

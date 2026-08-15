@@ -19,7 +19,7 @@ def _add_device(db_session, name="SW-Core-01", ip="10.0.0.1", device_type="core_
     return device
 
 
-def test_device_unreachable_creates_assigned_fault(db_session, monkeypatch):
+def test_device_unreachable_creates_open_fault(db_session, monkeypatch):
     monkeypatch.setattr("app.services.incident_automation.notify_incident", lambda *args, **kwargs: None)
     device = _add_device(db_session)
 
@@ -32,7 +32,7 @@ def test_device_unreachable_creates_assigned_fault(db_session, monkeypatch):
     ))
 
     assert fault is not None
-    assert fault.status == "assigned"
+    assert fault.status == "open"
     assert fault.severity == "critical"
     assert fault.fault_type == "network"
     assert fault.incident_type == "device_down"
@@ -122,7 +122,7 @@ def test_interface_poll_uplink_down_creates_fault(db_session, monkeypatch):
     ))
 
     assert fault is not None
-    assert fault.status == "assigned"
+    assert fault.status == "open"
     assert fault.severity == "critical"  # 上行口 + 核心交换机
     assert fault.incident_type == "uplink_down"
     assert fault.source_type == "interface_poll"
