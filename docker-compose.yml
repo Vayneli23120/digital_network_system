@@ -1,4 +1,15 @@
-version: '3.9'
+# ============================================================
+# Network Automation System — 全栈 Docker 编排
+#
+# 一次性启动：Postgres + Redis + 迁移初始化 + 后端 + Celery(worker/beat)
+#            + Vue 前端(nginx) + Prometheus + snmp_exporter + Grafana
+#
+# 使用前：
+#   1. cp .env.docker.example .env 并填写 DB_PASSWORD / JWT_SECRET / ADMIN_PASSWORD
+#   2. docker compose up -d --build
+#
+# 首次启动会自动执行：alembic upgrade head → 初始化默认角色/模板 → 创建初始管理员
+# ============================================================
 
 services:
   postgres:
@@ -34,6 +45,37 @@ services:
       timeout: 5s
       retries: 3
 
+  # 一次性任务：迁移 schema + 初始化默认数据 + 创建初始管理员。
+  # 完成后 backend/worker/beat 才会启动（depends_on: service_completed_successfully）。
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: nas-migrate
+    command: ["sh", "-c", "alembic upgrade head && python scripts/bootstrap.py"]
+    environment: &app-env
+      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
+      AUTH_ENABLED: "${AUTH_ENABLED:-true}"
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required}"
+      ENCRYPTION_KEY: "${ENCRYPTION_KEY:-}"
+      # Celery broker/backend（指向 redis 服务）
+      CELERY_BROKER_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/1"
+      CELERY_RESULT_BACKEND: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/1"
+      # Redis 数据缓存
+      REDIS_ENABLED: "true"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_DB: "0"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-changeme_redis}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      ADMIN_PASSWORD: "${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: "no"
+
   backend:
     build:
       context: .
@@ -46,39 +88,30 @@ services:
       - nas-backups:/app/backups
       - nas-logs:/app/logs
       - nas-assets:/app/assets
+      # file_sd 目标文件：后端按数据库生成，Prometheus 读取同一份
+      - ./docker/prometheus/targets:/app/docker/prometheus/targets
     environment:
-      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
-      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
-      AUTH_ENABLED: "${AUTH_ENABLED:-true}"
+      <<: *app-env
       APP_DEBUG: "${APP_DEBUG:-false}"
       CORS_ALLOWED_ORIGINS: "${CORS_ALLOWED_ORIGINS:-http://localhost:3000}"
-      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required in production}"
+      PROMETHEUS_URL: "http://prometheus:9090"
+      PROMETHEUS_TARGETS_FILE: "/app/docker/prometheus/targets/snmp_devices.yml"
       SNMP_TRAP_PORT: "${SNMP_TRAP_PORT:-162}"
       SNMP_TRAP_COMMUNITY: "${SNMP_TRAP_COMMUNITY:-}"
     depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # NET_BIND_SERVICE：允许 appuser 绑定 162/udp（SNMP Trap）；NET_RAW：ICMP ping 设备可达性
+    cap_add:
+      - NET_BIND_SERVICE
+      - NET_RAW
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 15s
-
-  frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: nas-frontend-vue
-    ports:
-      - "3000:80"
-    depends_on:
-      backend:
-        condition: service_healthy
-    restart: unless-stopped
+      start_period: 30s
 
   worker:
     build:
@@ -90,11 +123,14 @@ services:
       - nas-backups:/app/backups
       - nas-logs:/app/logs
     environment:
-      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
-      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
+      <<: *app-env
+    # 镜像内建了面向 uvicorn 的 HEALTHCHECK（curl :8000/health），
+    # 对 Celery worker 不适用，这里显式禁用避免误报 unhealthy。
+    healthcheck:
+      disable: true
     depends_on:
-      - backend
-      - redis
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   beat:
@@ -104,12 +140,75 @@ services:
     container_name: nas-beat
     command: celery -A app.core.celery_app beat -l info
     environment:
-      DATABASE_URL: "postgresql+psycopg2://${DB_USER:-nasuser}:${DB_PASSWORD}@postgres:5432/nas"
-      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis}@redis:6379/0"
+      <<: *app-env
+    healthcheck:
+      disable: true
     depends_on:
-      - backend
-      - redis
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: nas-frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: nas-prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./docker/prometheus/targets:/etc/prometheus/targets:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=90d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    depends_on:
+      - snmp_exporter
+
+  snmp_exporter:
+    image: prom/snmp-exporter:latest
+    container_name: nas-snmp-exporter
+    restart: unless-stopped
+    ports:
+      - "9116:9116"
+    volumes:
+      - ./docker/snmp_exporter/snmp.yml:/etc/snmp_exporter/snmp.yml:ro
+
+  grafana:
+    image: grafana/grafana-oss:latest
+    container_name: nas-grafana
+    restart: unless-stopped
+    ports:
+      - "3001:3000"          # 宿主机 3001 → 容器 3000（避开前端 3000）
+    environment:
+      # 允许被 iframe 嵌入到自研系统页面
+      - GF_SECURITY_ALLOW_EMBEDDING=true
+      # 本地直连模式：直接通过 http://localhost:3001 访问
+      - GF_SERVER_ROOT_URL=http://localhost:3001/
+      # 匿名只读（内网隔离环境；如需登录可改成 false 并配置管理员）
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_USERS_DEFAULT_THEME=light
+    volumes:
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./docker/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
 
 volumes:
   pg_data:
@@ -117,3 +216,5 @@ volumes:
   nas-backups:
   nas-logs:
   nas-assets:
+  prometheus_data:
+  grafana_data:

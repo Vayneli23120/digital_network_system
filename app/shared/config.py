@@ -345,6 +345,7 @@ class Config(BaseModel):
             # 这种回退会让服务连上一个空的开发库而不报任何错，所以必须显式告警。
             fallback = cls()
             fallback._apply_security_env_overrides()
+            fallback._apply_runtime_env_overrides()
             fallback.validate()
             effective = fallback.database.get_effective_url()
             print(
@@ -373,6 +374,7 @@ class Config(BaseModel):
 
         config = cls(**data)
         config._apply_security_env_overrides()
+        config._apply_runtime_env_overrides()
         # Fail-fast 验证
         config.validate()
         return config
@@ -422,6 +424,30 @@ class Config(BaseModel):
             self.metrics.cleanup_batch_size = self._parse_int_env(
                 "DEVICE_METRIC_CLEANUP_BATCH_SIZE", os.environ["DEVICE_METRIC_CLEANUP_BATCH_SIZE"]
             )
+
+    def _apply_runtime_env_overrides(self) -> None:
+        """应用容器/进程环境中的运行时配置（Celery / Redis 数据缓存）。
+
+        这些变量已在 .env.example / docker-compose.yml 中公开，必须真实生效，
+        否则容器内的 Celery broker 会回退到 redis://localhost（连不上 redis 服务）。
+        """
+        if "CELERY_BROKER_URL" in os.environ:
+            self.celery.broker_url = os.environ["CELERY_BROKER_URL"]
+        if "CELERY_RESULT_BACKEND" in os.environ:
+            self.celery.result_backend = os.environ["CELERY_RESULT_BACKEND"]
+
+        if "REDIS_ENABLED" in os.environ:
+            self.cache.enabled = self._parse_bool_env(
+                "REDIS_ENABLED", os.environ["REDIS_ENABLED"]
+            )
+        if "REDIS_HOST" in os.environ:
+            self.cache.host = os.environ["REDIS_HOST"]
+        if "REDIS_PORT" in os.environ:
+            self.cache.port = self._parse_int_env("REDIS_PORT", os.environ["REDIS_PORT"])
+        if "REDIS_PASSWORD" in os.environ:
+            self.cache.password = os.environ["REDIS_PASSWORD"]
+        if "REDIS_DB" in os.environ:
+            self.cache.db = self._parse_int_env("REDIS_DB", os.environ["REDIS_DB"])
 
     @staticmethod
     def _parse_int_env(name: str, value: str) -> int:

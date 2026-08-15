@@ -1,5 +1,6 @@
 # ============================================
 # Network Automation System - Frontend
+# 构建 Vue 产物并用 nginx 托管 + 反代 /api /ws /photos
 # ============================================
 
 FROM node:20-alpine AS builder
@@ -10,27 +11,25 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies (including dev for build)
-RUN npm install
+RUN npm install --no-audit --no-fund
 
 # Copy source
 COPY . .
 
-# Build for production
+# Build for production（VITE_API_BASE_URL 默认 /api，由 nginx 反代）
 RUN npm run build
 
 # ============================================
-# Stage 2: Production runner
+# Stage 2: nginx
 # ============================================
-FROM node:20-alpine AS production
+FROM nginx:1.27-alpine AS production
 
-WORKDIR /app
+# 覆盖默认站点配置
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
-# Install serve to serve the static build
-RUN npm install -g serve
+# 拷贝构建产物
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Copy built assets from builder
-COPY --from=builder /app/dist ./dist
+EXPOSE 80
 
-EXPOSE 3000
-
-CMD ["serve", "-s", "dist", "-l", "3000"]
+CMD ["nginx", "-g", "daemon off;"]

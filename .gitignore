@@ -39,6 +39,12 @@ ENV/
 config.yaml
 inventory/devices.yaml
 
+# Docker 部署环境变量（含密码/密钥，严禁提交）
+.env
+.env.*
+!.env.example
+!.env.docker.example
+
 # 数据库
 data/*.db
 data/*.db-journal
@@ -53,6 +59,10 @@ data/*.db-wal
 
 # 日志
 logs/*
+
+# Prometheus file_sd 目标文件：由后端 prometheus_connector 依据数据库运行时生成，
+# 各环境（开发机/服务器）内容不同，禁止入库（避免 git pull 与本地生成物冲突）
+docker/prometheus/targets/
 
 # 设备照片
 assets/devices/*
