@@ -5,7 +5,7 @@
       <p class="page-desc">{{ t('notifSettingsDesc') || '监控自动故障统一派发到运维组并通知管理员；超时未处理将逐级升级到部门经理。' }}</p>
     </div>
 
-    <el-tabs v-model="activeTab" class="settings-tabs">
+    <el-tabs v-model="activeTab" type="border-card" class="settings-tabs">
       <!-- ================= 分组与排班 ================= -->
       <el-tab-pane :label="t('notifSettingsGroups') || '分组与排班'" name="groups">
         <div class="groups-layout">
@@ -164,6 +164,10 @@
 
       <!-- ================= 渠道管理 ================= -->
       <el-tab-pane :label="t('notifSettingsChannels') || '渠道管理'" name="channels">
+        <div class="global-switch-row">
+          <span class="card-title">{{ t('notifSettingsGlobalSwitch') || '告警总开关（关闭后所有渠道停止发送，站内通知不受影响）' }}</span>
+          <el-switch v-model="globalAlertsEnabled" @change="saveGlobalSwitch" />
+        </div>
         <div class="card-header">
           <span class="card-title">{{ t('notifSettingsChannelsDesc') || '通知渠道配置（加密入库；每种类型一个）' }}</span>
           <el-button type="primary" size="small" @click="openChannelDialog()">{{ t('notifSettingsNewChannel') || '新建渠道' }}</el-button>
@@ -475,6 +479,7 @@ import {
   getNotificationTemplates, getNotificationPolicies,
   createNotificationPolicy, updateNotificationPolicy, deleteNotificationPolicy,
   getNotificationTargets, getNotificationLogs, getNotificationStats,
+  getGlobalAlertSwitch, updateGlobalAlertSwitch,
 } from '@/api'
 import { getUsers } from '@/api'
 
@@ -770,7 +775,7 @@ const savePolicy = async () => {
 }
 
 onMounted(async () => {
-  await Promise.all([loadGroups(), loadUsers(), loadRules(), loadPolicy(), loadChannels(), loadPolicies(), loadTemplates(), loadTargets(), loadLogs(), loadStats()])
+  await Promise.all([loadGroups(), loadUsers(), loadRules(), loadPolicy(), loadChannels(), loadPolicies(), loadTemplates(), loadTargets(), loadLogs(), loadStats(), loadGlobalSwitch()])
 })
 
 // ===== 渠道管理（二期） =====
@@ -778,6 +783,28 @@ const channels = ref([])
 const loadingChannels = ref(false)
 const channelDialogVisible = ref(false)
 const channelForm = ref({})
+
+// ===== 全局总开关 =====
+const globalAlertsEnabled = ref(true)
+
+const loadGlobalSwitch = async () => {
+  try {
+    const res = await getGlobalAlertSwitch()
+    globalAlertsEnabled.value = !!res.alerts_enabled
+  } catch (e) {
+    console.error('加载总开关失败:', e)
+  }
+}
+
+const saveGlobalSwitch = async (val) => {
+  try {
+    await updateGlobalAlertSwitch(!!val)
+    ElMessage.success(t('notifSettingsSaved') || '已保存')
+  } catch (e) {
+    globalAlertsEnabled.value = !val
+    ElMessage.error(t('notifSettingsSaveFailed') || '保存失败')
+  }
+}
 
 const loadChannels = async () => {
   loadingChannels.value = true
@@ -1008,9 +1035,12 @@ const loadStats = async () => {
 }
 .groups-layout {
   display: grid;
-  grid-template-columns: 380px 1fr;
+  grid-template-columns: 340px minmax(0, 1fr);
   gap: 20px;
   align-items: start;
+}
+@media (max-width: 1100px) {
+  .groups-layout { grid-template-columns: 1fr; }
 }
 .card-header {
   display: flex;
@@ -1046,6 +1076,16 @@ const loadStats = async () => {
 }
 .escalation-card {
   max-width: 640px;
+}
+.global-switch-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 14px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
 }
 .kpi-row {
   display: flex;

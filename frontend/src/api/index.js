@@ -516,18 +516,12 @@ export function changePassword(data) {
   return api.post('/auth/change-password', data)
 }
 
-// 告警通知
-export function getAlertSettings() {
-  return api.get('/alerts/settings')
+// 告警总开关（合并自旧"告警通知设置"，渠道明细统一在通知设置-渠道管理）
+export function getGlobalAlertSwitch() {
+  return api.get('/notification-settings/global')
 }
-export function saveAlertSettings(data) {
-  return api.post('/alerts/settings', data)
-}
-export function getAlertStatus() {
-  return api.get('/alerts/status')
-}
-export function testAlertChannel(channel = 'all') {
-  return api.post('/alerts/test', null, { params: { channel } })
+export function updateGlobalAlertSwitch(enabled) {
+  return api.put('/notification-settings/global', { enabled })
 }
 
 // 配置合规

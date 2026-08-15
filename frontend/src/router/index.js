@@ -260,16 +260,7 @@ const routes = [
   },
   {
     path: '/alert-settings',
-    name: 'AlertSettingsLayout',
-    component: Layout,
-    children: [
-      {
-        path: '',
-        name: 'AlertSettings',
-        component: () => import('@/views/AlertSettings.vue'),
-        meta: { title: '告警通知', permission: 'alert:manage' }
-      }
-    ]
+    redirect: '/notification-settings'
   },
   {
     path: '/system-settings',

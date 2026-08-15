@@ -281,16 +281,26 @@ class NotificationService:
                                         fault_id=fault_id, maintenance_id=maintenance_id, error=str(e))
         return count
 
+    def _any_db_channel_enabled(self, db) -> bool:
+        for ctype in ("email", "wechat_work", "dingtalk", "webhook"):
+            dbc = self._channel_db(db, ctype)
+            if dbc and dbc["enabled"]:
+                return True
+        return False
+
     def _send_email_robust(self, db, subject: str, body: str,
                            to_addresses: Optional[List[str]] = None) -> bool:
-        """邮件发送（DB 渠道覆盖 recipients + 重试熔断）。"""
+        """邮件发送（DB 渠道覆盖 recipients + 重试熔断）。
+
+        渠道开关以 DB 为准；仅当 DB 无该渠道时才回退 config.yaml 开关（兜底）。
+        """
         from app.services.notification_channels import send_with_retry
         dbc = self._channel_db(db, "email")
         if dbc is not None and not dbc["enabled"]:
             return False
         if dbc is not None and dbc["config"].get("recipients"):
             to_addresses = list(dbc["config"]["recipients"])
-        if not self.config.alerts.email.enabled:
+        if dbc is None and not self.config.alerts.email.enabled:
             return False
         return send_with_retry(
             "email",
@@ -440,7 +450,8 @@ class NotificationService:
                           maintenance_id=None, use_email=True, use_im=True) -> Dict[str, Any]:
         """一期默认行为（未命中策略时）：站内 + config.yaml 渠道，带重试熔断。"""
         results: Dict[str, Any] = {"inapp": 0, "email": False, "wechat_work": False, "dingtalk": False}
-        alerts_enabled = bool(self.config.alerts.enabled)
+        # 主开关：config.yaml 总开关 或 任一 DB 渠道启用（渠道已 DB 化，二者皆可放行）
+        alerts_enabled = bool(self.config.alerts.enabled) or self._any_db_channel_enabled(db)
 
         results["inapp"] = self._send_inapp(
             db, event_type=event_type, title=title, content=content,

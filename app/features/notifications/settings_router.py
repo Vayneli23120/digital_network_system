@@ -177,6 +177,52 @@ async def test_channel(channel_id: int, db: Session = Depends(get_db),
     return {"ok": False, "detail": f"渠道类型 {row.type} 暂不支持测试"}
 
 
+# ==================== 全局总开关（合并自旧"告警通知设置"） ====================
+
+class GlobalSwitchUpdate(BaseModel):
+    enabled: bool
+
+
+@router.get("/global")
+async def get_global_switch(_: None = Depends(require_notification_manage)):
+    """读取告警总开关（config.yaml alerts.enabled，渠道明细已在 DB）。"""
+    from app.shared.config import get_config
+    return {"alerts_enabled": bool(get_config().alerts.enabled)}
+
+
+@router.put("/global")
+async def update_global_switch(payload: GlobalSwitchUpdate,
+                               _: None = Depends(require_notification_manage)):
+    """更新告警总开关（只写 config.yaml 的 alerts.enabled，原子替换）。"""
+    import os as _os
+    import yaml as _yaml
+    from pathlib import Path as _Path
+
+    config_path = _Path("config.yaml")
+    raw = {}
+    if config_path.exists():
+        with config_path.open("r", encoding="utf-8") as f:
+            raw = _yaml.safe_load(f) or {}
+    raw.setdefault("alerts", {})["enabled"] = payload.enabled
+    config_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = config_path.with_suffix(config_path.suffix + ".tmp")
+    try:
+        with tmp_path.open("w", encoding="utf-8") as f:
+            _yaml.safe_dump(raw, f, default_flow_style=False, allow_unicode=True)
+            f.flush()
+            _os.fsync(f.fileno())
+        _os.replace(tmp_path, config_path)
+    finally:
+        if tmp_path.exists():
+            tmp_path.unlink()
+
+    import app.shared.config as config_module
+    config_module._config = None
+    from app.services.notification_service import reset_notification_service
+    reset_notification_service()
+    return {"alerts_enabled": payload.enabled}
+
+
 # ==================== 模板 ====================
 
 def _template_dict(row: NotificationTemplate) -> dict:
