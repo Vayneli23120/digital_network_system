@@ -1,0 +1,7 @@
+# 本机特有的端口覆盖（不污染主 docker-compose.yml）
+# 宿主机 5432 已被本地 PostgreSQL 17（zabbix 共用）占用，故把容器 PG15 映射到 5433
+# 注意：ports 是列表，Compose 默认合并，必须用 !override 强制整体覆盖
+services:
+  postgres:
+    ports: !override
+      - "5433:5432"
