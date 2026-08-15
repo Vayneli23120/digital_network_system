@@ -76,11 +76,13 @@ import { ElMessage } from 'element-plus'
 import { Bell, Warning, Tools, InfoFilled, Delete } from '@element-plus/icons-vue'
 import { getNotifications, markNotificationRead, markAllNotificationsRead, deleteNotification, getUnreadCount } from '@/api'
 import { useI18n } from '@/composables/useI18n'
+import { useAuthStore } from '@/stores/auth'
 import { cachedRequest, clearCache } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
 const { t } = useI18n()
 const router = useRouter()
+const authStore = useAuthStore()
 
 const notifications = ref([])
 const loading = ref(false)
@@ -94,7 +96,7 @@ const loadNotifications = debounce(async (force = false) => {
     const res = await cachedRequest(
       () => getNotifications(unreadOnly),
       'notifications',
-      { filter: filterType.value },
+      { filter: filterType.value, user: authStore.currentUser || '' },
       { forceRefresh: force }
     )
     let items = res.items || []

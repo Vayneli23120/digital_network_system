@@ -48,15 +48,13 @@ class SystemNotificationService:
     ) -> List[Notification]:
         """获取用户通知
 
-        Admin 用户可以看到所有通知（超级管理员）
-        其他用户只能看到发给自己的通知（大小写不敏感）
+        严格按当前登录账号过滤：每个账号只接收发给自己的通知
+        （大小写不敏感；admin 同样只收自己的，不再全量可见）。
         """
         query = self.db.query(Notification)
 
-        # Admin 超级管理员可以看到所有通知
-        if user.lower() != 'admin':
-            # 大小写不敏感匹配
-            query = query.filter(Notification.user.ilike(user))
+        # 大小写不敏感匹配
+        query = query.filter(Notification.user.ilike(user))
 
         if unread_only:
             query = query.filter(Notification.read == False)
@@ -67,8 +65,7 @@ class SystemNotificationService:
         """获取用户通知总数（不受 limit 截断，用于返回真实 total）"""
         query = self.db.query(Notification)
 
-        if user.lower() != 'admin':
-            query = query.filter(Notification.user.ilike(user))
+        query = query.filter(Notification.user.ilike(user))
 
         if unread_only:
             query = query.filter(Notification.read == False)
@@ -78,14 +75,11 @@ class SystemNotificationService:
     def get_unread_count(self, user: str) -> int:
         """获取未读通知数量
 
-        Admin 用户可以看到所有未读通知
-        其他用户只能看到自己的未读通知（大小写不敏感）
+        严格按当前登录账号统计：只数发给自己的未读通知（大小写不敏感）。
         """
         query = self.db.query(Notification).filter(Notification.read == False)
 
-        if user.lower() != 'admin':
-            # 大小写不敏感匹配
-            query = query.filter(Notification.user.ilike(user))
+        query = query.filter(Notification.user.ilike(user))
 
         return query.count()
 
@@ -112,10 +106,9 @@ class SystemNotificationService:
         ).count()
 
     def mark_as_read(self, notification_id: int, user: str) -> bool:
-        """标记通知为已读"""
+        """标记通知为已读（只能标记发给自己的通知）"""
         query = self.db.query(Notification).filter(Notification.id == notification_id)
-        if user.lower() != 'admin':
-            query = query.filter(Notification.user.ilike(user))
+        query = query.filter(Notification.user.ilike(user))
         notification = query.first()
 
         if notification:
@@ -126,19 +119,17 @@ class SystemNotificationService:
         return False
 
     def mark_all_as_read(self, user: str) -> int:
-        """标记所有通知为已读"""
+        """标记所有通知为已读（只作用于发给自己的通知）"""
         query = self.db.query(Notification).filter(Notification.read == False)
-        if user.lower() != 'admin':
-            query = query.filter(Notification.user.ilike(user))
+        query = query.filter(Notification.user.ilike(user))
         count = query.update({"read": True, "read_at": datetime.utcnow()})
         self.db.commit()
         return count
 
     def delete_notification(self, notification_id: int, user: str) -> bool:
-        """删除通知"""
+        """删除通知（只能删除发给自己的通知）"""
         query = self.db.query(Notification).filter(Notification.id == notification_id)
-        if user.lower() != 'admin':
-            query = query.filter(Notification.user.ilike(user))
+        query = query.filter(Notification.user.ilike(user))
         notification = query.first()
 
         if notification:

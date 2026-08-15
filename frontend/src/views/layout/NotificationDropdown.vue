@@ -81,6 +81,7 @@ import { useRouter } from 'vue-router'
 import { Bell, Warning, Tools, InfoFilled } from '@element-plus/icons-vue'
 import { getNotifications } from '@/api'
 import { cachedRequest } from '@/utils/cache.js'
+import { useAuthStore } from '@/stores/auth'
 import { debounce } from '@/utils/requestManager.js'
 
 const props = defineProps({
@@ -101,6 +102,7 @@ const props = defineProps({
 const emit = defineEmits(['markRead', 'markAllRead', 'viewAll'])
 
 const router = useRouter()
+const authStore = useAuthStore()
 const showDropdown = ref(false)
 const panelRef = ref(null)
 const notifications = ref([])
@@ -119,7 +121,7 @@ const loadNotifications = debounce(async (force = false) => {
     const res = await cachedRequest(
       () => getNotifications(false),
       'notifications_dropdown',
-      {},
+      { user: authStore.currentUser || '' },
       { forceRefresh: force }
     )
     notifications.value = res.items || []
