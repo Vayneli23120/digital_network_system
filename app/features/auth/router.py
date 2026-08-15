@@ -667,14 +667,20 @@ async def change_password(
     if not current_user:
         raise HTTPException(status_code=401, detail="需要认证")
 
+    # 重新从当前会话查询用户再修改：principal.user 来自中间件会话（已关闭）的游离对象，
+    # 直接改它不会进入本请求会话的 identity map，commit 会静默丢弃变更（密码改不掉却提示成功）。
+    user = db.query(User).filter(User.id == current_user.id).first()
+    if not user:
+        raise HTTPException(status_code=401, detail="需要认证")
+
     # 验证旧密码
-    if not verify_password(password_data.old_password, current_user.password_hash):
+    if not verify_password(password_data.old_password, user.password_hash):
         raise HTTPException(status_code=400, detail="旧密码错误")
 
     # 更新密码
-    current_user.password_hash = get_password_hash(password_data.new_password)
-    current_user.updated_at = datetime.utcnow()
-    _revoke_user_sessions(db, current_user.id)
+    user.password_hash = get_password_hash(password_data.new_password)
+    user.updated_at = datetime.utcnow()
+    _revoke_user_sessions(db, user.id)
     db.commit()
 
     return {"message": "密码修改成功"}
