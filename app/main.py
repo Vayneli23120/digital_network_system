@@ -489,6 +489,14 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"启动 Trap 接收器失败: {e}")
 
+    # 启动数据库连接池监控（检测 idle-in-transaction 泄漏并告警）
+    try:
+        from .services.connection_monitor import start_connection_monitor
+        start_connection_monitor()
+        logger.info("数据库连接监控服务已启动")
+    except Exception as e:
+        logger.warning(f"启动数据库连接监控服务失败: {e}")
+
 
 # ============ 优雅关闭 ============
 
@@ -524,6 +532,13 @@ async def shutdown_event():
         stop_trap_receiver()
     except Exception as e:
         logger.warning(f"停止 Trap 接收器失败: {e}")
+
+    # 停止数据库连接监控
+    try:
+        from .services.connection_monitor import stop_connection_monitor
+        stop_connection_monitor()
+    except Exception as e:
+        logger.warning(f"停止数据库连接监控服务失败: {e}")
 
     try:
         get_db_manager().engine.dispose()
