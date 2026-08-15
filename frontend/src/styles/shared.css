@@ -568,3 +568,30 @@
     font-size: 11px;
   }
 }
+/* ===== 全局 75% 显示比例（应用主体 .app-shell；登录页/扫码终端等独立页面不受影响） ===== */
+/* 关键语义（Chrome zoom）：百分比尺寸按缩放后坐标空间解析（盒子铺满），
+   px 尺寸/字号按 0.75 视觉缩放；fixed/sticky 不受 zoom 影响。
+   因此不需要任何宽度补偿，也不要混用 calc/zoom（会产生双倍偏移）。 */
+.app-shell {
+  zoom: 0.75;
+}
+
+/* 3D 数字孪生页面整体保持原尺寸（地图显示区域与操作面板不变） */
+.app-shell.no-global-zoom {
+  zoom: 1;
+}
+
+/* body 级弹层跟随 75% */
+body .el-overlay {
+  zoom: 0.75;
+}
+/* 提示：el-popper 不能整体 zoom（会连带缩放其 px 定位导致跑飞）。
+   折中：popper 容器保持 body 层标准定位（位置正确），仅缩放其内容面板（zoom 锚定左上角）。 */
+body .el-popper > .el-picker-panel,
+body .el-popper > .el-select-dropdown,
+body .el-popper > .el-tooltip__popper {
+  zoom: 0.75;
+}
+body .el-message {
+  zoom: 0.75;
+}

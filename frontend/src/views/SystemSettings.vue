@@ -14,7 +14,7 @@
           <div class="section-header">{{ t('systemTimeSettings') || '时间设置' }}</div>
 
           <el-form-item :label="t('systemTimezone') || '系统时区'">
-            <el-select v-model="form.timezone" placeholder="选择时区" style="width: 300px">
+            <el-select v-model="form.timezone" :placeholder="t('systemTimezonePlaceholder') || '选择时区'" style="width: 300px">
               <el-option
                 v-for="tz in timezoneOptions"
                 :key="tz.value"
@@ -28,10 +28,10 @@
 
         <!-- Grafana 集成 -->
         <div class="form-section">
-          <div class="section-header">Grafana 指标图表</div>
-          <el-form-item label="Grafana 地址">
-            <el-input v-model="form.grafana_url" placeholder="如 http://192.168.4.37:3001" style="width: 360px" />
-            <span class="form-tip">用于设备详情页嵌入指标图表；为空则不显示。指向你部署的 Grafana（docker 默认宿主机 3001）。</span>
+          <div class="section-header">{{ t('grafanaSectionTitle') || 'Grafana 指标图表' }}</div>
+          <el-form-item :label="t('grafanaUrl') || 'Grafana 地址'">
+            <el-input v-model="form.grafana_url" :placeholder="t('grafanaUrlPlaceholder') || '如 http://192.168.4.37:3001'" style="width: 360px" />
+            <span class="form-tip">{{ t('grafanaUrlTip') || '用于设备详情页嵌入指标图表；为空则不显示。指向你部署的 Grafana（docker 默认宿主机 3001）。' }}</span>
           </el-form-item>
         </div>
       </el-form>
@@ -53,59 +53,59 @@
     <el-card style="margin-top: 20px">
       <template #header>
         <div class="card-header">
-          <span>SLO 服务配置</span>
-          <el-button type="primary" size="small" @click="openSloDialog()">新增 SLO</el-button>
+          <span>{{ t('sloSectionTitle') || '服务等级目标（SLO）配置' }}</span>
+          <el-button type="primary" size="small" @click="openSloDialog()">{{ t('sloAdd') || '新增 SLO' }}</el-button>
         </div>
       </template>
-      <div class="slo-hint">定义服务可用性目标（如核心机房 99.9%）。同一故障域的设备应归入同一个 SLO；停机按故障时长自动计入预算。</div>
+      <div class="slo-hint">{{ t('sloHint') || '定义服务可用性目标（如核心机房 99.9%）。同一故障域的设备应归入同一个 SLO；停机按故障时长自动计入预算。' }}</div>
       <el-table :data="sloList" v-loading="sloLoading" size="small" style="margin-top: 8px">
-        <el-table-column label="服务名称" prop="service_name" min-width="130" />
-        <el-table-column label="标识 key" prop="service_key" width="140" />
-        <el-table-column label="目标" width="80">
+        <el-table-column :label="t('sloServiceName') || '服务名称'" prop="service_name" min-width="130" />
+        <el-table-column :label="t('sloServiceKey') || '标识 key'" prop="service_key" width="140" />
+        <el-table-column :label="t('sloTarget') || '目标'" width="80">
           <template #default="{ row }">{{ row.slo_target }}%</template>
         </el-table-column>
-        <el-table-column label="设备类型" min-width="220">
+        <el-table-column :label="t('sloDeviceTypes') || '设备类型'" min-width="220">
           <template #default="{ row }">{{ row.device_types || '全局' }}</template>
         </el-table-column>
-        <el-table-column label="窗口" width="70">
+        <el-table-column :label="t('sloWindow') || '窗口'" width="70">
           <template #default="{ row }">{{ row.window_days }}d</template>
         </el-table-column>
-        <el-table-column label="启用" width="64" align="center">
+        <el-table-column :label="t('sloEnabled') || '启用'" width="64" align="center">
           <template #default="{ row }"><el-switch :model-value="row.is_active" @change="v => toggleSlo(row, v)" size="small" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="110">
+        <el-table-column :label="t('sloActions') || '操作'" width="110">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" @click="openSloDialog(row)">编辑</el-button>
-            <el-button link type="danger" size="small" @click="deleteSloRow(row)">删除</el-button>
+            <el-button link type="primary" size="small" @click="openSloDialog(row)">{{ t('sloEdit') || '编辑' }}</el-button>
+            <el-button link type="danger" size="small" @click="deleteSloRow(row)">{{ t('sloDelete') || '删除' }}</el-button>
           </template>
         </el-table-column>
       </el-table>
-      <el-empty v-if="!sloList.length && !sloLoading" description="尚未配置 SLO，点「新增 SLO」添加" :image-size="56" />
+      <el-empty v-if="!sloList.length && !sloLoading" :description="t('sloEmpty') || '尚未配置 SLO，点「新增 SLO」添加'" :image-size="56" />
     </el-card>
 
     <!-- SLO 编辑对话框 -->
-    <el-dialog v-model="sloDialog" :title="sloForm.id ? '编辑 SLO' : '新增 SLO'" width="560px">
+    <el-dialog v-model="sloDialog" :title="sloForm.id ? (t('sloEditTitle') || '编辑 SLO') : (t('sloAddTitle') || '新增 SLO')" width="560px">
       <el-form :model="sloForm" label-width="100px">
-        <el-form-item label="服务名称" required>
-          <el-input v-model="sloForm.service_name" placeholder="如 核心机房网络" />
+        <el-form-item :label="t('sloServiceName') || '服务名称'" required>
+          <el-input v-model="sloForm.service_name" :placeholder="t('sloServiceNamePlaceholder') || '如 核心机房网络'" />
         </el-form-item>
-        <el-form-item label="标识 key" required>
-          <el-input v-model="sloForm.service_key" placeholder="如 core_room（英文、唯一）" :disabled="!!sloForm.id" />
+        <el-form-item :label="t('sloServiceKey') || '标识 key'" required>
+          <el-input v-model="sloForm.service_key" :placeholder="t('sloServiceKeyPlaceholder') || '如 core_room（英文、唯一）'" :disabled="!!sloForm.id" />
         </el-form-item>
-        <el-form-item label="目标可用率">
+        <el-form-item :label="t('sloTargetLabel') || '目标可用率'">
           <el-input-number v-model="sloForm.slo_target" :min="90" :max="100" :step="0.1" :precision="2" />
           <span class="form-tip">%</span>
         </el-form-item>
-        <el-form-item label="设备类型">
-          <el-select v-model="sloDeviceTypes" multiple placeholder="选择设备类型（空=全局）" style="width: 100%">
+        <el-form-item :label="t('sloDeviceTypes') || '设备类型'">
+          <el-select v-model="sloDeviceTypes" multiple :placeholder="t('sloDeviceTypesPlaceholder') || '选择设备类型（空=全局）'" style="width: 100%">
             <el-option v-for="dt in deviceTypeOptions" :key="dt.value" :label="dt.label" :value="dt.value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="统计窗口">
+        <el-form-item :label="t('sloWindowLabel') || '统计窗口'">
           <el-input-number v-model="sloForm.window_days" :min="1" :max="365" />
-          <span class="form-tip">天</span>
+          <span class="form-tip">{{ t('sloWindowUnit') || '天' }}</span>
         </el-form-item>
-        <el-form-item label="启用">
+        <el-form-item :label="t('sloEnabled') || '启用'">
           <el-switch v-model="sloForm.is_active" />
         </el-form-item>
       </el-form>
@@ -322,8 +322,6 @@ onMounted(loadSlo)
 <style scoped>
 .system-settings-page {
   padding: 20px;
-  max-width: 1080px;
-  margin: 0 auto;
 }
 
 .card-header {

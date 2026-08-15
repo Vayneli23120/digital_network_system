@@ -17,16 +17,16 @@
               </el-button>
             </div>
             <el-table :data="groups" highlight-current-row @current-change="selectGroup" v-loading="loadingGroups">
-              <el-table-column prop="name" :label="t('notifSettingsGroupName') || '组名'" min-width="110" />
-              <el-table-column prop="is_oncall" :label="t('notifSettingsIsOncall') || '值班组'" width="76">
+              <el-table-column prop="name" :label="t('notifSettingsGroupName') || '组名'" min-width="150" />
+              <el-table-column prop="is_oncall" :label="t('notifSettingsIsOncall') || '值班组'" min-width="80" align="center">
                 <template #default="{ row }">
                   <el-tag size="small" :type="row.is_oncall ? 'success' : 'info'">{{ row.is_oncall ? '✓' : '—' }}</el-tag>
                 </template>
               </el-table-column>
-              <el-table-column :label="t('notifSettingsMemberCount') || '成员'" width="66">
+              <el-table-column :label="t('notifSettingsMemberCount') || '成员'" min-width="70" align="center">
                 <template #default="{ row }">{{ row.members?.length || 0 }}</template>
               </el-table-column>
-              <el-table-column :label="t('notifSettingsActions') || '操作'" width="140">
+              <el-table-column :label="t('notifSettingsActions') || '操作'" min-width="120" fixed="right">
                 <template #default="{ row }">
                   <el-button size="small" @click="openGroupDialog(row)">{{ t('notifSettingsEdit') || '编辑' }}</el-button>
                   <el-button size="small" type="danger" link @click="removeGroup(row)">{{ t('notifSettingsDelete') || '删除' }}</el-button>
@@ -37,10 +37,10 @@
 
           <div class="groups-right">
             <template v-if="selectedGroup">
-              <div class="card-header">
+              <div class="card-header member-header">
                 <span class="card-title">{{ t('notifSettingsMembers') || '成员与组长' }}：{{ selectedGroup.name }}</span>
                 <div class="member-add">
-                  <el-select v-model="newMemberUserId" :placeholder="t('notifSettingsSelectUser') || '选择用户'" size="small" filterable style="width: 180px">
+                  <el-select :teleported="false" v-model="newMemberUserId" :placeholder="t('notifSettingsSelectUser') || '选择用户'" size="small" filterable style="width: 180px">
                     <el-option v-for="u in users" :key="u.id" :label="u.username + (u.email ? ` (${u.email})` : '')" :value="u.id" />
                   </el-select>
                   <el-button size="small" type="primary" :disabled="!newMemberUserId" @click="addMember">
@@ -49,24 +49,24 @@
                 </div>
               </div>
               <el-table :data="selectedGroup.members" size="small" v-loading="loadingMembers">
-                <el-table-column prop="username" :label="t('notifSettingsUsername') || '用户'" min-width="110" />
-                <el-table-column :label="t('notifSettingsRole') || '角色'" width="110">
+                <el-table-column prop="username" :label="t('notifSettingsUsername') || '用户'" min-width="150" />
+                <el-table-column :label="t('notifSettingsRole') || '角色'" min-width="140">
                   <template #default="{ row }">
                     <el-tag v-if="row.is_leader" type="warning" size="small">{{ t('notifSettingsLeader') || '组长(部门经理)' }}</el-tag>
                     <el-button v-else size="small" @click="setLeader(row)">{{ t('notifSettingsSetLeader') || '设为组长' }}</el-button>
                   </template>
                 </el-table-column>
-                <el-table-column :label="t('notifSettingsActions') || '操作'" width="80">
+                <el-table-column :label="t('notifSettingsActions') || '操作'" min-width="80" align="center">
                   <template #default="{ row }">
                     <el-button size="small" type="danger" link @click="removeMember(row)">{{ t('notifSettingsDelete') || '移除' }}</el-button>
                   </template>
                 </el-table-column>
               </el-table>
 
-              <div class="card-header schedule-header">
+              <div class="card-header schedule-header member-header">
                 <span class="card-title">{{ t('notifSettingsSchedules') || '值班排班' }}</span>
                 <div class="member-add">
-                  <el-select v-model="scheduleUserId" :placeholder="t('notifSettingsSelectUser') || '值班人'" size="small" filterable style="width: 150px">
+                  <el-select :teleported="false" v-model="scheduleUserId" :placeholder="t('notifSettingsSelectUser') || '值班人'" size="small" filterable style="width: 150px">
                     <el-option v-for="u in users" :key="u.id" :label="u.username" :value="u.id" />
                   </el-select>
                   <el-date-picker
@@ -83,14 +83,14 @@
                 </div>
               </div>
               <el-table :data="schedules" size="small" v-loading="loadingSchedules">
-                <el-table-column prop="username" :label="t('notifSettingsUsername') || '值班人'" width="110" />
-                <el-table-column :label="t('notifSettingsStartAt') || '开始'" min-width="150">
+                <el-table-column prop="username" :label="t('notifSettingsUsername') || '值班人'" min-width="120" />
+                <el-table-column :label="t('notifSettingsStartAt') || '开始'" min-width="170">
                   <template #default="{ row }">{{ formatTime(row.start_at) }}</template>
                 </el-table-column>
-                <el-table-column :label="t('notifSettingsEndAt') || '结束'" min-width="150">
+                <el-table-column :label="t('notifSettingsEndAt') || '结束'" min-width="170">
                   <template #default="{ row }">{{ row.end_at ? formatTime(row.end_at) : '长期' }}</template>
                 </el-table-column>
-                <el-table-column :label="t('notifSettingsActions') || '操作'" width="80">
+                <el-table-column :label="t('notifSettingsActions') || '操作'" min-width="80" align="center">
                   <template #default="{ row }">
                     <el-button size="small" type="danger" link @click="removeSchedule(row)">{{ t('notifSettingsDelete') || '删除' }}</el-button>
                   </template>
@@ -237,10 +237,10 @@
       <!-- ================= 发送日志 ================= -->
       <el-tab-pane :label="t('notifSettingsLogs') || '发送日志'" name="logs">
         <div class="log-filters">
-          <el-select v-model="logFilter.channel" clearable :placeholder="t('notifSettingsChannelType') || '渠道'" size="small" style="width: 140px">
+          <el-select :teleported="false" v-model="logFilter.channel" clearable :placeholder="t('notifSettingsChannelType') || '渠道'" size="small" style="width: 140px">
             <el-option v-for="c in ['inapp','email','wechat_work','dingtalk']" :key="c" :label="c" :value="c" />
           </el-select>
-          <el-select v-model="logFilter.status" clearable :placeholder="t('notifSettingsLogStatus') || '状态'" size="small" style="width: 140px">
+          <el-select :teleported="false" v-model="logFilter.status" clearable :placeholder="t('notifSettingsLogStatus') || '状态'" size="small" style="width: 140px">
             <el-option v-for="s in ['sent','failed','suppressed']" :key="s" :label="s" :value="s" />
           </el-select>
           <el-button size="small" type="primary" @click="loadLogs">{{ t('notifSettingsQuery') || '查询' }}</el-button>
@@ -368,7 +368,7 @@
           <el-input v-model="ruleForm.severities_text" placeholder="critical, major" />
         </el-form-item>
         <el-form-item :label="t('notifSettingsRuleTarget') || '目标组'">
-          <el-select v-model="ruleForm.target_group_id" placeholder="选择组" style="width: 100%">
+          <el-select :teleported="false" v-model="ruleForm.target_group_id" placeholder="选择组" style="width: 100%">
             <el-option v-for="g in groups" :key="g.id" :label="g.name" :value="g.id" />
           </el-select>
         </el-form-item>
@@ -383,7 +383,7 @@
     <el-dialog v-model="channelDialogVisible" :title="channelForm.id ? (t('notifSettingsEdit') || '编辑渠道') : (t('notifSettingsNewChannel') || '新建渠道')" width="520px">
       <el-form label-width="120px">
         <el-form-item :label="t('notifSettingsChannelType') || '类型'">
-          <el-select v-model="channelForm.type" :disabled="!!channelForm.id" style="width: 100%">
+          <el-select :teleported="false" v-model="channelForm.type" :disabled="!!channelForm.id" style="width: 100%">
             <el-option v-for="c in ['email','wechat_work','dingtalk','webhook']" :key="c" :label="c" :value="c" />
           </el-select>
         </el-form-item>
@@ -429,25 +429,25 @@
           <el-input v-model="policyEditForm.severities_text" placeholder="critical, major" />
         </el-form-item>
         <el-form-item :label="t('notifSettingsRuleTarget') || '目标'">
-          <el-select v-model="policyEditForm.target_type" style="width: 130px">
+          <el-select :teleported="false" v-model="policyEditForm.target_type" style="width: 130px">
             <el-option label="all(运维组+admin)" value="all" />
             <el-option label="group" value="group" />
             <el-option label="role" value="role" />
             <el-option label="user" value="user" />
           </el-select>
-          <el-select v-if="policyEditForm.target_type !== 'all'" v-model="policyEditForm.target_id" :placeholder="policyEditForm.target_type" style="width: 180px; margin-left: 8px">
+          <el-select :teleported="false" v-if="policyEditForm.target_type !== 'all'" v-model="policyEditForm.target_id" :placeholder="policyEditForm.target_type" style="width: 180px; margin-left: 8px">
             <el-option v-for="g in targetGroups" v-if="policyEditForm.target_type === 'group'" :key="g.id" :label="g.name" :value="g.id" />
             <el-option v-for="r in targetRoles" v-else-if="policyEditForm.target_type === 'role'" :key="r.id" :label="r.name" :value="r.id" />
             <el-option v-for="u in targetUsers" v-else :key="u.id" :label="u.username" :value="u.id" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('notifSettingsRuleChannels') || '渠道'">
-          <el-select v-model="policyEditForm.channels" multiple style="width: 100%">
+          <el-select :teleported="false" v-model="policyEditForm.channels" multiple style="width: 100%">
             <el-option v-for="c in ['inapp','email','wechat_work','dingtalk']" :key="c" :label="c" :value="c" />
           </el-select>
         </el-form-item>
         <el-form-item :label="t('notifSettingsPolicyTemplate') || '模板(可选)'">
-          <el-select v-model="policyEditForm.template_id" clearable placeholder="不套模板" style="width: 100%">
+          <el-select :teleported="false" v-model="policyEditForm.template_id" clearable placeholder="不套模板" style="width: 100%">
             <el-option v-for="tpl in templates" :key="tpl.id" :label="tpl.name" :value="tpl.id" />
           </el-select>
         </el-form-item>
@@ -1019,8 +1019,6 @@ const loadStats = async () => {
 <style scoped>
 .notif-settings-page {
   padding: 24px;
-  max-width: 1100px;
-  margin: 0 auto;
 }
 .page-header h2 {
   margin: 0 0 6px;
@@ -1035,7 +1033,7 @@ const loadStats = async () => {
 }
 .groups-layout {
   display: grid;
-  grid-template-columns: 340px minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 20px;
   align-items: start;
 }
@@ -1063,6 +1061,10 @@ const loadStats = async () => {
 }
 .schedule-header {
   margin-top: 22px;
+}
+.member-header {
+  flex-direction: column;
+  align-items: flex-start;
 }
 .hint-line {
   margin-top: 12px;

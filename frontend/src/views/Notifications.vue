@@ -216,8 +216,6 @@ onMounted(() => {
 <style scoped>
 .notifications-page {
   padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
 }
 
 .page-header {

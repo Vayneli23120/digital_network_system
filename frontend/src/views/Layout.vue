@@ -1,5 +1,5 @@
 <template>
-  <div class="app-shell">
+  <div class="app-shell" :class="{ 'no-global-zoom': isMonitor3d }">
     <!-- Topbar -->
     <Topbar
       :dark-mode="darkMode"
@@ -73,6 +73,8 @@ import { cachedRequest } from '@/utils/cache.js'
 import { debounce } from '@/utils/requestManager.js'
 
 const route = useRoute()
+// 3D 数字孪生页面整体不参与全局 75% 缩放（地图显示区域保持原尺寸）
+const isMonitor3d = computed(() => route.path.startsWith('/monitor-3d'))
 const router = useRouter()
 const { t, currentLang, toggleLang } = useI18n()
 const authStore = useAuthStore()
