@@ -25,7 +25,7 @@ def upgrade() -> None:
         op.create_table('maintenance_events',
             sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
             sa.Column('maintenance_id', sa.Integer(), nullable=False),
-            sa.Column('event_type', sa.String(length=20), nullable=False),
+            sa.Column('event_type', sa.String(length=30), nullable=False),
             sa.Column('event_time', sa.DateTime(), nullable=False),
             sa.Column('operator', sa.String(length=100), nullable=True),
             sa.Column('notes', sa.String(length=500), nullable=True),

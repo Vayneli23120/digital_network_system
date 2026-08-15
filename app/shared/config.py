@@ -193,10 +193,10 @@ class DatabaseConfig(BaseModel):
     @property
     def url_source(self) -> str:
         """有效 URL 的来源，用于启动日志与排障"""
-        if self.url and self.url != _URL_PLACEHOLDER:
-            return "config.yaml"
         if os.environ.get("DATABASE_URL"):
             return "DATABASE_URL 环境变量"
+        if self.url and self.url != _URL_PLACEHOLDER:
+            return "config.yaml"
         return "内置默认值 (SQLite)"
 
     def get_effective_url(self) -> str:
@@ -448,6 +448,11 @@ class Config(BaseModel):
             self.cache.password = os.environ["REDIS_PASSWORD"]
         if "REDIS_DB" in os.environ:
             self.cache.db = self._parse_int_env("REDIS_DB", os.environ["REDIS_DB"])
+
+        # 数据库连接串：容器内 DATABASE_URL 指向 postgres 服务，
+        # 必须覆盖 config.yaml 里写死的 127.0.0.1（否则连不上容器内 PG）。
+        if "DATABASE_URL" in os.environ:
+            self.database.url = os.environ["DATABASE_URL"]
 
     @staticmethod
     def _parse_int_env(name: str, value: str) -> int:

@@ -9,15 +9,20 @@ FROM python:3.12-slim AS builder
 WORKDIR /app
 
 # Install system dependencies for building Python packages
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 使用阿里云 Debian 镜像加速 apt
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     gcc \
     libpq-dev \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
+# 使用阿里云 PyPI 镜像加速 pip
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+    -i https://mirrors.aliyun.com/pypi/simple/ \
+    --trusted-host mirrors.aliyun.com
 
 # Copy application source
 COPY . .
@@ -32,7 +37,9 @@ WORKDIR /app
 
 # Install runtime dependencies only
 # iputils-ping：设备可达性监控依赖的 ping 命令
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# 使用阿里云 Debian 镜像加速 apt
+RUN sed -i 's|deb.debian.org|mirrors.aliyun.com|g' /etc/apt/sources.list.d/debian.sources \
+    && apt-get update && apt-get install -y --no-install-recommends \
     curl \
     libpq5 \
     iputils-ping \

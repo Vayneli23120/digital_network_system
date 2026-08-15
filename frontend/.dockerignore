@@ -1,0 +1,12 @@
+# 构建产物与依赖
+node_modules/
+dist/
+
+# 环境文件（保留 .env.example 作为文档，但不打包 dev 覆盖项）
+.env
+.env.local
+.env.*.local
+
+# 杂项
+*.log
+.DS_Store

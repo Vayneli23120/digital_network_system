@@ -316,7 +316,7 @@ class MaintenanceEvent(Base):
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     maintenance_id = Column(Integer, ForeignKey("maintenance_records.id", ondelete="CASCADE"), nullable=False, index=True)
-    event_type = Column(String(20), nullable=False)  # created, diagnosing, repairing, verifying, completed, cancelled
+    event_type = Column(String(30), nullable=False)  # created, diagnosing, repairing, verifying, completed, cancelled, verification_submitted 等
     event_time = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
     operator = Column(String(100))  # 操作人
     notes = Column(String(500))  # 事件备注

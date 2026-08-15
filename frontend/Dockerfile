@@ -11,7 +11,8 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install dependencies (including dev for build)
-RUN npm install --no-audit --no-fund
+# 使用 npmmirror 镜像加速 npm
+RUN npm install --no-audit --no-fund --registry=https://registry.npmmirror.com
 
 # Copy source
 COPY . .
