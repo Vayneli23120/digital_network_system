@@ -355,18 +355,16 @@ def test_status_response_contains_no_configuration_details(alerts_with_secrets, 
     assert "secret" not in rendered.lower()
 
 
-def test_frontend_alert_settings_uses_functional_permission_and_redacted_fields():
+def test_frontend_notification_settings_uses_functional_permission_and_redacted_fields():
     root = Path(__file__).resolve().parents[1]
     layout_source = (root / "frontend/src/views/Layout.vue").read_text(encoding="utf-8")
     settings_source = (
-        root / "frontend/src/views/AlertSettings.vue"
+        root / "frontend/src/views/NotificationSettings.vue"
     ).read_text(encoding="utf-8")
 
-    alert_menu_line = next(
-        line for line in layout_source.splitlines() if "path: '/alert-settings'" in line
+    menu_line = next(
+        line for line in layout_source.splitlines() if "path: '/notification-settings'" in line
     )
-    assert "permission: 'alert:manage'" in alert_menu_line
-    assert "has_email_password" in settings_source
-    assert "clear_email_password" in settings_source
-    assert "has_dingtalk_secret" in settings_source
-    assert "clear_dingtalk_secret" in settings_source
+    assert "permission: 'notification:manage'" in menu_line
+    assert "has_secret" in settings_source
+    assert "已配置（留空保留）" in settings_source

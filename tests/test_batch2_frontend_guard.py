@@ -22,7 +22,7 @@ class TestRouteMetaPermission:
         ("/system-settings", "system_config:read"),
         ("/permissions", "role:read"),
         ("/logs", "log:read"),
-        ("/alert-settings", "alert:manage"),
+        ("/notification-settings", "notification:manage"),
         ("/notifications", "notification:read"),
         ("/discovery", "discovery:read"),
         ("/compliance", "compliance:read"),
