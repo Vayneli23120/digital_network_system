@@ -154,7 +154,10 @@ services:
       dockerfile: Dockerfile
     container_name: nas-frontend
     ports:
-      - "3000:80"
+      - "3000:443"
+    volumes:
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./docker/nginx/certs:/etc/nginx/certs:ro
     depends_on:
       backend:
         condition: service_healthy

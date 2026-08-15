@@ -64,6 +64,9 @@ logs/*
 # 各环境（开发机/服务器）内容不同，禁止入库（避免 git pull 与本地生成物冲突）
 docker/prometheus/targets/
 
+# 自签名 TLS 证书：各主机生成（含本机 IP），禁止入库
+docker/nginx/certs/
+
 # 设备照片
 assets/devices/*
 
