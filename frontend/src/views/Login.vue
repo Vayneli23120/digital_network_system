@@ -1,26 +1,56 @@
 <template>
   <div class="login-page">
-    <div class="login-container">
+    <div class="login-container" ref="loginContainerRef">
       <!-- Logo -->
       <div class="login-logo">
         <div class="logo-icon">
-          <!-- 固特异轮胎 -->
+          <!-- 固特异球形轮胎（Eagle-360 概念风格：球体 + 赤道胎面带 + 滚动动效） -->
           <svg class="logo-tire" viewBox="0 0 64 64" aria-hidden="true" xmlns:xlink="http://www.w3.org/1999/xlink">
             <defs>
-              <path id="tire-text-arc" d="M 17 32 A 15 15 0 0 1 47 32" />
+              <!-- 球体 3D 渐变（左上受光 → 右下阴影） -->
+              <radialGradient id="tire-sphere" cx="36%" cy="30%" r="80%">
+                <stop offset="0%" stop-color="#FFF3B8" />
+                <stop offset="42%" stop-color="#FFD100" />
+                <stop offset="78%" stop-color="#F2C400" />
+                <stop offset="100%" stop-color="#D9A800" />
+              </radialGradient>
+              <!-- 赤道胎面带裁剪 -->
+              <clipPath id="tire-band-clip">
+                <ellipse cx="32" cy="32" rx="25.5" ry="9.5" />
+              </clipPath>
+              <!-- 胎面带底色（上下深中间浅，表现球面弯曲） -->
+              <linearGradient id="tire-band-fill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stop-color="#081C36" />
+                <stop offset="30%" stop-color="#0A2342" />
+                <stop offset="70%" stop-color="#0A2342" />
+                <stop offset="100%" stop-color="#081C36" />
+              </linearGradient>
+              <!-- GOODYEAR 弧形字路径 -->
+              <path id="tire-text-arc" d="M 13 32 A 19 19 0 0 1 51 32" />
             </defs>
-            <!-- 轮胎主体 -->
-            <circle cx="32" cy="32" r="28" fill="#FFD100" />
-            <!-- 胎面花纹 -->
-            <circle cx="32" cy="32" r="25" fill="none" stroke="#0A2342" stroke-width="5" stroke-dasharray="4.5 4" />
-            <!-- 侧壁高光 -->
-            <circle cx="32" cy="32" r="19" fill="#FFE9A8" opacity="0.55" />
-            <!-- 轮毂 -->
-            <circle cx="32" cy="32" r="9" fill="#0A2342" />
-            <circle cx="32" cy="32" r="9" fill="none" stroke="#FFD100" stroke-width="1.6" />
-            <circle cx="32" cy="32" r="3.2" fill="#FFD100" />
-            <!-- GOODYEAR 字样（沿侧壁弧形排布） -->
-            <text font-family="Arial, 'Helvetica Neue', sans-serif" font-size="6.6" font-weight="700" letter-spacing="0.4" fill="#0A2342">
+
+            <!-- 球体 -->
+            <circle cx="32" cy="32" r="26" fill="url(#tire-sphere)" />
+            <circle cx="32" cy="32" r="26" fill="none" stroke="#0A2342" stroke-width="1" opacity="0.4" />
+            <!-- 镜面高光 -->
+            <ellipse cx="21" cy="17.5" rx="9.5" ry="5.5" fill="#FFFFFF" opacity="0.28" transform="rotate(-24 21 17.5)" />
+
+            <!-- 赤道胎面带（胎纹向下滚动，模拟球体向前滚动） -->
+            <g clip-path="url(#tire-band-clip)">
+              <rect x="6.5" y="22.5" width="51" height="19" fill="url(#tire-band-fill)" />
+              <g class="tire-tread" fill="#FFD100">
+                <rect x="6.5" y="12" width="51" height="2.6" />
+                <rect x="6.5" y="20" width="51" height="2.6" />
+                <rect x="6.5" y="28" width="51" height="2.6" />
+                <rect x="6.5" y="36" width="51" height="2.6" />
+                <rect x="6.5" y="44" width="51" height="2.6" />
+                <rect x="6.5" y="52" width="51" height="2.6" />
+              </g>
+            </g>
+            <ellipse cx="32" cy="32" rx="25.5" ry="9.5" fill="none" stroke="#0A2342" stroke-width="1.2" opacity="0.55" />
+
+            <!-- GOODYEAR 字样（沿球面上弧排布） -->
+            <text font-family="Arial, 'Helvetica Neue', sans-serif" font-size="5.2" font-weight="700" letter-spacing="0.35" fill="#0A2342">
               <textPath xlink:href="#tire-text-arc" startOffset="50%" text-anchor="middle">GOODYEAR</textPath>
             </text>
           </svg>
@@ -161,13 +191,13 @@
     <!-- 固特异品牌背景四层：深海暗流（WebGL 流体）+ 点阵网格 + 飞足字标粒子 + 漂浮飞艇粒子 -->
     <div class="login-bg-layer login-bg-ocean"><OceanBackground /></div>
     <div class="login-bg-layer login-bg-dots"><DotGridBackground /></div>
-    <GoodyearParticles class="login-particles" />
+    <GoodyearParticles class="login-particles" :style="particlesStyle" @bounds="onWordmarkBounds" />
     <BlimpParticles class="login-blimp" />
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { WarningFilled, Right, Lock } from '@element-plus/icons-vue'
@@ -188,6 +218,19 @@ const loading = ref(false)
 const errorMsg = ref('')
 const rememberMe = ref(localStorage.getItem('login_remember_username') === '1')
 const aboutVisible = ref(false)
+const loginContainerRef = ref(null)
+// 背景字标层动态 top（内联覆盖 .login-particles 的 CSS 兜底值）
+const particlesStyle = ref({})
+// PNG 内容边界（归一化 v：0=顶部 1=底部），由 GoodyearParticles 采样后上报。
+// footMaxV = 右半区（飞足）下沿，用于让飞足对齐到面板上沿上方留白处。
+const wordmarkBounds = ref({ minV: 0, maxV: 1, footMaxV: 1 })
+
+const onWordmarkBounds = (bounds) => {
+  if (bounds && typeof bounds.maxV === 'number') {
+    wordmarkBounds.value = bounds
+    updateParticlesPosition()
+  }
+}
 
 // —— 登录失败保护（客户端软锁，叠加后端 15 次/分钟认证限流） ——
 const MAX_FAILED_ATTEMPTS = 5
@@ -205,6 +248,31 @@ const stage = ref('choose')
 const ssoStatus = ref({ enabled: false, display_name: '', login_url: '/api/auth/sso/login' })
 const ssoEnabled = computed(() => ssoStatus.value.enabled === true)
 
+// —— 背景 GOODYEAR 字标/飞足粒子定位 ——
+// 登录页整体按 75% 显示比例呈现（面板 zoom:0.75、字标层宽 75%），
+// 粒子层宽 = min(750px, 69vw)（与 GoodyearParticles 组件一致），
+// 层高 = 宽 / 5.818（PNG 3840x660 宽高比）。
+const WORDMARK_ASPECT = 3840 / 660
+// 飞足下沿与登录面板上沿之间的视觉留白（取层高比例，随屏幕宽度自然缩放）。
+// 原设计让飞足恰好踩在面板上沿（0 间距），视觉偏挤；现上调一段距离，
+// 使品牌字标区与登录区之间产生呼吸感（对应"75% 显示比例更舒展"的观感）。
+const WORDMARK_GAP_RATIO = 0.2
+let particlesObserver = null
+
+const updateParticlesPosition = () => {
+  const panel = loginContainerRef.value
+  if (!panel) return
+  const layerWidth = Math.min(750, window.innerWidth * 0.69)
+  const layerHeight = layerWidth / WORDMARK_ASPECT
+  const panelTop = panel.getBoundingClientRect().top
+  // 层以 translate(-50%, -50%) 居中定位。对齐目标：飞足下沿（右半区内容底部）
+  // 位于面板上沿上方 gap 处；中心 = 面板上沿 - gap - 层高*(footMaxV - 0.5)。
+  // 飞足比文字短一截，文字 descender 会藏进面板上沿后侧，属预期。
+  const footMaxV = wordmarkBounds.value.footMaxV ?? wordmarkBounds.value.maxV ?? 1
+  const gap = layerHeight * WORDMARK_GAP_RATIO
+  particlesStyle.value = { top: `${panelTop - gap - layerHeight * (footMaxV - 0.5)}px` }
+}
+
 onMounted(async () => {
   try {
     ssoStatus.value = await getSsoStatus()
@@ -217,6 +285,19 @@ onMounted(async () => {
   if (rememberMe.value) {
     loginForm.username = localStorage.getItem('login_username') || ''
   }
+
+  // 定位背景字标层；面板高度变化（choose/local 切换、字体加载、缩放）时重算
+  updateParticlesPosition()
+  if (typeof ResizeObserver !== 'undefined' && loginContainerRef.value) {
+    particlesObserver = new ResizeObserver(updateParticlesPosition)
+    particlesObserver.observe(loginContainerRef.value)
+  }
+  window.addEventListener('resize', updateParticlesPosition)
+})
+
+onBeforeUnmount(() => {
+  particlesObserver?.disconnect()
+  window.removeEventListener('resize', updateParticlesPosition)
 })
 
 const backToChoose = () => {
@@ -412,11 +493,12 @@ const handleLogin = async () => {
 .login-page {
   min-height: 100vh;
   display: flex;
-  align-items: center;
-  justify-content: center;
+  padding: 16px;
   background: linear-gradient(135deg, #003087 0%, #001F5C 100%);
   position: relative;
-  overflow: hidden;
+  /* 面板高于视口时允许滚动（配合 .login-container 的 margin:auto 居中，顶部不被裁剪） */
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 /* ===== 登录方式选择（SSO / 本地账号） ===== */
@@ -433,7 +515,7 @@ const handleLogin = async () => {
   align-items: center;
   gap: 12px;
   width: 100%;
-  padding: 18px 20px;
+  padding: 14px 18px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.07);
@@ -463,15 +545,15 @@ const handleLogin = async () => {
 }
 
 .method-title {
-  margin: 0 0 6px;
-  font-size: 16px;
+  margin: 0 0 4px;
+  font-size: 15px;
   font-weight: 700;
   line-height: 1.3;
 }
 
 .method-desc {
   margin: 0;
-  font-size: 13px;
+  font-size: 12.5px;
   line-height: 1.5;
   color: rgba(255, 255, 255, 0.65);
 }
@@ -546,10 +628,10 @@ const handleLogin = async () => {
   z-index: 1;
 }
 
-/* 飞足 + 字标粒子层：居中于卡片上方，避开中央不透明登录卡片 */
+/* 飞足 + 字标粒子层：位于登录卡片上方，矮视口下也尽量不被卡片遮挡（75% 比例兜底值） */
 .login-particles {
   z-index: 2;
-  top: max(98px, calc(50vh - 360px));
+  top: max(58px, calc(50vh - 230px));
   left: 50%;
   transform: translate(-50%, -50%);
 }
@@ -557,7 +639,7 @@ const handleLogin = async () => {
 /* 飞艇粒子层：GOODYEAR 字标正下方，从面板前面（Logo 区域）缓缓飞过，始终可见 */
 .login-blimp {
   z-index: 11; /* 高于登录卡片（z10）：飞艇在面板前方可见，不遮登录表单，pointer-events none 不拦截操作 */
-  top: max(284px, calc(50vh - 174px));
+  top: max(213px, calc(50vh - 125px));
   left: 50%;
   transform: translate(-50%, -50%);
 }
@@ -565,7 +647,18 @@ const handleLogin = async () => {
 .login-container {
   width: 400px;
   max-width: 90vw;
-  padding: 40px;
+  /* 登录页整体按 75% 显示比例呈现（等价于浏览器 75% 缩放）：
+     用 transform: scale(0.75)（transform-origin 默认 center）等比缩小视觉盒，
+     布局盒仍居中，视觉盒也保持居中；内部 logo/卡片/字体/间距全部等比缩小，
+     与飞足字标层（宽 75%）匹配。
+     注意：不能用 zoom——zoom 下 getBoundingClientRect() 的坐标语义与视觉位置
+     不一致（Chrome 对 zoom 元素返回未缩放布局盒的换算坐标），会导致背景字标
+     对齐公式把飞足算到面板区域内、被面板盖住。transform 的 rect 是标准化的
+     变换后视觉盒，定位精确。 */
+  transform: scale(0.75);
+  /* margin:auto 替代父级 align/justify 居中：内容超高时可滚动且顶部不被裁剪 */
+  margin: auto;
+  padding: 32px 36px;
   /* 透明玻璃质感（学习 DeepSeek harness 右侧面板）：深海军蓝玻璃 + 背景模糊 */
   background: rgba(10, 35, 66, 0.45);
   backdrop-filter: blur(18px) saturate(140%);
@@ -586,31 +679,47 @@ const handleLogin = async () => {
 
 .login-logo {
   text-align: center;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
 
 .logo-icon {
-  width: 64px;
-  height: 64px;
+  width: 56px;
+  height: 56px;
   background: linear-gradient(135deg, #004F9F, #001F3F);
   border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 16px;
+  border-radius: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   color: #FFD100;
   font-size: 28px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .logo-tire {
-  width: 42px;
-  height: 42px;
+  width: 38px;
+  height: 38px;
   display: block;
 }
 
+/* 球形轮胎滚动动效：赤道胎纹向下滚动（周期 8px 无缝循环） */
+@keyframes tire-roll {
+  from { transform: translateY(0); }
+  to { transform: translateY(8px); }
+}
+
+.logo-tire .tire-tread {
+  animation: tire-roll 0.7s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .logo-tire .tire-tread {
+    animation: none;
+  }
+}
+
 .logo-text {
-  font-size: 28px;
+  font-size: 26px;
   font-weight: 700;
   color: #fff;
   letter-spacing: -0.02em;
@@ -631,11 +740,11 @@ const handleLogin = async () => {
 }
 
 .login-form {
-  margin-top: 20px;
+  margin-top: 16px;
 }
 
 .login-form .el-form-item {
-  margin-bottom: 20px;
+  margin-bottom: 16px;
 }
 
 /* 深色玻璃面板内的输入框（Element Plus 深色适配） */
@@ -667,7 +776,7 @@ const handleLogin = async () => {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: -6px 0 16px;
+  margin: -4px 0 12px;
 }
 
 .login-form :deep(.remember-checkbox .el-checkbox__label) {
@@ -716,7 +825,7 @@ const handleLogin = async () => {
 
 .login-btn {
   width: 100%;
-  height: 44px;
+  height: 42px;
   font-size: 16px;
   font-weight: 600;
   background: linear-gradient(135deg, #ffd100, #ffcc00);
@@ -747,7 +856,7 @@ const handleLogin = async () => {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  margin-top: 30px;
+  margin-top: 22px;
   color: rgba(255, 255, 255, 0.5);
   font-size: 12px;
 }
@@ -787,7 +896,7 @@ const handleLogin = async () => {
 .login-lang {
   display: flex;
   justify-content: center;
-  margin-top: 24px;
+  margin-top: 18px;
 }
 
 /* 中/EN 选项卡（分段式玻璃 tab，学习 DeepSeek 右侧面板的选项卡样式） */
@@ -822,9 +931,121 @@ const handleLogin = async () => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
 }
 
+/* ===== 矮视口逐级压缩（如 macOS Safari 窗口较矮时）：
+   避免登录面板过长遮挡背景 GOODYEAR 字标，无需手动缩放浏览器 ===== */
+@media (max-height: 585px) {
+  .login-container {
+    padding: 22px 30px;
+  }
+
+  .login-logo {
+    margin-bottom: 16px;
+  }
+
+  .logo-icon {
+    width: 44px;
+    height: 44px;
+    margin-bottom: 8px;
+    border-radius: 11px;
+  }
+
+  .logo-tire {
+    width: 30px;
+    height: 30px;
+  }
+
+  .logo-text {
+    font-size: 22px;
+  }
+
+  .method-card {
+    padding: 10px 16px;
+  }
+
+  .method-title {
+    font-size: 14px;
+  }
+
+  .method-desc {
+    font-size: 12px;
+  }
+
+  .method-badge {
+    margin-top: 4px;
+    font-size: 11px;
+  }
+
+  .login-form {
+    margin-top: 10px;
+  }
+
+  .login-form .el-form-item {
+    margin-bottom: 12px;
+  }
+
+  .login-options {
+    margin: -2px 0 8px;
+  }
+
+  .login-btn {
+    height: 40px;
+    font-size: 15px;
+  }
+
+  .login-security-hint {
+    margin: -6px 0 8px;
+  }
+
+  .login-lang {
+    margin-top: 14px;
+  }
+
+  .login-footer {
+    margin-top: 16px;
+  }
+}
+
+@media (max-height: 480px) {
+  .login-container {
+    padding: 16px 24px;
+  }
+
+  .login-logo {
+    margin-bottom: 12px;
+  }
+
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    margin-bottom: 6px;
+    border-radius: 9px;
+  }
+
+  .logo-tire {
+    width: 24px;
+    height: 24px;
+  }
+
+  .logo-text {
+    font-size: 18px;
+  }
+
+  .method-card {
+    padding: 8px 14px;
+  }
+
+  .login-security-hint {
+    display: none;
+  }
+
+  .login-footer {
+    margin-top: 12px;
+  }
+}
+
 @media (max-width: 480px) {
   .login-container {
-    padding: 30px 20px;
+    padding: 24px 20px;
   }
 
   .logo-icon {

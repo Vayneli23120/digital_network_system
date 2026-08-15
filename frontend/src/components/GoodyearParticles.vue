@@ -4,7 +4,7 @@
     点位置从 public/assets/goodyear-logo.png（透明底 PNG，3840×660）按 alpha 阈值采样，
     保证飞足翅膀与字母轮廓肉眼可辨。黄色双色 #FFCC00（暗）/ #FFE9A8（亮），
     光核在字标中线、X 跟随鼠标 ×1.05；鼠标 14px 半径内排斥（弹性回归 + 悬停抖动增强）。
-    容器宽度 min(1000px, 92vw)，高度按 PNG 实际宽高比 3840/660 计算。
+    容器宽度 min(750px, 69vw)（75% 显示比例），高度按 PNG 实际宽高比 3840/660 计算。
     CSS screen 混合、pointer-events none、两端 mask 渐隐，<768px 隐藏。
   -->
   <div ref="rootRef" class="goodyear-particles">
@@ -19,7 +19,7 @@ import * as THREE from 'three'
 // ---- 可调参数（世界单位 = CSS px） ----
 const PARAMS = {
   aspect: 3840 / 660,      // PNG 实际宽高比（5.818:1）
-  maxWidth: 1000,          // 容器最大宽度（CSS 端同样限制 min(1000px, 92vw)）
+  maxWidth: 750,           // 容器最大宽度（75% 显示比例；CSS 端同样限制 min(750px, 69vw)）
   jitterAmp: { x: 4.5, y: 5.5, z: 3 }, // 抖动振幅
   shadeMin: 0.2,           // 亮度下限（暗点）
   shadeMax: 1.12,          // 亮度上限（亮点）
@@ -92,6 +92,10 @@ const rootRef = ref(null)
 const canvasRef = ref(null)
 let state = null // { renderer, scene, camera, geometry, material, ... } 全部句柄
 
+// 采样完成后向父组件上报 PNG 内容边界（归一化 v 坐标），
+// 供登录页把字标下沿精确对齐到登录面板上沿。
+const emit = defineEmits(['bounds'])
+
 /**
  * 加载 PNG 并按 alpha 阈值采样为归一化坐标点集 { u, v, b }。
  * 目标约 450 列采样点（≈2 万粒子），飞足翅膀 25-40px 笔画可保持 3-5 点宽度。
@@ -112,13 +116,29 @@ function sampleLogo() {
         const data = octx.getImageData(0, 0, w, h).data
         const step = Math.max(2, Math.ceil(w / 450))
         const pts = []
+        let minV = 1
+        let maxV = 0
+        // 右半区（飞足）下沿：PNG 中飞足在右、GOODYEAR 文字在左，
+        // 两者下沿高度不同，单独统计右半区供对齐用。
+        let footMinV = 1
+        let footMaxV = 0
+        const footX0 = Math.floor(w * 0.5)
         for (let y = 0; y < h; y += step) {
           for (let x = 0; x < w; x += step) {
             const a = data[(y * w + x) * 4 + 3]
-            if (a > 90) pts.push({ u: x / w, v: y / h, b: Math.random() })
+            if (a > 90) {
+              const v = y / h
+              pts.push({ u: x / w, v, b: Math.random() })
+              if (v < minV) minV = v
+              if (v > maxV) maxV = v
+              if (x >= footX0) {
+                if (v < footMinV) footMinV = v
+                if (v > footMaxV) footMaxV = v
+              }
+            }
           }
         }
-        resolve(pts)
+        resolve({ pts, minV, maxV, footMinV, footMaxV })
       } catch (err) {
         reject(err)
       }
@@ -392,9 +412,10 @@ function start() {
 
   // 异步采样 PNG 后建几何（加载期间组件为空，失败仅告警不阻塞页面）
   sampleLogo()
-    .then((pts) => {
+    .then(({ pts, minV, maxV, footMinV, footMaxV }) => {
       if (s.destroyed) return
       buildGeometry(pts)
+      emit('bounds', { minV, maxV, footMinV, footMaxV })
     })
     .catch((err) => {
       console.warn('[GoodyearParticles] logo 采样失败：', err)
@@ -415,7 +436,7 @@ onBeforeUnmount(stop)
 <style scoped>
 .goodyear-particles {
   position: absolute;
-  width: min(1000px, 92vw);
+  width: min(750px, 69vw); /* 75% 显示比例（原 1000px/92vw） */
   pointer-events: none;      /* 不拦截鼠标事件，交互留给登录卡片 */
   mix-blend-mode: screen;    /* 与深海军蓝背景做屏幕混合 */
   /* 两端渐隐，避免字标边缘生硬 */

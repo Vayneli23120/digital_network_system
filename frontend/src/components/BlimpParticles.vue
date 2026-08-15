@@ -19,20 +19,21 @@ import { onBeforeUnmount, onMounted, ref } from 'vue'
 import * as THREE from 'three'
 
 // ---- 可调参数（世界单位 = CSS px；时间单位 = 物理帧 tick，30fps 节流下 1 tick = 1/30s） ----
+// 登录页整体按 75% 显示比例呈现：飞艇尺寸/速度/点尺寸等同比缩小（原值 ×0.75）。
 const PARAMS = {
-  blimpW: 220,             // 飞艇宽度（px）
-  blimpH: 140,             // 飞艇高度（px）
-  cruiseSpeed: 1.15,       // 巡航速度（px/tick，30fps 下约 34px/s，横穿字标约 22s）
+  blimpW: 165,             // 飞艇宽度（px）
+  blimpH: 105,             // 飞艇高度（px）
+  cruiseSpeed: 0.86,       // 巡航速度（px/tick，30fps 下约 25.8px/s，横穿字标约 24s）
   turnFrames: 48,          // 调头时长（tick，约 1.6s，艇首扫过 180°）
-  bobAmp: 12,              // 上下浮动幅度（px）
+  bobAmp: 9,               // 上下浮动幅度（px）
   tiltAmp: 0.055,          // 艇身轻微摆动幅度（rad，叠加在朝向角上）
-  jitterAmp: { x: 2.4, y: 3.0, z: 1.6 }, // 粒子呼吸抖动振幅
+  jitterAmp: { x: 1.8, y: 2.25, z: 1.2 }, // 粒子呼吸抖动振幅
   hoverJitterBoost: 4.0,   // 悬停时抖动振幅增益（剧烈运动）
   hoverSpeedBoost: 2.0,    // 悬停时抖动角速度增益
-  pointSize: 2.6,          // 点尺寸
+  pointSize: 1.95,         // 点尺寸
   spring: 0.12,            // 弹簧回归系数（略硬于字标层，悬停抖动更急促）
   damping: 0.85,           // 速度阻尼
-  hoverPad: 14,            // 悬停判定外扩（px）
+  hoverPad: 10,            // 悬停判定外扩（px）
   hoverRamp: 0.12,         // 悬停状态平滑系数（每物理帧）
   fps: 30,                 // 帧率节流
   maxDpr: 1.5,             // DPR 上限
@@ -488,7 +489,7 @@ onBeforeUnmount(stop)
 <style scoped>
 .blimp-particles {
   position: absolute;
-  width: min(1100px, 100vw); /* 覆盖整个 GOODYEAR 字标宽度（字标为 min(1000px, 92vw)）+ 漂移余量 */
+  width: min(825px, 75vw); /* 覆盖整个 GOODYEAR 字标宽度（字标为 min(750px, 69vw)，75% 比例）+ 漂移余量 */
   height: 200px;             /* 飞艇 140 + 浮动 24 + 余量 */
   pointer-events: none;      /* 不拦截鼠标事件，交互留给登录卡片 */
   mix-blend-mode: screen;    /* 与深海军蓝背景做屏幕混合 */
